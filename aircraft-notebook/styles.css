@@ -1,0 +1,15 @@
+/* Matplotlib figures are emitted at their native pixel size, which is wider
+   than the content column -- so the page scrolls sideways. Scale them to fit
+   instead. */
+.cell-output-display img,
+figure img,
+.quarto-figure img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Wide code output (the printed tables) scrolls in its own box rather than
+   stretching the page. */
+.cell-output pre {
+  overflow-x: auto;
+}

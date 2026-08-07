@@ -1,0 +1,26 @@
+---
+title: "What does it look like?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+print(f"wing:  span {b_w*100:5.1f} cm   chord {c_w*100:5.2f} cm   AR {AR_w:.2f}")
+print(f"stab:  span {b_h*100:5.1f} cm   chord {c_h*100:5.2f} cm   AR {AR_h:.2f}")
+print(f"fin:   span {b_v*100:5.1f} cm   chord {c_v*100:5.2f} cm   AR {AR_v:.2f}  (assumed)")
+print()
+print(f"wing t/c          = {t_foam / c_w * 100:.1f} %")
+print(f"dihedral tip rise = {z_tip*100:.1f} cm")
+print(f"tail volume       = {S_h * l_tail / (S_w * c_w):.2f}")
+print(f"foam mass, flying surfaces only = {m_surfaces*1000:.2f} g")
+```
+
+```{python}
+#| label: fig-three-view
+#| fig-cap: "The airframe as modelled. The 8° dihedral is visible in the front view (top right); the tail sits 10 cm aft, quarter-chord to quarter-chord. No fuselage or boom is modelled."
+#| fig-width: 7
+#| fig-height: 7
+# Bind the returned axes -- otherwise their repr renders as a second output and
+# demotes the figure to a subfigure.
+_ = bfg.draw_three_view(show=True)
+```

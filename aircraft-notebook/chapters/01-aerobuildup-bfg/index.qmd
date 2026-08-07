@@ -1,0 +1,39 @@
+---
+title: "BFG, AeroBuildup"
+# There is no notebook title page, so Quarto redirects the site root to whatever
+# it rendered first. Claim that redirect for the chapter instead.
+aliases:
+  - /index.html
+---
+
+The BFG — a 31.5 cm hand-launched foam chuck glider — as measured geometry run
+through `AeroBuildup`.
+
+- **`AeroBuildup` on 3D geometry**, with NeuralFoil section data.
+- **Flat foam section**, 7.1% thick, approximated as a NACA 0007.
+- **Measured geometry**; only the fin's aspect ratio is assumed.
+- **Flying surfaces only** — no fuselage or boom.
+- **Fixed speed per run**, since Re is ~2–4 × 10⁴ here.
+
+## The model
+
+Read straight from `_model.qmd` rather than copied, so this listing cannot drift
+from what the entries actually run.
+
+```{python}
+#| echo: false
+#| output: asis
+import pathlib
+import re
+
+source = pathlib.Path("chapters/01-aerobuildup-bfg/_model.qmd").read_text()
+cell = re.search(r"^```\{python\}\n(.*?)^```", source, re.S | re.M).group(1)
+code = "\n".join(l for l in cell.splitlines() if not l.startswith("#|"))
+
+print('::: {.callout-note collapse="true"}')
+print("## `_model.qmd`\n")
+print("```python")
+print(code.strip())
+print("```")
+print(":::")
+```

@@ -1,0 +1,43 @@
+project:
+  type: website
+  output-dir: _site
+  # Run every cell from the aircraft-notebook/ root so relative paths mean the
+  # same thing regardless of which page is being rendered.
+  execute-dir: project
+
+website:
+  title: "Aircraft Notebook"
+  description: "A chronological record of questions asked while designing a new aircraft."
+  # Next/Previous links in each page footer, so entries read straight through.
+  page-navigation: true
+  sidebar:
+    style: docked
+    contents:
+      # Subdirectories become sections. Entry filenames start with their date,
+      # so alphabetical order is chronological order.
+      - auto: "chapters"
+
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    # Scales matplotlib output down to the content column so pages never scroll
+    # sideways.
+    css: styles.css
+    # Code is folded away everywhere by default -- the prose and figures are the
+    # content; the code is there when you want to check it.
+    code-fold: true
+    code-summary: "Show code"
+    code-copy: true
+    code-overflow: wrap
+    fig-width: 8
+    fig-height: 4.5
+    fig-dpi: 150
+
+execute:
+  # Entries are written once, debugged, then left alone -- so freeze genuinely
+  # freezes them. Commit _freeze/ so a fresh clone renders without re-solving.
+  # NOTE: freeze tracks the page file, not its includes. After editing a
+  # chapter's _model.qmd, re-render with `quarto render --no-freeze`.
+  freeze: auto
+  warning: false

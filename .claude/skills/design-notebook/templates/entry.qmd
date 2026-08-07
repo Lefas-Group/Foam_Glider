@@ -1,0 +1,40 @@
+---
+title: "<the question, exactly as the user asked it>"
+---
+
+{{< include _model.qmd >}}
+
+<One line: what was run and at what condition. Add a second only if you had to
+assume a value that wasn't given. Nothing else.>
+
+```{python}
+<code — the model is already available from the include. Compute what was
+ asked for and no more.>
+```
+
+```{python}
+#| label: fig-<name>
+#| fig-cap: "<what is plotted. Not what to conclude from it.>"
+<plotting code — plain matplotlib, legends rather than direct labels>
+```
+
+<!--
+Notes on this template — delete this comment in real entries.
+
+FRONT MATTER IS THE TITLE ONLY. No `date`, `categories` or `description`: they
+render as a "Published" block, tag chips and a subtitle, which is clutter.
+Filenames carry the date, and the sidebar sorts on filename, so ordering is
+unaffected.
+
+NO RESTATED QUESTION in the body — the title is the question.
+
+NO **Answer.** LINE unless the question can only be answered in prose (e.g.
+"what are this model's limitations?"). A numeric question is answered by its
+printed output; a visual one by its figure.
+
+NO trailing sections. No "what the numbers say", no "what this doesn't
+include", no "open threads". See the Scope section of SKILL.md.
+
+A CELL RETURNING AN OBJECT dumps its repr as a second output and demotes the
+figure to a subfigure. Bind it: `_ = bfg.draw_three_view(show=True)`.
+-->

@@ -1,0 +1,12 @@
+{
+  "hash": "a24d03a2d6a9b3e60a3896d60b30da51",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: \"What does it look like?\"\n---\n\n\n::: {#5569f2cb .cell execution_count=2}\n``` {.python .cell-code}\nprint(f\"wing:  span {b_w*100:5.1f} cm   chord {c_w*100:5.2f} cm   AR {AR_w:.2f}\")\nprint(f\"stab:  span {b_h*100:5.1f} cm   chord {c_h*100:5.2f} cm   AR {AR_h:.2f}\")\nprint(f\"fin:   span {b_v*100:5.1f} cm   chord {c_v*100:5.2f} cm   AR {AR_v:.2f}  (assumed)\")\nprint()\nprint(f\"wing t/c          = {t_foam / c_w * 100:.1f} %\")\nprint(f\"dihedral tip rise = {z_tip*100:.1f} cm\")\nprint(f\"tail volume       = {S_h * l_tail / (S_w * c_w):.2f}\")\nprint(f\"foam mass, flying surfaces only = {m_surfaces*1000:.2f} g\")\n```\n\n::: {.cell-output .cell-output-stdout}\n```\nwing:  span  31.5 cm   chord  7.00 cm   AR 4.51\nstab:  span   9.9 cm   chord  3.95 cm   AR 2.50\nfin:   span   4.1 cm   chord  2.71 cm   AR 1.50  (assumed)\n\nwing t/c          = 7.1 %\ndihedral tip rise = 2.2 cm\ntail volume       = 0.25\nfoam mass, flying surfaces only = 5.81 g\n```\n:::\n:::\n\n\n::: {#cell-fig-three-view .cell fig-height='7' fig-width='7' execution_count=3}\n``` {.python .cell-code}\n# Bind the returned axes -- otherwise their repr renders as a second output and\n# demotes the figure to a subfigure.\n_ = bfg.draw_three_view(show=True)\n```\n\n::: {.cell-output .cell-output-display}\n![The airframe as modelled. The 8° dihedral is visible in the front view (top right); the tail sits 10 cm aft, quarter-chord to quarter-chord. No fuselage or boom is modelled.](2026-08-05-02-what-does-it-look-like_files/figure-html/fig-three-view-output-1.png){#fig-three-view width=1896 height=1896}\n:::\n:::\n\n\n",
+    "supporting": [
+      "2026-08-05-02-what-does-it-look-like_files"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}

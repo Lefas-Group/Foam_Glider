@@ -1,0 +1,27 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Quarto render output. Note that each notebook's _freeze/ is deliberately NOT
+# ignored: it holds the frozen results of each entry, so a fresh clone renders
+# without re-running any optimizations.
+aircraft-notebook/_site/
+aircraft-notebook/.quarto/
+
+# Draft/probe work, never committed. Each notebook has its own; the leading
+# underscore is what keeps Quarto from rendering it as part of the project.
+_scratch/
+
+# Third-party reference material -- kept on disk, never committed.
+reference/*
+!reference/README.md
+
+# macOS
+.DS_Store

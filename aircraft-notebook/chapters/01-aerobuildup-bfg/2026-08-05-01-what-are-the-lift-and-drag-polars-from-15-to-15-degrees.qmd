@@ -1,0 +1,38 @@
+---
+title: "What are the lift and drag polars from −15° to +15° angle of attack?"
+---
+
+{{< include _model.qmd >}}
+
+`AeroBuildup` over 61 angles at a fixed 6 m/s — the speed sets the Reynolds
+number the section data is read at.
+
+```{python}
+alpha = np.linspace(-15, 15, 61)
+p = polars(alpha, V=6.0)
+
+print(f"V = {p['V']:.1f} m/s,  Re_c = {p['Re_c']:.0f}")
+```
+
+```{python}
+#| label: fig-polars
+#| fig-cap: "Lift curve, drag curve, and drag polar at 6 m/s."
+fig, ax = plt.subplots(1, 3, figsize=(9, 3.0))
+
+ax[0].plot(alpha, p["CL"])
+ax[0].set_xlabel(r"$\alpha$ [deg]"); ax[0].set_ylabel(r"$C_L$")
+ax[0].set_title("Lift curve")
+
+ax[1].plot(alpha, p["CD"])
+ax[1].set_xlabel(r"$\alpha$ [deg]"); ax[1].set_ylabel(r"$C_D$")
+ax[1].set_title("Drag curve")
+
+ax[2].plot(p["CD"], p["CL"])
+ax[2].set_xlabel(r"$C_D$"); ax[2].set_ylabel(r"$C_L$")
+ax[2].set_title("Drag polar")
+
+for a in ax:
+    a.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
+```

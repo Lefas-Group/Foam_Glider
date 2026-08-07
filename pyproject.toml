@@ -1,0 +1,13 @@
+[project]
+name = "foam-glider"
+version = "0.1.0"
+description = "Design notebook for a hand-launched foam glider"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aerosandbox>=4.2.10",
+    "matplotlib>=3.9",
+    # Quarto needs both of these to execute Python cells in .qmd files.
+    "jupyter>=1.1",
+    "pyyaml>=6.0",
+]
