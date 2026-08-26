@@ -10,18 +10,22 @@ Notebook: !`find . -maxdepth 3 -name _quarto.yml -not -path "*/_site/*" 2>/dev/n
 
 ## The loop
 
-1. **Explore in the notebook's `_scratch/probe.qmd`** — gitignored, skipped by
-   project renders, so nothing in the notebook is touched. See "Scratch probes"
-   below for the file and how to run it.
+1. **Explore in the notebook's `_scratch/`** — gitignored, skipped by project
+   renders, so nothing in the notebook is touched. See "Scratch probes" below.
 
 2. **When a question has been answered, stop and propose.** Give the entry
    title (the user's question, verbatim) and its figures — nothing else. If the
-   proposal covers more than one question, split it into one entry each. Ask
+   proposal covers more than one question, split it into one entry each. Say
+   what the entry will cost to render if any cell runs a solver or a sweep;
+   freeze pays it once, and it survives edits to `_model.py`. Ask
    whether to record it and where. **Write nothing into the notebook until the
    user agrees.**
 
-3. **On approval**, write the entry, render it, look at every figure, report the
-   numbers.
+3. **On approval**, write the entry's code, render it, and read every figure and
+   printed block. **Then** write the prose and the `**Answer.**` line against
+   what actually rendered, and re-render. An entry must never contradict its own
+   outputs — prose written from the conversation rather than from the output is
+   how that happens.
 
 Repeat per question. A discussion that answers nothing gets no entry.
 
@@ -31,12 +35,24 @@ The entry answers the question asked and stops. This is the rule that gets
 broken most; when in doubt, write less.
 
 - **One question, one entry.** Two questions asked in the same breath become two
-  entries, not one entry with two sections.
+  entries, not one entry with two sections. Facets of a *single* comparison
+  (cost, fidelity, applicability) are one question, not three.
 - **Compute only what was asked.** "What are the polars?" means the curves — not
   max L/D, CL_max, stall angle or Cm_α. Don't print derived scalars nobody
   requested, and don't add them to the model "while you're there".
 - **No unrequested studies.** A sensitivity sweep, a multistart, a comparison
   against another configuration: each is its own question, for the user to ask.
+- **Don't assume a value the model can compute.** If the components are stated,
+  sum them — `MassProperties` gives CG and inertia, `run_with_stability_derivatives()`
+  gives the neutral point. An assumption is for a value you genuinely don't
+  have, not one you didn't bother deriving. Where an assumed value and a
+  computed one must agree, solve for the input that makes them agree rather than
+  asserting both.
+- **A comparison entry names what is held constant between the arms.** Two
+  models differing in more than one respect measure nothing.
+- **State the reference for any quantity that has one.** A `Cm` is meaningless
+  without saying what it is taken about; a coefficient at chuck-glider scale is
+  meaningless without the speed, since Re moves the polar materially.
 - **Prose is a setup line plus assumptions.** One sentence on what was run and
   at what condition, plus any assumption you had to make because a value wasn't
   given. Nothing else — no commentary on what the numbers mean, no "what this
@@ -56,10 +72,31 @@ tangents, only for what was asked.
 
 ## Scratch probes
 
-Every notebook owns `<notebook>/_scratch/probe.qmd`. It is scaffolded with the
-notebook; create it if a notebook predates this. **One rolling file per
-notebook** — overwrite it for each new question rather than accumulating
-`probe-<slug>.qmd` files.
+Every notebook owns `<notebook>/_scratch/`, holding `probe.py` and `probe.qmd`.
+Both are scaffolded with the notebook; create them if a notebook predates this.
+Overwrite them per question rather than accumulating `probe-<slug>` files; a
+second file is fine when a long run is worth keeping while a new question is
+explored.
+
+**Reach for `probe.py` first.** The chapter model is plain Python
+(`chapters/NN-name/_model.py`), so a script gets it with one `exec` and gives
+you real tracebacks and stdout. Quarto gives you `Cell 3/5 ... An error
+occurred` and then makes you scrape the output back out of HTML.
+
+```python
+import pathlib
+_chapter = pathlib.Path(__file__).parent.parent / "chapters" / "NN-name"
+exec((_chapter / "_model.py").read_text())
+```
+
+**Use `probe.qmd` when the question produces a figure**, or when you are
+rehearsing cells that are about to become an entry — its cells paste across
+unchanged. For a one-off API check that needs no model at all, `uv run python -c`
+beats both.
+
+Iterating on a plot re-runs every cell above it, cold, on each render. If that
+starts to hurt, `exec` the model into a persistent Jupyter kernel instead and
+re-plot without re-solving.
 
 The leading underscore is load-bearing: `_scratch/` sits inside the Quarto
 project, and Quarto skips `_`-prefixed paths, so `quarto render <notebook>`
@@ -89,8 +126,8 @@ execute:
   output is in `_scratch/probe.html`; figures are
   `_scratch/probe_files/figure-html/*.png`, named `cell-N-output-1.png` unless
   the cell has a `#| label:`. Read every figure before reporting on it.
-- Each render costs ~8s of fixed overhead regardless of the code, so put several
-  probes in one file rather than rendering repeatedly.
+- Each render costs ~8 s of fixed overhead regardless of the code, so put
+  several probes in one file rather than rendering repeatedly.
 
 ## Where the work goes
 
@@ -113,46 +150,20 @@ asked. Format: `templates/entry.qmd`.
 Entries are written once, debugged, then left alone. Record what actually
 happened, including answers that turned out to be wrong.
 
-## Quarto gotchas
+When a later entry corrects an earlier one, the correction goes in the **later**
+entry: state the old value, the new one, and why they differ. Never edit the
+earlier entry, and don't add a pointer to it unless asked. Two entries
+disagreeing, with the later one explaining the disagreement, is the intended end
+state.
 
-- `uv run quarto render` — bare `quarto` picks up the wrong Python.
-- **There is no `--no-freeze` flag** (checked on Quarto 1.8.27; it falls through
-  to pandoc and errors with `Unknown option`). Freeze tracks the page, not its
-  includes — so after editing a chapter's `_model.qmd`, delete
-  `<notebook>/_freeze/chapters/NN-name/` and render normally.
-- `- auto: "chapters"` crashes on an empty `chapters/` with
-  `TypeError: Cannot convert undefined or null to object`. Keep the line
-  commented out until the first chapter directory exists.
-- **A cell whose last expression returns an object renders that object's repr as
-  a second output**, which demotes the figure to a subfigure captioned "(a)" and
-  dumps something like `array([[<Axes3D: …>]])` beneath it. Bind the result:
-  `_ = bfg.draw_three_view(show=True)`.
-- **Matplotlib figures overflow the content column** and make the page scroll
-  sideways — they carry their native pixel width. The notebook's `styles.css`
-  fixes this globally; keep it wired in via `css:` in `_quarto.yml`.
-- Reading results back: printed output is in `_site/**/*.html` — extract
-  `<pre><code>` blocks with Python rather than grepping, since syntax
-  highlighting splits code across spans. Figures land in
-  `_freeze/chapters/NN-name/<entry>/figure-html/*.png`; Read every one before
-  reporting.
-- `_`-prefixed files and directories are skipped by project renders — that is
-  what keeps `_model.qmd` off the sidebar and `_scratch/` out of the site. They
-  still render fine when named directly on the command line.
+## Reference
 
-## AeroSandbox gotchas
-
-- `op_point.reynolds(c)` returns a **scalar** when `velocity` is scalar, even if
-  `alpha` is a vector — indexing it raises `IndexError`.
-- `AeroBuildup` gets its section data from NeuralFoil. For flat foam, name a
-  symmetric section of the right thickness (`asb.Airfoil("naca0007")` for 5 mm
-  on a 70 mm chord) rather than inventing coordinates — and say in the chapter
-  index that it stands in for a flat plate, which stalls earlier and softer.
-- Dihedral is a `z` offset on the tip `WingXSec`, with `symmetric=True` on the
-  `Wing`.
-- `Airplane(xyz_ref=…)` sets the moment reference. State what it is whenever a
-  `Cm` is quoted; it is not the CG unless you made it so.
-- `draw_three_view` builds its own figure, so `fig-width`/`fig-height` cell
-  options do nothing — it emits ~1896 px square regardless. Only CSS constrains
-  it.
-- At chuck-glider scale, chord Reynolds number is 1–4 × 10⁴ and the polar moves
-  materially with airspeed. Record the speed alongside any coefficient.
+- `references/quarto.md` — render and tooling traps. Read when a render fails, a
+  figure misbehaves, or output needs extracting.
+- `references/aerosandbox.md` — API traps and solver behaviour. Read before
+  writing dynamics, optimization or mass-properties code.
+- `references/aerosandbox-book/` — the AeroSandbox book, vendored.
+  `11-optimal-control.qmd` for collocation, `12-dynamics-stack.qmd` for the
+  `Dynamics` classes and axis systems, `07-atmosphere-propulsion-weights.qmd`
+  for `MassProperties`, `02-robust-optimization-models.qmd` when a solve will
+  not converge.

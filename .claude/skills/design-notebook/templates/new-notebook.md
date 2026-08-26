@@ -57,9 +57,9 @@ format:
 execute:
   # Entries are written once, debugged, then left alone -- so freeze genuinely
   # freezes them. Commit _freeze/ so a fresh clone renders without re-solving.
-  # NOTE: freeze tracks page files, not their includes. After editing a
-  # chapter's _model.qmd, delete _freeze/chapters/NN-name/ and render. There is
-  # no --no-freeze flag.
+  # NOTE: freeze tracks page files, not their includes -- so editing a
+  # chapter's _model.py does NOT invalidate its entries. Delete
+  # _freeze/chapters/NN-name/ and render. There is no --no-freeze flag.
   freeze: auto
   warning: false
 ````
@@ -101,7 +101,7 @@ The `aliases` entry matters: with no title page, Quarto redirects the site root
 to whichever page it happened to render first. The **first** chapter's index
 should claim that redirect. Later chapters omit it.
 
-The listing cell reads `_model.qmd` off disk rather than copying it, so it
+The listing cell reads `_model.py` off disk rather than copying it, so it
 cannot drift from what the entries run. Update the path to match the chapter.
 
 `````markdown
@@ -124,21 +124,18 @@ aliases:
 
 ## The model
 
-Read straight from `_model.qmd` rather than copied, so this listing cannot drift
+Read straight from `_model.py` rather than copied, so this listing cannot drift
 from what the entries actually run.
 
 ````{python}
 #| echo: false
 #| output: asis
 import pathlib
-import re
 
-source = pathlib.Path("chapters/NN-name/_model.qmd").read_text()
-cell = re.search(r"^```\{python\}\n(.*?)^```", source, re.S | re.M).group(1)
-code = "\n".join(l for l in cell.splitlines() if not l.startswith("#|"))
+code = pathlib.Path("chapters/NN-name/_model.py").read_text()
 
 print('::: {.callout-note collapse="true"}')
-print("## `_model.qmd`\n")
+print("## `_model.py`\n")
 print("```python")
 print(code.strip())
 print("```")
@@ -175,25 +172,62 @@ Run with `uv run quarto render notebook/_scratch/probe.qmd`. Output stays in
 
 ---
 
+## `notebook/_scratch/probe.py`
+
+For questions that need a real traceback and stdout instead of Quarto's
+render-then-scrape-HTML loop. Run with `uv run python notebook/_scratch/probe.py`.
+
+````python
+"""Scratch probe. Gitignored, never rendered."""
+import pathlib
+
+_chapter = pathlib.Path(__file__).parent.parent / "chapters" / "NN-name"
+exec((_chapter / "_model.py").read_text())
+
+# <the question being explored>
+````
+
+---
+
 ## `notebook/chapters/NN-name/_model.qmd`
 
-Skeleton only. Fill it with the chapter's actual model.
+A shim, not the model. Two lines, and the only thing to change per chapter is
+the path.
 
 Do **not** write an include shortcode literally inside these comments — the
-chapter index prints this file through `output: asis`, and a literal shortcode
+chapter index prints the model through `output: asis`, and a literal shortcode
 there risks being expanded.
 
 ````markdown
 ```{python}
 #| include: false
+# The chapter model lives in _model.py next to this file; this pulls it into
+# the including page's namespace. exec rather than import, because every
+# chapter names its model `_model` and real imports would collide in
+# sys.modules. Path is relative to the notebook root -- _quarto.yml sets
+# `execute-dir: project`, so that is always the cwd.
+import pathlib
+
+exec(pathlib.Path("chapters/NN-name/_model.py").read_text())
+```
+````
+
+---
+
+## `notebook/chapters/NN-name/_model.py`
+
+Skeleton only. Fill it with the chapter's actual model. Plain Python, so it can
+be read by a scratch script, a Jupyter kernel and the chapter index alike.
+
+````python
 # =============================================================================
 # <Chapter name> model.
 #
-# Pulled into every entry in this chapter by an include shortcode at the top of
-# the page. Cells here run in the including page's kernel but show no output.
-#
 # This file defines the chapter. A different model gets its own directory and
-# its own _model.qmd, sharing nothing with this one.
+# its own _model.py, sharing nothing with this one.
+#
+# Loaded two ways, both by exec into the caller's namespace: entries via the
+# _model.qmd shim, scratch scripts via _scratch/probe.py.
 #
 # Quarto's freeze tracks page files, not their includes -- so after editing
 # this, delete the chapter's _freeze/ directory before re-rendering.
@@ -216,7 +250,6 @@ there risks being expanded.
 #  what is fixed and what is free, so the same code serves as both simulator
 #  and optimizer. Return a dict of the solved result plus its scalars -- but
 #  only quantities the entries actually use.>
-```
 ````
 
 ---

@@ -17,21 +17,18 @@ through `AeroBuildup`.
 
 ## The model
 
-Read straight from `_model.qmd` rather than copied, so this listing cannot drift
+Read straight from `_model.py` rather than copied, so this listing cannot drift
 from what the entries actually run.
 
 ```{python}
 #| echo: false
 #| output: asis
 import pathlib
-import re
 
-source = pathlib.Path("chapters/01-aerobuildup-bfg/_model.qmd").read_text()
-cell = re.search(r"^```\{python\}\n(.*?)^```", source, re.S | re.M).group(1)
-code = "\n".join(l for l in cell.splitlines() if not l.startswith("#|"))
+code = pathlib.Path("chapters/01-aerobuildup-bfg/_model.py").read_text()
 
 print('::: {.callout-note collapse="true"}')
-print("## `_model.qmd`\n")
+print("## `_model.py`\n")
 print("```python")
 print(code.strip())
 print("```")

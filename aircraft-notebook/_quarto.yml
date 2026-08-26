@@ -37,7 +37,8 @@ format:
 execute:
   # Entries are written once, debugged, then left alone -- so freeze genuinely
   # freezes them. Commit _freeze/ so a fresh clone renders without re-solving.
-  # NOTE: freeze tracks the page file, not its includes. After editing a
-  # chapter's _model.qmd, re-render with `quarto render --no-freeze`.
+  # NOTE: freeze tracks the page file, not its includes -- so editing a
+  # chapter's _model.py does NOT invalidate its entries. Delete
+  # _freeze/chapters/NN-name/ and render normally. There is no --no-freeze flag.
   freeze: auto
   warning: false
