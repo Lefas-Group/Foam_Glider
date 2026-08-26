@@ -1,0 +1,277 @@
+---
+title: "How do the collocation and rollout formulations compare?"
+---
+
+{{< include _model.qmd >}}
+
+Wall-clock cost of each stage of both formulations, a refinement study on each
+one's discretization, and a check of the one place their physics differs — the
+treatment of pitch rate.
+
+Mass, release height and the solved ballast station are as in the previous entry,
+and both models are restricted to the same −6°/+16° angle-of-attack range, so the
+comparison is like-for-like wherever both converge. Timings are single-run wall
+clock on one machine: the ratios are the result, the absolutes are not.
+
+**Answer.** The rollout is far cheaper — roughly 10× end-to-end, and roughly 150×
+once each is run at the discretization it actually needs. That gap is structural
+rather than a fidelity artifact: it is 901 variables solved simultaneously against
+876 explicit steps marched forward, and it would remain if both used byte-identical
+aerodynamics. The two nonetheless settle on ranges 0.5% apart, and the refinements
+below narrow where that comes from rather than closing it: each method is converged
+in its own discretization, and the two pitch-damping treatments agree to 0.7% at
+the pitch rates these trajectories reach. That leaves the difference in aero source
+— an interpolated, clamped table against AeroBuildup evaluated on the trajectory —
+as the remaining candidate rather than a demonstrated cause. The rollout's speed
+advantage is nonetheless bought partly
+by not checking, since it clamps its aero table and returns a number where the
+collocation form goes infeasible. Collocation earns its cost when the question
+changes shape rather than when the physics gets harder: an unknown at the far end
+of the trajectory, a control history rather than a scalar, or vehicle and
+trajectory solved together. Its cost is close to flat in the difficulty of the
+question, while the rollout needs another outer loop for every unknown that is not
+an initial condition.
+
+```{python}
+import numpy as onp
+from time import perf_counter
+from scipy.interpolate import RegularGridInterpolator
+
+g, rho = 9.81, 1.225
+m_total = 0.012      # kg, ASSUMED all-up mass
+h0 = 2.0             # m, ASSUMED release height
+a_trim, V_trim = 6.0, 4.41
+
+x_cg_target = float(bfg.xyz_ref[0])
+m_ballast = 0.0042
+others = [  # (mass [kg], x_cg [m], radius of gyration in y [m])
+    (S_w * t_foam * rho_foam, 0.5 * c_w, 0.0),
+    (S_h * t_foam * rho_foam, x_qc_t, 0.0),
+    (S_v * t_foam * rho_foam, x_qc_t, 0.0),
+    (0.0020, 0.100, 0.20 / 12 ** 0.5),
+]
+x_ballast = (
+    (sum(p[0] for p in others) + m_ballast) * x_cg_target
+    - sum(mi * xi for mi, xi, _ in others)
+) / m_ballast
+mass_props = sum(
+    [asb.mass_properties_from_radius_of_gyration(
+        mass=mi, x_cg=xi, radius_of_gyration_y=ri) for mi, xi, ri in others],
+    asb.mass_properties_from_radius_of_gyration(mass=m_ballast, x_cg=x_ballast),
+)
+mass_props.Ixx = mass_props.Izz = 1
+
+al_grid = onp.linspace(-6, 16, 45)
+V_grid = onp.array([2.0, 3.0, 4.0, 5.0, 6.5, 8.0, 10.0, 12.5, 15.0, 18.0])
+
+# The two formulations need different things before they can take a step: the
+# rollout needs a tabulated aero model, the collocation form needs only a trim
+# offset because it evaluates AeroBuildup on the trajectory itself.
+t0 = perf_counter()
+CL_t = onp.zeros((len(al_grid), len(V_grid)))
+CD_t, Cm_t = onp.zeros_like(CL_t), onp.zeros_like(CL_t)
+for j, V in enumerate(V_grid):
+    p = polars(al_grid, V=float(V))
+    CL_t[:, j], CD_t[:, j], Cm_t[:, j] = p["CL"], p["CD"], p["Cm"]
+Cm_offset = -float(polars(np.array([a_trim]), V=V_trim)["Cm"][0])
+d = asb.AeroBuildup(
+    airplane=bfg, op_point=asb.OperatingPoint(velocity=V_trim, alpha=a_trim)
+).run_with_stability_derivatives()
+Cmq, Cm0 = float(d["Cmq"][0]), float(d["Cm"][0])
+setup_rollout = perf_counter() - t0
+
+t0 = perf_counter()
+_ = -float(polars(np.array([a_trim]), V=V_trim)["Cm"][0])
+setup_colloc = perf_counter() - t0
+
+print(f"rollout setup     (aero table + Cm offset + Cmq) {setup_rollout:6.2f} s")
+print(f"collocation setup (Cm offset only)               {setup_colloc:6.2f} s")
+
+kw = dict(bounds_error=False, fill_value=None)
+fCL = RegularGridInterpolator((al_grid, V_grid), CL_t, **kw)
+fCD = RegularGridInterpolator((al_grid, V_grid), CD_t, **kw)
+fCm = RegularGridInterpolator((al_grid, V_grid), Cm_t + Cm_offset, **kw)
+```
+
+```{python}
+def timeit(label, fn, n=5):
+    t0 = perf_counter()
+    for _ in range(n):
+        fn()
+    dt = (perf_counter() - t0) / n
+    print(f"{label:46s} {dt*1000:8.1f} ms")
+
+
+timeit("AeroBuildup, 1 alpha", lambda: polars(np.array([6.0]), V=V_trim))
+timeit("AeroBuildup, 45 alphas (one call)",
+       lambda: polars(al_grid, V=V_trim))
+timeit("AeroBuildup, 61 alphas (one call)",
+       lambda: polars(onp.linspace(-15, 15, 61), V=6.0))
+timeit("AeroBuildup + stability derivatives",
+       lambda: asb.AeroBuildup(
+           airplane=bfg,
+           op_point=asb.OperatingPoint(velocity=V_trim, alpha=a_trim)
+       ).run_with_stability_derivatives())
+```
+
+```{python}
+def rollout(V0, dt=0.0005):
+    """Hand-rolled: explicit Euler, clamped aero table, Cmq frozen at trim."""
+    W, Iyy = m_total * g, mass_props.Iyy
+    x, z, V, gam = 0.0, h0, V0, 0.0
+    th, qr = onp.radians(a_trim), 0.0
+    n = 0
+    while z > 0 and n * dt < 30:
+        pt = onp.array([[onp.clip(onp.degrees(th - gam), -6, 16),
+                         onp.clip(V, 2.0, 18.0)]])
+        CL, CD, Cm = float(fCL(pt)[0]), float(fCD(pt)[0]), float(fCm(pt)[0])
+        q_ = 0.5 * rho * V ** 2
+        qr += (q_ * S_w * c_w * (Cm + Cmq * qr * c_w / (2 * max(V, 0.5))) / Iyy) * dt
+        th += qr * dt
+        V = max(V + ((-q_ * S_w * CD - W * onp.sin(gam)) / m_total) * dt, 0.5)
+        gam += ((q_ * S_w * CL - W * onp.cos(gam)) / (m_total * V)) * dt
+        x += V * onp.cos(gam) * dt
+        z += V * onp.sin(gam) * dt
+        n += 1
+    return x, n * dt, n
+
+
+print(" dt [ms]    steps   range [m]   wall [s]")
+rollout_sweep = []
+for dt in [4e-3, 2e-3, 1e-3, 5e-4, 2.5e-4, 1e-4]:
+    t0 = perf_counter()
+    rng, tf, n = rollout(4.4, dt=dt)
+    wall = perf_counter() - t0
+    rollout_sweep.append((dt, n, rng, wall))
+    print(f"{dt*1000:8.2f} {n:8d} {rng:11.3f} {wall:10.2f}")
+```
+
+```{python}
+def collocation(V0, N=150, seed="rollout", al_lim=(-6.0, 16.0), max_iter=800):
+    """
+    The same flight posed as a collocation problem: initial state pinned, no
+    objective, so the problem is square and solving it integrates the dynamics.
+    """
+    t0 = perf_counter()
+    if seed == "rollout":
+        _, t_guess, _ = rollout(V0)
+    else:
+        t_guess = 4.0
+    grid = onp.linspace(0, t_guess, N)
+    t_seed = perf_counter() - t0
+
+    t0 = perf_counter()
+    opti = asb.Opti()
+    t_final = opti.variable(init_guess=t_guess, lower_bound=0.2, upper_bound=25)
+    time = np.linspace(0, t_final, N)
+    dyn = asb.DynamicsRigidBody2DBody(
+        mass_props=mass_props,
+        x_e=opti.variable(init_guess=V0 * grid),
+        z_e=opti.variable(init_guess=onp.linspace(-h0, 0, N)),
+        u_b=opti.variable(init_guess=V0 * onp.cos(onp.radians(a_trim)),
+                          n_vars=N, lower_bound=1.0, upper_bound=25),
+        w_b=opti.variable(init_guess=V0 * onp.sin(onp.radians(a_trim)), n_vars=N),
+        theta=opti.variable(init_guess=onp.radians(a_trim), n_vars=N),
+        q=opti.variable(init_guess=0, n_vars=N),
+    )
+    opti.subject_to([
+        dyn.w_b < dyn.u_b * onp.tan(onp.radians(al_lim[1])),
+        dyn.w_b > dyn.u_b * onp.tan(onp.radians(al_lim[0])),
+    ])
+    dyn.add_gravity_force(g=g)
+    aero = asb.AeroBuildup(airplane=bfg, op_point=dyn.op_point).run()
+    dyn.add_force(*aero["F_w"], axes="wind")
+    dyn.add_moment(
+        My=aero["M_b"][1] + dyn.op_point.dynamic_pressure() * S_w * c_w * Cm_offset,
+        axes="body")
+    dyn.constrain_derivatives(opti, time)
+    opti.subject_to([
+        dyn.x_e[0] == 0, dyn.z_e[0] == -h0,
+        dyn.u_b[0] == V0 * np.cosd(a_trim), dyn.w_b[0] == V0 * np.sind(a_trim),
+        dyn.theta[0] == np.radians(a_trim), dyn.q[0] == 0, dyn.z_e[-1] == 0,
+    ])
+    t_build = perf_counter() - t0
+
+    t0 = perf_counter()
+    try:
+        sol = opti.solve(verbose=False, max_iter=max_iter)
+        rng, iters = sol(dyn.x_e[-1]), sol.stats()["iter_count"]
+    except RuntimeError:
+        rng, iters = None, None
+    return dict(seed=t_seed, build=t_build, solve=perf_counter() - t0,
+                iters=iters, range=rng, nx=opti.nx, ng=opti.ng)
+
+
+cases = [
+    ("V0=4.4, N= 50, rollout seed", dict(V0=4.4, N=50)),
+    ("V0=4.4, N=150, rollout seed", dict(V0=4.4, N=150)),
+    ("V0=4.4, N=300, rollout seed", dict(V0=4.4, N=300)),
+    ("V0=4.4, N=150, crude seed",   dict(V0=4.4, N=150, seed="crude")),
+    ("V0=6.0, N=150, rollout seed", dict(V0=6.0, N=150)),
+]
+
+print(f"{'case':30s} {'seed':>6} {'build':>7} {'solve':>8} {'iters':>6} "
+      f"{'nx':>5} {'ng':>5} {'range [m]':>10}")
+colloc_runs = {}
+for label, kwargs in cases:
+    r = collocation(**kwargs)
+    colloc_runs[label] = r
+    rng = f"{r['range']:10.3f}" if r["range"] is not None else "    failed"
+    print(f"{label:30s} {r['seed']:6.2f} {r['build']:7.2f} {r['solve']:8.1f} "
+          f"{str(r['iters']):>6} {r['nx']:5d} {r['ng']:5d} {rng}")
+```
+
+```{python}
+# The one place the two models' physics differ: the rollout adds pitch damping
+# as Cmq frozen at the trim condition, while AeroBuildup sees the pitch rate
+# through dyn.op_point at every node.
+print(" q [rad/s]   AeroBuildup Cm   rollout Cm      diff")
+for q_rate in [0.0, 1.0, 3.0, 5.0]:
+    direct = float(asb.AeroBuildup(
+        airplane=bfg,
+        op_point=asb.OperatingPoint(velocity=V_trim, alpha=a_trim, q=q_rate),
+    ).run()["Cm"][0])
+    hand = Cm0 + Cmq * q_rate * c_w / (2 * V_trim)
+    print(f"{q_rate:10.1f} {direct:16.6f} {hand:12.6f} "
+          f"{100*(hand-direct)/abs(direct):+8.1f}%")
+```
+
+```{python}
+#| label: fig-cost-accuracy
+#| fig-cap: "Achieved range against wall-clock cost as each formulation's discretization is refined: the rollout over timestep, the collocation model over number of nodes. The non-converging launch is marked on the time axis at the cost it took to fail."
+fig, ax = plt.subplots(figsize=(8, 3.6))
+
+r_wall = [w for _, _, _, w in rollout_sweep]
+r_range = [r for _, _, r, _ in rollout_sweep]
+ax.plot(r_wall, r_range, "o-", color="C0", label="rollout (timestep refined)")
+for (dt, n, rng, wall) in [rollout_sweep[0], rollout_sweep[-1]]:
+    ax.annotate(f"dt={dt*1000:g} ms", xy=(wall, rng), fontsize=7,
+                xytext=(0, -12), textcoords="offset points", ha="center",
+                color="C0")
+
+c_keys = ["V0=4.4, N= 50, rollout seed", "V0=4.4, N=150, rollout seed",
+          "V0=4.4, N=300, rollout seed"]
+c_wall = [colloc_runs[k]["seed"] + colloc_runs[k]["build"] + colloc_runs[k]["solve"]
+          for k in c_keys]
+c_range = [colloc_runs[k]["range"] for k in c_keys]
+ax.plot(c_wall, c_range, "s-", color="C3", label="collocation (nodes refined)")
+for k, w, r in zip(c_keys, c_wall, c_range):
+    ax.annotate(f"N={k.split('N=')[1].split(',')[0].strip()}", xy=(w, r),
+                fontsize=7, xytext=(0, 8), textcoords="offset points",
+                ha="center", color="C3")
+
+fail = colloc_runs["V0=6.0, N=150, rollout seed"]
+t_fail = fail["seed"] + fail["build"] + fail["solve"]
+ax.axvline(t_fail, color="C3", ls=":", lw=1)
+ax.annotate("V0=6.0 m/s:\ndid not converge", xy=(t_fail, onp.mean(r_range)),
+            fontsize=7, xytext=(-6, 0), textcoords="offset points",
+            ha="right", va="center", color="C3")
+
+ax.set_xscale("log")
+ax.set_xlabel("wall-clock time [s]")
+ax.set_ylabel("range [m]")
+ax.legend(fontsize=7, loc="center left")
+ax.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
+```

@@ -1,0 +1,168 @@
+---
+title: "Is it a good assumption that there are no pitch dynamics, at this level of fidelity?"
+---
+
+{{< include _model.qmd >}}
+
+Longitudinal modal timescales at the best-glide condition, then the same launch
+released from 2 m flown twice on one aero table — once with angle of attack
+pinned at trim, once with pitch attitude and pitch rate as free states.
+
+Pitch inertia comes from the mass build-up below, which distributes the assumed
+12 g all-up mass. The CG is assumed to sit at the model's moment reference. The
+stabilizer incidence that would trim the aircraft is not modelled, so it is
+stood in for by a constant pitching-moment offset. The aero table is clamped at
+16°, above which the section data would be extrapolated, so excursions beyond
+that angle are held at the 16° coefficients.
+
+**Answer.** For a release at trim speed, yes — the two models agree to within
+0.1%, and angle of attack never leaves 5.7°–6.5°. For a launch above trim speed,
+no. The short period is not the reason: it is fast and well damped. The reason
+is kinematic — angle of attack is the difference between pitch attitude and
+flight path angle, and over the top of a zoom the flight path drops faster than
+the airframe pitches down, driving angle of attack past stall. A fixed angle of
+attack cannot represent that excursion at any level of pitch damping.
+
+```{python}
+import numpy as onp
+from scipy.interpolate import RegularGridInterpolator
+
+g, rho = 9.81, 1.225
+m  = 0.012            # kg, ASSUMED all-up mass
+h0 = 2.0              # m, ASSUMED release height
+W  = m * g
+V_trim, a_trim = 4.41, 6.0   # best-glide condition
+
+# Pitch inertia. 5.8 g of this is the flying surfaces; the rest is the boom and
+# the nose ballast that puts the CG at the model's moment reference.
+x_cg = x_qc_w
+parts = [  # (mass [kg], x [m], own inertia [kg m^2])
+    (S_w * t_foam * rho_foam, 0.5 * c_w, 0.0),
+    (S_h * t_foam * rho_foam, x_qc_t, 0.0),
+    (S_v * t_foam * rho_foam, x_qc_t, 0.0),
+    (0.0042, -0.030, 0.0),                      # nose ballast
+    (0.0020, 0.100, 0.0020 * 0.20 ** 2 / 12),   # 0.2 m boom, uniform
+]
+Iyy = sum(mi * (xi - x_cg) ** 2 + Ii for mi, xi, Ii in parts)
+print(f"mass {sum(p[0] for p in parts)*1000:.1f} g, Iyy = {Iyy:.3e} kg m^2, "
+      f"radius of gyration = {(Iyy/sum(p[0] for p in parts))**0.5*1000:.0f} mm")
+```
+
+```{python}
+op = asb.OperatingPoint(velocity=V_trim, alpha=a_trim)
+d = asb.AeroBuildup(airplane=bfg, op_point=op).run_with_stability_derivatives()
+CLa, Cma, Cmq = float(d["CLa"][0]), float(d["Cma"][0]), float(d["Cmq"][0])
+LD = float(d["CL"][0]) / float(d["CD"][0])
+print(f"CLa = {CLa:.2f}/rad, Cma = {Cma:.3f}/rad, Cmq = {Cmq:.2f}, "
+      f"x_np = {float(d['x_np'][0]):.4f} m "
+      f"(static margin {(float(d['x_np'][0]) - x_cg)/c_w*100:.0f}% MAC)")
+
+# Short period from the two-state [alpha, q] approximation; phugoid from the
+# standard Lanchester result, whose damping is set entirely by L/D.
+q_dyn = 0.5 * rho * V_trim ** 2
+Za = q_dyn * S_w * CLa / (m * V_trim)                       # 1/s
+Ma = q_dyn * S_w * c_w * Cma / Iyy                          # 1/s^2
+Mq = q_dyn * S_w * c_w ** 2 * Cmq / (2 * V_trim * Iyy)      # 1/s
+
+w_sp = (-Ma - Za * Mq) ** 0.5
+z_sp = (Za - Mq) / (2 * w_sp)
+w_ph = g * 2 ** 0.5 / V_trim
+z_ph = 1 / (2 ** 0.5 * LD)
+
+print(f"short period: T = {2*onp.pi/w_sp:5.2f} s, zeta = {z_sp:.2f}, "
+      f"settles (2%) in {4/(z_sp*w_sp):.2f} s")
+print(f"phugoid:      T = {2*onp.pi/w_ph:5.2f} s, zeta = {z_ph:.2f}, "
+      f"settles (2%) in {4/(z_ph*w_ph):.1f} s")
+print(f"T_phugoid / T_short_period = {w_sp/w_ph:.1f}")
+```
+
+```{python}
+# One aero table over (alpha, V), so both trajectory models see identical
+# aerodynamics and the only difference between them is the pitch freedom.
+al_grid = onp.linspace(-6, 16, 45)
+V_grid = onp.array([2.0, 3.0, 4.0, 5.0, 6.5, 8.0, 10.0, 12.5, 15.0, 18.0])
+
+CL_t = onp.zeros((len(al_grid), len(V_grid)))
+CD_t, Cm_t = onp.zeros_like(CL_t), onp.zeros_like(CL_t)
+for j, V in enumerate(V_grid):
+    p = polars(al_grid, V=float(V))
+    CL_t[:, j], CD_t[:, j], Cm_t[:, j] = p["CL"], p["CD"], p["Cm"]
+
+Cm_offset = -float(polars(np.array([a_trim]), V=V_trim)["Cm"][0])
+
+kw = dict(bounds_error=False, fill_value=None)
+fCL = RegularGridInterpolator((al_grid, V_grid), CL_t, **kw)
+fCD = RegularGridInterpolator((al_grid, V_grid), CD_t, **kw)
+fCm = RegularGridInterpolator((al_grid, V_grid), Cm_t + Cm_offset, **kw)
+
+
+def coeffs(al_deg, V):
+    """Clamped at the table edges -- see the note on 16° above."""
+    pt = onp.array([[onp.clip(al_deg, -6, 16), onp.clip(V, 2.0, 18.0)]])
+    return float(fCL(pt)[0]), float(fCD(pt)[0]), float(fCm(pt)[0])
+
+
+def fly(V0, pitching, dt=0.0005):
+    """
+    Level release at V0 from h0.
+
+    pitching=False pins alpha at trim, so only V and the flight path angle are
+    states. pitching=True adds pitch attitude and pitch rate, making alpha the
+    difference between attitude and flight path.
+    """
+    x, z, V, gam = 0.0, h0, V0, 0.0
+    th, qr = onp.radians(a_trim), 0.0
+    xs, zs, als = [x], [z], [a_trim]
+    t = 0.0
+    while z > 0 and t < 60:
+        al = onp.degrees(th - gam) if pitching else a_trim
+        CL, CD, Cm = coeffs(al, V)
+        q_ = 0.5 * rho * V ** 2
+        L, D = q_ * S_w * CL, q_ * S_w * CD
+        if pitching:
+            M = q_ * S_w * c_w * (Cm + Cmq * qr * c_w / (2 * max(V, 0.5)))
+            qr += (M / Iyy) * dt
+            th += qr * dt
+        V = max(V + ((-D - W * onp.sin(gam)) / m) * dt, 0.5)
+        gam += ((L - W * onp.cos(gam)) / (m * V)) * dt
+        x += V * onp.cos(gam) * dt
+        z += V * onp.sin(gam) * dt
+        xs.append(x); zs.append(z); als.append(al); t += dt
+    return onp.array(xs), onp.array(zs), onp.array(als)
+
+
+launch_speeds = [4.4, 6.0, 8.0, 10.0, 12.0]
+runs = {V0: (fly(V0, False), fly(V0, True)) for V0 in launch_speeds}
+
+print(" V0 [m/s]   fixed-alpha [m]   free-pitch [m]    diff   alpha range [deg]")
+for V0, ((xf, zf, af), (xp, zp, ap)) in runs.items():
+    print(f"{V0:8.1f} {xf[-1]:17.1f} {xp[-1]:16.1f} {100*(xp[-1]-xf[-1])/xf[-1]:+7.0f}%"
+          f"   {ap.min():6.1f} to {ap.max():6.1f}")
+```
+
+```{python}
+#| label: fig-pitch-freedom
+#| fig-cap: "Above: flight path with angle of attack pinned at trim (dashed) and with pitch free (solid). Below: angle of attack of the free-pitch runs, with the trim value dotted."
+fig, ax = plt.subplots(2, 1, figsize=(8, 5), sharex=True)
+
+for V0, colour in zip([4.4, 8.0, 12.0], ["C0", "C2", "C3"]):
+    (xf, zf, af), (xp, zp, ap) = runs[V0]
+    ax[0].plot(xf, zf, colour, ls="--", alpha=0.6)
+    ax[0].plot(xp, zp, colour, label=f"{V0} m/s")
+    ax[1].plot(xp, ap, colour, label=f"{V0} m/s")
+
+ax[0].plot([], [], "k--", alpha=0.6, label="alpha pinned at trim")
+ax[0].plot([], [], "k-", label="pitch free")
+ax[0].set_ylabel("height [m]")
+ax[0].legend(fontsize=7)
+ax[0].grid(alpha=0.3)
+
+ax[1].axhline(a_trim, color="k", lw=0.8, ls=":")
+ax[1].set_xlabel("range [m]")
+ax[1].set_ylabel(r"$\alpha$ [deg]")
+ax[1].legend(fontsize=7)
+ax[1].grid(alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+```

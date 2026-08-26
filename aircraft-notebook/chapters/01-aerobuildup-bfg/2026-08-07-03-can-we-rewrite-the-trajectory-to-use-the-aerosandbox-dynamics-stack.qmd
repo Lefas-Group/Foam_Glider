@@ -1,0 +1,218 @@
+---
+title: "Can we rewrite the trajectory to use the AeroSandbox dynamics stack?"
+---
+
+{{< include _model.qmd >}}
+
+The launch trajectory rebuilt on `MassProperties`, `DynamicsRigidBody2DBody` and
+`Opti` collocation, run against the hand-rolled explicit-Euler integrator on
+identical mass properties.
+
+Mass, release height and the constant pitching-moment offset standing in for
+stabilizer incidence are as before. The ballast station is no longer assumed —
+it is solved for, as the station that places the CG on the model's moment
+reference.
+
+**Answer.** Yes, and it is both shorter and stricter. The equations of motion,
+the ground-contact stopping condition and the aerodynamic pitch damping are all
+handled by the library, and `AeroBuildup` evaluates on the trajectory itself, so
+the tabulated-and-clamped aerodynamics of the hand-rolled version disappear. On
+the launches that converge, the two agree to within 0.5%. Two things follow from
+building it this way. First, `MassProperties` computes the CG rather than
+accepting an assumed one, and doing so shows that the mass build-up recorded in
+the previous entry does not produce the CG that entry assumes: it puts the CG at
+30.5 mm, aft of the neutral point at 27.3 mm, which is statically unstable. The
+ballast has to sit at −67 mm to give the intended 14% MAC static margin, and the
+pitch inertia about the corrected CG is 6.25×10⁻⁵ kg m², not the 4.20×10⁻⁵
+quoted previously — which moves the short period to T = 0.31 s, ζ = 0.93. Second,
+the collocation form will not solve the launches above 5 m/s at all: unbounded it
+drives `AeroBuildup` to NaN, and bounded to the aero model's valid range it is
+infeasible, because those trajectories genuinely require post-stall angles of
+attack. The hand-rolled version returned numbers there only because it clamped
+its coefficients at 16°.
+
+```{python}
+import numpy as onp
+from time import perf_counter
+from scipy.interpolate import RegularGridInterpolator
+
+g, rho = 9.81, 1.225
+m_total = 0.012      # kg, ASSUMED all-up mass
+h0 = 2.0             # m, ASSUMED release height
+a_trim, V_trim = 6.0, 4.41
+
+# Ballast station is solved for, not assumed: the value that puts the CG on the
+# model's moment reference, so that AeroBuildup's moments and the dynamics
+# class's moments share an origin.
+x_cg_target = float(bfg.xyz_ref[0])
+m_ballast = 0.0042
+others = [  # (mass [kg], x_cg [m], radius of gyration in y [m])
+    (S_w * t_foam * rho_foam, 0.5 * c_w, 0.0),
+    (S_h * t_foam * rho_foam, x_qc_t, 0.0),
+    (S_v * t_foam * rho_foam, x_qc_t, 0.0),
+    (0.0020, 0.100, 0.20 / 12 ** 0.5),      # 0.2 m boom, uniform
+]
+x_ballast = (
+    (sum(p[0] for p in others) + m_ballast) * x_cg_target
+    - sum(mi * xi for mi, xi, _ in others)
+) / m_ballast
+
+mass_props = sum(
+    [asb.mass_properties_from_radius_of_gyration(
+        mass=mi, x_cg=xi, radius_of_gyration_y=ri) for mi, xi, ri in others],
+    asb.mass_properties_from_radius_of_gyration(mass=m_ballast, x_cg=x_ballast),
+)
+mass_props.Ixx = mass_props.Izz = 1  # unused in 2D; keeps the tensor non-singular
+
+d = asb.AeroBuildup(
+    airplane=bfg, op_point=asb.OperatingPoint(velocity=V_trim, alpha=a_trim)
+).run_with_stability_derivatives()
+x_np, Cmq = float(d["x_np"][0]), float(d["Cmq"][0])
+
+print(f"ballast station        {x_ballast*1000:8.1f} mm")
+print(f"CG                     {mass_props.x_cg*1000:8.1f} mm")
+print(f"neutral point          {x_np*1000:8.1f} mm  "
+      f"-> static margin {(x_np - mass_props.x_cg)/c_w*100:.1f}% MAC")
+print(f"Iyy about the CG       {mass_props.Iyy:8.4e} kg m^2")
+```
+
+```{python}
+# Aero table and Cm offset, needed only by the hand-rolled integrator -- the
+# collocation model calls AeroBuildup directly.
+al_grid = onp.linspace(-6, 16, 45)
+V_grid = onp.array([2.0, 3.0, 4.0, 5.0, 6.5, 8.0, 10.0, 12.5, 15.0, 18.0])
+CL_t = onp.zeros((len(al_grid), len(V_grid)))
+CD_t, Cm_t = onp.zeros_like(CL_t), onp.zeros_like(CL_t)
+for j, V in enumerate(V_grid):
+    p = polars(al_grid, V=float(V))
+    CL_t[:, j], CD_t[:, j], Cm_t[:, j] = p["CL"], p["CD"], p["Cm"]
+
+Cm_offset = -float(polars(np.array([a_trim]), V=V_trim)["Cm"][0])
+kw = dict(bounds_error=False, fill_value=None)
+fCL = RegularGridInterpolator((al_grid, V_grid), CL_t, **kw)
+fCD = RegularGridInterpolator((al_grid, V_grid), CD_t, **kw)
+fCm = RegularGridInterpolator((al_grid, V_grid), Cm_t + Cm_offset, **kw)
+
+
+def euler_3dof(V0, dt=0.0005):
+    """Hand-rolled: explicit Euler, clamped aero table, Cmq fixed at trim."""
+    W, Iyy = m_total * g, mass_props.Iyy
+    x, z, V, gam = 0.0, h0, V0, 0.0
+    th, qr = onp.radians(a_trim), 0.0
+    xs, zs = [x], [z]
+    t = 0.0
+    while z > 0 and t < 30:
+        pt = onp.array([[onp.clip(onp.degrees(th - gam), -6, 16),
+                         onp.clip(V, 2.0, 18.0)]])
+        CL, CD, Cm = float(fCL(pt)[0]), float(fCD(pt)[0]), float(fCm(pt)[0])
+        q_ = 0.5 * rho * V ** 2
+        qr += (q_ * S_w * c_w * (Cm + Cmq * qr * c_w / (2 * max(V, 0.5))) / Iyy) * dt
+        th += qr * dt
+        V = max(V + ((-q_ * S_w * CD - W * onp.sin(gam)) / m_total) * dt, 0.5)
+        gam += ((q_ * S_w * CL - W * onp.cos(gam)) / (m_total * V)) * dt
+        x += V * onp.cos(gam) * dt
+        z += V * onp.sin(gam) * dt
+        t += dt
+        xs.append(x); zs.append(z)
+    return onp.array(xs), onp.array(zs), t
+```
+
+```{python}
+def fly_collocation(V0, N=150, al_lim=(-6.0, 16.0)):
+    """
+    The same flight as a collocation problem.
+
+    The initial state is pinned and no objective is declared, so the problem is
+    square and `solve()` simply integrates the equations of motion. States are
+    bounded to keep the solver inside the range where AeroBuildup is finite.
+    """
+    xs, zs, t_guess = euler_3dof(V0)          # a starting guess, not the answer
+    ts = onp.linspace(0, t_guess, len(xs))
+    grid = onp.linspace(0, t_guess, N)
+    x_g, z_g = onp.interp(grid, ts, xs), onp.interp(grid, ts, zs)
+
+    opti = asb.Opti()
+    t_final = opti.variable(init_guess=t_guess, lower_bound=0.2, upper_bound=25)
+    time = np.linspace(0, t_final, N)
+
+    dyn = asb.DynamicsRigidBody2DBody(
+        mass_props=mass_props,
+        x_e=opti.variable(init_guess=x_g),
+        z_e=opti.variable(init_guess=-z_g),
+        u_b=opti.variable(init_guess=V0 * onp.cos(onp.radians(a_trim)),
+                          n_vars=N, lower_bound=1.0, upper_bound=25),
+        w_b=opti.variable(init_guess=V0 * onp.sin(onp.radians(a_trim)), n_vars=N),
+        theta=opti.variable(init_guess=onp.radians(a_trim), n_vars=N),
+        q=opti.variable(init_guess=0, n_vars=N),
+    )
+
+    # alpha = atan2(w_b, u_b), held inside the aero model's valid range.
+    opti.subject_to([
+        dyn.w_b < dyn.u_b * onp.tan(onp.radians(al_lim[1])),
+        dyn.w_b > dyn.u_b * onp.tan(onp.radians(al_lim[0])),
+    ])
+
+    dyn.add_gravity_force(g=g)
+    aero = asb.AeroBuildup(airplane=bfg, op_point=dyn.op_point).run()
+    dyn.add_force(*aero["F_w"], axes="wind")
+    dyn.add_moment(
+        My=aero["M_b"][1] + dyn.op_point.dynamic_pressure() * S_w * c_w * Cm_offset,
+        axes="body",
+    )
+    dyn.constrain_derivatives(opti, time)
+
+    opti.subject_to([
+        dyn.x_e[0] == 0,
+        dyn.z_e[0] == -h0,
+        dyn.u_b[0] == V0 * np.cosd(a_trim),   # released level, at trim alpha
+        dyn.w_b[0] == V0 * np.sind(a_trim),
+        dyn.theta[0] == np.radians(a_trim),
+        dyn.q[0] == 0,
+        dyn.z_e[-1] == 0,                     # ground contact, at a free time
+    ])
+
+    t0 = perf_counter()
+    try:
+        sol = opti.solve(verbose=False, max_iter=800)
+        return sol(dyn), sol(t_final), perf_counter() - t0
+    except RuntimeError:
+        return None, None, perf_counter() - t0
+
+
+launch_speeds = [4.4, 5.0, 6.0, 7.0, 8.0]
+runs = {}
+
+print(" V0 [m/s]   hand-rolled [m]   collocation [m]     diff   solve [s]   alpha range [deg]")
+for V0 in launch_speeds:
+    xs, zs, t_e = euler_3dof(V0)
+    dyn, t_c, wall = fly_collocation(V0)
+    runs[V0] = ((xs, zs), dyn)
+    if dyn is None:
+        print(f"{V0:8.1f} {xs[-1]:17.1f} {'--':>17} {'--':>8} {wall:10.0f}   "
+              f"did not converge")
+    else:
+        al = onp.degrees(onp.arctan2(dyn.w_b, dyn.u_b))
+        print(f"{V0:8.1f} {xs[-1]:17.1f} {dyn.x_e[-1]:17.1f} "
+              f"{100*(dyn.x_e[-1]-xs[-1])/xs[-1]:+7.1f}% {wall:10.0f}   "
+              f"{al.min():5.1f} to {al.max():5.1f}")
+```
+
+```{python}
+#| label: fig-collocation
+#| fig-cap: "Flight path from a level release at 2 m, hand-rolled explicit Euler (dashed) against the AeroSandbox collocation model (solid), both on the corrected mass properties."
+fig, ax = plt.subplots(figsize=(8, 3))
+
+for V0, colour in zip([4.4, 5.0], ["C0", "C1"]):
+    (xs, zs), dyn = runs[V0]
+    ax.plot(xs, zs, colour, ls="--", alpha=0.6)
+    ax.plot(dyn.x_e, dyn.altitude, colour, label=f"{V0} m/s")
+
+ax.plot([], [], "k--", alpha=0.6, label="hand-rolled Euler")
+ax.plot([], [], "k-", label="collocation")
+ax.set_xlabel("range [m]")
+ax.set_ylabel("height [m]")
+ax.legend(fontsize=7)
+ax.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
+```

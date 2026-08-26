@@ -1,0 +1,113 @@
+---
+title: "How far would the plane depicted in aircraft notebook fly if it were launched by hand?"
+---
+
+{{< include _model.qmd >}}
+
+Equilibrium glide over angle of attack, then a point-mass launch trajectory
+released level from 2 m at four launch speeds.
+
+All-up mass is assumed to be 12 g — the model carries only the flying surfaces,
+which come to 5.8 g. Release height is assumed to be 2 m. The glider is taken to
+be trimmed to its best-glide angle of attack and to hold it throughout, so the
+trajectory has no pitch dynamics and its phugoid is damped only by drag.
+
+```{python}
+from scipy.interpolate import interp1d
+
+g   = 9.81
+rho = 1.225
+m   = 0.012           # kg, ASSUMED all-up mass
+h0  = 2.0             # m, ASSUMED release height
+W   = m * g
+
+
+def glide_polar(alphas=np.linspace(2, 11, 19)):
+    """
+    Equilibrium glide at each alpha.
+
+    L = W cos(gamma) and tan(gamma) = 1/(L/D), solved by iteration because CL
+    and CD depend on Reynolds number and so on the speed being solved for.
+    """
+    rows = []
+    for a in alphas:
+        V = 5.0
+        for _ in range(40):
+            p = polars(np.array([a]), V=V)
+            CL, CD = float(p["CL"][0]), float(p["CD"][0])
+            gamma = np.arctan2(1.0, CL / CD)
+            V_new = (2 * W * np.cos(gamma) / (rho * CL * S_w)) ** 0.5
+            if abs(V_new - V) < 1e-5:
+                V = V_new
+                break
+            V = 0.5 * V + 0.5 * V_new
+        rows.append(dict(alpha=a, V=V, LD=CL / CD, sink=V * np.sin(gamma),
+                         Re=float(p["Re_c"])))
+    return rows
+
+
+best = max(glide_polar(), key=lambda r: r["LD"])
+print(f"Best glide: L/D = {best['LD']:.2f} at alpha = {best['alpha']:.1f} deg, "
+      f"V = {best['V']:.2f} m/s, Re_c = {best['Re']:.0f}")
+print(f"Sink rate {best['sink']:.2f} m/s")
+print(f"Steady glide from {h0:.1f} m: {best['LD'] * h0:.1f} m in "
+      f"{h0 / best['sink']:.1f} s")
+```
+
+```{python}
+# CL and CD at the trim angle across the speeds the launch passes through --
+# tabulated once, then interpolated, so the integration doesn't re-run
+# AeroBuildup at every step.
+Vs = np.linspace(2.0, 20.0, 19)
+CLs, CDs = [], []
+for V in Vs:
+    p = polars(np.array([best["alpha"]]), V=float(V))
+    CLs.append(float(p["CL"][0]))
+    CDs.append(float(p["CD"][0]))
+
+fCL = interp1d(Vs, CLs, bounds_error=False, fill_value=(CLs[0], CLs[-1]))
+fCD = interp1d(Vs, CDs, bounds_error=False, fill_value=(CDs[0], CDs[-1]))
+
+
+def fly(V0, gamma0_deg=0.0, dt=0.001):
+    """Point mass at fixed alpha, from release to ground contact."""
+    x, z, V, gam = 0.0, h0, V0, np.radians(gamma0_deg)
+    xs, zs = [x], [z]
+    t = 0.0
+    while z > 0 and t < 60:
+        q = 0.5 * rho * V ** 2
+        L, D = q * S_w * float(fCL(V)), q * S_w * float(fCD(V))
+        V = max(V + ((-D - W * np.sin(gam)) / m) * dt, 0.5)
+        gam += ((L - W * np.cos(gam)) / (m * V)) * dt
+        x += V * np.cos(gam) * dt
+        z += V * np.sin(gam) * dt
+        xs.append(x)
+        zs.append(z)
+        t += dt
+    return np.array(xs), np.array(zs), t
+
+
+launch_speeds = [4.4, 6.0, 8.0, 10.0, 12.0]
+tracks = {V0: fly(V0) for V0 in launch_speeds}
+
+print(" V0 [m/s]   range [m]   peak [m]   time [s]   looped")
+for V0, (xs, zs, t) in tracks.items():
+    print(f"{V0:8.1f} {xs[-1]:11.1f} {zs.max():10.1f} {t:10.1f}   "
+          f"{'yes' if xs.min() < -0.2 else 'no'}")
+```
+
+```{python}
+#| label: fig-launch
+#| fig-cap: "Flight path from a level release at 2 m, at five launch speeds, holding the best-glide angle of attack."
+fig, ax = plt.subplots(figsize=(8, 3))
+
+for V0, (xs, zs, t) in tracks.items():
+    ax.plot(xs, zs, label=f"{V0:.1f} m/s")
+
+ax.set_xlabel("range [m]")
+ax.set_ylabel("height [m]")
+ax.legend(title="launch speed")
+ax.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
+```
