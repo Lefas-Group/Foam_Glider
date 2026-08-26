@@ -71,16 +71,9 @@ mass-properties code.
 
 ## The vendored book
 
-`references/aerosandbox-book/` is "The AeroSandbox Book" by Peter Sharpe,
-vendored as text to read, not to execute — the `.qmd` files import a `_common`
-module that is not included, so they will not render standalone.
-
-| File | Covers |
-|---|---|
-| `11-optimal-control.qmd` | Direct collocation, `derivative_of` / `constrain_derivative`, free final time, convergence checks |
-| `12-dynamics-stack.qmd` | The `Dynamics` classes, axis systems, `dyn.op_point`, worked glide and quadcopter examples |
-| `07-atmosphere-propulsion-weights.qmd` | `Atmosphere`, `OperatingPoint`, weight buildups, `MassProperties` |
-| `02-robust-optimization-models.qmd` | Scaling and initial-guess hygiene for problems that fail to converge |
-| `06-aircraft-aerodynamics.qmd` | What `AeroBuildup` models and when to trust it |
+`aerosandbox-book/` is "The AeroSandbox Book" by Peter Sharpe, vendored as text
+to read, not to execute — the `.qmd` files import a `_common` module that is not
+included, so they will not render standalone. Filenames say what each chapter
+covers; `SKILL.md` names the ones that come up most.
 
 Upstream, to refresh the copy: <https://github.com/peterdsharpe/AeroSandbox>

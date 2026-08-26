@@ -162,8 +162,8 @@ state.
   figure misbehaves, or output needs extracting.
 - `references/aerosandbox.md` — API traps and solver behaviour. Read before
   writing dynamics, optimization or mass-properties code.
-- `references/aerosandbox-book/` — the AeroSandbox book, vendored.
-  `11-optimal-control.qmd` for collocation, `12-dynamics-stack.qmd` for the
-  `Dynamics` classes and axis systems, `07-atmosphere-propulsion-weights.qmd`
-  for `MassProperties`, `02-robust-optimization-models.qmd` when a solve will
-  not converge.
+- `references/aerosandbox-book/` — the AeroSandbox book, vendored. Filenames say
+  what each chapter covers. The ones that come up: `11-optimal-control` for
+  collocation, `12-dynamics-stack` for the `Dynamics` classes and axis systems,
+  `07-atmosphere-propulsion-weights` for `MassProperties`,
+  `02-robust-optimization-models` when a solve will not converge.

@@ -19,9 +19,5 @@ aircraft-notebook/.quarto/
 # underscore is what keeps Quarto from rendering it as part of the project.
 _scratch/
 
-# Third-party reference material -- kept on disk, never committed.
-reference/*
-!reference/README.md
-
 # macOS
 .DS_Store
