@@ -2,7 +2,7 @@
 
 To use Claude Code to design a foam chuck glider using [AeroSandbox](https://github.com/peterdsharpe/AeroSandbox). This can then be verified in real life.
 
-The first task has been to provide claude with a 'skill' helping it to create a 'notebook' for the aircraft design, which lists answers to the users design questions in a robust, repeatable manner. Once this system is efficient, the user can be replaced with a higher level agent, which interrogates the design assumptions and outputs, and driveas further decisions. The notebook forms an end to end documentation of the development of the design, which can be human reviewed for trust.
+The first task has been to provide claude with a 'skill' helping it to create a 'notebook' for the aircraft design, which lists answers to the users design questions in a robust, repeatable manner. Once this system is efficient, the user can be replaced with a higher level agent, which interrogates the design assumptions and outputs, and drives further decisions. The notebook forms an end to end documentation of the development of the design, which can be human reviewed for trust.
 
 ## Structure
 
