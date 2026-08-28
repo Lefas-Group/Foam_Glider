@@ -11,3 +11,11 @@ dependencies = [
     "jupyter>=1.1",
     "pyyaml>=6.0",
 ]
+
+# Tooling, not notebook runtime -- the library-explorer MCP server that the
+# design-notebook skill uses to look up AeroSandbox APIs. Kept out of the main
+# dependencies so `uv sync` for the notebook alone stays lean.
+[dependency-groups]
+# Pinned to 1.x: the vendored server uses mcp.server.fastmcp.FastMCP,
+# which 2.x renamed to MCPServer.
+mcp = ["mcp>=1.2,<2"]

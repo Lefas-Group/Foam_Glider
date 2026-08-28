@@ -1,0 +1,64 @@
+---
+title: "What does it weigh, and where does it balance?"
+---
+
+{{< include _model.qmd >}}
+
+Each part's traced area times the sheet's areal density, placed at the traced
+centroid of its plan shape, summed with `MassProperties` so the balance point is
+computed rather than assumed.
+
+::: {.callout-note}
+## Assumed
+Nothing beyond the sheet weight, which was given. Glue is not modelled at all —
+it lies forward of the structure CG, so every gram of it reduces the ballast
+needed rather than adding to it.
+:::
+
+```{python}
+mp = mass_properties()
+
+parts = [
+    ("wing",                    S_w,        S_w * sigma,        x_le_w + 0.0450),
+    ("stabilizer",              S_h,        S_h * sigma,        x_le_h + 0.0318),
+    ("fin",                     S_v,        S_v * sigma,        x_te_v - fin_c[0] + 0.0207),
+    ("fuselage, 2 laminations", 2 * S_fus,  2 * S_fus * sigma,  0.1163),
+]
+x_np = neutral_point()
+```
+
+**Answer.** `{python} f"{mp.mass*1e3:.2f}"` g, balancing
+`{python} f"{mp.x_cg*1e3:.1f}"` mm aft of the nose — which is
+`{python} f"{(mp.x_cg - x_np)*1e3:.1f}"` mm *behind* its own neutral point at
+`{python} f"{x_np*1e3:.1f}"` mm, so it will not fly as built. That is the whole
+reason ballast is needed, and it follows from where the mass sits rather than
+from any aerodynamic subtlety: the tail surfaces are only
+`{python} f"{(S_h + S_v)/(S_w + S_h + S_v)*100:.0f}"`% of the flying-surface
+area but sit at the end of a `{python} f"{l_fus*100:.1f}"` cm fuselage, and the
+fuselage plate itself — `{python} f"{2*S_fus*sigma/mp.mass*100:.0f}"`% of the
+structure — is the only heavy thing forward of the wing.
+
+At `{python} f"{sigma*1e3:.1f}"` g/m², the sheet is what sets all of this: mass
+scales with traced area alone, so it is the one quantity in this chapter that
+carries no aerodynamic assumption.
+
+```{python}
+#| label: tbl-mass
+#| tbl-cap: "The mass build-up. Station is the traced centroid of each plan shape, measured aft of the nose; the balance point is their mass-weighted mean."
+import pandas as pd
+
+pd.DataFrame({
+    "part": [p[0] for p in parts] + ["structure"],
+    "foam area [cm²]": [f"{p[1]*1e4:.1f}" for p in parts]
+                       + [f"{sum(p[1] for p in parts)*1e4:.1f}"],
+    "mass [g]": [f"{p[2]*1e3:.2f}" for p in parts] + [f"{mp.mass*1e3:.2f}"],
+    "station [mm]": [f"{p[3]*1e3:.1f}" for p in parts] + [f"{mp.x_cg*1e3:.1f}"],
+    "share [%]": [f"{p[2]/mp.mass*100:.0f}" for p in parts] + ["100"],
+}).style.hide(axis="index")
+```
+
+```{python}
+#| echo: false
+#| output: asis
+show_source(neutral_point)
+```

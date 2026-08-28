@@ -181,18 +181,71 @@ render-then-scrape-HTML loop. Run with `uv run python notebook/_scratch/probe.py
 """Scratch probe. Gitignored, never rendered."""
 import pathlib
 
-_chapter = pathlib.Path(__file__).parent.parent / "chapters" / "NN-name"
-exec((_chapter / "_model.py").read_text())
+_root = pathlib.Path(__file__).parent.parent
+_chapter = _root / "chapters" / "NN-name"
+for _p in [_root / "_notebook.py", _chapter / "_model.py", _chapter / "_analysis.py"]:
+    # compile() with the real path so api() and inspect.getsource() work here
+    # exactly as they do in a rendered entry.
+    exec(compile(_p.read_text(), str(_p), "exec"))
+
+print("already available -- check here before writing a helper:")
+for _sig, _doc in api():
+    print(f"  {_sig:52s} {_doc}")
 
 # <the question being explored>
 ````
 
 ---
 
+## `notebook/_notebook.py`
+
+Notebook furniture, one copy for every chapter. Copy verbatim; nothing in it is
+project-specific. Deliberately invisible in the rendered site — the chapter index
+lists `_model.py` and `_analysis.py` only, and `api()` filters to `_analysis.py`,
+so neither function appears in the notebook a reader sees.
+
+````python
+import inspect
+
+
+def show_source(*objs):
+    """Render the source of the shared functions an entry called."""
+    print('::: {.callout-note collapse="true"}')
+    print("## The method, as called\n")
+    print("```python")
+    for o in objs:
+        print(inspect.getsource(o).rstrip())
+        print()
+    print("```")
+    print(":::")
+
+
+def api(filename="_analysis.py"):
+    """Every function defined in `filename`, with signature and summary line."""
+    for name, obj in sorted(globals().items()):
+        if inspect.isfunction(obj) and obj.__code__.co_filename.endswith(filename):
+            yield (name + str(inspect.signature(obj)),
+                   (inspect.getdoc(obj) or "").strip().split("\n")[0])
+````
+
+---
+
+## `notebook/chapters/NN-name/_analysis.py`
+
+The chapter's shared machinery — the calculations more than one entry performs.
+Created empty with the chapter; helpers arrive by promotion from entries, never
+by anticipation. Nothing about rendering or discovery goes here: that is
+`_notebook.py`.
+
+---
+
 ## `notebook/chapters/NN-name/_model.qmd`
 
-A shim, not the model. Two lines, and the only thing to change per chapter is
-the path.
+A shim, not the model. It execs both chapter files, model first.
+
+**`compile()` with the real path is load-bearing.** A bare `exec()` of file text
+labels every function `"<string>"`, and then `inspect.getsource()` raises
+`OSError` — which breaks `show_source()` and `api()` together.
 
 Do **not** write an include shortcode literally inside these comments — the
 chapter index prints the model through `output: asis`, and a literal shortcode
@@ -201,14 +254,17 @@ there risks being expanded.
 ````markdown
 ```{python}
 #| include: false
-# The chapter model lives in _model.py next to this file; this pulls it into
-# the including page's namespace. exec rather than import, because every
-# chapter names its model `_model` and real imports would collide in
-# sys.modules. Path is relative to the notebook root -- _quarto.yml sets
+# The chapter lives in two files next to this one -- _model.py (the vehicle)
+# and _analysis.py (how the chapter measures it). exec rather than import,
+# because every chapter names its model `_model` and real imports would collide
+# in sys.modules. Paths are relative to the notebook root -- _quarto.yml sets
 # `execute-dir: project`, so that is always the cwd.
 import pathlib
 
-exec(pathlib.Path("chapters/NN-name/_model.py").read_text())
+for _p in ["_notebook.py",
+           "chapters/NN-name/_model.py",
+           "chapters/NN-name/_analysis.py"]:
+    exec(compile(pathlib.Path(_p).read_text(), _p, "exec"))
 ```
 ````
 

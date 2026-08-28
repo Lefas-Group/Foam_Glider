@@ -3,6 +3,42 @@
 API traps and solver behaviour. Read before writing dynamics, optimization or
 mass-properties code.
 
+## Don't reimplement what the library has
+
+Look it up with the `library-explorer` MCP server before writing a calculation:
+`list_scoped_classes`, then `get_methods` on the class. It is scoped on purpose
+— don't substitute your own `dir()` dump.
+
+Every row below was written by hand in this notebook before someone noticed the
+library already had it:
+
+| instead of | use |
+|---|---|
+| `2 * np.trapezoid(chords, eta * b/2)` | `Wing.area()` |
+| `b ** 2 / S` | `Wing.aspect_ratio()` |
+| `S / b` | `Wing.mean_geometric_chord()`, or `mean_aerodynamic_chord()` for a true MAC |
+| a finite difference over `beta` | `run_with_stability_derivatives()` → `Cnb`, `CYb`, `Clb`, `x_np_lateral` |
+| `xyz_ref[0] - Cma / CLa * c_ref` | the same call → `x_np` |
+| anything about a fuselage's size | `Fuselage.volume()`, `.area_wetted()`, `.length()`, `.fineness_ratio()` |
+
+Two results that look like bugs and are not:
+
+- **`Wing.span()` defaults to `type="yz"`** — the true panel length, *including*
+  the dihedral rise, not the projected tip-to-tip span. A wing meant to span
+  300 mm read 308.3 mm this way, which is how a real geometry error surfaced:
+  flat-pattern chords had been placed at projected stations, so the model needed
+  a 308 mm pattern to build a 300 mm glider.
+- **`Wing.area()` includes twist.** A stabilizer at `twist=-2°` lofts 0.06%
+  larger than the flat pattern it is cut from. Below the tracing uncertainty
+  here, but it is why `area()` and a flat integral disagree on a twisted surface.
+
+**`x_np` is a point derivative, not a band average.** `run_with_stability_derivatives()`
+finite-differences over a hard-coded 0.001 rad. At chuck-glider Reynolds numbers
+`Cm` against `CL` is genuinely curved, so `x_np` varies with the angle you take
+it at — 147 to 197 mm across 0–8° in one case, which is real curvature and not
+noise. Fitting a line over a stated band is a different, equally defensible
+answer. Whichever you use, state the angle or the band.
+
 ## Return types
 
 - **`float()` on a shape-`(1,)` result raises `TypeError`.** `AeroBuildup`

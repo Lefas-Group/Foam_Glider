@@ -63,8 +63,14 @@ fus_d    = np.array([0.5, 21.6, 27.1, 33.3, 36.7, 38.4, 37.9, 36.2, 33.3, 32.6,
                      12.2, 12.0]) * 1e-3
 
 # Wing: straight leading edge, elliptical trailing edge, rounding off to a
-# point at the tip. eta is fraction of semispan.
-b_w      = 0.300                     # m, wingspan -- the scale the plan is set to
+# point at the tip. eta is fraction of semispan measured ALONG THE PANEL.
+#
+# b_w is the flat pattern -- the width of foam you cut, and the scale the plan
+# is set to. It is not the span of the finished glider: bending the wing to its
+# dihedral pulls the tips inboard, so the built aircraft measures
+# 2 * y_tip = 292 mm across. Placing the traced chords at projected y stations
+# instead would quietly require a 308 mm flat pattern to build a 300 mm glider.
+b_w      = 0.300                     # m, flat pattern width, tip to tip
 wing_eta = np.array([0, .1, .2, .3, .4, .5, .6, .7, .8, .85, .9, .93, .96, .98, 1.0])
 wing_c   = np.array([98.80, 98.32, 97.12, 95.68, 94.00, 91.85, 89.45, 86.09,
                      82.01, 79.38, 74.82, 67.39, 51.80, 38.13, 8.00]) * 1e-3
@@ -79,12 +85,6 @@ stab_c   = np.array([65.23, 65.23, 64.51, 63.31, 61.87, 60.70,
 b_v      = 0.0614                    # m, fin height above the fuselage
 fin_eta  = np.array([0, .25, .5, .75, .9, 1.0])
 fin_c    = np.array([43.20, 42.45, 41.73, 41.01, 32.61, 4.00]) * 1e-3
-
-# Areas, as the sections enclose them. Traced pixel areas, for comparison:
-# 0.026357, 0.009259 and 0.002414 m^2.
-S_w      = 2 * np.trapezoid(wing_c, wing_eta * b_w / 2)
-S_h      = 2 * np.trapezoid(stab_c, stab_eta * b_h / 2)
-S_v      = np.trapezoid(fin_c, fin_eta * b_v)
 
 ##### Stations, measured aft of the nose
 # The plan marks each mounting position with a dashed bracket. The stabilizer
@@ -110,11 +110,13 @@ i_h      = -2.0                      # deg, ASSUMED. The build notes call for
                                      # number.
 
 ##### Derived planform
-AR_w     = b_w ** 2 / S_w
-c_w      = S_w / b_w                 # m, mean geometric chord
-z_tip    = (b_w / 2) * np.tand(dihedral)
-x_qc_w   = x_le_w + 0.25 * wing_c[0]  # wing root quarter-chord station
-x_qc_h   = x_le_h + 0.25 * stab_c[0]
+# The panel is rigid foam bent at the root, so eta runs along the panel and the
+# tip station is that arc length resolved into y and z.
+y_tip    = (b_w / 2) * np.cosd(dihedral)  # m, projected half-span, as built
+z_tip    = (b_w / 2) * np.sind(dihedral)  # m, tip rise from the dihedral break
+b_proj   = 2 * y_tip                 # m, span of the finished glider
+x_qc_w   = x_le_w + 0.25 * wing_c[0]  # m, wing root quarter-chord, the moment reference
+x_qc_h   = x_le_h + 0.25 * stab_c[0]  # m, stabilizer root quarter-chord
 
 ##### Section
 # Every surface is cut from the same flat 5 mm plate with square edges, so
@@ -145,15 +147,15 @@ airfoil = asb.Airfoil("naca0006")
 # exponents from 2 to 10 -- but a strong one on volume, which is why mass is
 # NOT taken from this body. See mass_properties().
 w_fus     = 2 * t_foam               # m, two laminations
-fus_shape = 6.0                      # super-ellipse exponent
+fus_shape = 6.0                      # -, super-ellipse exponent of the fuselage section
 
 
-def build_airplane(stab_incidence=i_h):
-    """The McEagle-300: three flat foam surfaces on the laminated fuselage
-    plate, which is modelled as a body and carries force as well as mass."""
+def _surfaces(stab_incidence):
+    """The four bodies. Split out so the reference quantities below can be read
+    off real geometry instead of being integrated by hand a second time."""
     wing = asb.Wing(name="Wing", symmetric=True, xsecs=[
         asb.WingXSec(
-            xyz_le=[x_le_w, eta * b_w / 2, eta * z_tip],
+            xyz_le=[x_le_w, eta * y_tip, eta * z_tip],
             chord=c, airfoil=airfoil,
         )
         for eta, c in zip(wing_eta, wing_c)
@@ -177,6 +179,35 @@ def build_airplane(stab_incidence=i_h):
         )
         for x, d in zip(fus_x, fus_d)
     ])
+    return wing, stab, fin, fuselage
+
+
+##### Reference quantities, read off the geometry
+# Not integrated from the chord tables. AeroSandbox already computes all of
+# this, and asking it twice -- once by hand, once from the object -- is what
+# caught the wing being built 2.75% oversized. They now agree exactly, and that
+# agreement is a standing check rather than a coincidence.
+#
+# area() is the lofted planform, so it follows the dihedral break and, on the
+# stabilizer, its -2 deg twist: 0.06% above the flat pattern the part is cut
+# from, an eighth of the tracing uncertainty.
+#
+# c_ref is the true mean AERODYNAMIC chord, not S/b. Static margins are quoted
+# as "% MAC", so the denominator had better be the MAC -- 89.8 mm here against
+# 87.5 mm for the mean geometric chord. The neutral point itself does not care:
+# x_np = x_ref - (dCm/dCL) * c_ref is invariant, because Cm scales as 1/c_ref.
+_wing, _stab, _fin, _fus = _surfaces(i_h)
+S_w      = _wing.area()              # m^2, wing area, both panels
+S_h      = _stab.area()              # m^2, stabilizer area
+S_v      = _fin.area()               # m^2, fin area
+AR_w     = _wing.aspect_ratio()      # -, wing aspect ratio, on the flat pattern
+c_w      = _wing.mean_aerodynamic_chord()  # m, MAC -- the static-margin reference
+
+
+def build_airplane(stab_incidence=i_h):
+    """The McEagle-300: three flat foam surfaces on the laminated fuselage
+    plate, which is modelled as a body and carries force as well as mass."""
+    wing, stab, fin, fuselage = _surfaces(stab_incidence)
     return asb.Airplane(
         name="McEagle-300", wings=[wing, stab, fin], fuselages=[fuselage],
         s_ref=S_w, c_ref=c_w, b_ref=b_w,
@@ -215,9 +246,11 @@ def mass_properties(m_ballast=0.0, x_ballast=0.0):
 
     mp = (
         # Wing: centroid 45.0 mm aft of the root LE and 69.6 mm out along each
-        # panel, which the dihedral lifts 16.4 mm above the root chord line.
-        plate(S_w * sigma, x_le_w + 0.0450, 0, 0.0164,
-              wing_c[0], b_w, 2 * 0.0164)
+        # panel. That arc length resolves into height and projected offset the
+        # same way the tip station does.
+        plate(S_w * sigma, x_le_w + 0.0450, 0, 0.0696 * np.sind(dihedral),
+              wing_c[0], 2 * 0.0696 * np.cosd(dihedral),
+              2 * 0.0696 * np.sind(dihedral))
         # Stabilizer: centroid 31.8 mm aft of its root LE.
         + plate(S_h * sigma, x_le_h + 0.0318, 0, z_h, stab_c[0], b_h, 0)
         # Fin: centroid 20.7 mm aft of its LE, 28.7 mm above the fuselage.

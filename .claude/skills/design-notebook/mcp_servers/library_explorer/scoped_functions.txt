@@ -1,0 +1,353 @@
+Functions from traced modules
+================================================================================
+
+aerosandbox.dynamics.flight_dynamics.airplane.get_modes(airplane: aerosandbox.geometry.airplane.Airplane, op_point: aerosandbox.performance.operating_point.OperatingPoint, mass_props: aerosandbox.weights.mass_properties.MassProperties, aero, g=9.81)
+
+aerosandbox.library.power_solar.airmass(solar_elevation_angle: float | numpy.ndarray, altitude: float | numpy.ndarray = 0.0, method='Young') -> float | numpy.ndarray
+  Computes the (relative) airmass as a function of the (true) solar elevation angle and observer altitude.
+  Includes refractive (e.g. curving) effects due to atmospheric density gradient.
+
+aerosandbox.library.power_solar.declination_angle(day_of_year: int | float | numpy.ndarray) -> float | numpy.ndarray
+  Computes the solar declination angle, in degrees, as a function of day of year.
+  
+
+aerosandbox.library.power_solar.length_day(latitude: float | numpy.ndarray, day_of_year: int | float | numpy.ndarray) -> float | numpy.ndarray
+  Gives the duration where the sun is above the horizon on a given day.
+  
+
+aerosandbox.library.power_solar.mass_MPPT(power: float | numpy.ndarray) -> float | numpy.ndarray
+  Gives the estimated mass of a Maximum Power Point Tracking (MPPT) unit for solar energy
+  collection. Based on regressions at AeroSandbox/studies/SolarMPPTMasses.
+
+aerosandbox.library.power_solar.peak_sun_hours_per_day_on_horizontal(latitude: float | numpy.ndarray, day_of_year: int | float | numpy.ndarray) -> float | numpy.ndarray
+  How many hours of equivalent peak sun do you get per day?
+  :param latitude: Latitude [degrees]
+
+aerosandbox.library.power_solar.solar_azimuth_angle(latitude: float | numpy.ndarray, day_of_year: int | float | numpy.ndarray, time: float | numpy.ndarray) -> float | numpy.ndarray
+  Azimuth angle of the sun [degrees] for a local observer.
+  
+
+aerosandbox.library.power_solar.solar_elevation_angle(latitude: float | numpy.ndarray, day_of_year: int | float | numpy.ndarray, time: float | numpy.ndarray) -> float | numpy.ndarray
+  Elevation angle of the sun [degrees] for a local observer.
+  
+
+aerosandbox.library.power_solar.solar_flux(latitude: float | numpy.ndarray, day_of_year: int | float | numpy.ndarray, time: float | numpy.ndarray, altitude: float | numpy.ndarray = 0.0, panel_azimuth_angle: float | numpy.ndarray = 0.0, panel_tilt_angle: float | numpy.ndarray = 0.0, air_quality: Literal['typical', 'clean', 'polluted'] = 'typical', albedo: float | numpy.ndarray = 0.2, **deprecated_kwargs) -> float | numpy.ndarray
+  Computes the solar power flux (power per unit area) on a flat (possibly tilted) panel. Accounts for atmospheric
+  absorption, scattering, and re-scattering (e.g. diffuse illumination), all as a function of panel altitude.
+
+aerosandbox.library.power_solar.solar_flux_outside_atmosphere_normal(day_of_year: int | float | numpy.ndarray) -> float | numpy.ndarray
+  Computes the normal solar flux at the top of the atmosphere ("Airmass 0").
+  This varies due to Earth's orbital eccentricity (elliptical orbit).
+
+aerosandbox.library.propulsion_electric.electric_propeller_propulsion_analysis(total_thrust: float, n_engines: int, propeller_diameter: float, op_point: aerosandbox.performance.operating_point.OperatingPoint, motor_kv: float, motor_no_load_current: float, motor_resistance: float, wire_resistance: float, battery_voltage: float, propeller_tip_mach: float = 0.5, gearbox_ratio: float = 1, gearbox_efficiency: float = 1, esc_efficiency: float = 0.98, battery_discharge_efficiency: float = 0.985) -> dict[str, float]
+  Performs a propulsion analysis for an electric propeller-driven aircraft.
+  
+
+aerosandbox.library.propulsion_electric.mass_ESC(max_power)
+  Estimates the mass of an ESC.
+  
+
+aerosandbox.library.propulsion_electric.mass_battery_pack(battery_capacity_Wh, battery_cell_specific_energy_Wh_kg=240, battery_pack_cell_fraction=0.7)
+  Estimates the mass of a lithium-polymer battery.
+  
+
+aerosandbox.library.propulsion_electric.mass_motor_electric(max_power, kv_rpm_volt=1000, voltage=20, method='hobbyking')
+  Estimates the mass of a brushless DC electric motor.
+  Curve fit to scraped Hobbyking BLDC motor data as of 2/24/2020.
+
+aerosandbox.library.propulsion_electric.mass_wires(wire_length, max_current, allowable_voltage_drop, material='aluminum', insulated=True, max_voltage=600, wire_packing_factor=1, insulator_density=1700, insulator_dielectric_strength=12000000.0, insulator_min_thickness=0.0002, return_dict: bool = False)
+  Estimates the mass of wires used for power transmission.
+  
+
+aerosandbox.library.propulsion_electric.motor_electric_performance(voltage: float | numpy.ndarray | None = None, current: float | numpy.ndarray | None = None, rpm: float | numpy.ndarray | None = None, torque: float | numpy.ndarray | None = None, kv: float = 1000.0, resistance: float = 0.1, no_load_current: float = 0.4) -> dict[str, float | numpy.ndarray]
+  A function for predicting the performance of an electric motor.
+  
+
+aerosandbox.library.propulsion_electric.motor_resistance_from_no_load_current(no_load_current)
+  Estimates the internal resistance of a motor from its no_load_current. Gates quotes R^2=0.93 for this model.
+  
+
+aerosandbox.library.propulsion_propeller.mass_gearbox(power, rpm_in, rpm_out)
+  Estimates the mass of a gearbox.
+  
+
+aerosandbox.library.propulsion_propeller.mass_hpa_propeller(diameter, max_power, include_variable_pitch_mechanism=False)
+  Returns the estimated mass of a propeller assembly for low-disc-loading applications (human powered airplane, paramotor, etc.)
+  
+
+aerosandbox.library.propulsion_propeller.propeller_shaft_power_from_thrust(thrust_force, area_propulsive, airspeed, rho, propeller_coefficient_of_performance=0.8)
+  Using dynamic disc actuator theory, gives the shaft power required to generate
+  a certain amount of thrust.
+
+aerosandbox.library.weights.torenbeek_weights.mass_fuselage(fuselage: aerosandbox.geometry.fuselage.Fuselage, design_mass_TOGW: float, ultimate_load_factor: float, never_exceed_airspeed: float, wing_to_tail_distance: float)
+
+aerosandbox.library.weights.torenbeek_weights.mass_fuselage_simple(fuselage: aerosandbox.geometry.fuselage.Fuselage, never_exceed_airspeed: float, wing_to_tail_distance: float)
+  Computes the mass of the fuselage, using Torenbeek's simple version of the calculation.
+  
+aerosandbox.library.weights.torenbeek_weights.mass_propeller(propeller_diameter: float, propeller_power: float, n_blades: int) -> float
+  Computes the mass of a propeller.
+
+aerosandbox.library.weights.torenbeek_weights.mass_wing(wing: aerosandbox.geometry.wing.Wing, design_mass_TOGW: float, ultimate_load_factor: float, suspended_mass: float, never_exceed_airspeed: float, max_airspeed_for_flaps: float, main_gear_mounted_to_wing: bool = True, flap_deflection_angle: float = 30, strut_y_location: float = None, return_dict: bool = False) -> Union[float, Dict[str, float]]
+  Computes the mass of a wing of an aircraft, according to Torenbeek's "Synthesis of Subsonic Airplane Design",
+      1976, Appendix C: "Prediction of Wing Structural Weight".
+
+aerosandbox.library.weights.torenbeek_weights.mass_wing_basic_structure(wing: aerosandbox.geometry.wing.Wing, design_mass_TOGW: float, ultimate_load_factor: float, suspended_mass: float, never_exceed_airspeed: float, main_gear_mounted_to_wing: bool = True, strut_y_location: float = None, k_e: float = 0.95, return_dict: bool = False) -> Union[float, Dict[str, float]]
+  Computes the mass of the basic structure of the wing of an aircraft, according to
+      Torenbeek's "Synthesis of Subsonic Airplane Design", 1976, Appendix C: "Prediction
+
+aerosandbox.library.weights.torenbeek_weights.mass_wing_high_lift_devices(wing: aerosandbox.geometry.wing.Wing, max_airspeed_for_flaps: float, flap_deflection_angle: float = 30, k_f1: float = 1.0, k_f2: float = 1.0) -> float
+  The function mass_high_lift() is designed to estimate the weight of the high-lift devices
+      on an airplane wing. It uses Torenbeek's method, which is based on multiple factors
+
+aerosandbox.library.weights.torenbeek_weights.mass_wing_simple(wing: aerosandbox.geometry.wing.Wing, design_mass_TOGW: float, ultimate_load_factor: float, suspended_mass: float, main_gear_mounted_to_wing: bool = True) -> float
+  Computes the mass of a wing of an aircraft, according to Torenbeek's "Synthesis of Subsonic
+  Airplane Design".
+
+aerosandbox.library.weights.torenbeek_weights.mass_wing_spoilers_and_speedbrakes(wing: aerosandbox.geometry.wing.Wing, mass_basic_wing: float) -> float
+  The function mass_spoilers_and_speedbrakes() estimates the weight of the spoilers and speedbrakes
+      according to Torenbeek's "Synthesis of Subsonic Airplane Design", 1976, Appendix C: "Prediction
+
+aerosandbox.numpy.arithmetic_monadic.abs(x)
+
+aerosandbox.numpy.arithmetic_monadic.mean(x, axis: int = None)
+  Compute the arithmetic mean along the specified axis.
+  
+
+aerosandbox.numpy.arithmetic_monadic.prod(x, axis: int = None)
+  Return the product of array elements over a given axis.
+  
+
+aerosandbox.numpy.arithmetic_monadic.sum(x, axis: int = None)
+  Sum of array elements over a given axis.
+  
+
+aerosandbox.numpy.array.array(array_like, dtype=None)
+  Initializes a new array. Creates a NumPy array if possible; if not, creates a CasADi array.
+  
+
+aerosandbox.numpy.array.assert_equal_shape(arrays: list[numpy.ndarray] | dict[str, numpy.ndarray]) -> None
+  Assert that all of the given arrays are the same shape. If this is not true, raise a ValueError.
+  
+
+aerosandbox.numpy.array.concatenate(arrays: Sequence[numpy.ndarray | casadi.casadi.MX], axis: int = 0)
+  Join a sequence of arrays along an existing axis. Returns a NumPy array if possible; if not, returns a CasADi array.
+  
+
+aerosandbox.numpy.array.diag(v, k=0)
+  Extract a diagonal or construct a diagonal array.
+  
+
+aerosandbox.numpy.array.dstack(arrays)
+
+aerosandbox.numpy.array.empty_like(prototype, dtype=None, order='K', subok=True, shape=None)
+  Return a new array with the same shape and type as a given array.
+
+aerosandbox.numpy.array.full_like(a, fill_value, dtype=None, order='K', subok=True, shape=None)
+  Return a full array with the same shape and type as a given array.
+
+aerosandbox.numpy.array.hstack(arrays)
+
+aerosandbox.numpy.array.length(array) -> int
+  Returns the length of an 1D-array-like object. An extension of len() with slightly different functionality.
+  Args:
+
+aerosandbox.numpy.array.max(a, axis=None)
+  Return the maximum of an array or maximum along an axis.
+  
+
+aerosandbox.numpy.array.min(a, axis=None)
+  Return the minimum of an array or minimum along an axis.
+  
+
+aerosandbox.numpy.array.ones_like(a, dtype=None, order='K', subok=True, shape=None)
+  Return an array of ones with the same shape and type as a given array.
+
+aerosandbox.numpy.array.ravel(a, order='C')
+  Returns a contiguous flattened array.
+  
+
+aerosandbox.numpy.array.reshape(a, newshape, order='C')
+  Gives a new shape to an array without changing its data.
+  
+
+aerosandbox.numpy.array.roll(a, shift, axis: int = None)
+  Roll array elements along a given axis.
+  
+
+aerosandbox.numpy.array.stack(arrays: Sequence, axis: int = 0)
+  Join a sequence of arrays along a new axis. Returns a NumPy array if possible; if not, returns a CasADi array.
+  
+
+aerosandbox.numpy.array.tile(A, reps)
+  Construct an array by repeating A the number of times given by reps.
+  
+
+aerosandbox.numpy.array.vstack(arrays)
+
+aerosandbox.numpy.array.zeros_like(a, dtype=None, order='K', subok=True, shape=None)
+  Return an array of zeros with the same shape and type as a given array.
+
+aerosandbox.numpy.conditionals.maximum(x1, x2)
+  Element-wise maximum of two arrays.
+  
+
+aerosandbox.numpy.conditionals.minimum(x1, x2)
+  Element-wise minimum of two arrays.
+  
+
+aerosandbox.numpy.conditionals.where(condition, value_if_true, value_if_false)
+  Return elements chosen from x or y depending on condition.
+  
+
+aerosandbox.numpy.rotations.is_valid_rotation_matrix(a: numpy.ndarray, tol=1e-09) -> bool
+  Returns a boolean of whether the given matrix satisfies the properties of a rotation matrix.
+  
+
+aerosandbox.numpy.rotations.rotation_matrix_2D(angle, as_array: bool = True)
+  Gives the 2D rotation matrix associated with a counterclockwise rotation about an angle.
+  Args:
+
+aerosandbox.numpy.rotations.rotation_matrix_3D(angle: float | numpy.ndarray, axis: Union[numpy.ndarray, Sequence[float], str], as_array: bool = True, axis_already_normalized: bool = False)
+  Yields the rotation matrix that corresponds to a rotation by a specified amount about a given axis.
+  
+
+aerosandbox.numpy.rotations.rotation_matrix_from_euler_angles(roll_angle: float | numpy.ndarray = 0, pitch_angle: float | numpy.ndarray = 0, yaw_angle: float | numpy.ndarray = 0, as_array: bool = True)
+  Yields the rotation matrix that corresponds to a given Euler angle rotation.
+  
+
+aerosandbox.numpy.spacing.cosspace(start: float = 0.0, stop: float = 1.0, num: int = 50)
+  Makes a cosine-spaced vector.
+  
+
+aerosandbox.numpy.spacing.geomspace(start: float = 1.0, stop: float = 10.0, num: int = 50)
+  Return numbers spaced evenly on a log scale (a geometric progression).
+  
+
+aerosandbox.numpy.spacing.linspace(start: float = 0.0, stop: float = 1.0, num: int = 50)
+  Returns evenly spaced numbers over a specified interval.
+  
+
+aerosandbox.numpy.spacing.logspace(start: float = 0.0, stop: float = 1.0, num: int = 50)
+  Return numbers spaced evenly on a log scale.
+  
+
+aerosandbox.numpy.spacing.sinspace(start: float = 0.0, stop: float = 1.0, num: int = 50, reverse_spacing: bool = False)
+  Makes a sine-spaced vector. By default, bunches points near the start.
+  
+
+aerosandbox.numpy.surrogate_model_tools.blend(switch: float, value_switch_high, value_switch_low)
+  Smoothly blends between two values on the basis of some switch function.
+  
+
+aerosandbox.numpy.surrogate_model_tools.sigmoid(x, sigmoid_type: Literal['tanh', 'logistic', 'arctan', 'polynomial'] = 'tanh', normalization_range: tuple[float | int, float | int] = (0, 1))
+  A sigmoid function. From Wikipedia (https://en.wikipedia.org/wiki/Sigmoid_function):
+      A sigmoid function is a mathematical function having a characteristic "S"-shaped curve
+
+aerosandbox.numpy.surrogate_model_tools.softmax(*args: float | numpy.ndarray, softness: float = None, hardness: float = None) -> float | numpy.ndarray
+  An element-wise softmax between two or more arrays. Also referred to as the logsumexp() function.
+  
+
+aerosandbox.numpy.surrogate_model_tools.softmax_scalefree(*args: float | numpy.ndarray, relative_softness: float = None, relative_hardness: float = None) -> float | numpy.ndarray
+
+aerosandbox.numpy.surrogate_model_tools.softmin(*args: float | numpy.ndarray, softness: float = None, hardness: float = None) -> float | numpy.ndarray
+  An element-wise softmin between two or more arrays. Related to the logsumexp() function.
+  
+
+aerosandbox.numpy.surrogate_model_tools.softmin_scalefree(*args: float | numpy.ndarray, relative_softness: float = None, relative_hardness: float = None) -> float | numpy.ndarray
+
+aerosandbox.numpy.surrogate_model_tools.softplus(x: float | numpy.ndarray, beta=1, threshold=40)
+  A smooth approximation of the ReLU function, applied elementwise to an array `x`.
+  
+
+aerosandbox.numpy.surrogate_model_tools.swish(x: float | numpy.ndarray, beta: float = 1.0)
+  A smooth approximation of the ReLU function, applied elementwise to an array `x`.
+  
+
+aerosandbox.numpy.trig.arccosd(x)
+  Returns the arccos of an x, in degrees
+
+aerosandbox.numpy.trig.arcsind(x)
+  Returns the arcsin of an x, in degrees
+
+aerosandbox.numpy.trig.arctan2d(y, x)
+  Returns the angle associated with arctan(y, x), in degrees
+
+aerosandbox.numpy.trig.cosd(x)
+  Returns the cos of an angle x, given in degrees
+
+aerosandbox.numpy.trig.degrees(x)
+  Converts an input x from radians to degrees
+
+aerosandbox.numpy.trig.radians(x)
+  Converts an input x from degrees to radians
+
+aerosandbox.numpy.trig.sind(x)
+  Returns the sin of an angle x, given in degrees
+
+aerosandbox.numpy.trig.tand(x)
+  Returns the tangent of an angle x, given in degrees
+
+aerosandbox.tools.pretty_plots.annotation.hline(y, linestyle='--', color='k', text: str = None, text_xloc=0.5, text_ha='center', text_va='bottom', text_kwargs=None, **kwargs)
+
+aerosandbox.tools.pretty_plots.annotation.vline(x, linestyle='--', color='k', text: str = None, text_yloc=0.5, text_ha='right', text_va='center', text_kwargs=None, **kwargs)
+
+aerosandbox.tools.pretty_plots.formatting.equal() -> None
+  Sets all axes to be equal. Works for both 2d plots and 3d plots.
+  
+
+aerosandbox.tools.pretty_plots.formatting.set_ticks(x_major: Union[float, int] = None, x_minor: Union[float, int] = None, y_major: Union[float, int] = None, y_minor: Union[float, int] = None, z_major: Union[float, int] = None, z_minor: Union[float, int] = None)
+
+aerosandbox.tools.pretty_plots.formatting.show_plot(title: str = None, xlabel: str = None, ylabel: str = None, zlabel: str = None, dpi: float = None, savefig: Union[str, List[str]] = None, savefig_transparent: bool = False, tight_layout: bool = True, tight_layout_pad: float = 0.25, legend: bool = None, legend_inline: bool = False, legend_frame: bool = True, pretty_grids: bool = True, set_ticks: bool = True, rotate_axis_labels: bool = True, rotate_axis_labels_linewidth: int = 14, show: bool = True)
+  Makes a matplotlib Figure (and all its constituent Axes) look "nice", then displays it.
+  
+
+aerosandbox.tools.pretty_plots.plots.contour.contour(*args, levels: Union[int, List, numpy.ndarray] = 31, colorbar: bool = True, linelabels: bool = True, cmap=None, alpha: float = 0.7, extend: str = 'neither', linecolor='k', linewidths: float = 0.5, extendrect: bool = True, linelabels_format: Union[str, Callable[[float], str]] = <function eng_string at 0x11d1e5120>, linelabels_fontsize: float = 8, max_side_length_nondim: float = inf, colorbar_label: str = None, x_log_scale: bool = False, y_log_scale: bool = False, z_log_scale: bool = False, mask: numpy.ndarray = None, drop_nans: bool = None, contour_kwargs: Dict = None, contourf_kwargs: Dict = None, colorbar_kwargs: Dict = None, linelabels_kwargs: Dict = None, **kwargs)
+  An analogue for plt.contour and plt.tricontour and friends that produces a much prettier default graph.
+  
+
+aerosandbox.tools.pretty_plots.plots.pie.pie(values: Union[numpy.ndarray, List[float]], names: List[str], colors: Union[numpy.ndarray, List[str]] = None, label_format: Callable[[str, float, float], str] = <function <lambda> at 0x12b1ba0c0>, sort_by: Union[numpy.ndarray, List[float], str, NoneType] = None, startangle: float = 0.0, center_text: str = None, x_labels: float = 1.25, y_max_labels: float = 1.3, arm_length=20, arm_radius=5)
+
+aerosandbox.tools.string_formatting.eng_string(x: float, unit: str = '', format='%.3g', si=True, add_space_after_number: bool = None) -> str
+  Taken from: https://stackoverflow.com/questions/17973278/python-decimal-engineering-notation-for-mili-10e-3-and-micro-10e-6/40691220
+  
+
+aerosandbox.tools.string_formatting.has_balanced_parentheses(string: str, left='(', right=')') -> bool
+  Determines whether a string has matching parentheses or not.
+  
+
+aerosandbox.tools.string_formatting.hash_string(string: str) -> int
+  Hashes a string into a quasi-random 32-bit integer! (Based on an MD5 checksum algorithm.)
+  
+
+aerosandbox.tools.string_formatting.latex_sci_notation_string(x: float, format='%.2e') -> str
+  Converts a floating-point number to a LaTeX-style formatted string. Does not include the `$$` wrapping to put you in math mode.
+  
+
+aerosandbox.tools.string_formatting.trim_string(string: str, length: int = 80) -> str
+  Trims a string to be less than a given length. If the string would exceed the length, makes it end in ellipses ("…").
+  
+
+aerosandbox.tools.string_formatting.wrap_text_ignoring_mathtext(text: str, width: int = 70) -> str
+  Reformat the single paragraph in 'text' to fit in lines of no more
+  than 'width' columns, and return a new string containing the entire
+
+aerosandbox.weights.mass_properties_of_shapes.mass_properties_from_radius_of_gyration(mass: float, x_cg: float = 0, y_cg: float = 0, z_cg: float = 0, radius_of_gyration_x: float = 0, radius_of_gyration_y: float = 0, radius_of_gyration_z: float = 0) -> aerosandbox.weights.mass_properties.MassProperties
+  Returns the mass properties of an object, given its radius of gyration.
+  
+
+aerosandbox.weights.mass_properties_of_shapes.mass_properties_of_cube(mass: float, side_length: float) -> aerosandbox.weights.mass_properties.MassProperties
+  Returns the mass properties of a cube centered on the origin.
+  
+
+aerosandbox.weights.mass_properties_of_shapes.mass_properties_of_ellipsoid(mass: float, radius_x: float, radius_y: float, radius_z: float) -> aerosandbox.weights.mass_properties.MassProperties
+  Returns the mass properties of an ellipsoid centered on the origin.
+  
+
+aerosandbox.weights.mass_properties_of_shapes.mass_properties_of_rectangular_prism(mass: float, length_x: float, length_y: float, length_z: float) -> aerosandbox.weights.mass_properties.MassProperties
+  Returns the mass properties of a rectangular prism centered on the origin.
+  
+
+aerosandbox.weights.mass_properties_of_shapes.mass_properties_of_sphere(mass: float, radius: float) -> aerosandbox.weights.mass_properties.MassProperties
+  Returns the mass properties of a sphere centered on the origin.
+  
+

@@ -4,69 +4,69 @@ title: "Where does the ballast go, and how much?"
 
 {{< include _model.qmd >}}
 
-The neutral point from a straight-line fit of `Cm` against `CL` over α = 0–8°
-at 6 m/s, then the ballast mass that puts the CG a given static margin ahead of
-it. The fit band is used rather than `run_with_stability_derivatives()` because
-the lift curve is nonlinear at this Reynolds number and point-wise finite
-differences on it scatter the neutral point over hundreds of millimetres; the
-band brackets the best-L/D angle. Static margin is not something the plan
-specifies, so three values are carried rather than one.
+The neutral point from a straight-line fit of `Cm` against `CL` over α = 0–8° at
+6 m/s, then the ballast mass that puts the CG a given static margin ahead of it.
+
+::: {.callout-note}
+## Assumed
+Static margin is not something the plan specifies, so three values are carried
+rather than one. The fit band is a choice too, not a measurement.
+:::
 
 ```{python}
-V = 6.0
-alpha = np.linspace(-15, 15, 121)
-p = polars(alpha, V=V)
-
-band = (alpha >= 0) & (alpha <= 8)
-dCm_dCL = np.polyfit(np.array(p["CL"])[band], np.array(p["Cm"])[band], 1)[0]
-x_np = x_qc_w - dCm_dCL * c_w
-
 mp0 = mass_properties()
-print(f"V = {V:.1f} m/s,  Re_c = {p['Re_c']:.0f}")
-print(f"dCm/dCL over alpha 0-8 deg = {dCm_dCL:+.4f}")
-print(f"neutral point       = {x_np*1e3:6.1f} mm aft of the nose")
-print(f"unballasted CG      = {mp0.x_cg*1e3:6.1f} mm aft of the nose"
-      f"  ({mp0.mass*1e3:.2f} g)")
-print(f"static margin as built, no ballast = "
-      f"{(x_np - mp0.x_cg)/c_w*100:+.0f} % MAC")
+x_np = neutral_point(band=(0, 8), V=6.0)
+
+margins = [0.05, 0.10, 0.15]
+x_b = np.linspace(0, x_le_w, 200)
+m_b = {SM: ballast_for(x_np - SM * c_w, x_b, mp0) for SM in margins}
+
+nose = {SM: ballast_for(x_np - SM * c_w, 0.0, mp0) for SM in margins}
+le = {SM: ballast_for(x_np - SM * c_w, x_le_w, mp0) for SM in margins}
+DIME = 2.268e-3                      # kg, a US dime, the plan's own ballast
+dime = mass_properties(m_ballast=DIME, x_ballast=0.0)
 ```
 
+**Answer.** On the nose, and about `{python} f"{nose[0.10]*1e3:.0f}"` g of it.
+Unballasted the airframe is unstable — `{python} f"{mp0.mass*1e3:.2f}"` g of
+foam puts the CG `{python} f"{mp0.x_cg*1e3:.1f}"` mm aft of the nose against a
+neutral point at `{python} f"{x_np*1e3:.1f}"` mm, a static margin of
+`{python} f"{static_margin(mp0.x_cg, x_np)*100:+.0f}"`% MAC — because a
+stabilizer `{python} f"{S_h/S_w*100:.0f}"`% the area of the wing, plus the fin,
+sit at the end of a `{python} f"{l_fus*100:.1f}"` cm fuselage. Station matters
+more than the mass does: 10% MAC costs `{python} f"{nose[0.10]*1e3:.2f}"` g at
+the nose but `{python} f"{le[0.10]*1e3:.2f}"` g at the wing leading edge, where
+the plan says to tape the dime (@fig-ballast). A dime alone is not enough at
+this size; `{python} f"{DIME*1e3:.2f}"` g on the nose lands the CG at `{python} f"{dime.x_cg*1e3:.1f}"` mm,
+`{python} f"{(x_np - dime.x_cg)*1e3:.1f}"` mm ahead of the neutral point, which
+is under half a percent of MAC and stable in name only.
+
 ```{python}
-# Ballast is a point mass; the CG of structure plus ballast is a weighted mean,
-# so the mass needed at a station follows from the lever ratio.
-def ballast_for(x_cg_target, x_ballast):
-    return mp0.mass * (mp0.x_cg - x_cg_target) / (x_cg_target - x_ballast)
+#| label: tbl-ballast
+#| tbl-cap: "Ballast needed at each static margin, taped to the nose and taped at the wing leading edge, at 6 m/s."
+import pandas as pd
 
-x_b = np.linspace(0, x_le_w, 200)
-margins = [0.05, 0.10, 0.15]
-m_b = {SM: ballast_for(x_np - SM * c_w, x_b) for SM in margins}
-
-for SM in margins:
-    x_cg = x_np - SM * c_w
-    print(f"SM {SM:4.0%}  (CG {x_cg*1e3:5.1f} mm):  "
-          f"{ballast_for(x_cg, 0.0)*1e3:5.2f} g at the nose,  "
-          f"{ballast_for(x_cg, x_le_w)*1e3:5.2f} g at the wing leading edge")
-
-m10 = ballast_for(x_np - 0.10 * c_w, 0.0)
-print(f"\nat 10% MAC with the ballast on the nose: all-up "
-      f"{(mp0.mass + m10)*1e3:.2f} g, wing loading "
-      f"{(mp0.mass + m10)*9.81/S_w:.2f} N/m^2")
-
-# What the plan's own ballast would do here, at its best possible station.
-dime = mass_properties(m_ballast=2.268e-3, x_ballast=0.0)
-print(f"a dime on the nose: {dime.mass*1e3:.2f} g all-up, CG "
-      f"{dime.x_cg*1e3:.1f} mm, static margin {(x_np - dime.x_cg)/c_w*100:+.0f} % MAC")
+pd.DataFrame({
+    "static margin [% MAC]": [SM * 100 for SM in margins],
+    "target CG [mm]": [(x_np - SM * c_w) * 1e3 for SM in margins],
+    "on the nose [g]": [nose[SM] * 1e3 for SM in margins],
+    "at the wing LE [g]": [le[SM] * 1e3 for SM in margins],
+}).style.format({
+    "static margin [% MAC]": "{:.0f}", "target CG [mm]": "{:.1f}",
+    "on the nose [g]": "{:.2f}", "at the wing LE [g]": "{:.2f}",
+}).hide(axis="index")
 ```
 
 ```{python}
 #| label: fig-ballast
-#| fig-cap: "Ballast mass needed against the station it is taped to, from the nose back to the wing leading edge, for three static margins at 6 m/s. The dashed line marks the 2.27 g of the dime the plan calls for."
+#| fig-cap: "Ballast mass needed against the station it is taped to, from the nose back to the wing leading edge. The dashed line marks the 2.27 g of the dime the plan calls for."
 fig, ax = plt.subplots(figsize=(7, 4))
 
 for SM in margins:
     ax.plot(x_b * 1e3, m_b[SM] * 1e3, label=f"static margin {SM:.0%} MAC")
 
-ax.axhline(2.268, ls="--", c="0.4", lw=1, label="a dime, 2.27 g")
+ax.axhline(DIME * 1e3, ls="--", c="0.4", lw=1,
+           label=f"a dime, {DIME*1e3:.2f} g")
 ax.set_xlabel("ballast station [mm aft of the nose]")
 ax.set_ylabel("ballast mass [g]")
 ax.set_xlim(0, x_le_w * 1e3)
@@ -77,12 +77,8 @@ plt.tight_layout()
 plt.show()
 ```
 
-**Answer.** On the nose, and about 3 g of it. Unballasted the airframe is
-unstable — 12.52 g of foam puts the CG 184.5 mm aft of the nose against a
-neutral point at 156.6 mm, a static margin of −32% MAC — because a stabilizer
-35% the area of the wing, plus the fin, sit at the end of a 43.8 cm fuselage.
-Station matters more than the mass does: 10% MAC costs 3.10 g at the nose but
-8.43 g at the wing leading edge, where the plan says to tape the dime. A dime
-alone is not enough at this size; 2.27 g on the nose lands the CG at 156.2 mm,
-0.4 mm ahead of the neutral point, which is under half a percent of MAC and
-stable in name only.
+```{python}
+#| echo: false
+#| output: asis
+show_source(neutral_point, ballast_for)
+```

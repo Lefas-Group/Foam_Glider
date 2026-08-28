@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "library-explorer": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "--group",
+        "mcp",
+        "python",
+        ".claude/skills/design-notebook/mcp_servers/library_explorer/library_explorer_server.py"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  }
+}

@@ -21,20 +21,22 @@ Aerospace Education Services Project at Oklahoma State University — scaled to 
 
 ## The model
 
-Read straight from `_model.py` rather than copied, so this listing cannot drift
-from what the entries actually run.
+`_model.py` says what the aircraft is; `_analysis.py` says how this chapter
+measures it. Both are read straight off disk rather than copied, so these
+listings cannot drift from what the entries actually run.
 
 ```{python}
 #| echo: false
 #| output: asis
 import pathlib
 
-code = pathlib.Path("chapters/02-mceagle-300/_model.py").read_text()
-
-print('::: {.callout-note collapse="true"}')
-print("## `_model.py`\n")
-print("```python")
-print(code.strip())
-print("```")
-print(":::")
+for _f in ["_model.py", "_analysis.py"]:
+    code = pathlib.Path(f"chapters/02-mceagle-300/{_f}").read_text()
+    print('::: {.callout-note collapse="true"}')
+    print(f"## `{_f}`\n")
+    print("```python")
+    print(code.strip())
+    print("```")
+    print(":::")
+    print()
 ```

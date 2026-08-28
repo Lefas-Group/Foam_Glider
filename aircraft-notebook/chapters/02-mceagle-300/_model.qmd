@@ -1,11 +1,20 @@
 ```{python}
 #| include: false
-# Shim. The chapter model lives in _model.py next to this file; this pulls it
-# into the including page's namespace. exec rather than import, because every
-# chapter names its model `_model` and real imports would collide in
-# sys.modules. Path is relative to the notebook root -- _quarto.yml sets
-# `execute-dir: project`, so that is always the cwd.
+# Shim. Three files, in order: the notebook's own furniture, then the chapter's
+# aircraft, then how the chapter measures it. All exec'd into the including
+# page's namespace. exec rather than import, because every chapter names its
+# model `_model` and real imports would collide in sys.modules. Paths are
+# relative to the notebook root -- _quarto.yml sets `execute-dir: project`, so
+# that is always the cwd.
+#
+# compile() with the real filename is load-bearing: it sets co_filename, which
+# is what lets an entry render a shared function with show_source() and lets
+# api() report what already exists. A bare exec() of source text labels every
+# function "<string>" and both stop working.
 import pathlib
 
-exec(pathlib.Path("chapters/02-mceagle-300/_model.py").read_text())
+for _p in ["_notebook.py",
+           "chapters/02-mceagle-300/_model.py",
+           "chapters/02-mceagle-300/_analysis.py"]:
+    exec(compile(pathlib.Path(_p).read_text(), _p, "exec"))
 ```

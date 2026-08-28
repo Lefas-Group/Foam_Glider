@@ -4,31 +4,43 @@ title: "What does it look like?"
 
 {{< include _model.qmd >}}
 
-```{python}
-def summary(name, span, chords, S):
-    print(f"{name:11s} span {span*100:5.1f} cm   root chord {chords[0]*100:5.2f} cm"
-          f"   mean chord {S/span*100:5.2f} cm   S {S*1e4:5.1f} cm^2"
-          f"   AR {span**2/S:5.2f}")
+A three-view and the principal dimensions, read back off the `Airplane` object
+rather than recomputed from the tables that built it — so this is the geometry
+`AeroBuildup` actually sees.
 
-summary("wing:", b_w, wing_c, S_w)
-summary("stabilizer:", b_h, stab_c, S_h)
-summary("fin:", b_v, fin_c, S_v)
-print()
-print(f"fuselage length     = {l_fus*100:.1f} cm")
-print(f"fuselage plate      = {w_fus*1e3:.0f} mm wide, {fus_d.max()*1e3:.1f} mm"
-      f" deep at most, {fus_d[-1]*1e3:.1f} mm at the tail")
-print(f"wing t/c            = {t_foam / c_w * 100:.1f} %")
-print(f"dihedral tip rise   = {z_tip*100:.1f} cm  ({dihedral:.1f} deg)")
-print(f"tail arm, qc to qc  = {(x_qc_h - x_qc_w)*100:.1f} cm")
-print(f"tail volume         = {S_h * (x_qc_h - x_qc_w) / (S_w * c_w):.2f}")
-print(f"fin volume          = {S_v * (x_te_v - 0.25*fin_c[0] - x_qc_w) / (S_w * b_w):.3f}")
-print()
-mp = mass_properties()
-print(f"foam sheet          = {sigma*1e3:.1f} g/m^2")
-print(f"flying surfaces     = {(S_w + S_h + S_v)*sigma*1e3:5.2f} g")
-print(f"fuselage, laminated = {2*S_fus*sigma*1e3:5.2f} g")
-print(f"structure, unballasted = {mp.mass*1e3:5.2f} g at "
-      f"{mp.x_cg*100:.1f} cm aft of the nose")
+```{python}
+wing, stab, fin = mceagle.wings
+```
+
+```{python}
+#| label: tbl-surfaces
+#| tbl-cap: "The three flying surfaces. Span and area are the flat pattern — the foam you cut — so the wing's 300 mm is measured along the panel, not tip to tip on the finished glider."
+import pandas as pd
+
+pd.DataFrame({
+    "surface": [w.name for w in mceagle.wings],
+    "span [cm]": [f"{w.span()*100:.1f}" for w in mceagle.wings],
+    "root chord [cm]": [f"{w.xsecs[0].chord*100:.2f}" for w in mceagle.wings],
+    "area [cm²]": [f"{w.area()*1e4:.1f}" for w in mceagle.wings],
+    "aspect ratio": [f"{w.aspect_ratio():.2f}" for w in mceagle.wings],
+}).style.hide(axis="index")
+```
+
+```{python}
+#| label: tbl-arrangement
+#| tbl-cap: "How the three surfaces are arranged on the fuselage."
+pd.DataFrame({
+    "dimension": [
+        "flat pattern span, as cut", "span as built, tips bent up",
+        "dihedral", "dihedral tip rise", "fuselage length",
+        "tail arm, quarter-chord to quarter-chord",
+    ],
+    "value": [
+        f"{b_w*100:.1f} cm", f"{b_proj*100:.1f} cm", f"{dihedral:.1f}°",
+        f"{z_tip*100:.1f} cm", f"{mceagle.fuselages[0].length()*100:.1f} cm",
+        f"{(x_qc_h - x_qc_w)*100:.1f} cm",
+    ],
+}).style.hide(axis="index")
 ```
 
 ```{python}

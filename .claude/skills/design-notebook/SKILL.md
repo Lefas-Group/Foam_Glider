@@ -2,7 +2,7 @@
 name: design-notebook
 description: Records aircraft design work in a chronological Quarto lab notebook. Use when the user is designing or analysing an aircraft, running AeroSandbox studies, or asks to record a finding. Scaffolds the notebook if none exists.
 when_to_use: Designing or sizing an aircraft, running a trajectory or aero study, sweeping a design parameter, or saying "add this to the notebook".
-allowed-tools: Bash(uv run quarto *) Bash(uv run python *)
+allowed-tools: Bash(uv run quarto *) Bash(uv run python *) mcp__library-explorer__list_scoped_classes mcp__library-explorer__list_scoped_functions mcp__library-explorer__get_docstring mcp__library-explorer__get_methods
 ---
 
 Now: !`date "+%Y-%m-%d %H:%M"`
@@ -29,6 +29,11 @@ Notebook: !`find . -maxdepth 3 -name _quarto.yml -not -path "*/_site/*" 2>/dev/n
 
 Repeat per question. A discussion that answers nothing gets no entry.
 
+**Run `uv run python <notebook>/_lint.py` before recording an entry.** It checks
+the three rules that have actually been broken here: no hand-typed numbers in
+prose, no code repeated across entries, and the `**Answer.**` before the
+evidence. It exits non-zero, so it can gate a commit.
+
 ## Scope
 
 The entry answers the question asked and stops. This is the rule that gets
@@ -43,11 +48,9 @@ broken most; when in doubt, write less.
 - **No unrequested studies.** A sensitivity sweep, a multistart, a comparison
   against another configuration: each is its own question, for the user to ask.
 - **Don't assume a value the model can compute.** If the components are stated,
-  sum them — `MassProperties` gives CG and inertia, `run_with_stability_derivatives()`
-  gives the neutral point. An assumption is for a value you genuinely don't
-  have, not one you didn't bother deriving. Where an assumed value and a
-  computed one must agree, solve for the input that makes them agree rather than
-  asserting both.
+  sum them. An assumption is for a value you genuinely don't have, not one you
+  didn't bother deriving. Where an assumed value and a computed one must agree,
+  solve for the input that makes them agree rather than asserting both.
 - **A comparison entry names what is held constant between the arms.** Two
   models differing in more than one respect measure nothing.
 - **State the reference for any quantity that has one.** A `Cm` is meaningless
@@ -60,15 +63,54 @@ broken most; when in doubt, write less.
 - **An `**Answer.**` line only when the question can *only* be answered in
   prose** — "what are this model's limitations?" gets one; "what are the
   polars?" and "what does it look like?" are answered by their own output.
+- **The answer goes before the evidence**, not after: setup, assumptions, the
+  compute cell, the `**Answer.**`, then tables and figures. `code-fold`
+  collapses the compute cell to one line, so the reader reaches the answer
+  without scrolling. Everything below it is there to be checked.
+- **Every number in prose is an inline expression**, `` `{python} f"{x:.2f}"` ``,
+  never typed. Hand-typed numbers drift from the cells above them and the drift
+  is silent until someone re-derives the result.
+- **Rectangular results are a table, not a `print()` block.** A labelled
+  `tbl-` cell is cross-referenceable and scannable; a wall of f-strings is
+  neither. Don't print working — a fit slope, a Reynolds number already stated,
+  a mass nobody asked for.
 - **Captions describe, they don't conclude.** "Lift curve, drag curve and drag
   polar at 6 m/s", not "notice that everything is symmetric because…".
-- **Assumptions live in the chapter's `index.qmd`**, stated once. Don't repeat
-  them as commentary inside entries.
+- **Assumptions sit at the level they belong to.** What defines the chapter —
+  the aero method, the section, what is left out — is stated once in
+  `index.qmd`. What this entry alone had to assume goes in its `## Assumed`
+  callout. Neither is repeated as commentary in the prose.
 - **Interesting things you weren't asked about go in chat**, as a suggested next
   question. Never into the notebook.
 
 The same restraint applies before the entry exists: don't probe in scratch for
 tangents, only for what was asked.
+
+## Use AeroSandbox's own functions
+
+**Before writing any geometry or aerodynamic calculation, ask what already
+exists.** Use the `library-explorer` MCP server — `list_scoped_classes`, then
+`get_methods` on the class you want. It is scoped deliberately: 81 curated
+classes and 353 functions, against ~183 modules in `aerosandbox`. **Do not write
+your own introspection** — a `dir()` or `inspect` dump bypasses that scoping and
+buries the answer in internals. (`uv run python -c` is still right for *checking*
+a call you have already found; that is not discovery.)
+
+Then three rules. The third is the one that catches things:
+
+1. **Use the library's function.** Areas, spans, aspect ratios, chords, volumes,
+   wetted areas, stability derivatives and neutral points all exist already.
+   `references/aerosandbox.md` lists the ones this notebook reimplemented before
+   noticing.
+2. **If you reimplement anyway, say why, at the point of deviation.** Sometimes
+   you must: fuselage mass in the McEagle chapter deliberately does not come
+   from `Fuselage.volume()`, because a super-ellipse under-fills the rectangular
+   foam slab by up to 22%. The comment saying so is the model working correctly.
+3. **Where both exist, compute both and compare.** The disagreement is the
+   finding. `Wing.area()` against a traced integral is what exposed a wing built
+   2.75% too large; `Fuselage.volume()` against the slab is what exposed the
+   mass trap. Neither was caught by reading the code. Agreement costs one line
+   and becomes a regression test.
 
 ## Scratch probes
 
@@ -78,16 +120,13 @@ Overwrite them per question rather than accumulating `probe-<slug>` files; a
 second file is fine when a long run is worth keeping while a new question is
 explored.
 
-**Reach for `probe.py` first.** The chapter model is plain Python
-(`chapters/NN-name/_model.py`), so a script gets it with one `exec` and gives
-you real tracebacks and stdout. Quarto gives you `Cell 3/5 ... An error
-occurred` and then makes you scrape the output back out of HTML.
-
-```python
-import pathlib
-_chapter = pathlib.Path(__file__).parent.parent / "chapters" / "NN-name"
-exec((_chapter / "_model.py").read_text())
-```
+**Reach for `probe.py` first.** The chapter is plain Python, so a script gets
+it with a few `exec`s and gives you real tracebacks and stdout. Quarto gives you
+`Cell 3/5 ... An error occurred` and then makes you scrape the output back out
+of HTML. The exact preamble — which files, in which order, and why they are
+`compile`d rather than `exec`d raw — is in `templates/new-notebook.md`. Copy it
+from there rather than from memory; the copy that used to live here drifted out
+of date and stopped working.
 
 **Use `probe.qmd` when the question produces a figure**, or when you are
 rehearsing cells that are about to become an entry — its cells paste across
@@ -128,6 +167,41 @@ execute:
   the cell has a `#| label:`. Read every figure before reporting on it.
 - Each render costs ~8 s of fixed overhead regardless of the code, so put
   several probes in one file rather than rendering repeatedly.
+
+## Where machinery lives
+
+A notebook is `_notebook.py` (furniture, one copy) plus chapters. A chapter is
+`_model.py` (the vehicle), `_analysis.py` (how the chapter measures it), and its
+entries. A helper moves up a tier only when it earns it:
+
+| tier | lives in | shown by | promoted when |
+|---|---|---|---|
+| entry-local | the `.qmd` cell | the folded code cell, already | one entry needs it |
+| chapter-shared | `_analysis.py` | `show_source(...)` in each calling entry | a **second** entry reaches for it |
+| model | `_model.py` | the chapter index | it describes the aircraft, not a measurement |
+| furniture | `_notebook.py` | nothing — it is plumbing | it is about the notebook, not any aircraft |
+
+`_notebook.py` holds `show_source()` and `api()` and is deliberately invisible in
+the rendered site: the chapter index lists `_model.py` and `_analysis.py` only,
+and `api()` filters to `_analysis.py`. A reader of the design does not need a
+function inventory.
+
+**`_scratch/probe.py` prints `api()` on every run**, which is the moment someone
+is about to write a helper. That is where discovery belongs — not on a rendered
+page the author has no reason to open. Four subtly different neutral points once
+existed in one chapter because nothing advertised the first, and one of the four
+took its moment reference from the wrong station.
+
+**An entry that calls shared machinery must render it**, with `show_source()`.
+Moving code out of an entry must not move the method out of sight — the
+notebook exists to be reviewed.
+
+Promoting a helper means editing an earlier entry to call it. That is allowed,
+and is *not* the thing "entries are written once and left alone" forbids: that
+rule protects conclusions from being quietly rewritten. A refactor is different
+in kind, and the difference must be **proven, not asserted** — dump every
+entry's rendered numbers before and after and diff them. Any change that is not
+a deliberate deletion means the refactor altered the model.
 
 ## Where the work goes
 

@@ -10,26 +10,20 @@ difference behind it is re-run at a range of step sizes, to establish whether
 the two disagree because of arithmetic or because of the aircraft.
 
 ```{python}
-ALPHA = np.linspace(-15, 15, 121)
-p = polars(ALPHA, V=6.0)
-CL, Cm = np.array(p["CL"]), np.array(p["Cm"])
-band = np.array([(a >= 0) and (a <= 8) for a in ALPHA])
-slope = np.polyfit(CL[band], Cm[band], 1)[0]
+alphas = [0., 2., 4., 6., 8.]
 
 # AeroSandbox computes x_np as xyz_ref[0] - Cma / CLa * c_ref, which is the
-# same formula the fit is put through -- only the slope is sourced differently.
+# same formula the fitted slope is put through -- only the slope is sourced
+# differently.
 d = asb.AeroBuildup(
     airplane=mceagle,
-    op_point=asb.OperatingPoint(velocity=6.0, alpha=np.array([0., 2., 4., 6., 8.])),
+    op_point=asb.OperatingPoint(velocity=6.0, alpha=np.array(alphas)),
 ).run_with_stability_derivatives(beta=False, p=False, q=False, r=False)
+asb_np = np.array(d["x_np"])
 
-print("run_with_stability_derivatives()['x_np']:")
-for a, x in zip([0., 2., 4., 6., 8.], np.array(d["x_np"])):
-    print(f"   alpha {a:4.1f} deg   x_np {x*1e3:6.1f} mm")
-print(f"\nstraight-line fit over the same band: {(x_qc_w - slope*c_w)*1e3:.1f} mm")
-```
+x_np_fit = neutral_point(band=(0, 8), V=6.0)
 
-```{python}
+
 # AeroSandbox differences one-sided over a hard-coded 0.001 rad (0.0573 deg).
 # If that step were too small to resolve, shrinking it would move the answer.
 def slope_at(a0, h_deg):
@@ -37,31 +31,60 @@ def slope_at(a0, h_deg):
     cl, cm = np.array(q["CL"]), np.array(q["Cm"])
     return (cm[1] - cm[0]) / (cl[1] - cl[0])
 
-print("central difference about alpha = 4 deg:")
-for h in [0.029, 0.1, 0.5, 1.0, 4.0]:
-    s = slope_at(4.0, h)
-    print(f"   step +/-{h:5.3f} deg   dCm/dCL {s:+.4f}   "
-          f"x_np {(x_qc_w - s*c_w)*1e3:6.1f} mm")
+
+steps = [0.029, 0.1, 0.5, 1.0, 4.0]
+step_slope = {h: slope_at(4.0, h) for h in steps}
 ```
 
 **Answer.** Yes, and it needs no fit: `run_with_stability_derivatives()` returns
 `x_np`, computed as `xyz_ref[0] - Cma / CLa * c_ref` — the same expression the
 fitted slope is put through. Nothing was missing from the library.
 
-This corrects the reason given in "Where does the ballast go, and how much?",
-which said the band was used because point-wise finite differences "scatter the
-neutral point over hundreds of millimetres". Both halves of that are wrong. The
-hundreds of millimetres came from reading `x_np` across the full −15° to +15°
-sweep, where it diverges past the stall as CLα passes through zero; across the
-band actually fitted, the range is 147.4 to 197.1 mm. And the variation is not
-scatter. Shrinking the difference step at 4° from ±0.5° to ±0.029° leaves the
-slope at −0.3380, −0.3354, −0.3353 — converged, so the arithmetic is sound and the
-neutral point genuinely moves with angle of attack. At this Reynolds number the
-wing and the stabilizer change their share of the lift as incidence changes, and
-the balance point moves with it.
+This corrects the reason originally given in "Where does the ballast go, and how
+much?", which justified the fit band as a guard against point-wise finite
+differences scattering the neutral point over hundreds of millimetres. Both
+halves of that were wrong. The hundreds of millimetres came from reading `x_np`
+across the full −15° to +15° sweep, where it diverges past the stall as CLα
+passes through zero; across the band actually fitted, the range is
+`{python} f"{asb_np.min()*1e3:.1f}"` to `{python} f"{asb_np.max()*1e3:.1f}"` mm
+(@tbl-asb-np). And the variation is not scatter. Shrinking the difference step
+at 4° from ±`{python} f"{steps[2]}"`° to ±`{python} f"{steps[0]}"`° leaves the
+slope at
+`{python} f"{step_slope[0.5]:+.4f}"`, `{python} f"{step_slope[0.1]:+.4f}"`,
+`{python} f"{step_slope[0.029]:+.4f}"` — converged, so the arithmetic is sound
+and the neutral point genuinely moves with angle of attack. At this Reynolds
+number the wing and the stabilizer change their share of the lift as incidence
+changes, and the balance point moves with it.
 
 So the fit is not suppressing numerical error, as that entry implied; it is
 averaging a real curve into the single slope that "static margin" presumes. The
 choice does not go away either way — `x_np` requires stating the angle it was
 taken at, and the fit requires stating the band. Both are the same decision, and
 either is defensible as long as it is declared.
+
+```{python}
+#| label: tbl-asb-np
+#| tbl-cap: "AeroSandbox's own neutral point across the fitted band, against the straight-line fit over the whole of it."
+import pandas as pd
+
+pd.DataFrame({
+    "angle of attack [deg]": [f"{a:.0f}" for a in alphas] + ["fit over 0–8"],
+    "neutral point [mm]": [f"{x*1e3:.1f}" for x in asb_np] + [f"{x_np_fit*1e3:.1f}"],
+}).style.hide(axis="index")
+```
+
+```{python}
+#| label: tbl-step
+#| tbl-cap: "The same Cm-against-CL slope at α = 4°, central-differenced over a range of step sizes. Convergence at small steps is what rules out a finite-difference artifact."
+pd.DataFrame({
+    "step [± deg]": [f"{h:.3f}" for h in steps],
+    "dCm/dCL": [f"{step_slope[h]:+.4f}" for h in steps],
+    "neutral point [mm]": [f"{(x_qc_w - step_slope[h]*c_w)*1e3:.1f}" for h in steps],
+}).style.hide(axis="index")
+```
+
+```{python}
+#| echo: false
+#| output: asis
+show_source(neutral_point)
+```
