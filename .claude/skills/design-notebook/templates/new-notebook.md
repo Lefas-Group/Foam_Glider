@@ -230,6 +230,24 @@ def api(filename="_analysis.py"):
 
 ---
 
+## `notebook/_lint.py`
+
+Format checks, run before recording any entry. **Copy it from an existing
+notebook** — `aircraft-notebook/_lint.py` is the reference copy — rather than
+retyping it. It checks four things, each earned by a failure that actually
+happened: no hand-typed numbers in prose, no code repeated across entries, the
+`**Answer.**` before the evidence, and no design decision swept over several
+values instead of being asked about.
+
+Chapters are discovered from `chapters/*/` and all are checked; `SKIP` names the
+ones deliberately excluded. Opt-out, not opt-in — a chapter added tomorrow is
+checked the moment it exists.
+
+`SKILL.md` instructs every session to run this, so a notebook without it makes
+that instruction a lie.
+
+---
+
 ## `notebook/chapters/NN-name/_analysis.py`
 
 The chapter's shared machinery — the calculations more than one entry performs.

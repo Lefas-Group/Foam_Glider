@@ -21,6 +21,12 @@ Three rules, each earned by a failure that actually happened in this notebook:
 3. THE ANSWER COMES BEFORE THE EVIDENCE. An entry is read to find out what was
    learned; the working is there to be checked afterwards.
 
+4. NO SWEEPING A DECISION THAT SHOULD HAVE BEEN ASKED. "Where does the ballast
+   go?" was once answered with three static margins because nobody asked which
+   one was wanted -- turning a missing input into extra analysis, which is worse
+   than either asking or assuming. A design decision gets asked for and recorded
+   in a `## Specified` callout, not swept.
+
 The leading underscore keeps Quarto from rendering this file.
 """
 import pathlib
@@ -28,10 +34,12 @@ import re
 import sys
 from collections import defaultdict
 
-# Chapters written to the current format. Entries and the chapter index. Chapter 1 predates it and is left
-# alone -- it is internally consistent, and rewriting it would invalidate a
-# freeze holding expensive solver runs.
-OPTED_IN = ["02-mceagle-300"]
+# Every chapter is checked unless it is named here. Opt-out, not opt-in: a
+# chapter added tomorrow is checked the moment it exists, and excluding one is a
+# deliberate act someone has to write down. An opt-in list quietly leaves new
+# work unchecked until somebody remembers, which is how a checker becomes
+# decoration.
+SKIP = ["01-aerobuildup-bfg"]   # predates the format; its freeze holds solver runs
 
 # Two decimals or more reads as a result. One decimal is usually a condition --
 # 6 m/s, 0.5 deg, 10% -- and flagging those is noise. Measured on this notebook:
@@ -45,6 +53,11 @@ BOILERPLATE = re.compile(
     r"\)|\]|\}|else:|try:|finally:)"
 )
 BLOCK = 3  # consecutive code lines that count as a repeated block
+
+# A short literal list of numbers bound to a name is how a hedge looks: three
+# static margins, five launch heights. A real sensitivity study builds its arms
+# from calls, and an analysis sweep uses linspace -- neither trips this.
+SWEPT_LITERAL = re.compile(r"^\s*(\w+)\s*=\s*\[\s*([-\d.eE, ]+)\]\s*$", re.M)
 
 
 def prose_of(text):
@@ -84,6 +97,17 @@ def check(chapters):
             problems.append(
                 (f, f"hand-typed number {n!r} in prose — use `{{python}} …`"))
 
+        # A swept design choice with no recorded decision.
+        if "## Specified" not in text:
+            code = "\n".join(re.findall(r"```\{python\}(.*?)```", text, re.S))
+            for name, body in SWEPT_LITERAL.findall(code):
+                n = len([v for v in body.split(",") if v.strip()])
+                if 3 <= n <= 5:
+                    problems.append(
+                        (f, f"sweeps {name!r} over {n} values with no recorded "
+                            f"decision — should the user have been asked, and the "
+                            f"answer put in a `## Specified` callout?"))
+
         if "**Answer.**" in text:
             last_cell = text.rfind("```{python}")
             if text.index("**Answer.**") > last_cell:
@@ -106,7 +130,10 @@ def check(chapters):
 
 
 if __name__ == "__main__":
-    chapters = sys.argv[1:] or OPTED_IN
+    root = pathlib.Path(__file__).parent
+    chapters = sys.argv[1:] or sorted(
+        d.name for d in (root / "chapters").iterdir()
+        if d.is_dir() and d.name not in SKIP)
     found = check(chapters)
     for where, msg in found:
         print(f"  {where.name[11:44] + ': ' if where else ''}{msg}")

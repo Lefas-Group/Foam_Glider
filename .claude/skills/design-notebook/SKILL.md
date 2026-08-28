@@ -8,13 +8,58 @@ allowed-tools: Bash(uv run quarto *) Bash(uv run python *) mcp__library-explorer
 Now: !`date "+%Y-%m-%d %H:%M"`
 Notebook: !`find . -maxdepth 3 -name _quarto.yml -not -path "*/_site/*" 2>/dev/null`
 
+## Start here — route the request
+
+Every request, before anything else.
+
+**1. Design, or meta?**
+Design is the aircraft and any model of it, including "can I trust this model?".
+Meta is the notebook system itself — this skill, its templates and references,
+`_lint.py`, `_notebook.py`, the MCP config, rendering. *Meta work gets done and
+committed. It never becomes an entry.*
+
+**2. Design: where does it go?** See "Where the work goes" — same model becomes
+an entry, a different model or vehicle a chapter, a different aircraft a new
+notebook (ask first).
+
+**3. Does it need an input you do not have?** Classify each one:
+
+| kind | test | action |
+|---|---|---|
+| **Derivable** | the model or the plans already contain it | compute it — never ask, never assume |
+| **Specified** | a different answer changes *what we are building* | **ask** |
+| **Unknown** | a different answer changes *how accurately we modelled it* | assume, flag, say what it costs |
+
+Static margin is Specified — 5% and 15% are different aircraft. The `Cm`-against-
+`CL` fit band is Unknown-ish but really a modelling convention; asking would be
+noise.
+
+**Never sweep a Specified input instead of asking for it.** Carrying three
+values because nobody chose one turns a missing input into extra analysis, which
+is worse than either asking or assuming — it triples the output and still does
+not answer the question. `_lint.py` checks for this.
+
+**4. On the reply:**
+
+- **A value** → record it in the entry's `## Specified` callout and continue.
+- **"I don't know, what do you think?"** →
+  - *answerable in a sentence* → answer it, record it as Specified with yourself
+    as owner and the reason, continue.
+  - *needs computation to answer* → it is a question in its own right. **Return
+    to step 1 with it**, answer it, then come back and finish the original.
+
+With no user to ask — an agent running unattended — assume, and write
+`owner: assumed` in the box. That keeps "did a person decide this?" visible.
+
 ## The loop
 
 1. **Explore in the notebook's `_scratch/`** — gitignored, skipped by project
    renders, so nothing in the notebook is touched. See "Scratch probes" below.
 
 2. **When a question has been answered, stop and propose.** Give the entry
-   title (the user's question, verbatim) and its figures — nothing else. If the
+   title (the user's question, verbatim) and its figures — nothing else. **Ask
+   the Specified questions from triage step 3 in this same message**: you are
+   stopping anyway, so resolving the inputs costs no extra round trip. If the
    proposal covers more than one question, split it into one entry each. Say
    what the entry will cost to render if any cell runs a solver or a sweep;
    freeze pays it once, and it survives edits to `_model.py`. Ask
@@ -76,6 +121,12 @@ broken most; when in doubt, write less.
   a mass nobody asked for.
 - **Captions describe, they don't conclude.** "Lift curve, drag curve and drag
   polar at 6 m/s", not "notice that everything is symmetric because…".
+- **Specified and Assumed are different things.** *Assumed* is a weakness —
+  nobody knows, the number may be wrong, sensitivity matters. *Specified* is a
+  brief — someone decided, so it is not wrong; changing it changes the target,
+  not the model's accuracy. `::: {.callout-tip}` / `## Specified` carries
+  **value · owner · date · one line of rationale**; `::: {.callout-note}` /
+  `## Assumed` carries the rest.
 - **Assumptions sit at the level they belong to.** What defines the chapter —
   the aero method, the section, what is left out — is stated once in
   `index.qmd`. What this entry alone had to assume goes in its `## Assumed`

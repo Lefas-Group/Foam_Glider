@@ -6,11 +6,20 @@ title: "<the question, exactly as the user asked it>"
 
 <One line: what was run and at what condition. Nothing else.>
 
+::: {.callout-tip}
+## Specified
+<A design decision the user made, in the form
+ **<quantity>: <value>** · asked of the user, <date> · <one line of why>.
+ Delete this block if no decision was taken for this entry. Running unattended,
+ write `owner: assumed` instead of naming the user -- that is what keeps "did a
+ person decide this?" answerable.>
+:::
+
 ::: {.callout-note}
 ## Assumed
-<Only if you had to assume a value that wasn't given. Delete this block if you
-didn't. Assumptions go here rather than in the setup line, so a reader can see
-at a glance what is measured and what is chosen.>
+<Only if you had to assume a value nobody could give you. Delete this block if
+you didn't. Assumed is a weakness -- the number may be wrong. Specified above
+is a brief -- someone decided, so it is not wrong. Do not file a decision here.>
 :::
 
 ```{python}

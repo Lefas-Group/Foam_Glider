@@ -87,8 +87,11 @@ it can be cross-referenced, scanned by row, and read on a phone.
 
 ## Callouts
 
-`::: {.callout-note}` … `:::` with a `## Heading` line inside. Use for the
-assumptions block, so what was assumed is visually separable from what was run.
+`::: {.callout-note}` … `:::` with a `## Heading` line inside. Two are in use,
+and the colours carry the meaning: **`callout-note` (blue) / `## Assumed`** for
+a value nobody could supply, and **`callout-tip` (green) / `## Specified`** for
+a design decision the user made. Blue reads as provisional, green as settled,
+which is the distinction — an assumption may be wrong, a decision cannot be.
 Add `collapse="true"` to fold it — that is how the chapter index ships a full
 source listing without burying the page.
 
