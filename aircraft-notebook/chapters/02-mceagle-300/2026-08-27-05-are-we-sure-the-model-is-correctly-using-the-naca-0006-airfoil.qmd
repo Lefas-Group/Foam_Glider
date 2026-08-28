@@ -1,0 +1,102 @@
+---
+title: "Are we sure the model is correctly using the NACA 0006 airfoil?"
+---
+
+{{< include _model.qmd >}}
+
+The section is checked three ways — that the geometry is what it claims, that
+every surface carries it, and that NeuralFoil returns a symmetric polar from it
+— and then the choice itself is tested by giving each surface the section its
+own chords imply.
+
+```{python}
+af = asb.Airfoil("naca0006")
+print(f"max thickness {af.max_thickness():.4f}, max camber {af.max_camber():.6f}")
+for w in mceagle.wings:
+    print(f"{w.name:11s} sections carry {set(x.airfoil.name for x in w.xsecs)}")
+
+a2 = np.linspace(-4, 4, 9)
+for Re in [1.6e3, 3.6e4]:                 # the fin tip, and the mean chord
+    r = af.get_aero_from_neuralfoil(alpha=a2, Re=Re)
+    print(f"Re {Re:7.0f}: CL(0) {np.array(r['CL'])[4]:+.2e}, "
+          f"dCL/dalpha {np.polyfit(a2, np.array(r['CL']), 1)[0]:.4f} /deg "
+          f"(thin-airfoil 0.1097), confidence "
+          f"{float(np.array(r['analysis_confidence'])[0]):.2f}")
+```
+
+```{python}
+for nm, etas, chords in [("wing", wing_eta, wing_c), ("stab", stab_eta, stab_c),
+                         ("fin", fin_eta, fin_c)]:
+    tc = t_foam / chords * 100
+    print(f"{nm:5s} area-weighted t/c "
+          f"{np.trapezoid(tc*chords, etas)/np.trapezoid(chords, etas):5.1f}% "
+          f"(modelled as 6.0%)")
+
+# Lift-curve slope against thickness, at the fin's own Reynolds number.
+print()
+for nm in ["naca0006", "naca0008", "naca0010", "naca0013"]:
+    r = asb.Airfoil(nm).get_aero_from_neuralfoil(alpha=a2, Re=1.56e4)
+    print(f"  {nm} at Re 15600: dCL/dalpha "
+          f"{np.polyfit(a2, np.array(r['CL']), 1)[0]:+.4f} /deg")
+```
+
+```{python}
+def swap(af_w, af_h, af_v):
+    """The airframe rebuilt with a chosen section on each surface."""
+    xs = lambda le, eta, c, af, **kw: asb.WingXSec(xyz_le=le, chord=c,
+                                                   airfoil=af, **kw)
+    return asb.Airplane(
+        name="v", fuselages=mceagle.fuselages, s_ref=S_w, c_ref=c_w, b_ref=b_w,
+        xyz_ref=[x_qc_w, 0, 0],
+        wings=[
+            asb.Wing(name="Wing", symmetric=True, xsecs=[
+                xs([x_le_w, e*b_w/2, e*z_tip], e, c, af_w)
+                for e, c in zip(wing_eta, wing_c)]),
+            asb.Wing(name="Stabilizer", symmetric=True, xsecs=[
+                xs([x_le_h, e*b_h/2, z_h], e, c, af_h, twist=i_h)
+                for e, c in zip(stab_eta, stab_c)]),
+            asb.Wing(name="Fin", xsecs=[
+                xs([x_te_v - c, 0, e*b_v], e, c, af_v)
+                for e, c in zip(fin_eta, fin_c)]),
+        ])
+
+
+ALPHA = np.linspace(-15, 15, 121)
+BAND = (ALPHA >= 0) & (ALPHA <= 8)
+mp0 = mass_properties()
+
+for label, ap in [("all 0006, as modelled", mceagle),
+                  ("stab 0008, fin 0013", swap(*map(asb.Airfoil,
+                       ["naca0006", "naca0008", "naca0013"])))]:
+    p = polars(ALPHA, V=6.0, airplane=ap)
+    CL, Cm = np.array(p["CL"]), np.array(p["Cm"])
+    x_np = x_qc_w - np.polyfit(CL[BAND], Cm[BAND], 1)[0] * c_w
+    x_cg = x_np - 0.10 * c_w
+    b = asb.AeroBuildup(airplane=ap, op_point=asb.OperatingPoint(
+        velocity=6.0, alpha=4.0, beta=np.array([-2.0, 2.0]))).run()
+    Cn = np.array(b["Cn"])
+    print(f"{label:22s} x_np {x_np*1e3:6.1f} mm, ballast "
+          f"{mp0.mass*(mp0.x_cg - x_cg)/x_cg*1e3:5.2f} g, Cn_beta "
+          f"{(Cn[1]-Cn[0])/4/np.pi*180:+.4f} /rad")
+```
+
+**Answer.** Yes, mechanically. The geometry is a true NACA 0006 — 6.00% thick,
+zero camber — every section of all three surfaces carries it, and NeuralFoil
+returns CL(0) = 0 to machine precision with a slope near thin-airfoil theory,
+still at 0.94 confidence down at the fin tip's Re of 1,600.
+
+What is not right is the reason recorded for choosing it. Six percent matches
+the wing's mean chord and nothing else: the same 5 mm foam is 7.9% of the
+stabilizer's chord and 12.8% of the fin's. Matching those makes the model
+worse. NeuralFoil's smooth sections shed lift-curve slope quickly at this scale
+— at the fin's Re of 15,600 it runs 0.081, 0.066, 0.048, 0.018 per degree
+across 6, 8, 10 and 13% thick — so a 13% fin flips Cn_beta from +0.0957 to
+−0.0085 and the aircraft loses directional stability. A square-cut plate does
+not behave that way, because its sharp edge fixes separation and reattachment.
+One thin section on every surface is therefore the right model of a flat plate,
+and being thinner than the tail's true t/c is the point rather than an error.
+
+One consequence for later work: the Cn_beta above is taken about the model's
+moment reference at the wing quarter-chord. About the ballasted CG it is
++0.0485 /rad, a little over half as much, because the fin's arm is shorter from
+there.

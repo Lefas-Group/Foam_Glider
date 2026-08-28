@@ -1,0 +1,11 @@
+```{python}
+#| include: false
+# Shim. The chapter model lives in _model.py next to this file; this pulls it
+# into the including page's namespace. exec rather than import, because every
+# chapter names its model `_model` and real imports would collide in
+# sys.modules. Path is relative to the notebook root -- _quarto.yml sets
+# `execute-dir: project`, so that is always the cwd.
+import pathlib
+
+exec(pathlib.Path("chapters/02-mceagle-300/_model.py").read_text())
+```

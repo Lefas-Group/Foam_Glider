@@ -1,0 +1,67 @@
+---
+title: "Could we use AeroSandbox rather than polyfit to do this calculation?"
+---
+
+{{< include _model.qmd >}}
+
+`AeroBuildup` already returns a neutral point, so it is read out across the same
+0–8° band at 6 m/s and set against the straight-line fit; then the finite
+difference behind it is re-run at a range of step sizes, to establish whether
+the two disagree because of arithmetic or because of the aircraft.
+
+```{python}
+ALPHA = np.linspace(-15, 15, 121)
+p = polars(ALPHA, V=6.0)
+CL, Cm = np.array(p["CL"]), np.array(p["Cm"])
+band = np.array([(a >= 0) and (a <= 8) for a in ALPHA])
+slope = np.polyfit(CL[band], Cm[band], 1)[0]
+
+# AeroSandbox computes x_np as xyz_ref[0] - Cma / CLa * c_ref, which is the
+# same formula the fit is put through -- only the slope is sourced differently.
+d = asb.AeroBuildup(
+    airplane=mceagle,
+    op_point=asb.OperatingPoint(velocity=6.0, alpha=np.array([0., 2., 4., 6., 8.])),
+).run_with_stability_derivatives(beta=False, p=False, q=False, r=False)
+
+print("run_with_stability_derivatives()['x_np']:")
+for a, x in zip([0., 2., 4., 6., 8.], np.array(d["x_np"])):
+    print(f"   alpha {a:4.1f} deg   x_np {x*1e3:6.1f} mm")
+print(f"\nstraight-line fit over the same band: {(x_qc_w - slope*c_w)*1e3:.1f} mm")
+```
+
+```{python}
+# AeroSandbox differences one-sided over a hard-coded 0.001 rad (0.0573 deg).
+# If that step were too small to resolve, shrinking it would move the answer.
+def slope_at(a0, h_deg):
+    q = polars(np.array([a0 - h_deg, a0 + h_deg]), V=6.0)
+    cl, cm = np.array(q["CL"]), np.array(q["Cm"])
+    return (cm[1] - cm[0]) / (cl[1] - cl[0])
+
+print("central difference about alpha = 4 deg:")
+for h in [0.029, 0.1, 0.5, 1.0, 4.0]:
+    s = slope_at(4.0, h)
+    print(f"   step +/-{h:5.3f} deg   dCm/dCL {s:+.4f}   "
+          f"x_np {(x_qc_w - s*c_w)*1e3:6.1f} mm")
+```
+
+**Answer.** Yes, and it needs no fit: `run_with_stability_derivatives()` returns
+`x_np`, computed as `xyz_ref[0] - Cma / CLa * c_ref` — the same expression the
+fitted slope is put through. Nothing was missing from the library.
+
+This corrects the reason given in "Where does the ballast go, and how much?",
+which said the band was used because point-wise finite differences "scatter the
+neutral point over hundreds of millimetres". Both halves of that are wrong. The
+hundreds of millimetres came from reading `x_np` across the full −15° to +15°
+sweep, where it diverges past the stall as CLα passes through zero; across the
+band actually fitted, the range is 147.4 to 197.1 mm. And the variation is not
+scatter. Shrinking the difference step at 4° from ±0.5° to ±0.029° leaves the
+slope at −0.3380, −0.3354, −0.3353 — converged, so the arithmetic is sound and the
+neutral point genuinely moves with angle of attack. At this Reynolds number the
+wing and the stabilizer change their share of the lift as incidence changes, and
+the balance point moves with it.
+
+So the fit is not suppressing numerical error, as that entry implied; it is
+averaging a real curve into the single slope that "static margin" presumes. The
+choice does not go away either way — `x_np` requires stating the angle it was
+taken at, and the fit requires stating the band. Both are the same decision, and
+either is defensible as long as it is declared.

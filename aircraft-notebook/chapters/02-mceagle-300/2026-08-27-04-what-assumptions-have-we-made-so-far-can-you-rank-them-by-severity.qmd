@@ -1,0 +1,192 @@
+---
+title: "What assumptions have we made so far, can you rank them by severity?"
+---
+
+{{< include _model.qmd >}}
+
+Each assumption is swapped for the other readings the plan allows, one at a
+time with everything else held fixed at 6 m/s, and severity is read as the
+spread it opens in the nose ballast needed for 10% MAC — the conclusion this
+chapter has actually drawn. Two assumptions cannot be tested this way and are
+named in the answer instead.
+
+```{python}
+ALPHA = np.linspace(-15, 15, 121)
+
+
+def assess(airplane, x_ref, mp, band=(0, 8), V=6.0):
+    """Neutral point, best L/D, and the nose ballast for 10% MAC."""
+    p = polars(ALPHA, V=V, airplane=airplane)
+    CL, CD, Cm = np.array(p["CL"]), np.array(p["CD"]), np.array(p["Cm"])
+    k = (ALPHA >= band[0]) & (ALPHA <= band[1])
+    x_np = x_ref - np.polyfit(CL[k], Cm[k], 1)[0] * c_w
+    x_cg = x_np - 0.10 * c_w
+    return x_np, (CL / CD).max(), mp.mass * (mp.x_cg - x_cg) / x_cg
+
+
+def wing_at(x_le, curved_is_le=False, tip_rise=None):
+    """The wing rebuilt at a chosen root LE station, optionally flipped."""
+    rise = z_tip if tip_rise is None else tip_rise
+    return asb.Wing(name="Wing", symmetric=True, xsecs=[
+        asb.WingXSec(
+            xyz_le=[x_le + ((wing_c[0] - c) if curved_is_le else 0),
+                    eta * b_w / 2, eta * rise],
+            chord=c, airfoil=airfoil,
+        )
+        for eta, c in zip(wing_eta, wing_c)
+    ])
+
+
+def with_wing(wing, x_ref):
+    base = build_airplane()
+    return asb.Airplane(
+        name="variant", wings=[wing] + list(base.wings[1:]),
+        fuselages=base.fuselages, s_ref=S_w, c_ref=c_w, b_ref=b_w,
+        xyz_ref=[x_ref, 0, 0],
+    )
+
+
+def mass_with_wing_at(x_le):
+    """The wing carries mass as well as lift, so moving it moves the CG."""
+    global x_le_w
+    saved, x_le_w = x_le_w, x_le
+    try:
+        return mass_properties()
+    finally:
+        x_le_w = saved
+```
+
+```{python}
+mp0 = mass_properties()
+base = assess(mceagle, x_qc_w, mp0)
+
+cases = {}
+
+# The "Mount wings here" bracket runs 119.2 to 166.4 mm aft of the nose -- 47 mm
+# against a 99 mm root chord, so it cannot be marking the chord. The model
+# centres the chord on it; the alternatives pin one end of the chord instead.
+cases["wing station on its mount bracket"] = [
+    assess(with_wing(wing_at(xl), xl + 0.25 * wing_c[0]),
+           xl + 0.25 * wing_c[0], mass_with_wing_at(xl))
+    for xl in [0.1664 - wing_c[0], 0.1192]
+]
+
+# "A slight negative angle to the plane of the wings", with no number given.
+cases["stabilizer incidence, 0 to -4 deg"] = [
+    assess(build_airplane(stab_incidence=inc), x_qc_w, mp0)
+    for inc in [0.0, -4.0]
+]
+
+# 5 mm foam on the mean chord is 5.7% thick; the section stands in for a flat
+# plate, and the sheet thickness that picks it is itself assumed.
+_af = airfoil
+cases["section standing in for flat foam"] = []
+for _name in ["naca0004", "naca0008"]:
+    airfoil = asb.Airfoil(_name)
+    cases["section standing in for flat foam"].append(
+        assess(build_airplane(), x_qc_w, mp0))
+airfoil = _af
+
+# The wing is traced with one straight edge and one curved; which is the
+# leading edge is a reading of the plan, not a measurement. Flipping it also
+# moves the wing's own centroid, hence the mass offset.
+cases["which wing edge is the leading edge"] = [
+    base,
+    assess(with_wing(wing_at(x_le_w, curved_is_le=True), x_qc_w), x_qc_w,
+           mass_with_wing_at(x_le_w + wing_c[0] - 2 * 0.0450)),
+]
+
+# The neutral point comes from a straight-line fit whose band is a choice.
+cases["neutral-point fit band"] = [
+    assess(mceagle, x_qc_w, mp0, band=b) for b in [(0, 6), (2, 10)]
+]
+
+# Glue is not in the mass build-up at all. It lies where the fuselage lies.
+cases["glue, currently not modelled"] = [
+    (base[0], base[1],
+     (mp0.mass + m) * ((mp0 + asb.MassProperties(mass=m, x_cg=0.1163)).x_cg
+                       - (base[0] - 0.10 * c_w)) / (base[0] - 0.10 * c_w))
+    for m in [0.0, 3.0e-3]
+]
+
+cases["operating speed, 4 to 8 m/s"] = [
+    assess(mceagle, x_qc_w, mp0, V=V) for V in [4.0, 8.0]
+]
+
+# The plan's 2.5 cm tip rise, scaled as an angle or kept as a length.
+cases["dihedral, 9.6 or 13.3 deg"] = [
+    base, assess(with_wing(wing_at(x_le_w, tip_rise=0.025), x_qc_w), x_qc_w, mp0)
+]
+
+_shape = fus_shape
+cases["fuselage cross-section exponent"] = []
+for fus_shape in [2.0, 10.0]:
+    cases["fuselage cross-section exponent"].append(
+        assess(build_airplane(), x_qc_w, mp0))
+fus_shape = _shape
+
+print(f"baseline: x_np {base[0]*1e3:.1f} mm, best L/D {base[1]:.2f}, "
+      f"ballast {base[2]*1e3:.2f} g\n")
+print(f"{'assumption':38s} {'x_np [mm]':>16s} {'L/D':>13s} {'ballast [g]':>14s}")
+order = sorted(cases, key=lambda k: -abs(cases[k][1][2] - cases[k][0][2]))
+for k in order:
+    (n0, l0, b0), (n1, l1, b1) = cases[k]
+    print(f"{k:38s} {n0*1e3:7.1f}{n1*1e3:8.1f} {l0:6.2f}{l1:7.2f}"
+          f" {b0*1e3:6.2f}{b1*1e3:7.2f}")
+```
+
+```{python}
+#| label: fig-severity
+#| fig-cap: "Nose ballast required for 10% MAC, as each assumption is swung across the readings the plan allows. Bars span the two arms; the dot marks where the current model sits. Ordered by span."
+fig, ax = plt.subplots(figsize=(7.5, 4.2))
+
+lo = np.array([min(cases[k][0][2], cases[k][1][2]) for k in order]) * 1e3
+hi = np.array([max(cases[k][0][2], cases[k][1][2]) for k in order]) * 1e3
+y = np.arange(len(order))[::-1]
+
+ax.barh(y, hi - lo, left=lo, height=0.45, color="#4C78A8", zorder=2,
+        label="span of the two arms")
+ax.plot(np.full(len(order), base[2] * 1e3), y, "o", ms=6, color="0.15",
+        zorder=3, label="current model")
+
+ax.set_yticks(y, order)
+ax.set_xlabel("nose ballast for 10% MAC [g]")
+ax.set_xlim(0, 5)
+ax.grid(axis="x", alpha=0.3)
+ax.set_axisbelow(True)
+for side in ["top", "right", "left"]:
+    ax.spines[side].set_visible(False)
+ax.legend(loc="lower left", frameon=False)
+plt.tight_layout()
+plt.show()
+```
+
+**Answer.** No single assumption dominates. Five sit within a factor of about
+2.5 of one another and together set the answer; below them the rest are noise.
+
+Largest is where the wing sits along the fuselage: the plan's mount bracket is
+47 mm long against a 99 mm root chord, so it cannot be marking the chord, and
+the readings it permits move the neutral point between 135.2 and 178.0 mm — the
+neutral point tracks the wing at about 0.83 mm per mm — and the ballast between
+4.59 and 1.99 g. Then, in order: the stabilizer incidence, which the plan
+describes only as "a slight negative angle" (1.80–3.71 g); the fit band chosen
+for the neutral point (1.92–3.55 g); the section standing in for flat foam,
+together with the 5 mm thickness that picks it (2.44–3.70 g); and which of the
+wing's two edges is the leading one (2.10–3.10 g). That the fit band — a
+choice made in the analysis, not in the aircraft — ranks third is worth noting.
+Glue, absent from the mass build-up entirely, only ever helps: it lies forward
+of the structure CG, so 3 g of it cuts the ballast to 2.46 g.
+
+Ballast is not the whole story. Best L/D is nearly indifferent to all of the
+above — it moves 6.32 to 6.60 across every arm — and is set instead by the
+speed the polar is read at, 5.87 at 4 m/s against 6.96 at 8 m/s. Dihedral and
+the fuselage cross-section exponent are negligible for anything computed here,
+though dihedral is a roll-axis device being judged on a pitch-axis result and no
+lateral case has been run.
+
+Two assumptions cannot be swung inside this model. The first is `AeroBuildup`
+with NeuralFoil section data standing in for a square-cut foam plate at
+Re 3.6 × 10⁴: the sweep above only substitutes smooth NACA sections, while the
+real leading edge separates at once, so the best L/D here is optimistic by an
+amount this chapter cannot bound. The second is that the airframe is rigid and
+true, when the plan's own trimming instructions are to warp the fin.

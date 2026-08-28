@@ -1,0 +1,42 @@
+---
+title: "What does it look like?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+def summary(name, span, chords, S):
+    print(f"{name:11s} span {span*100:5.1f} cm   root chord {chords[0]*100:5.2f} cm"
+          f"   mean chord {S/span*100:5.2f} cm   S {S*1e4:5.1f} cm^2"
+          f"   AR {span**2/S:5.2f}")
+
+summary("wing:", b_w, wing_c, S_w)
+summary("stabilizer:", b_h, stab_c, S_h)
+summary("fin:", b_v, fin_c, S_v)
+print()
+print(f"fuselage length     = {l_fus*100:.1f} cm")
+print(f"fuselage plate      = {w_fus*1e3:.0f} mm wide, {fus_d.max()*1e3:.1f} mm"
+      f" deep at most, {fus_d[-1]*1e3:.1f} mm at the tail")
+print(f"wing t/c            = {t_foam / c_w * 100:.1f} %")
+print(f"dihedral tip rise   = {z_tip*100:.1f} cm  ({dihedral:.1f} deg)")
+print(f"tail arm, qc to qc  = {(x_qc_h - x_qc_w)*100:.1f} cm")
+print(f"tail volume         = {S_h * (x_qc_h - x_qc_w) / (S_w * c_w):.2f}")
+print(f"fin volume          = {S_v * (x_te_v - 0.25*fin_c[0] - x_qc_w) / (S_w * b_w):.3f}")
+print()
+mp = mass_properties()
+print(f"foam sheet          = {sigma*1e3:.1f} g/m^2")
+print(f"flying surfaces     = {(S_w + S_h + S_v)*sigma*1e3:5.2f} g")
+print(f"fuselage, laminated = {2*S_fus*sigma*1e3:5.2f} g")
+print(f"structure, unballasted = {mp.mass*1e3:5.2f} g at "
+      f"{mp.x_cg*100:.1f} cm aft of the nose")
+```
+
+```{python}
+#| label: fig-three-view
+#| fig-cap: "The airframe as modelled. The 13.3° dihedral shows in the front view (top right); the stabilizer hangs below the fuselage plate and the fin stands above it, both with their trailing edges at the tail."
+#| fig-width: 7
+#| fig-height: 7
+# Bind the returned axes -- otherwise their repr renders as a second output and
+# demotes the figure to a subfigure.
+_ = mceagle.draw_three_view(show=True)
+```
