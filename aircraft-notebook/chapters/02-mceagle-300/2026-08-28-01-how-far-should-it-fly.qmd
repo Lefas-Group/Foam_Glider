@@ -1,0 +1,109 @@
+---
+title: "How far should it fly?"
+---
+
+{{< include _model.qmd >}}
+
+The speed and angle of attack at which the ballasted glider flies itself, then
+the still-air glide that follows from them. Trim is solved by iteration because
+the two conditions are coupled: the angle where the pitching moment about the CG
+vanishes sets the lift coefficient, that sets the speed, and the speed moves the
+polar through Reynolds number.
+
+::: {.callout-tip}
+## Specified
+**Still-air steady glide, released at trim speed** · asked of the user,
+2026-08-28 · the aircraft's own performance rather than a measure of anyone's
+throwing arm. A thrown launch zooms and may stall, which needs pitch freedom and
+is a separate question.
+
+**Release height: 1.5 m** · asked of the user, 2026-08-28 · a normal standing
+throw. Range scales linearly with it.
+:::
+
+::: {.callout-note}
+## Assumed
+Still air, and a glide already settled at trim — no launch transient, no thermal,
+no wind. Ballast is at the nose, as the previous entry concluded.
+:::
+
+```{python}
+H = 1.5                              # m, release height, specified above
+
+x_np = neutral_point()
+mp = mass_properties(m_ballast=ballast_for(x_np - 0.10 * c_w, 0.0), x_ballast=0.0)
+W = mp.mass * 9.81
+
+
+def trim(mp, V=5.0, alpha=np.linspace(-2, 12, 141), iters=60):
+    """
+    The angle of attack and speed at which the aircraft flies itself.
+
+    AeroBuildup reports Cm about `xyz_ref`, so it is shifted to the CG before
+    the zero is found: Cm_cg = Cm_ref + CL * (x_cg - x_ref) / c_ref. Iterating
+    rather than solving because CL and V determine each other.
+    """
+    for _ in range(iters):
+        p = polars(alpha, V=V)
+        Cm_cg = np.array(p["Cm"]) + np.array(p["CL"]) * (mp.x_cg - x_qc_w) / c_w
+        i = int(np.argmin(abs(Cm_cg)))
+        V = (2 * mp.mass * 9.81 / (1.225 * S_w * float(np.array(p["CL"])[i]))) ** 0.5
+    slope = (Cm_cg[i + 1] - Cm_cg[i - 1]) / (alpha[i + 1] - alpha[i - 1])
+    return dict(alpha=alpha[i], V=V, CL=float(np.array(p["CL"])[i]),
+                CD=float(np.array(p["CD"])[i]), Cma=slope, Re=p["Re_c"])
+
+
+t = trim(mp)
+LD = t["CL"] / t["CD"]
+sink = t["V"] / (1 + LD ** 2) ** 0.5
+
+# The polars entry's headline figure, recomputed rather than quoted, so this
+# entry cannot end up disagreeing with the one it is comparing itself against.
+p6 = polars(np.linspace(-15, 15, 121), V=6.0)
+LD_6 = float((np.array(p6["CL"]) / np.array(p6["CD"])).max())
+```
+
+**Answer.** About `{python} f"{LD*H:.1f}"` m, from a
+`{python} f"{H:.1f}"` m release — a glide of
+`{python} f"{LD:.2f}"`:1 lasting `{python} f"{H/sink:.1f}"` seconds, sinking at
+`{python} f"{sink:.2f}"` m/s. Ballasted to the specified 10% MAC it weighs
+`{python} f"{mp.mass*1e3:.2f}"` g and settles at
+`{python} f"{t['V']:.2f}"` m/s, nose-up `{python} f"{t['alpha']:.1f}"`°.
+
+That glide ratio is worth reading against the polar the chapter has already
+plotted. The best L/D anywhere on it at 6 m/s is
+`{python} f"{LD_6:.2f}"` — but the aircraft does not fly there. It trims at
+`{python} f"{t['V']:.2f}"` m/s — Reynolds number
+`{python} f"{t['Re']:.0f}"` against the `{python} f"{polars(np.array([4.0]), V=6.0)['Re_c']:.0f}"`
+the polars are read at — and at a lift coefficient of
+`{python} f"{t['CL']:.2f}"`, well above the one that minimises drag. Both effects
+push the same way, and the achievable glide is
+`{python} f"{(1 - LD/LD_6)*100:.0f}"`% worse than the headline figure. Quoting
+the best-L/D number for this aircraft would be quoting a condition it never
+reaches.
+
+The trim is a genuine stable equilibrium, not an artefact of the search:
+`{python} f"{t['Cma']:+.4f}"` per degree through the crossing, so a nose-up
+disturbance is pushed back down.
+
+```{python}
+#| label: tbl-glide
+#| tbl-cap: "The trimmed glide. Everything below the rule follows from the two rows above it and the specified release height."
+import pandas as pd
+
+pd.DataFrame({
+    "quantity": ["all-up mass", "trim angle of attack", "trim speed",
+                 "Reynolds number at trim", "lift coefficient", "drag coefficient",
+                 "glide ratio", "sink rate", "range from 1.5 m", "time aloft"],
+    "value": [f"{mp.mass*1e3:.2f} g", f"{t['alpha']:.1f}°", f"{t['V']:.2f} m/s",
+              f"{t['Re']:.0f}", f"{t['CL']:.3f}", f"{t['CD']:.4f}",
+              f"{LD:.2f} : 1", f"{sink:.2f} m/s", f"{LD*H:.1f} m",
+              f"{H/sink:.1f} s"],
+}).style.hide(axis="index")
+```
+
+```{python}
+#| echo: false
+#| output: asis
+show_source(neutral_point, ballast_for)
+```
