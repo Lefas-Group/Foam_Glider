@@ -34,8 +34,8 @@ def neutral_point(airplane=None, band=(0.0, 8.0), V=6.0):
     The moment reference is read off the airplane rather than passed in.
     AeroBuildup reports Cm about `xyz_ref`, and the answer is only meaningful
     measured from that same station; sourcing the two separately silently
-    biases the result by the offset between them, which is exactly the error
-    that inflated the wing-station sensitivity in the assumptions entry.
+    biases the result by the offset between them. That error once doubled a
+    reported sensitivity before it was caught.
 
     This is one of the few places worth NOT using the library's own function.
     `run_with_stability_derivatives()` returns x_np from the identical formula,
@@ -43,7 +43,7 @@ def neutral_point(airplane=None, band=(0.0, 8.0), V=6.0):
     is genuinely curved, so that answer moves with the angle you take it at --
     147 to 197 mm across the same band. This returns the average slope over a
     stated range instead. Neither removes the choice, so `band` is an explicit
-    argument every entry declares. See the entry on using AeroSandbox's x_np.
+    argument every entry declares.
     """
     ap = mceagle if airplane is None else airplane
     p = polars(ALPHA_SWEEP, V=V, airplane=ap)

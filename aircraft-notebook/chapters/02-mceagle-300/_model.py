@@ -70,6 +70,8 @@ fus_d    = np.array([0.5, 21.6, 27.1, 33.3, 36.7, 38.4, 37.9, 36.2, 33.3, 32.6,
 # dihedral pulls the tips inboard, so the built aircraft measures
 # 2 * y_tip = 292 mm across. Placing the traced chords at projected y stations
 # instead would quietly require a 308 mm flat pattern to build a 300 mm glider.
+b_plan   = 0.2172                    # m, the wing's span on the printed plan
+                                     # sheet: 1252 px at 1242 px / 8.5 in
 b_w      = 0.300                     # m, flat pattern width, tip to tip
 wing_eta = np.array([0, .1, .2, .3, .4, .5, .6, .7, .8, .85, .9, .93, .96, .98, 1.0])
 wing_c   = np.array([98.80, 98.32, 97.12, 95.68, 94.00, 91.85, 89.45, 86.09,
