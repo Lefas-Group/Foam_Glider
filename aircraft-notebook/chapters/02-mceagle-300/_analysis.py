@@ -38,12 +38,19 @@ def neutral_point(airplane=None, band=(0.0, 8.0), V=6.0):
     reported sensitivity before it was caught.
 
     This is one of the few places worth NOT using the library's own function.
-    `run_with_stability_derivatives()` returns x_np from the identical formula,
-    but by finite-differencing at a point; at this Reynolds number Cm against CL
-    is genuinely curved, so that answer moves with the angle you take it at --
-    147 to 197 mm across the same band. This returns the average slope over a
-    stated range instead. Neither removes the choice, so `band` is an explicit
-    argument every entry declares.
+    `run_with_stability_derivatives()` returns x_np from the identical formula
+    (`xyz_ref[0] - Cma / CLa * c_ref`), but takes the slope as a one-sided
+    finite difference over a hard-coded 0.001 rad. At this Reynolds number Cm
+    against CL is genuinely curved -- shrinking that step does not move the
+    answer, so the variation is the aircraft rather than the arithmetic -- and
+    the point answer therefore moves with the angle you take it at, roughly
+    149 to 199 mm across alpha 0-8 deg at the time of writing.
+
+    This returns the average slope over a stated range instead. Neither removes
+    the choice, so `band` is an explicit argument every entry declares.
+
+    Those millimetres are a snapshot, not a guarantee: they were 147 to 197
+    before the dihedral and c_ref corrections. Recompute before quoting them.
     """
     ap = mceagle if airplane is None else airplane
     p = polars(ALPHA_SWEEP, V=V, airplane=ap)
@@ -66,3 +73,63 @@ def ballast_for(x_cg_target, x_ballast=0.0, mp=None):
 def static_margin(x_cg, x_np):
     """Static margin as a fraction of the mean chord. Positive is stable."""
     return (x_np - x_cg) / c_w
+
+
+##### Flat patterns
+# Outlines for cutting templates, in millimetres because that is what a
+# template is measured in. Generated from the same chord tables and depth
+# profile the aerodynamics uses, so a template cannot drift from the aircraft.
+
+
+def sym_surface(eta, chord, semi):
+    """
+    A symmetric flat pattern [mm]: straight leading edge, chord table swept to
+    both tips. Span along x, chord along y -- paper is landscape, so are wings.
+    """
+    y = np.concatenate([-eta[::-1], eta[1:]]) * semi * 1e3
+    c = np.concatenate([chord[::-1], chord[1:]]) * 1e3
+    return np.column_stack([np.concatenate([y, y[::-1]]),
+                            np.concatenate([np.zeros_like(y), c[::-1]])])
+
+
+def fin_outline():
+    """The fin's flat pattern [mm]: straight trailing edge, swept leading edge."""
+    z, c = fin_eta * b_v * 1e3, fin_c * 1e3
+    return np.column_stack([np.concatenate([np.zeros_like(z), -c[::-1]]),
+                            np.concatenate([z, z[::-1]])])
+
+
+def fuselage_outline(x0, x1):
+    """
+    A slice of the fuselage plate between two stations [mm].
+
+    The top edge is straight -- it is what carries the wing -- and the belly
+    hangs below it, so the outline is the depth profile mirrored about y = 0.
+    """
+    xs = np.linspace(x0, x1, 200)
+    d = np.interp(xs, fus_x, fus_d)
+    return np.column_stack([np.concatenate([xs, xs[::-1]]) * 1e3,
+                            np.concatenate([np.zeros_like(xs), -d[::-1]]) * 1e3])
+
+
+def nest(parts, layout, sheet):
+    """
+    Place parts at given bottom-left corners and check the packing.
+
+    Raises rather than returning a flag: a template that overhangs the sheet or
+    overlaps itself is worse than no template, and it should stop the render.
+    """
+    placed = {n: p - p.min(axis=0) + np.array(layout[n]) for n, p in parts.items()}
+    bb = lambda p: (p[:, 0].min(), p[:, 1].min(), p[:, 0].max(), p[:, 1].max())
+    for n, p in placed.items():
+        x0, y0, x1, y1 = bb(p)
+        if x0 < 0 or y0 < 0 or x1 > sheet[0] or y1 > sheet[1]:
+            raise ValueError(f"{n} falls off the {sheet[0]:.0f}x{sheet[1]:.0f} sheet")
+    names = list(placed)
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            ax0, ay0, ax1, ay1 = bb(placed[a])
+            bx0, by0, bx1, by1 = bb(placed[b])
+            if ax0 < bx1 and bx0 < ax1 and ay0 < by1 and by0 < ay1:
+                raise ValueError(f"{a} overlaps {b}")
+    return placed

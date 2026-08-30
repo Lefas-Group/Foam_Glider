@@ -1,0 +1,111 @@
+---
+title: "What to do if I can only print A4?"
+---
+
+{{< include _model.qmd >}}
+
+The same parts, re-nested onto A4 instead of tiled across it, and written out as
+a two-page 1:1 PDF. The foam is unchanged — it is still the A3 sheet the brief
+specifies. Only the paper changes.
+
+::: {.callout-tip}
+## Specified
+**Re-nest onto A4 rather than tile the A3 across two sheets** · decided here,
+2026-08-30 · two A4 portrait sheets side by side come to exactly A3, so tiling
+works in principle, but every printer refuses to print to the paper edge and the
+seam falls across parts. Re-nesting costs nothing because the only part too big
+for A4 is the wing, which the build already splits at the centreline.
+:::
+
+```{python}
+A4P, A4L = (210.0, 297.0), (297.0, 210.0)    # mm, portrait and landscape
+SPLIT_A, SPLIT_B = 0.2665, 0.1800            # m, as the A3 plan
+
+whole_wing = sym_surface(wing_eta, wing_c, b_w / 2)
+half = whole_wing[whole_wing[:, 0] <= 0]     # one panel, cut at the centreline
+mirrored = half * [-1, 1]
+
+# Splitting a polygon by a coordinate is the kind of thing that silently drops a
+# vertex, so the two panels are checked to reconstitute the wing before either
+# reaches a printer.
+shoelace = lambda q: abs(np.sum(q[:, 0] * np.roll(q[:, 1], -1)
+                                - np.roll(q[:, 0], -1) * q[:, 1])) / 2 / 1e6
+assert abs(shoelace(half) + shoelace(mirrored) - S_w) < 1e-9, "panels lost area"
+
+sheet1 = nest({
+    "wing, left panel": half, "wing, right panel": mirrored,
+    "stabilizer": sym_surface(stab_eta, stab_c, b_h / 2), "fin": fin_outline(),
+}, {"wing, left panel": (8, 8), "wing, right panel": (8, 112),
+    "stabilizer": (8, 218), "fin": (160, 218)}, A4P)
+
+sheet2 = nest({
+    "fuselage A, nose": fuselage_outline(0, SPLIT_A),
+    "fuselage B, tail": fuselage_outline(SPLIT_B, l_fus),
+    "fuselage B, nose": fuselage_outline(0, SPLIT_B),
+    "fuselage A, tail": fuselage_outline(SPLIT_A, l_fus),
+}, {"fuselage A, nose": (8, 8), "fuselage B, tail": (8, 54),
+    "fuselage B, nose": (8, 92), "fuselage A, tail": (8, 138)}, A4L)
+
+short_by = b_w * 1e3 - A4P[1]
+PDF = "chapters/02-mceagle-300/mceagle-300-cutting-plan-a4.pdf"
+```
+
+**Answer.** Print two A4 sheets — one portrait, one landscape — and cut nothing
+across a seam. Every part fits a single sheet except the wing, which at
+`{python} f"{b_w*1e3:.0f}"` mm misses A4's `{python} f"{A4P[1]:.0f}"` mm edge by
+`{python} f"{short_by:.0f}"` mm. That costs nothing, because the wing is divided
+at its centreline during assembly anyway: each panel is
+`{python} f"{b_w/2*1e3:.0f}"` × `{python} f"{wing_c[0]*1e3:.1f}"` mm and fits
+easily.
+
+Two A4 portrait sheets butted together are exactly A3, so the A3 plan *could* be
+tiled instead. It is a worse answer. Printers leave an unprintable margin of
+several millimetres, so the join loses material precisely where the wing and the
+long fuselage pieces cross it, and those are the parts whose length matters
+most. Re-nesting has no seam at all.
+
+Cut the two wing panels as a matched pair — stack the foam and cut both at once
+— since they no longer come from one piece split down the middle.
+
+[**Download the 1:1 A4 cutting plan (2 pages)**](mceagle-300-cutting-plan-a4.pdf) —
+print at 100%, and check a wing panel measures `{python} f"{b_w/2*1e3:.0f}"` mm
+along its straight edge before cutting. Everything else — stations, dihedral,
+ballast — is unchanged from the A3 plan.
+
+```{python}
+#| label: fig-a4
+#| fig-cap: "The same seven pieces on two A4 sheets: wing panels, stabilizer and fin on one; the four fuselage laminations on the other. No part crosses a sheet boundary."
+from matplotlib.backends.backend_pdf import PdfPages
+
+
+def draw(ax, placed, sheet, label=True):
+    for n, p in placed.items():
+        ax.fill(p[:, 0], p[:, 1], facecolor="none", edgecolor="k", lw=0.6)
+        if label:
+            ax.text(p[:, 0].mean(), p[:, 1].mean(), n, ha="center", va="center",
+                    fontsize=6, color="0.45")
+    ax.set_xlim(0, sheet[0]); ax.set_ylim(0, sheet[1])
+    ax.set_aspect("equal"); ax.axis("off")
+
+
+with PdfPages(PDF) as pdf:                       # 1:1 -- one unit per millimetre
+    for placed, sheet in [(sheet1, A4P), (sheet2, A4L)]:
+        f = plt.figure(figsize=(sheet[0] / 25.4, sheet[1] / 25.4))
+        draw(f.add_axes([0, 0, 1, 1]), placed, sheet, label=False)
+        pdf.savefig(f); plt.close(f)
+
+fig, axes = plt.subplots(1, 2, figsize=(9, 4.2))
+for ax, (placed, sheet, t) in zip(axes, [(sheet1, A4P, "sheet 1, portrait"),
+                                         (sheet2, A4L, "sheet 2, landscape")]):
+    draw(ax, placed, sheet)
+    ax.add_patch(plt.Rectangle((0, 0), *sheet, fill=False, ec="0.6", lw=1))
+    ax.set_title(f"{t} — {sheet[0]:.0f} × {sheet[1]:.0f} mm", fontsize=9)
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+show_source(sym_surface, nest)
+```
