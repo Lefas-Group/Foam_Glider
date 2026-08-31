@@ -133,3 +133,50 @@ def nest(parts, layout, sheet):
             if ax0 < bx1 and bx0 < ax1 and ay0 < by1 and by0 < ay1:
                 raise ValueError(f"{a} overlaps {b}")
     return placed
+
+
+def trim(mass, x_cg, V=5.0, alpha=None, iters=60):
+    """
+    The angle of attack and speed at which an aircraft of this mass and balance
+    flies itself: pitching moment about the CG zero, lift equal to weight.
+
+    Takes mass and CG rather than a MassProperties, so it works for a glider
+    that has been built and weighed as readily as for one that has been summed.
+
+    AeroBuildup reports Cm about `xyz_ref`, so it is shifted to the CG first:
+    Cm_cg = Cm_ref + CL * (x_cg - x_ref) / c_ref. Iterated rather than solved,
+    because CL and V each determine the other and the speed moves the polar
+    through Reynolds number.
+
+    `slope` is dCm/dalpha at the crossing -- negative is a restoring moment.
+    That is the honest stability test: it needs no neutral point, so it does not
+    inherit the ambiguity in defining one.
+    """
+    a = np.linspace(-2, 14, 161) if alpha is None else alpha
+    for _ in range(iters):
+        p = polars(a, V=V)
+        Cm_cg = np.array(p["Cm"]) + np.array(p["CL"]) * (x_cg - x_qc_w) / c_w
+        i = int(np.argmin(abs(Cm_cg)))
+        V = (2 * mass * 9.81 / (1.225 * S_w * float(np.array(p["CL"])[i]))) ** 0.5
+    CL, CD = float(np.array(p["CL"])[i]), float(np.array(p["CD"])[i])
+    return dict(alpha=a[i], V=V, CL=CL, CD=CD, LD=CL / CD,
+                slope=(Cm_cg[i + 1] - Cm_cg[i - 1]) / (a[i + 1] - a[i - 1]),
+                Re=p["Re_c"], sink=V / (1 + (CL / CD) ** 2) ** 0.5)
+
+
+def stall(V, alpha=None):
+    """
+    Angle of attack where lift first stops rising, and the CL there.
+
+    The FIRST peak, deliberately, not the global maximum. NeuralFoil's curve
+    turns over near 10 degrees, dips, and then climbs again well past 20 -- deep
+    post-stall behaviour the model is not meant to represent. A global argmax
+    picks that second branch at some speeds and reports a stall angle of 16-24
+    degrees, which is nonsense for this wing.
+    """
+    a = np.linspace(0, 24, 241) if alpha is None else alpha
+    CL = np.array(polars(a, V=V)["CL"])
+    for i in range(1, len(a) - 1):
+        if CL[i] >= CL[i - 1] and CL[i] > CL[i + 1]:
+            return a[i], float(CL[i])
+    return a[int(np.argmax(CL))], float(CL.max())

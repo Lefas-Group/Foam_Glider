@@ -35,27 +35,8 @@ mp = mass_properties(m_ballast=ballast_for(x_np - 0.10 * c_w, 0.0), x_ballast=0.
 W = mp.mass * 9.81
 
 
-def trim(mp, V=5.0, alpha=np.linspace(-2, 12, 141), iters=60):
-    """
-    The angle of attack and speed at which the aircraft flies itself.
-
-    AeroBuildup reports Cm about `xyz_ref`, so it is shifted to the CG before
-    the zero is found: Cm_cg = Cm_ref + CL * (x_cg - x_ref) / c_ref. Iterating
-    rather than solving because CL and V determine each other.
-    """
-    for _ in range(iters):
-        p = polars(alpha, V=V)
-        Cm_cg = np.array(p["Cm"]) + np.array(p["CL"]) * (mp.x_cg - x_qc_w) / c_w
-        i = int(np.argmin(abs(Cm_cg)))
-        V = (2 * mp.mass * 9.81 / (1.225 * S_w * float(np.array(p["CL"])[i]))) ** 0.5
-    slope = (Cm_cg[i + 1] - Cm_cg[i - 1]) / (alpha[i + 1] - alpha[i - 1])
-    return dict(alpha=alpha[i], V=V, CL=float(np.array(p["CL"])[i]),
-                CD=float(np.array(p["CD"])[i]), Cma=slope, Re=p["Re_c"])
-
-
-t = trim(mp)
-LD = t["CL"] / t["CD"]
-sink = t["V"] / (1 + LD ** 2) ** 0.5
+t = trim(mp.mass, mp.x_cg)
+LD, sink = t["LD"], t["sink"]
 
 # The polars entry's headline figure, recomputed rather than quoted, so this
 # entry cannot end up disagreeing with the one it is comparing itself against.
@@ -83,7 +64,7 @@ the best-L/D number for this aircraft would be quoting a condition it never
 reaches.
 
 The trim is a genuine stable equilibrium, not an artefact of the search:
-`{python} f"{t['Cma']:+.4f}"` per degree through the crossing, so a nose-up
+`{python} f"{t['slope']:+.4f}"` per degree through the crossing, so a nose-up
 disturbance is pushed back down.
 
 ```{python}
@@ -105,5 +86,5 @@ pd.DataFrame({
 ```{python}
 #| echo: false
 #| output: asis
-show_source(neutral_point, ballast_for)
+show_source(trim)
 ```

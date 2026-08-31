@@ -1,0 +1,89 @@
+---
+title: "Should it still fly?"
+---
+
+{{< include _model.qmd >}}
+
+The built glider's own mass and balance point put through the same trim solve as
+the design, and the restoring moment measured at the trim it actually reaches.
+
+::: {.callout-tip}
+## Specified
+**All-up mass 16 g, balance point 15 mm aft of the plan's** · measured on the
+built glider by the user, 2026-08-30 · the plan called for a balance point
+149.0 mm aft of the nose, so as built it is at 164.0 mm.
+:::
+
+```{python}
+BUILT_M, SHIFT = 0.016, 0.015
+
+x_np = neutral_point()
+x_cg_plan = x_np - 0.10 * c_w
+x_cg_built = x_cg_plan + SHIFT
+
+plan = trim(0.01550, x_cg_plan)
+built = trim(BUILT_M, x_cg_built)
+a_stall, CL_stall = stall(built["V"])
+
+# What it would take to put the balance back where the plan wanted it.
+fix = BUILT_M * (x_cg_built - x_cg_plan) / x_cg_plan
+```
+
+**Answer.** Yes — but only just, and not well. It is not unstable: the restoring
+moment at its trim is `{python} f"{built['slope']:+.4f}"` per degree, *stronger*
+than the design's `{python} f"{plan['slope']:+.4f}"`, so a nose-up disturbance is
+still pushed back down. The problem is where it trims. At
+`{python} f"{BUILT_M*1e3:.0f}"` g and a balance point
+`{python} f"{x_cg_built*1e3:.1f}"` mm aft of the nose it settles at
+`{python} f"{built['alpha']:.1f}"`°, and at that speed the wing stalls at
+`{python} f"{a_stall:.1f}"`° — so it is trimmed
+`{python} f"{abs(built['alpha']-a_stall):.1f}"`° **past** the stall rather than
+`{python} f"{a_stall-plan['alpha']:.1f}"`° below it. Expect it to mush: nose
+high, sinking fast, unwilling to pick up speed, and liable to drop a wing.
+
+The fix is `{python} f"{fix*1e3:.2f}"` g more at the nose, bringing it to
+`{python} f"{(BUILT_M+fix)*1e3:.2f}"` g all-up and the balance back to
+`{python} f"{x_cg_plan*1e3:.1f}"` mm — about
+`{python} f"{fix/3.56e-3:.0%}"` of a 1p coin's weight. Easier, though, to move
+whatever ballast is already fitted as far forward as it will go, and only add
+metal if that runs out of nose.
+
+**A warning about the number this chapter has been quoting.** Static margin says
+this aircraft is *unstable*: the balance point sits
+`{python} f"{(x_cg_built-x_np)*1e3:.1f}"` mm behind the neutral point at
+`{python} f"{x_np*1e3:.1f}"` mm, a margin of
+`{python} f"{static_margin(x_cg_built, x_np)*100:+.1f}"`% MAC. The direct test
+disagrees, and the direct test is right. The neutral point here is a straight
+line fitted across α = 0–8°, and this glider trims well outside that band; the
+label stops describing the aircraft before the aircraft stops flying. Where they
+disagree, believe `dCm/dα` at the trim — it needs no neutral point and so
+inherits none of the ambiguity in defining one.
+
+```{python}
+#| label: tbl-asbuilt
+#| tbl-cap: "The design against the article. Everything is computed at each one's own trim, not at a common condition."
+import pandas as pd
+
+pd.DataFrame({
+    "": ["all-up mass", "balance point", "static margin (band fit)",
+         "restoring moment dCm/dα", "trims at", "stall at that speed",
+         "margin to the stall", "trim speed"],
+    "as planned": [f"{15.50:.2f} g", f"{x_cg_plan*1e3:.1f} mm",
+                   f"{static_margin(x_cg_plan, x_np)*100:+.1f} %",
+                   f"{plan['slope']:+.4f} /deg", f"{plan['alpha']:.1f}°",
+                   f"{stall(plan['V'])[0]:.1f}°",
+                   f"{stall(plan['V'])[0]-plan['alpha']:+.1f}°",
+                   f"{plan['V']:.2f} m/s"],
+    "as built": [f"{BUILT_M*1e3:.2f} g", f"{x_cg_built*1e3:.1f} mm",
+                 f"{static_margin(x_cg_built, x_np)*100:+.1f} %",
+                 f"{built['slope']:+.4f} /deg", f"{built['alpha']:.1f}°",
+                 f"{a_stall:.1f}°", f"{a_stall-built['alpha']:+.1f}°",
+                 f"{built['V']:.2f} m/s"],
+}).style.hide(axis="index")
+```
+
+```{python}
+#| echo: false
+#| output: asis
+show_source(trim, stall)
+```

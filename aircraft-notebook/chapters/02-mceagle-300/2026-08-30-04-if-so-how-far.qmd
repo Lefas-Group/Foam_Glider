@@ -1,0 +1,87 @@
+---
+title: "If so, how far?"
+---
+
+{{< include _model.qmd >}}
+
+The glide that follows from the built glider's own trim, set against the design's,
+from the same release height.
+
+::: {.callout-tip}
+## Specified
+**All-up mass 16 g, balance point 15 mm aft of the plan's** · measured on the
+built glider by the user, 2026-08-30.
+
+**Release height 1.5 m** · as for the design, so the two are comparable.
+:::
+
+::: {.callout-note}
+## Assumed
+Still air, and a glide already settled at trim. More seriously, the built
+glider's trim lies past the stall, where `AeroBuildup` is reading NeuralFoil
+beyond the attached-flow regime it represents well. The range below is what the
+model says, not what the model can support.
+:::
+
+```{python}
+H, BUILT_M, SHIFT = 1.5, 0.016, 0.015
+
+x_np = neutral_point()
+x_cg_plan = x_np - 0.10 * c_w
+plan = trim(0.01550, x_cg_plan)
+built = trim(BUILT_M, x_cg_built := x_cg_plan + SHIFT)
+a_stall, _ = stall(built["V"])
+```
+
+**Answer.** The model says `{python} f"{built['LD']*H:.1f}"` m, against
+`{python} f"{plan['LD']*H:.1f}"` m for the design — a glide ratio of
+`{python} f"{built['LD']:.2f}"` where the plan gives
+`{python} f"{plan['LD']:.2f}"`, so about
+`{python} f"{(1 - built['LD']/plan['LD'])*100:.0f}"`% less distance for the same
+release. It also comes down faster, sinking
+`{python} f"{built['sink']:.2f}"` m/s against
+`{python} f"{plan['sink']:.2f}"`, so it is airborne
+`{python} f"{H/built['sink']:.1f}"` s instead of
+`{python} f"{H/plan['sink']:.1f}"`.
+
+**Do not trust that number.** It is computed at
+`{python} f"{built['alpha']:.1f}"`°, and the wing stalls at
+`{python} f"{a_stall:.1f}"`°, so the aircraft is trimmed past the point where
+the flow stays attached. The section data behind it is a smooth NACA
+approximation to a flat plate, which is optimistic before the stall and
+unreliable after it. Read
+`{python} f"{built['LD']*H:.1f}"` m as an upper bound on a flight that will
+really be a nose-high mush, and expect a real glider to land nearer the thrower
+than that — with the direction it lands in largely decided by which wing drops
+first.
+
+The useful comparison is not the two distances but their cause: the design flies
+`{python} f"{stall(plan['V'])[0]-plan['alpha']:.1f}"`° below the stall and the
+article flies past it. Recovering the distance is not a matter of trimming for
+range; it is a matter of moving the balance point forward until the aircraft is
+flying on the right side of its own polar again.
+
+```{python}
+#| label: tbl-range
+#| tbl-cap: "Glide from a 1.5 m release, each at its own trim. The built column is quoted for completeness, not for confidence."
+import pandas as pd
+
+pd.DataFrame({
+    "": ["trims at", "trim speed", "lift coefficient", "glide ratio",
+         "sink rate", "range from 1.5 m", "time aloft"],
+    "as planned": [f"{plan['alpha']:.1f}°", f"{plan['V']:.2f} m/s",
+                   f"{plan['CL']:.3f}", f"{plan['LD']:.2f} : 1",
+                   f"{plan['sink']:.2f} m/s", f"{plan['LD']*H:.1f} m",
+                   f"{H/plan['sink']:.1f} s"],
+    "as built": [f"{built['alpha']:.1f}°", f"{built['V']:.2f} m/s",
+                 f"{built['CL']:.3f}", f"{built['LD']:.2f} : 1",
+                 f"{built['sink']:.2f} m/s", f"{built['LD']*H:.1f} m",
+                 f"{H/built['sink']:.1f} s"],
+}).style.hide(axis="index")
+```
+
+```{python}
+#| echo: false
+#| output: asis
+show_source(trim)
+```
