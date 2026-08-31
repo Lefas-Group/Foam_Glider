@@ -1,0 +1,80 @@
+---
+title: "What if I use a 50c instead of a 2p?"
+---
+
+{{< include _model.qmd >}}
+
+The same balance solved for a different coin, and what the substitution costs.
+
+::: {.callout-tip}
+## Specified
+**Ballast: one euro 50 cent, replacing the fitted 1p** · decided by the user,
+2026-08-31 · supersedes the 2p chosen the same day. Both work; this is the coin
+actually to hand.
+:::
+
+```{python}
+M, XCG = 0.016, 0.1640                       # as built, with the 1p at 24 mm
+PENNY, PENNY_X = 3.56e-3, 0.0240
+COINS = {"UK 2p": (7.12e-3, 25.9e-3), "euro 50 cent": (7.80e-3, 24.25e-3)}
+
+x_target = neutral_point() - 0.10 * c_w
+fitted = M * XCG - PENNY * PENNY_X           # moment of everything but the 1p
+
+sol = {}
+for name, (m, d) in COINS.items():
+    M2 = M - PENNY + m
+    x = (x_target * M2 - fitted) / m         # where this coin must sit
+    t = trim(M2, x_target)
+    sol[name] = dict(m=m, d=d, x=x, M=M2, t=t, stall=stall(t["V"])[0],
+                     depth=float(np.interp(x, fus_x, fus_d)),
+                     # fraction of MAC per millimetre the coin is misplaced:
+                     # the CG moves m/M of the coin's travel, over a chord in mm
+                     per_mm=(m / M2) / (c_w * 1e3))
+
+fifty = sol["euro 50 cent"]
+twop = sol["UK 2p"]
+```
+
+**Answer.** Centre it `{python} f"{fifty['x']*1e3:.0f}"` mm from the nose —
+`{python} f"{(fifty['x']-twop['x'])*1e3:.0f}"` mm further aft than the 2p would
+have gone. That gives `{python} f"{fifty['M']*1e3:.2f}"` g balancing at
+`{python} f"{x_target*1e3:.1f}"` mm, trimming
+`{python} f"{fifty['stall']-fifty['t']['alpha']:.1f}"`° below the stall and
+gliding `{python} f"{fifty['t']['LD']*1.5:.1f}"` m from 1.5 m.
+
+It is very nearly a drop-in for the 2p. The 50c is only
+`{python} f"{(fifty['m']-twop['m'])*1e3:.2f}"` g heavier, and the reason it moves
+aft rather than forward is that a heavier coin needs a shorter lever to make the
+same moment about the target balance point. The flight is indistinguishable:
+both trim at `{python} f"{fifty['t']['alpha']:.1f}"`° and land within
+`{python} f"{abs(fifty['t']['LD']-twop['t']['LD'])*1.5*100:.0f}"` cm of each
+other over a 1.5 m release. Use whichever is in your pocket.
+
+It fits: the fuselage is `{python} f"{fifty['depth']*1e3:.0f}"` mm deep there
+against the coin's `{python} f"{fifty['d']*1e3:.1f}"` mm, so it tapes flat to the
+side with room top and bottom. Placement is forgiving — a millimetre out is
+`{python} f"{fifty['per_mm']*100:.2f}"`% of MAC, so a couple of millimetres of
+eyeballing costs less than a quarter of the margin to the stall.
+
+```{python}
+#| label: tbl-coins
+#| tbl-cap: "The two coins, each placed where it puts the balance at the specified 10% MAC."
+import pandas as pd
+
+pd.DataFrame({
+    "": list(sol),
+    "coin mass [g]": [f"{v['m']*1e3:.2f}" for v in sol.values()],
+    "station [mm]": [f"{v['x']*1e3:.1f}" for v in sol.values()],
+    "all-up [g]": [f"{v['M']*1e3:.2f}" for v in sol.values()],
+    "trims at": [f"{v['t']['alpha']:.1f}°" for v in sol.values()],
+    "margin to stall": [f"{v['stall']-v['t']['alpha']:+.1f}°" for v in sol.values()],
+    "range from 1.5 m [m]": [f"{v['t']['LD']*1.5:.1f}" for v in sol.values()],
+}).style.hide(axis="index")
+```
+
+```{python}
+#| echo: false
+#| output: asis
+show_source(trim, stall)
+```
