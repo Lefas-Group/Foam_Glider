@@ -38,13 +38,31 @@ import aerosandbox.numpy as np
 import matplotlib.pyplot as plt
 
 ##### Material
-# 27 g per A3 sheet (0.297 x 0.420 m) is the whole of what is specified, and is
-# also the only thing mass depends on. Thickness is ASSUMED at 5 mm, carried
-# over from the foam measured for the BFG in chapter 1 -- 27 g/A3 works out at
-# 43.3 kg/m^3 over 5 mm, which is that same foam to within a percent. Thickness
-# is used only to pick the section, not for mass.
-sigma    = 0.027 / (0.297 * 0.420)   # kg/m^2, areal density of the sheet
+# MEASURED, not taken from the brief: four A3 sheets weighed 87 g on a kitchen
+# scale, so 21.75 g each -- 19% lighter than the 27 g/A3 the brief stated. The
+# brief's figure was carried unchecked through every mass in this chapter until
+# the first glider was built and weighed. Areal density is the only thing mass
+# depends on, so this rescales every component and nothing else; it does not
+# touch the aerodynamics, and the neutral point does not move.
+#
+# Thickness is still ASSUMED at 5 mm. It sets the section thickness ratio and
+# the volume a bevel removes, not the mass.
+sigma    = (0.087 / 4) / (0.297 * 0.420)   # kg/m^2, four A3 sheets, weighed
 t_foam   = 0.005                     # m, ASSUMED sheet thickness
+
+##### Glue -- measured on one build, deliberately NOT modelled
+# The mass build-up below carries no adhesive at all. On the glider built from
+# this plan the unmodelled mass came to 2.98 g centred 286 mm aft of the nose,
+# consistent with roughly 1.2 g laminating the fuselage and 1.75 g of hot-melt
+# bead at the stabilizer and fin joints. That is a quarter of the airframe, and
+# because it sits well behind the balance point it moved the CG 20 mm aft.
+#
+# It stays out of the build-up because one aircraft is not a rule -- the amount
+# depends entirely on how freely the gun is used, and a per-joint allowance
+# fitted to a single build would look more authoritative than it deserves. Use
+# these numbers as a budget when setting ballast, not as a prediction.
+m_glue_measured = 2.98e-3            # kg, build of 2026-08-30. NOT in the model.
+x_glue_measured = 0.286              # m, its centroid aft of the nose
 
 ##### Planform, traced from the plan sheet
 S_fus    = 0.009991                  # m^2, traced fuselage side area, one lamination

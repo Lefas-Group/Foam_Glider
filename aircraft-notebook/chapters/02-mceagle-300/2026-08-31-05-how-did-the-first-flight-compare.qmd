@@ -1,0 +1,140 @@
+---
+title: "How did the first flight compare?"
+---
+
+{{< include _model.qmd >}}
+
+The first flight of the corrected glider, filmed and measured, against what this
+chapter predicted for it.
+
+::: {.callout-tip}
+## Specified
+**Flight video `IMG_1665.mov`** · filmed by the user, 2026-08-31 · the glider as
+flown carries the euro 50 cent, not the 1p. Read off the video: it decodes at
+640 × 360 and 30 fps; the glider leaves the hand at frame 100 and is lying still
+on the grass by frame 156; its wingspan measures 20 px across when at rest,
+read off a 12× crop with a 5 px rule.
+:::
+
+::: {.callout-note}
+## Assumed
+The camera's **horizontal field of view is 66°**, typical of a phone's main
+lens, which is what converts pixels to metres — nothing in the video states it.
+The glider is assumed to **lie broadside** at rest, so its measured span is not
+foreshortened; the fuselage is visibly shorter than the span in those frames
+even though it is longer in fact, which is what a fuselage pointing away from
+the camera looks like. **Release height 1.5 m**, from the video: eye level, arm
+extended, level push.
+:::
+
+```{python}
+FPS, WIDTH_PX, HFOV = 30.0, 640, 66.0
+F_RELEASE, F_DOWN = 100, 156          # last frame in hand / first frame at rest
+SPAN_PX, SPAN_ERR = 20.0, 2.0         # apparent span at rest, and its read error
+H_REL = 1.5                           # m, release height
+
+# Pixels to metres: a span of S metres at range d subtends f*S/d pixels.
+f_px = (WIDTH_PX / 2) / np.tand(HFOV / 2)
+t_aloft = (F_DOWN - F_RELEASE) / FPS
+rng = f_px * b_proj / SPAN_PX
+rng_err = rng * SPAN_ERR / SPAN_PX    # one pixel of read error, propagated
+v_avg = rng / t_aloft
+
+# The aircraft as flown: the 50 cent in place of the fitted 1p.
+m_flown = 0.016 - 3.56e-3 + 7.80e-3
+x_flown = neutral_point() - 0.10 * c_w
+t = trim(m_flown, x_flown)
+a_stall, CL_max = stall(t["V"])
+
+V_stall = (2 * m_flown * 9.81 / (1.225 * S_w * CL_max)) ** 0.5
+rng_floor = V_stall * t_aloft         # it cannot have flown slower than this
+rng_trim = t["V"] * t_aloft           # what the model's own speed implies
+pred_rng, pred_t = t["LD"] * H_REL, H_REL / t["sink"]
+
+# The same airframe at the balance point it was built with, for contrast. Its
+# stall must be read at its own trim speed, not at the flown one.
+heavy = trim(0.016, x_flown + 0.015)
+heavy_past = heavy["alpha"] - stall(heavy["V"])[0]
+```
+
+**Answer.** It flew as designed. The glider was airborne for
+`{python} f"{t_aloft:.2f}"` s against a predicted
+`{python} f"{pred_t:.2f}"` s — agreement to
+`{python} f"{abs(t_aloft-pred_t)/pred_t*100:.0f}"`% — and covered
+`{python} f"{rng:.1f}"` ± `{python} f"{rng_err:.1f}"` m against a predicted
+`{python} f"{pred_rng:.1f}"` m. Time is the number to trust here: it is counted
+in frames and needs no camera calibration, whereas range rests on a
+`{python} f"{SPAN_PX:.0f}"`-pixel measurement and an assumed lens.
+
+**It was not thrown.** @fig-flight shows a level push at eye height with the arm
+extending — the release the glide prediction assumes, not a hard overarm throw.
+That matters, because it is what makes the comparison fair; an earlier read of
+this same video as a hard throw was wrong, and the wide frames are what settle
+it. There is no zoom, no ballooning and no pitch oscillation after release,
+which is what an over-speed launch produces and which would be plainly visible.
+
+**On launch speed.** The video cannot measure it directly — the glider's
+attitude changes faster than its range does, so apparent span is unusable in the
+first half-second — but it is boxed in tightly from both sides. It cannot have
+left the hand below the stall speed of `{python} f"{V_stall:.1f}"` m/s or it
+would have dropped, and the absence of any phugoid rules out much above trim.
+**Launch was therefore at essentially the trim speed,
+`{python} f"{t['V']:.1f}"` m/s** — which is exactly what a level hand push
+should give, and why the flight settled immediately instead of hunting.
+
+**The one inconsistency, and what it means.** The measured range implies an
+average speed of `{python} f"{v_avg:.1f}"` m/s, which is *below* the
+`{python} f"{V_stall:.1f}"` m/s stall — physically impossible for
+`{python} f"{t_aloft:.2f}"` s of steady flight. So the range is underestimated,
+not the model overestimated: flight time alone puts the floor at
+`{python} f"{rng_floor:.1f}"` m, and the model's own trim speed over the
+measured time gives `{python} f"{rng_trim:.1f}"` m, within
+`{python} f"{abs(rng_trim-pred_rng)/pred_rng*100:.0f}"`% of the prediction. Two
+pixels of span at rest is all it takes; that is the measurement to improve, and
+a metre rule laid on the grass would remove the assumed lens entirely.
+
+The glide itself is clean (@fig-flight, third panel): wings level, dihedral
+holding, no wing drop, no mush. That is the corrected balance doing its job —
+the same aircraft at its as-built balance point was predicted to trim
+`{python} f"{heavy_past:.1f}"`° past the stall and to do none of those things.
+
+```{python}
+#| label: fig-flight
+#| fig-cap: "Four frames from the flight. The release is a level push at eye height, not a throw. Circles mark the glider where it is small: in the glide, and at rest on the grass."
+import matplotlib.image as mpimg
+
+fig, ax = plt.subplots(figsize=(7.2, 1.3))
+ax.imshow(mpimg.imread("chapters/02-mceagle-300/flight-2026-08-31.png"))
+ax.axis("off")
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| label: tbl-flight
+#| tbl-cap: "Measured against predicted. Time aloft is counted in frames; range depends on the assumed lens and a 20-pixel span, and carries the uncertainty."
+import pandas as pd
+
+pd.DataFrame({
+    "": ["time aloft", "range", "average speed", "launch speed",
+         "trim speed", "stall speed"],
+    "predicted": [f"{pred_t:.2f} s", f"{pred_rng:.1f} m",
+                  f"{t['V']:.1f} m/s", f"{t['V']:.1f} m/s",
+                  f"{t['V']:.2f} m/s", f"{V_stall:.2f} m/s"],
+    "measured": [f"{t_aloft:.2f} s", f"{rng:.1f} ± {rng_err:.1f} m",
+                 f"{v_avg:.1f} m/s", "not directly measurable",
+                 "—", "—"],
+    "note": ["frames counted, no calibration needed",
+             f"floor of {rng_floor:.1f} m from time and stall speed",
+             "below stall, so the range is low",
+             "bounded to trim by stall and by no phugoid",
+             "model, at the flown mass and balance",
+             "model, at CL max"],
+}).style.hide(axis="index")
+```
+
+```{python}
+#| echo: false
+#| output: asis
+show_source(trim, stall)
+```

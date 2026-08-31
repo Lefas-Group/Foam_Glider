@@ -7,7 +7,7 @@ title: "McEagle-300, AeroBuildup"
 The McEagle — Norm Poff's Styrofoam-tray glider plan, published by the
 Aerospace Education Services Project at Oklahoma State University — scaled to a
 `{python} f"{b_w*1e3:.0f}"` mm wingspan and cut from foam sheet weighing
-27 g per A3, run through
+`{python} f"{sigma*0.297*0.420*1e3:.2f}"` g per A3, run through
 `AeroBuildup`.
 
 - **`AeroBuildup` on 3D geometry**, with NeuralFoil section data.
@@ -21,6 +21,12 @@ Aerospace Education Services Project at Oklahoma State University — scaled to 
   the traced depth profile,
   carrying force as well as mass. Its mass comes from the traced plan area, not
   from the body's volume — a super-ellipse under-fills the rectangular slab.
+- **Glue is not modelled.** The mass build-up carries foam only. On the one
+  glider built so far the adhesive came to
+  `{python} f"{m_glue_measured*1e3:.2f}"` g centred
+  `{python} f"{x_glue_measured*1e3:.0f}"` mm aft of the nose — a quarter of the
+  airframe, sitting behind the balance point. Budget for it; do not expect the
+  model to.
 - **Ballast is not a constant here.** The plan trims the glider by taping a dime
   to the fuselage; the structure alone sits behind its own neutral point, so
   where the ballast goes is a question for an entry.

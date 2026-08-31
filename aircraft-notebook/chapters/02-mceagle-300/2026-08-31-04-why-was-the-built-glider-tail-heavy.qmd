@@ -1,0 +1,120 @@
+---
+title: "Why was the built glider tail-heavy?"
+---
+
+{{< include _model.qmd >}}
+
+The built glider weighed what the model predicted but balanced 20 mm further
+aft. This reconciles the two, working from the article back to the model rather
+than forward.
+
+::: {.callout-tip}
+## Specified
+Measured on the built glider and its material by the user, 2026-08-30/31:
+**16 g all-up**, balancing **164.0 mm** aft of the nose with a 1p at 24 mm;
+**wing leading edge 91 mm** aft of the nose; bevels **4 mm at the leading edge,
+10 mm at the trailing edge**, each tapered to a point; and **four A3 sheets of
+foam weighing 87 g**.
+:::
+
+```{python}
+MM = 1e3
+M, XCG, PENNY, PENNY_X = 0.016, 0.1640, 3.56e-3, 0.0240
+WING_LE, LE_W, TE_W = 0.091, 4.0, 10.0
+SIGMA_BRIEF = 0.027 / (0.297 * 0.420)        # what the brief claimed
+
+# The article, with the known coin stripped off.
+m_built = M - PENNY
+x_built = (M * XCG - PENNY * PENNY_X) / m_built
+
+# The model as it stood: the brief's foam, and the wing where the plan put it.
+pred = mass_properties()
+old_m = pred.mass * SIGMA_BRIEF / sigma
+old_x = pred.x_cg + (S_w * SIGMA_BRIEF) * (WING_LE - x_le_w) / old_m
+new_x = pred.x_cg + (S_w * sigma) * (WING_LE - x_le_w) / pred.mass
+
+# Bevels: a wedge w*t/2 off each edge, at the measured density.
+rho = sigma / t_foam / 1e9
+bev = [(span * MM * w * t_foam * MM / 2, x)
+       for span, xle, xte in [(b_w, WING_LE, WING_LE + c_w),
+                              (b_h, x_le_h, x_te_v),
+                              (b_v, x_te_v - fin_c[0], x_te_v)]
+       for w, x in [(LE_W, xle), (TE_W, xte)]]
+m_bev = sum(v for v, _ in bev) * rho
+x_bev = sum(v * x for v, x in bev) / sum(v for v, _ in bev)
+
+after_m = pred.mass - m_bev
+after_x = (pred.mass * new_x - m_bev * x_bev) / after_m
+glue_m = m_built - after_m
+glue_x = (m_built * x_built - after_m * after_x) / glue_m
+
+# The ballast this chapter used to call for, on the brief's foam.
+x_t = neutral_point() - 0.10 * c_w
+old_ballast = old_m * (pred.x_cg - x_t) / x_t
+new_ballast = ballast_for(x_t, 0.0)
+```
+
+**Answer.** Two errors, pulling opposite ways on mass and the same way on
+balance, which is why the total looked right and the trim did not.
+
+The foam is `{python} f"{(1 - sigma/SIGMA_BRIEF)*100:.0f}"`% lighter than the
+brief said — `{python} f"{sigma*0.297*0.420*1e3:.2f}"` g per A3 measured against the
+`{python} f"{SIGMA_BRIEF*0.297*0.420*1e3:.0f}"` g claimed. The model was therefore carrying about
+`{python} f"{(old_m - pred.mass)*1e3:.1f}"` g of foam that does not exist,
+spread over the whole airframe. Against that, the build carries roughly
+`{python} f"{glue_m*1e3:.1f}"` g of hot glue that the model does not carry at
+all, and its centre of mass sits `{python} f"{glue_x*MM:.0f}"` mm aft of the
+nose — behind the balance point, because the heaviest beads are at the
+stabiliser and fin joints.
+
+Phantom foam removed from everywhere and real glue added at the tail nearly
+cancel in total mass. They do not cancel in moment. That is the whole
+discrepancy: `{python} f"{(m_built - old_m)*1e3:+.2f}"` g of mass but
+`{python} f"{(x_built - old_x)*MM:+.1f}"` mm of balance.
+
+The bevels are real — `{python} f"{m_bev*1e3:.2f}"` g, some
+`{python} f"{m_bev/pred.mass*100:.0f}"`% of the airframe — but they worked
+*against* the shift. Weighted by edge length they remove foam centred
+`{python} f"{x_bev*MM:.0f}"` mm aft of the nose, behind the balance point, so
+taking that material off pulled the CG forward. Nor was the wing misplaced: at
+91 mm it is `{python} f"{(x_le_w - WING_LE)*MM:.1f}"` mm *forward* of where the
+plan put it, which widens the gap rather than closing it.
+
+**What changed in the model.** `sigma` is now the measured
+`{python} f"{sigma*1e3:.1f}"` g/m² rather than the brief's
+`{python} f"{SIGMA_BRIEF*1e3:.1f}"`. Structure mass falls from
+`{python} f"{old_m*1e3:.2f}"` g to `{python} f"{pred.mass*1e3:.2f}"` g and the
+nose ballast for 10% MAC from `{python} f"{old_ballast*1e3:.2f}"` g to
+`{python} f"{new_ballast*1e3:.2f}"` g. The
+neutral point does not move at all — areal density never enters the
+aerodynamics. Glue is still not modelled; the measurement above is recorded in
+`_model.py` as a budget, not folded into the build-up, because one aircraft is
+not a rule.
+
+```{python}
+#| label: tbl-reconcile
+#| tbl-cap: "From the model as it stood to the glider on the bench. Mass and balance are reconciled together; neither alone identifies the cause."
+import pandas as pd
+
+pd.DataFrame({
+    "step": ["model, as it stood (27 g/A3)", "foam corrected to 21.75 g/A3",
+             "wing at its measured 91 mm", "less the bevels",
+             "plus unmodelled glue", "the glider, measured"],
+    "mass [g]": [f"{old_m*1e3:.2f}", f"{pred.mass*1e3:.2f}",
+                 f"{pred.mass*1e3:.2f}", f"{after_m*1e3:.2f}",
+                 f"{m_built*1e3:.2f}", f"{m_built*1e3:.2f}"],
+    "balance [mm]": [f"{old_x*MM:.1f}", f"{pred.x_cg*MM:.1f}", f"{new_x*MM:.1f}",
+                     f"{after_x*MM:.1f}", f"{x_built*MM:.1f}", f"{x_built*MM:.1f}"],
+    "note": ["the prediction that was wrong", "19% less foam, balance unmoved",
+             "2.4 mm forward — widens the gap",
+             f"{m_bev*1e3:.2f} g off, centred {x_bev*MM:.0f} mm — pulls forward",
+             f"{glue_m*1e3:.2f} g at {glue_x*MM:.0f} mm — pulls aft",
+             "16.00 g all-up with the 1p"],
+}).style.hide(axis="index")
+```
+
+```{python}
+#| echo: false
+#| output: asis
+show_source(ballast_for)
+```
