@@ -1,0 +1,103 @@
+---
+title: "How far should I move the ballast?"
+---
+
+{{< include _model.qmd >}}
+
+What moving the fitted coin can and cannot achieve, and what it takes to put the
+balance point back where the design wants it.
+
+::: {.callout-tip}
+## Specified
+**As built: 16 g, balance point 164.0 mm aft of the nose, 1p coin centred at
+24 mm** · measured on the built glider by the user, 2026-08-30.
+
+**Fix chosen: replace the 1p with a 2p** · decided by the user, 2026-08-31 · one
+coin rather than two, and it lands on the flat of the fuselage ahead of the wing.
+:::
+
+```{python}
+M, XCG = 0.016, 0.1640                     # as built
+PENNY, PENNY_X, PENNY_D = 3.56e-3, 0.0240, 20.3e-3
+TWOPENCE, TWOPENCE_D = 7.12e-3, 25.9e-3
+
+x_target = neutral_point() - 0.10 * c_w    # the specified 10% MAC
+need = XCG - x_target
+
+# Moving a fixed mass: the CG shifts by m*travel/M, so invert for the travel.
+travel = need * M / PENNY
+x_nose = PENNY_D / 2                       # coin edge just touching the nose tip
+best_by_moving = XCG - PENNY * (PENNY_X - x_nose) / M
+
+# Swapping it: solve for where the heavier coin must sit.
+x_2p = (x_target * (M - PENNY + TWOPENCE) - (M * XCG - PENNY * PENNY_X)) / TWOPENCE
+M_2p = M - PENNY + TWOPENCE
+
+options = {
+    "as built, 1p at 24 mm": (M, XCG),
+    "1p pushed against the nose": (M, best_by_moving),
+    "2p at its solved station": (M_2p, x_target),
+    "the design, for reference": (0.01550, x_target),
+}
+flown = {}
+for k, (m, x) in options.items():
+    t = trim(m, x)
+    flown[k] = (t, *stall(t["V"]))
+```
+
+**Answer.** You cannot fix it by moving that coin. Shifting the balance the
+`{python} f"{need*1e3:.1f}"` mm it needs would take
+`{python} f"{travel*1e3:.0f}"` mm of travel from a
+`{python} f"{PENNY*1e3:.2f}"` g coin in a `{python} f"{M*1e3:.0f}"` g aeroplane,
+which puts it `{python} f"{abs(PENNY_X - travel)*1e3:.0f}"` mm *ahead of the
+nose*. Pushed as far forward as it physically goes — centred
+`{python} f"{x_nose*1e3:.1f}"` mm back, its edge on the tip — it buys
+`{python} f"{(XCG - best_by_moving)*1e3:.1f}"` mm of the
+`{python} f"{need*1e3:.1f}"` mm required, leaving the glider trimmed level with
+its stall instead of past it. Better, still not flying.
+
+The fix is more ballast, not relocated ballast. **Replace the 1p with a 2p,
+centred `{python} f"{x_2p*1e3:.0f}"` mm from the nose.** That brings the glider
+to `{python} f"{M_2p*1e3:.2f}"` g balancing at
+`{python} f"{x_target*1e3:.1f}"` mm, trimming
+`{python} f"{flown['2p at its solved station'][1] - flown['2p at its solved station'][0]['alpha']:.1f}"`°
+below the stall rather than above it, and gliding
+`{python} f"{flown['2p at its solved station'][0]['LD']*1.5:.1f}"` m from 1.5 m.
+
+That is marginally *further* than the `{python} f"{0.01550*1e3:.2f}"` g design
+manages, which is worth a second look before it is mistaken for a free lunch.
+The extra weight raises the trim speed from
+`{python} f"{flown['the design, for reference'][0]['V']:.2f}"` to
+`{python} f"{flown['2p at its solved station'][0]['V']:.2f}"` m/s, and at the
+higher Reynolds number the section does slightly better — enough to offset the
+mass. It buys distance by flying faster, not by flying better: sink rate rises
+from `{python} f"{flown['the design, for reference'][0]['sink']:.2f}"` to
+`{python} f"{flown['2p at its solved station'][0]['sink']:.2f}"` m/s, so it is
+airborne for less time.
+
+A `{python} f"{TWOPENCE_D*1e3:.1f}"` mm coin at that station sits on the flat of
+the fuselage well ahead of the wing, and placement is forgiving: a millimetre
+either way is worth about
+`{python} f"{TWOPENCE/M_2p*1e3/c_w*1e-3*100*1e3:.2f}"`% of MAC.
+
+```{python}
+#| label: tbl-options
+#| tbl-cap: "Each option at its own trim, with the stall angle from the corrected first-peak search."
+import pandas as pd
+
+pd.DataFrame({
+    "": list(options),
+    "mass [g]": [f"{options[k][0]*1e3:.2f}" for k in options],
+    "balance [mm]": [f"{options[k][1]*1e3:.1f}" for k in options],
+    "trims at": [f"{flown[k][0]['alpha']:.1f}°" for k in options],
+    "stall": [f"{flown[k][1]:.1f}°" for k in options],
+    "margin": [f"{flown[k][1] - flown[k][0]['alpha']:+.1f}°" for k in options],
+    "range [m]": [f"{flown[k][0]['LD']*1.5:.1f}" for k in options],
+}).style.hide(axis="index")
+```
+
+```{python}
+#| echo: false
+#| output: asis
+show_source(trim, stall)
+```

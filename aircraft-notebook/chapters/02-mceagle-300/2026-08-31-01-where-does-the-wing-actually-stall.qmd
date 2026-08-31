@@ -1,0 +1,96 @@
+---
+title: "Where does the wing actually stall?"
+---
+
+{{< include _model.qmd >}}
+
+The lift curve taken out to 24° rather than the 16° the stall search used, at the
+three speeds this chapter trims at, to establish whether it has one peak or more
+than one.
+
+::: {.callout-note}
+## Assumed
+Nothing new. This is the chapter's own `polars()` read over a wider range of
+angle than any entry has asked it for before.
+:::
+
+```{python}
+a = np.linspace(0, 24, 241)
+curves = {V: np.array(polars(a, V=V)["CL"]) for V in [3.73, 3.96, 4.46]}
+
+
+def peaks(CL):
+    """Every local maximum, in order. The first one is the stall."""
+    return [i for i in range(1, len(CL) - 1)
+            if CL[i] >= CL[i - 1] and CL[i] > CL[i + 1]]
+
+
+rows = []
+for V, CL in curves.items():
+    p = peaks(CL)
+    g = int(np.argmax(CL[a <= 16]))          # what a global search over 0-16 finds
+    rows.append((V, a[p[0]], CL[p[0]], a[g], CL[a <= 16][g], len(p)))
+worst = max(r[3] - r[1] for r in rows)
+```
+
+**Answer.** At `{python} f"{rows[0][0]:.2f}"`–`{python} f"{rows[-1][0]:.2f}"` m/s
+the wing stalls between `{python} f"{min(r[1] for r in rows):.1f}"`° and
+`{python} f"{max(r[1] for r in rows):.1f}"`°. There is exactly one peak, but the
+curve does not simply fall away after it: lift dips to about 13°, then climbs
+steadily again and is still rising at 24°, by then well above anything it
+reached before the stall (@fig-doublepeak). That renewed rise is deep post-stall
+behaviour, outside the attached-flow regime the section data represents, and not
+a condition this glider can reach or would want to.
+
+It matters because taking the largest lift coefficient over a range is the
+obvious way to find a stall, and here it finds the wrong thing. Over 0–16° the
+climbing branch has already overtaken the peak at the highest of these speeds,
+so a global maximum reports the stall `{python} f"{worst:.1f}"`° late and at the
+range boundary (@tbl-peaks) — a value that would move if the search window did,
+which is the signature of the bug. The stall search now takes the **first**
+turning point instead, which does not care where the window ends.
+
+Nothing published moved: every entry that quotes a stall angle does so at
+`{python} f"{rows[0][0]:.2f}"` or `{python} f"{rows[1][0]:.2f}"` m/s, where the
+two methods happen to agree. The error only appears at the higher trim speed of
+a heavier glider — which is exactly the case the next entry needed.
+
+```{python}
+#| label: tbl-peaks
+#| tbl-cap: "The first peak against what a global maximum over 0–16° returns. They agree at the two lower speeds and disagree at the third."
+import pandas as pd
+
+pd.DataFrame({
+    "speed [m/s]": [f"{r[0]:.2f}" for r in rows],
+    "first peak": [f"{r[1]:.1f}°  (CL {r[2]:.3f})" for r in rows],
+    "global max over 0–16°": [f"{r[3]:.1f}°  (CL {r[4]:.3f})" for r in rows],
+    "local maxima found": [r[5] for r in rows],
+}).style.hide(axis="index")
+```
+
+```{python}
+#| label: fig-doublepeak
+#| fig-cap: "Lift curve out to 24° at the three trim speeds. The filled marker is the stall — the first time lift stops rising. The cross is what a global maximum over 0–16° returns at the highest speed: the boundary of the search, on the post-stall branch."
+fig, ax = plt.subplots(figsize=(7, 4))
+
+for (V, CL), colour in zip(curves.items(), ["C0", "C1", "C2"]):
+    p = peaks(CL)
+    ax.plot(a, CL, colour, lw=1.5, label=f"{V:.2f} m/s")
+    ax.plot(a[p[0]], CL[p[0]], "o", color=colour, ms=7)
+    g = int(np.argmax(CL[a <= 16]))          # what a global search would pick
+    if abs(a[g] - a[p[0]]) > 0.5:
+        ax.plot(a[g], CL[a <= 16][g], "x", color=colour, ms=9, mew=2)
+
+ax.axvspan(0, 12, color="0.92", zorder=0)
+ax.text(6, 0.05, "where this glider flies", ha="center", fontsize=8, color="0.45")
+ax.set_xlabel(r"$\alpha$ [deg]"); ax.set_ylabel(r"$C_L$")
+ax.set_xlim(0, 24); ax.grid(alpha=0.3); ax.legend()
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+show_source(stall)
+```
