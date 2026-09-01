@@ -78,3 +78,17 @@ figure img,
 @media (max-width: 480px) {
   .hero-value { font-size: 2rem; }
 }
+
+/* What the entry cost to run. Printed by footer() in _notebook.py, from a timer
+   the shim starts -- freeze records no timing of its own, so without this an
+   entry's cost leaves no trace once it is written. Recessive on purpose: it is
+   provenance, not a result. */
+.runtime {
+  display: block;
+  margin-top: 2rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(128, 128, 128, 0.25);
+  font-size: 0.8rem;
+  color: #6b747d;
+  font-variant-numeric: tabular-nums;
+}

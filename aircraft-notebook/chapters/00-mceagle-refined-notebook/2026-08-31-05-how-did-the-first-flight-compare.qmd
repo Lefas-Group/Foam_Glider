@@ -87,7 +87,7 @@ underestimated. A metre rule on the grass would fix it.
 #| fig-cap: "Four frames from the flight. The release is a level push at eye height, not a throw. Circles mark the glider where it is small: in the glide, and at rest on the grass."
 import matplotlib.image as mpimg
 
-fig, ax = plt.subplots(figsize=(7.2, 1.3))
+fig, ax = plt.subplots(figsize=(7.0, 1.27))
 ax.imshow(mpimg.imread("chapters/00-mceagle-refined-notebook/flight-2026-08-31.png"))
 ax.axis("off")
 plt.tight_layout()
@@ -97,5 +97,5 @@ plt.show()
 ```{python}
 #| echo: false
 #| output: asis
-show_source(trim, stall)
+footer(trim, stall)
 ```

@@ -17,4 +17,16 @@ for _p in ["_notebook.py",
            "chapters/00-mceagle-refined-notebook/_model.py",
            "chapters/00-mceagle-refined-notebook/_analysis.py"]:
     exec(compile(pathlib.Path(_p).read_text(), _p, "exec"))
+
+# The chapter this page belongs to, taken from the paths above rather than
+# retyped. superseded_by() resolves its forward link inside this directory: a
+# bare chapters/*/ glob matches twice the moment a chapter is copied for
+# reference, which is what a frozen reference copy of this chapter is.
+_CHAPTER = str(pathlib.Path(_p).parent)
+
+# Start the entry's clock here, after the model is built but before any of the
+# entry's own cells run, and zero the solve counter so the footer reports this
+# page rather than a running total. footer() reads both.
+_T0 = time.perf_counter()
+aero_cost.update(calls=0, seconds=0.0)
 ```

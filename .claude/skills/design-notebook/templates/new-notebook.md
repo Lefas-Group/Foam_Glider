@@ -153,6 +153,20 @@ figure img,
 @media (max-width: 480px) {
   .hero-value { font-size: 2rem; }
 }
+
+/* What the entry cost to run. Printed by footer() in _notebook.py, from a timer
+   the shim starts -- freeze records no timing of its own, so without this an
+   entry's cost leaves no trace once it is written. Recessive on purpose: it is
+   provenance, not a result. */
+.runtime {
+  display: block;
+  margin-top: 2rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(128, 128, 128, 0.25);
+  font-size: 0.8rem;
+  color: #6b747d;
+  font-variant-numeric: tabular-nums;
+}
 ````
 
 ---
@@ -272,6 +286,47 @@ so neither function appears in the notebook a reader sees.
 
 ````python
 import inspect
+import pathlib
+import re
+import time
+
+import matplotlib as mpl
+
+# One plot style for the whole notebook, so figures read against each other.
+# C0 matches --key-accent in styles.css, so a curve and the hero number above it
+# are the same colour. NOT set: axes.grid and spines -- entries call ax.grid()
+# themselves, and forcing either would also reach library-drawn figures.
+mpl.rcParams.update({
+    "figure.figsize": (7.0, 3.2),
+    "font.size": 9, "axes.labelsize": 9, "axes.titlesize": 10,
+    "xtick.labelsize": 8, "ytick.labelsize": 8, "legend.fontsize": 8,
+    "lines.linewidth": 1.8, "grid.alpha": 0.3, "grid.linewidth": 0.6,
+    "axes.prop_cycle": mpl.cycler(color=["#14655c", "#b8860b",
+                                         "#5c6670", "#b3412c"]),
+})
+
+aero_cost = {"calls": 0, "seconds": 0.0}   # incremented by the chapter's solver
+
+
+def superseded_by(stem, reason):
+    """Banner naming the entry that replaced this one; title read off disk."""
+    hit = pathlib.Path(globals()["_CHAPTER"]) / f"{stem}.qmd"
+    if not hit.exists():
+        raise FileNotFoundError(f"superseded_by({stem!r}): no {hit}")
+    title = re.search(r'^title:\s*"(.+)"$', hit.read_text(), re.M).group(1)
+    print('::: {.callout-important}')
+    print("## Superseded\n")
+    print(f"{reason} See [{title}]({stem}.qmd).")
+    print(":::\n")
+
+
+def footer(*objs):
+    """Closing cell: the machinery this entry called, then what it cost to run."""
+    if objs:
+        show_source(*objs)
+    n = aero_cost["calls"]
+    cost = f" \u00b7 {n} solve{'s' if n != 1 else ''}" if n else ""
+    print(f"[Executed in {time.perf_counter() - _T0:.1f} s{cost}]{{.runtime}}")
 
 
 def show_source(*objs):
@@ -349,6 +404,13 @@ for _p in ["_notebook.py",
            "chapters/NN-name/_model.py",
            "chapters/NN-name/_analysis.py"]:
     exec(compile(pathlib.Path(_p).read_text(), _p, "exec"))
+
+# The chapter this page belongs to, taken from the paths above rather than
+# retyped -- superseded_by() resolves its forward link inside this directory.
+# Then start the entry's clock and zero the solve counter, both read by footer().
+_CHAPTER = str(pathlib.Path(_p).parent)
+_T0 = time.perf_counter()
+aero_cost.update(calls=0, seconds=0.0)
 ```
 ````
 

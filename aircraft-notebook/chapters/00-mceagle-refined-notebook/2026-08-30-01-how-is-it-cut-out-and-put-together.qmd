@@ -78,7 +78,7 @@ pdf = plt.figure(figsize=(A3[0] / 25.4, A3[1] / 25.4))
 draw(pdf.add_axes([0, 0, 1, 1]))
 pdf.savefig(PDF); plt.close(pdf)
 
-fig, ax = plt.subplots(figsize=(8, 5.7))
+fig, ax = plt.subplots(figsize=(7, 4.95))
 draw(ax)
 ax.add_patch(plt.Rectangle((0, 0), *A3, fill=False, ec="0.6", lw=1))
 for n, p in placed.items():
@@ -91,5 +91,5 @@ plt.show()
 ```{python}
 #| echo: false
 #| output: asis
-show_source(sym_surface, fin_outline, fuselage_outline, nest)
+footer(sym_surface, fin_outline, fuselage_outline, nest)
 ```

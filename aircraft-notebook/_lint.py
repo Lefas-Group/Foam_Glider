@@ -60,6 +60,13 @@ Five rules, each earned by a failure that actually happened in this notebook:
    100 words in each part ends up long overall. If a procedure or a caveat is
    worth keeping, it belongs inside the answer or inside a callout.
 
+10. A REFERENCE TO ANOTHER ENTRY IS A LINK. "the previous entry", "the glide
+    entry" as bare prose is the same defect as a hand-typed number: it points at
+    something that can be retitled, reordered or deleted, and nothing notices.
+    A markdown link to the `.qmd` is checked by Quarto at render, and the
+    notebook's whole structure is later entries revising earlier ones -- so
+    those references are the structure, not decoration.
+
 A value written as an inline expression counts as one word, so tightening prose
 is never at odds with computing the numbers in it.
 
@@ -98,6 +105,13 @@ BLOCK = 3  # consecutive code lines that count as a repeated block
 # static margins, five launch heights. A real sensitivity study builds its arms
 # from calls, and an analysis sweep uses linspace -- neither trips this.
 SWEPT_LITERAL = re.compile(r"^\s*(\w+)\s*=\s*\[\s*([-\d.eE, ]+)\]\s*$", re.M)
+
+# A sibling entry named in prose. Matched only outside links, so the fix -- turn
+# it into one -- silences it. "this chapter"/"this entry" are self-reference and
+# point at nothing that can drift, so they are not listed.
+ENTRY_REFERENCE = re.compile(
+    r"\bthe\s+(previous|next|last|earlier|later|first|glide|ballast|cutting|"
+    r"polars?|stall|flight|trim)\s+entry\b", re.I)
 
 
 # Calls that cost a full aero solve -- ~350 ms each on the McEagle, and rising
@@ -306,6 +320,15 @@ def check(chapters):
                 (f, f"{len(leads)} prose sections ({', '.join(l.strip()[:24] for l in leads)})"
                     f" — an entry has one: the answer. Fold the rest into it, or "
                     f"into a callout"))
+
+        # Rule 10: a sibling entry named in prose, not linked. Link *labels* are
+        # stripped first, so "[the ballast entry](….qmd)" is the fix rather than
+        # a permanent offence.
+        unlinked = re.sub(r"\[[^\]]*\]\([^)]*\)", " ", prose_of(text))
+        for ref in dict.fromkeys(m.group(0) for m in ENTRY_REFERENCE.finditer(unlinked)):
+            problems.append(
+                (f, f"{ref!r} in prose — link it: [{ref}](2026-….qmd). A bare "
+                    f"reference drifts when the target is retitled or removed"))
 
         for cap in re.findall(r"^\s*#\|\s*fig-cap:\s*(.+)$", text, re.M):
             n = words(cap.strip().strip('"'))

@@ -4,6 +4,14 @@ title: "<the question, exactly as the user asked it>"
 
 {{< include _model.qmd >}}
 
+<!-- If the work has moved past this entry, say so here, above everything:
+```{python}
+#| echo: false
+#| output: asis
+superseded_by("<successor stem>", "<one short sentence on what changed>")
+```
+-->
+
 ```{python}
 <Compute what was asked for and no more. Bind results to names; do not print
  them -- the hero, the answer and the figure below pull from these.
@@ -50,8 +58,9 @@ number", "what this cannot measure". Counts against the 100-word prose budget.>
 ```{python}
 #| echo: false
 #| output: asis
-show_source(<the shared functions this entry called -- from _analysis.py.
-             show_source itself lives in the notebook's _notebook.py>)
+footer(<the shared functions this entry called -- from _analysis.py. footer()
+        renders them, then what the entry cost to run. Pass none if it called
+        none: bare footer().>)
 ```
 
 <!--
@@ -96,9 +105,17 @@ them, and the drift is invisible until someone re-derives the result.
 DON'T PRINT WORKING. Intermediates (a fit slope, a Reynolds number you already
 stated, an all-up mass nobody asked for) are clutter. Print results.
 
-SHOW THE MACHINERY YOU CALLED. An entry that calls shared machinery without
-rendering it has stopped documenting its own method. show_source() reads the
-source off the live object, so it cannot drift from what ran.
+EVERY ENTRY ENDS WITH ONE footer(...) CELL. It shows the machinery the entry
+called -- read off the live object, so it cannot drift from what ran -- and then
+what the entry cost to run. Freeze stores no timing, so that line is the only
+trace an entry's cost leaves.
+
+A SIBLING ENTRY IS A LINK, never bare prose. "the previous entry" drifts when the
+target is retitled or deleted; [the ballast entry](2026-….qmd) is checked at
+render. _lint.py flags the bare form.
+
+FIGURES SHARE ONE STYLE, set in _notebook.py: width 7.0, accent matching the hero
+number, C3 reserved for alarm. Don't set fonts or colours per figure.
 
 A CELL RETURNING AN OBJECT dumps its repr as a second output and demotes the
 figure to a subfigure. Bind it: `_ = bfg.draw_three_view(show=True)`.

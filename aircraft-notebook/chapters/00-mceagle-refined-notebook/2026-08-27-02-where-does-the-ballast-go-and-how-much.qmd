@@ -63,5 +63,5 @@ plt.show()
 ```{python}
 #| echo: false
 #| output: asis
-show_source(neutral_point, ballast_for)
+footer(neutral_point, ballast_for)
 ```

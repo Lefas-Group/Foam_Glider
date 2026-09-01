@@ -79,12 +79,13 @@ With no user to ask — an agent running unattended — assume, and write
 
 Repeat per question. A discussion that answers nothing gets no entry.
 
-**Run `uv run python <notebook>/_lint.py` before recording an entry.** Nine
+**Run `uv run python <notebook>/_lint.py` before recording an entry.** Ten
 rules, each earned by a failure that actually happened here: no hand-typed
 numbers in prose, no code repeated across entries, the `**Answer.**` before the
 evidence, no swept decision that should have been asked, no fixed trip count
 around an aero solve, the three word budgets (100 prose / 50 caption / 10 per
-callout item), and one prose section per entry. It exits non-zero, so it can gate a commit.
+callout item), one prose section per entry, and sibling entries linked
+rather than named in prose. It exits non-zero, so it can gate a commit.
 
 ## Scope
 
@@ -122,6 +123,22 @@ broken most; when in doubt, write less.
   with its own budget, which is how an entry inside 100 words in each part ends
   up long overall. A build procedure belongs *inside* the answer, as a numbered
   list under it; a caveat belongs in a `callout-warning`.
+- **A reference to another entry is a link**, never bare prose. "the previous
+  entry" points at something that can be retitled or deleted with nothing
+  noticing; `[the ballast entry](2026-08-27-02-….qmd)` is checked at render.
+  Later entries revising earlier ones *is* the notebook's structure.
+- **An entry the work has moved past says so, at the top.** Call
+  `superseded_by("<successor stem>", "<one short sentence>")` in a cell directly
+  under the include. The successor's title and link are read off disk, so they
+  cannot go stale, and a wrong stem stops the render. Without this, an entry
+  describing a configuration that was later corrected reads — to anyone arriving
+  from the sidebar — as the current state of the aircraft.
+- **Every entry ends with one `footer(...)` cell**, passing the shared functions
+  it called. It renders the method and then what the entry cost to run. Freeze
+  records no timing of its own, so this is the only trace an entry's cost leaves.
+- **Figures share one style**, set once in `_notebook.py` — width 7.0, the
+  accent matching the hero number, `C3` reserved for alarm. Don't set fonts or
+  colours per figure.
 - **No setup line.** The title is the question and the callouts carry the
   conditions; a sentence restating what was run before the reader reaches the
   answer is throat-clearing.

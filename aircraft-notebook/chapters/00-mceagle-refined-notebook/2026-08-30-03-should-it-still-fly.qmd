@@ -5,6 +5,13 @@ title: "Should it still fly?"
 {{< include _model.qmd >}}
 
 ```{python}
+#| echo: false
+#| output: asis
+superseded_by("2026-08-31-05-how-did-the-first-flight-compare",
+              "The balance was corrected after this was written.")
+```
+
+```{python}
 BUILT_M, SHIFT = 0.016, 0.015
 
 x_np = neutral_point()
@@ -70,5 +77,5 @@ plt.show()
 ```{python}
 #| echo: false
 #| output: asis
-show_source(trim, stall)
+footer(trim, stall)
 ```

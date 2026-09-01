@@ -5,6 +5,13 @@ title: "If so, how far?"
 {{< include _model.qmd >}}
 
 ```{python}
+#| echo: false
+#| output: asis
+superseded_by("2026-08-31-05-how-did-the-first-flight-compare",
+              "The balance was corrected after this was written.")
+```
+
+```{python}
 H, BUILT_M, SHIFT = 1.5, 0.016, 0.015
 
 x_np = neutral_point()
@@ -53,5 +60,5 @@ Measured on the built glider by the user, 2026-08-30:
 ```{python}
 #| echo: false
 #| output: asis
-show_source(trim)
+footer(trim)
 ```

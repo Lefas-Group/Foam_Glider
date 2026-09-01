@@ -13,6 +13,40 @@
 # The leading underscore keeps Quarto from rendering this file, as with _scratch/.
 # =============================================================================
 import inspect
+import pathlib
+import re
+import time
+
+import matplotlib as mpl
+
+# =============================================================================
+# One plot style for the whole notebook.
+#
+# Set here rather than per entry, because a figure's job is to be read against
+# the figures around it. Before this, every figure inherited raw matplotlib
+# defaults and each width was chosen by hand, so fonts differed once matplotlib
+# scaled them and nothing aligned down the page.
+#
+# C0 is the accent from styles.css, so a curve and the hero number above it are
+# the same colour. C3 stays an alarm red -- entries use it for "past the stall",
+# and a cycle that quietly reassigned it would repaint that meaning.
+#
+# NOT set here: `axes.grid` and spine visibility. Entries call ax.grid()
+# themselves, and forcing either globally would also reach draw_three_view() and
+# the two axis("off") layout figures, which are drawings rather than plots.
+# =============================================================================
+mpl.rcParams.update({
+    "figure.figsize": (7.0, 3.2),
+    "font.size": 9, "axes.labelsize": 9, "axes.titlesize": 10,
+    "xtick.labelsize": 8, "ytick.labelsize": 8, "legend.fontsize": 8,
+    "lines.linewidth": 1.8, "grid.alpha": 0.3, "grid.linewidth": 0.6,
+    "axes.prop_cycle": mpl.cycler(color=[
+        "#14655c",   # C0 teal -- matches --key-accent, the hero colour
+        "#b8860b",   # C1 amber
+        "#5c6670",   # C2 grey
+        "#b3412c",   # C3 alarm red -- keeps its "past the stall" meaning
+    ]),
+})
 
 # =============================================================================
 # What the notebook costs to run.
@@ -82,6 +116,53 @@ def show_source(*objs):
         print()
     print("```")
     print(":::")
+
+
+def superseded_by(stem, reason):
+    """
+    Banner naming the entry that replaced this one.
+
+    The successor's title and link are read off disk rather than typed, so a
+    retitled successor cannot leave a stale label behind -- the same guarantee
+    inline expressions give numbers. A stem that matches no file, or more than
+    one, raises: a dead forward link is worse than none, because the reader
+    trusts it.
+
+    Scoped to the calling chapter, via `_CHAPTER` set by the shim. Globbing
+    `chapters/*/` instead finds two files the moment a chapter is duplicated for
+    reference, which is exactly what happened the first time this ran.
+    """
+    chapter = globals().get("_CHAPTER")
+    if chapter is None:
+        raise RuntimeError("superseded_by() needs _CHAPTER, set by _model.qmd")
+    hit = pathlib.Path(chapter) / f"{stem}.qmd"
+    if not hit.exists():
+        raise FileNotFoundError(f"superseded_by({stem!r}): no {hit}")
+    title = re.search(r'^title:\s*"(.+)"$', hit.read_text(), re.M).group(1)
+    print('::: {.callout-important}')
+    print("## Superseded\n")
+    print(f"{reason} See [{title}]({stem}.qmd).")
+    print(":::\n")
+
+
+def footer(*objs):
+    """
+    The entry's closing cell: the machinery it called, then what it cost to run.
+
+    Cost is wall clock since the shim plus the aero solves behind it -- the
+    solve count is what explains the seconds, and `polars()` already counts
+    both. Nothing else recorded this: _freeze/*/execute-results/html.json keeps
+    a hash and a result and no timing at all, so before this an entry's cost
+    left no trace once written.
+
+    Under freeze the line shows the last REAL execution, not the cache hit,
+    which is the number worth having.
+    """
+    if objs:
+        show_source(*objs)
+    n = aero_cost["calls"]
+    cost = f" · {n} aero solve{'s' if n != 1 else ''}" if n else ""
+    print(f"[Executed in {time.perf_counter() - _T0:.1f} s{cost}]{{.runtime}}")
 
 
 def api(filename="_analysis.py"):

@@ -25,3 +25,9 @@ dimension of this aircraft most easily got wrong.
 # demotes the figure to a subfigure.
 _ = mceagle.draw_three_view(show=True)
 ```
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```

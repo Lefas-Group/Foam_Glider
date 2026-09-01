@@ -47,11 +47,12 @@ Asked of the user, 2026-08-28:
 ## Assumed
 1. **Still air** — no thermal, no wind.
 2. **Settled at trim** — no launch transient.
-3. **Ballast at the nose**, per the previous entry.
+3. **Ballast at the nose**, per
+   [the ballast entry](2026-08-27-02-where-does-the-ballast-go-and-how-much.qmd).
 :::
 
 ```{python}
 #| echo: false
 #| output: asis
-show_source(trim)
+footer(trim)
 ```
