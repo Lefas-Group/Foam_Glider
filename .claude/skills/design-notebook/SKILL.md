@@ -79,12 +79,12 @@ With no user to ask — an agent running unattended — assume, and write
 
 Repeat per question. A discussion that answers nothing gets no entry.
 
-**Run `uv run python <notebook>/_lint.py` before recording an entry.** Eight
+**Run `uv run python <notebook>/_lint.py` before recording an entry.** Nine
 rules, each earned by a failure that actually happened here: no hand-typed
 numbers in prose, no code repeated across entries, the `**Answer.**` before the
 evidence, no swept decision that should have been asked, no fixed trip count
-around an aero solve, and the three word budgets (100 prose / 50 caption / 10
-per callout item). It exits non-zero, so it can gate a commit.
+around an aero solve, the three word budgets (100 prose / 50 caption / 10 per
+callout item), and one prose section per entry. It exits non-zero, so it can gate a commit.
 
 ## Scope
 
@@ -116,6 +116,12 @@ broken most; when in doubt, write less.
   fights computing the numbers in it. Entries drift long one clause at a time,
   and the fix is always the same: the sentence explaining *why* a number is what
   it is belongs in the figure or a code comment, not the answer.
+- **One prose section, not several.** The entry has a single run of prose — the
+  answer — and everything else is a callout, a figure or code. A second headed
+  block (`**Assembly.**`, `**Method.**`, a `##` heading) reads as its own essay
+  with its own budget, which is how an entry inside 100 words in each part ends
+  up long overall. A build procedure belongs *inside* the answer, as a numbered
+  list under it; a caveat belongs in a `callout-warning`.
 - **No setup line.** The title is the question and the callouts carry the
   conditions; a sentence restating what was run before the reader reaches the
   answer is throat-clearing.

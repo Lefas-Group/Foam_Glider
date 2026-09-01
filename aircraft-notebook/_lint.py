@@ -53,6 +53,13 @@ Five rules, each earned by a failure that actually happened in this notebook:
    three lines of justification, which reads as hedging a decision that was
    actually made.
 
+9. ONE PROSE SECTION, NOT SEVERAL. An entry has a single run of prose -- the
+   answer -- and everything else is a callout, a figure or code. A second
+   headed block (`**Assembly.**`, `**Method.**`, a `##` heading) reads as its
+   own little essay with its own budget, which is how an entry that is inside
+   100 words in each part ends up long overall. If a procedure or a caveat is
+   worth keeping, it belongs inside the answer or inside a callout.
+
 A value written as an inline expression counts as one word, so tightening prose
 is never at odds with computing the numbers in it.
 
@@ -282,6 +289,23 @@ def check(chapters):
                 (f, f"{n} words of prose, over the {MAX_PROSE}-word budget — "
                     f"answer, warnings and any other running text, added up; "
                     f"only Specified/Assumed and figure captions are excluded"))
+
+        # Rule 9: one prose section. Every callout is stripped from the RAW text
+        # first -- body_prose() has already discarded the ::: fences, so
+        # stripping there would find nothing and count each callout's own title
+        # as a top-level section. A warning keeps its internal bold lead-ins;
+        # what is counted is blocks sitting alongside the answer as peers.
+        top = re.sub(r"^:{3,}\s*\{\.callout-\w+\}.*?^:{3,}\s*$", "", text,
+                     flags=re.S | re.M)
+        top = re.sub(r"```\{python\}.*?```", "", top, flags=re.S)
+        top = re.sub(r"^:{3,}.*$", "", top, flags=re.M)
+        leads = (re.findall(r"^\*\*([^*]+?\.)\*\*", top, re.M)
+                 + re.findall(r"^(#{2,}\s+.+)$", top, re.M))
+        if len(leads) > 1:
+            problems.append(
+                (f, f"{len(leads)} prose sections ({', '.join(l.strip()[:24] for l in leads)})"
+                    f" — an entry has one: the answer. Fold the rest into it, or "
+                    f"into a callout"))
 
         for cap in re.findall(r"^\s*#\|\s*fig-cap:\s*(.+)$", text, re.M):
             n = words(cap.strip().strip('"'))

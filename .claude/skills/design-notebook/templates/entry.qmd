@@ -19,7 +19,9 @@ title: "<the question, exactly as the user asked it>"
 :::
 
 **Answer.** <The answer, in prose. Supporting values get [`{python} …`]{.key}.
-Cross-reference the figure as (@fig-<name>).>
+Cross-reference the figure as (@fig-<name>). If the question also asks HOW --
+build steps, a procedure -- it continues here as a numbered list, never as a
+second `**Assembly.**` section.>
 
 ::: {.callout-tip}
 ## Specified
@@ -71,6 +73,11 @@ THREE WORD BUDGETS, ALL LINTED.
    10  words per Specified/Assumed item. Attribution goes in a preamble line
        above the list, not inside every item.
 An inline expression counts as one word.
+
+ONE PROSE SECTION. The answer is the only run of prose; a second headed block
+(`**Assembly.**`, a `##` heading) is how an entry inside budget in each part ends
+up long overall. Procedures fold into the answer as a list; caveats become a
+`callout-warning`.
 
 ORDER MATTERS. Compute cell, hero, answer, callouts, evidence. The reader should
 reach the answer without scrolling past the first code cell; `code-fold`
