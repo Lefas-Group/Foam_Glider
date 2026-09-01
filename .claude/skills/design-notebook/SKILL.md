@@ -79,10 +79,12 @@ With no user to ask — an agent running unattended — assume, and write
 
 Repeat per question. A discussion that answers nothing gets no entry.
 
-**Run `uv run python <notebook>/_lint.py` before recording an entry.** It checks
-the three rules that have actually been broken here: no hand-typed numbers in
-prose, no code repeated across entries, and the `**Answer.**` before the
-evidence. It exits non-zero, so it can gate a commit.
+**Run `uv run python <notebook>/_lint.py` before recording an entry.** Eight
+rules, each earned by a failure that actually happened here: no hand-typed
+numbers in prose, no code repeated across entries, the `**Answer.**` before the
+evidence, no swept decision that should have been asked, no fixed trip count
+around an aero solve, and the three word budgets (100 prose / 50 caption / 10
+per callout item). It exits non-zero, so it can gate a commit.
 
 ## Scope
 
@@ -106,17 +108,27 @@ broken most; when in doubt, write less.
 - **State the reference for any quantity that has one.** A `Cm` is meaningless
   without saying what it is taken about; a coefficient at chuck-glider scale is
   meaningless without the speed, since Re moves the polar materially.
-- **Prose is a setup line plus assumptions.** One sentence on what was run and
-  at what condition, plus any assumption you had to make because a value wasn't
-  given. Nothing else — no commentary on what the numbers mean, no "what this
-  doesn't include", no "open threads".
-- **An `**Answer.**` line only when the question can *only* be answered in
-  prose** — "what are this model's limitations?" gets one; "what are the
-  polars?" and "what does it look like?" are answered by their own output.
-- **The answer goes before the evidence**, not after: setup, assumptions, the
-  compute cell, the `**Answer.**`, then tables and figures. `code-fold`
-  collapses the compute cell to one line, so the reader reaches the answer
-  without scrolling. Everything below it is there to be checked.
+- **Three word budgets, all enforced by `_lint.py`.**
+  **100 words of prose per entry** — the answer, any warning, an assembly
+  section, everything addressed to the reader, added up across the page.
+  **50 words per figure caption.** **10 words per `## Specified` or `## Assumed`
+  item.** An inline expression counts as one word, so tightening prose never
+  fights computing the numbers in it. Entries drift long one clause at a time,
+  and the fix is always the same: the sentence explaining *why* a number is what
+  it is belongs in the figure or a code comment, not the answer.
+- **No setup line.** The title is the question and the callouts carry the
+  conditions; a sentence restating what was run before the reader reaches the
+  answer is throat-clearing.
+- **The answer goes first**, above everything: hero, `**Answer.**`, then the
+  callouts, then the evidence. `code-fold` collapses the compute cell to one
+  line, so the reader reaches the answer without scrolling.
+- **One hero number, or none.** `::: {.hero}` carries the single value the entry
+  exists to produce, with a one-line label saying what it means. Use
+  `.hero-pair` when the answer *is* a comparison — measured against predicted,
+  as-built against as-designed — and nothing when the answer is a figure, a
+  yes/no, or a value nobody asked for. A hero that isn't the answer to the
+  title is worse than no hero: it tells the reader to look at the wrong thing.
+  Supporting values in the sentence get `[…]{.key}`.
 - **Every number in prose is an inline expression**, `` `{python} f"{x:.2f}"` ``,
   never typed. Hand-typed numbers drift from the cells above them and the drift
   is silent until someone re-derives the result.
@@ -129,9 +141,13 @@ broken most; when in doubt, write less.
 - **Specified and Assumed are different things.** *Assumed* is a weakness —
   nobody knows, the number may be wrong, sensitivity matters. *Specified* is a
   brief — someone decided, so it is not wrong; changing it changes the target,
-  not the model's accuracy. `::: {.callout-tip}` / `## Specified` carries
-  **value · owner · date · one line of rationale**; `::: {.callout-note}` /
-  `## Assumed` carries the rest.
+  not the model's accuracy. `::: {.callout-tip}` / `## Specified` and
+  `::: {.callout-note}` / `## Assumed` are each **one line of attribution
+  ("Asked of the user, 2026-08-28:"), then a numbered list of inputs at ten
+  words each**. Attribution goes in the preamble, not inside every item.
+- **A caveat is a `::: {.callout-warning}`, not a paragraph.** "Do not trust
+  that number", "what the video cannot measure", "what changed in the model" —
+  yellow, titled, and still inside the 100-word prose budget.
 - **Assumptions sit at the level they belong to.** What defines the chapter —
   the aero method, the section, what is left out — is stated once in
   `index.qmd`. What this entry alone had to assume goes in its `## Assumed`

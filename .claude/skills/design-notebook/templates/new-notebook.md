@@ -69,7 +69,8 @@ execute:
 ## `notebook/styles.css`
 
 Without this, every matplotlib figure renders at its native pixel width — wider
-than the content column — and the page scrolls sideways.
+than the content column — and the page scrolls sideways. It also carries the
+hero/key styles that entries use to emphasise their answer.
 
 ````css
 /* Matplotlib figures are emitted at their native pixel size, which is wider
@@ -86,6 +87,71 @@ figure img,
    stretching the page. */
 .cell-output pre {
   overflow-x: auto;
+}
+
+/* ---------------------------------------------------------------------------
+   The answer, emphasised.
+
+   Every entry produces one number it exists to produce. `.hero-value` is that
+   number, set large enough to be read before the prose is; `.key` is for the
+   one or two supporting values in the sentence underneath. Both use tabular
+   figures so digits line up and a value cannot be misread at a glance.
+
+   The accent is deliberately NOT the link blue -- a coloured number that looks
+   clickable is worse than a plain one.
+   --------------------------------------------------------------------------- */
+:root {
+  --key-accent: #14655c;
+}
+
+.hero,
+.hero-pair {
+  margin: 1.4rem 0 1.1rem;
+  padding-left: 0.9rem;
+  border-left: 3px solid var(--key-accent);
+}
+
+/* Two values at equal size, for the entries whose answer IS a comparison:
+   measured against predicted, as-built against as-designed. The reference half
+   is muted rather than smaller -- they are peers, but only one of them is the
+   finding. */
+.hero-pair {
+  display: flex;
+  gap: 2.4rem;
+  flex-wrap: wrap;
+}
+
+.hero-ref {
+  color: #5c6670;
+}
+
+.hero-value {
+  display: block;
+  font-size: 2.6rem;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--key-accent);
+}
+
+.hero-label {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.9rem;
+  color: #5c6670;
+}
+
+.key {
+  font-size: 1.15em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--key-accent);
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .hero-value { font-size: 2rem; }
 }
 ````
 

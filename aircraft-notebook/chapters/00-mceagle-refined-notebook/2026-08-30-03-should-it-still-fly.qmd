@@ -24,29 +24,27 @@ Cm_of = lambda x_cg, V: (
 ```
 
 ::: {.hero}
-[`{python} f"{abs(built['alpha']-a_stall):.1f}"`° past the stall]{.hero-value}
-[where it trims, against a stall at [`{python} f"{a_stall:.1f}"`°]{.key}]{.hero-label}
+[Barely]{.hero-value}
+[trimmed `{python} f"{abs(built['alpha']-a_stall):.1f}"`° past the stall, not below it]{.hero-label}
 :::
 
-**Answer.** Yes, but only just and not well (@fig-asbuilt). Expect it to mush:
-nose high, sinking fast, liable to drop a wing. It is not unstable — the
-restoring moment is if anything *stronger* than the design's. Stability was never
-the problem; where it trims is.
+**Answer.** It will fly, but badly (@fig-asbuilt). Expect it to mush: nose high,
+sinking fast, liable to drop a wing. It is not unstable — the restoring moment is
+if anything *stronger* than the design's. Where it trims is the problem.
 
 ::: {.callout-tip}
 ## Specified
-1. **All-up mass: 16 g** · measured on the built glider by the user, 2026-08-30.
-2. **Balance point: 15 mm aft of the plan's** · same measurement · the plan
-   called for 149.0 mm aft of the nose, so as built it is at 164.0 mm.
+Measured on the built glider by the user, 2026-08-30:
+
+1. **All-up mass: 16 g.**
+2. **Balance point: 15 mm aft of the plan's.**
 :::
 
 ::: {.callout-warning}
 ## The static margin disagrees, and it is wrong
-It calls this aircraft unstable, because the balance point sits behind the
-neutral point. But that neutral point is a straight line fitted across α = 0–8°,
-and this glider trims well outside the band — so the label stops describing the
-aircraft before the aircraft stops flying. Believe `dCm/dα` at the trim instead:
-it needs no neutral point, so it inherits none of the ambiguity in defining one.
+It calls this aircraft unstable. But its neutral point is a line fitted across
+α = 0–8°, and this glider trims outside that band, so the label stops describing
+the aircraft before the aircraft stops flying. Believe `dCm/dα` at the trim.
 :::
 
 ```{python}

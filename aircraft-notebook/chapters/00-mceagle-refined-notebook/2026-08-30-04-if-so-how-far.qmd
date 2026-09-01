@@ -38,17 +38,16 @@ Recovering the distance means moving the balance forward, not trimming for range
 
 ::: {.callout-tip}
 ## Specified
-1. **All-up mass: 16 g, balance point 15 mm aft of the plan's** · measured on
-   the built glider by the user, 2026-08-30.
-2. **Release height: 1.5 m** · as for the design, so the two are comparable.
+Measured on the built glider by the user, 2026-08-30:
+
+1. **16 g**, balance **15 mm aft** of the plan's.
+2. **Release height: 1.5 m**, as for the design.
 :::
 
 ::: {.callout-note}
 ## Assumed
 1. **Still air, and a glide already settled at trim.**
-2. **The trim lies past the stall**, where `AeroBuildup` is reading NeuralFoil
-   beyond the attached-flow regime it represents well. The range above is what
-   the model says, not what the model can support.
+2. **Trim lies past the stall** — outside NeuralFoil's attached-flow regime.
 :::
 
 ```{python}

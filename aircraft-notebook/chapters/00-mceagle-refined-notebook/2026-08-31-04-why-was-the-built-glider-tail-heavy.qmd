@@ -54,27 +54,27 @@ new_ballast = ballast_for(x_t, 0.0)
 
 **Answer.** Two errors: the foam is
 [`{python} f"{(1 - sigma/SIGMA_BRIEF)*100:.0f}"`%]{.key} lighter than the brief
-said, and the build carries unmodelled glue at the tail (@fig-reconcile). They
-nearly cancel in mass but not in moment — hence a right-looking total and a wrong
-trim. Bevels and wing position both worked *against* the shift.
+said, and unmodelled glue sits at the tail (@fig-reconcile). They cancel in mass
+but not in moment — hence a right-looking total and a wrong trim. Bevels and wing
+position worked *against* the shift.
 
 ::: {.callout-tip}
 ## Specified
 Measured on the built glider and its material by the user, 2026-08-30/31:
 
-1. **16 g all-up**, balancing **164.0 mm** aft of the nose with a 1p at 24 mm.
-2. **Wing leading edge 91 mm** aft of the nose.
-3. **Bevels: 4 mm at the leading edge, 10 mm at the trailing edge**, each
-   tapered to a point.
-4. **Four A3 sheets of foam weighing 87 g.**
+1. **16 g**, balancing **164.0 mm** aft.
+2. **1p ballast** fitted at **24 mm**.
+3. **Wing leading edge 91 mm** aft.
+4. **Bevels: 4 mm leading, 10 mm trailing.**
+5. **Four A3 sheets weighing 87 g.**
+
 :::
 
 ::: {.callout-warning}
 ## What changed in the model
-`sigma` is now the measured value, so structure mass and nose ballast both fall;
-the neutral point does not move at all, since areal density never enters the
-aerodynamics. Glue stays unmodelled — the figure above is recorded in `_model.py`
-as a budget, not folded into the build-up, because one aircraft is not a rule.
+`sigma` is now the measured value, so structure mass and nose ballast both fall.
+The neutral point does not move — areal density never enters the aerodynamics.
+Glue stays unmodelled, recorded in `_model.py` as a budget.
 :::
 
 ```{python}

@@ -36,28 +36,24 @@ mp = mass_properties(m_ballast=m_b, x_ballast=0.0)
 
 **Answer.** All seven pieces fit one A3 sheet, using
 [`{python} f"{foam/(A3[0]*A3[1]/MM**2)*100:.0f}"`%]{.key} of it (@fig-cutting).
-The fuselage forces the layout: longer than A3's edge, it cannot be cut squared
-up to the sheet. Splitting it into two laminations lets their butt joints be
-staggered, each backed by unbroken foam in the other.
+The fuselage exceeds A3's edge, so it is two laminations, joints staggered.
 
 [**Download the 1:1 cutting plan (A3 PDF)**](mceagle-300-cutting-plan-a3.pdf) —
-print at 100%, not "fit to page", and check the printed wing measures
-`{python} f"{b_w*MM:.0f}"` mm tip to tip before cutting anything.
+print at 100%, then check the wing measures
+`{python} f"{b_w*MM:.0f}"` mm.
 
 ::: {.callout-tip}
 ## Specified
-1. **Sheet: A3** · from the original brief · it sets the space available, so it
-   decides the nesting.
-2. **Output: a scale layout plus a true 1:1 PDF** · asked of the user,
-   2026-08-30 · the PDF is the usable artefact.
+From the brief, and asked of the user, 2026-08-30:
+
+1. **Sheet: A3** — it decides the nesting.
+2. **Output: a scale layout plus a 1:1 PDF.**
 :::
 
 ::: {.callout-note}
 ## Assumed
-1. **The two fuselage laminations are spliced at different stations**, so each
-   butt joint is bridged by continuous material in the other layer. The original
-   plan interlocks a single pair with zigzag teeth instead.
-2. **Cut lines are the finished outline** — no allowance for the knife.
+1. **Fuselage laminations spliced at staggered stations**, each joint bridged.
+2. **Cut lines are the finished outline** — no knife allowance.
 :::
 
 ```{python}
@@ -85,24 +81,16 @@ plt.tight_layout()
 plt.show()
 ```
 
-**Assembly.** Cut all seven pieces, marking the forward direction on each.
-Laminate the two fuselage layers face to face with the splices offset, and let
-them dry flat under a weight. Glue the stabilizer under the tail and the fin on
-top of it, both trailing edges flush with the square end, and set the stabilizer
-`{python} f"{abs(i_h):.0f}"`° trailing-edge-up relative to the wing — that
-negative incidence is what lifts the nose out of a stall.
+**Assembly.**
 
-Divide the wing along its centreline, sand about 10 mm of each cut edge to a
-`{python} f"{dihedral:.1f}"`° bevel, and glue the halves back together on top of
-the fuselage with the leading edge `{python} f"{x_le_w*MM:.1f}"` mm aft of the
-nose, propping the tips `{python} f"{z_tip*MM:.1f}"` mm up while it dries. The
-finished wing spans `{python} f"{b_proj*MM:.0f}"` mm across the tips even though
-`{python} f"{b_w*MM:.0f}"` mm of foam went into it — the dihedral takes the
-difference.
-
-Finally add `{python} f"{m_b*1e3:.2f}"` g at the nose and check it balances
-`{python} f"{mp.x_cg*MM:.1f}"` mm back. Balance is the one thing worth measuring
-rather than trusting: everything else tolerates a millimetre, and this does not.
+1. Laminate both fuselage layers, splices offset; dry flat.
+2. Stabiliser under the tail, fin on top, trailing edges flush; stabiliser
+   `{python} f"{abs(i_h):.0f}"`° trailing-edge-up.
+3. Split the wing, bevel each root `{python} f"{dihedral:.1f}"`°, rejoin with the
+   leading edge `{python} f"{x_le_w*MM:.1f}"` mm aft, tips
+   `{python} f"{z_tip*MM:.1f}"` mm up.
+4. Add `{python} f"{m_b*1e3:.2f}"` g at the nose; check it balances
+   `{python} f"{mp.x_cg*MM:.1f}"` mm back.
 
 ```{python}
 #| echo: false

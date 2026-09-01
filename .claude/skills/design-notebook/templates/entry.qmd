@@ -4,48 +4,44 @@ title: "<the question, exactly as the user asked it>"
 
 {{< include _model.qmd >}}
 
-<One line: what was run and at what condition. Nothing else.>
+```{python}
+<Compute what was asked for and no more. Bind results to names; do not print
+ them -- the hero, the answer and the figure below pull from these.
+ Reach for the chapter's shared machinery rather than restating it;
+ _scratch/probe.py prints api() on every run, so what exists is already on
+ screen. A claim the prose makes but does not quote gets an `assert`, so the
+ page fails to render rather than going quietly stale.>
+```
+
+::: {.hero}
+[`{python} f"<the one value this entry exists to produce>"`]{.hero-value}
+[<one line: what it means. Not what to conclude from it.>]{.hero-label}
+:::
+
+**Answer.** <The answer, in prose. Supporting values get [`{python} …`]{.key}.
+Cross-reference the figure as (@fig-<name>).>
 
 ::: {.callout-tip}
 ## Specified
-<A design decision the user made, in the form
- **<quantity>: <value>** · asked of the user, <date> · <one line of why>.
- Delete this block if no decision was taken for this entry. Running unattended,
- write `owner: assumed` instead of naming the user -- that is what keeps "did a
- person decide this?" answerable.>
+<Asked of the user, <date>:>
+
+1. **<quantity>: <value>** — <why, if it fits>.
 :::
 
 ::: {.callout-note}
 ## Assumed
-<Only if you had to assume a value nobody could give you. Delete this block if
-you didn't. Assumed is a weakness -- the number may be wrong. Specified above
-is a brief -- someone decided, so it is not wrong. Do not file a decision here.>
+1. **<quantity>: <value>**, <the one-clause reason>.
+:::
+
+::: {.callout-warning}
+## <The caveat, as a title>
+<Only when the answer comes with a real health warning -- "do not trust that
+number", "what this cannot measure". Counts against the 100-word prose budget.>
 :::
 
 ```{python}
-<Compute what was asked for and no more. Bind results to names; do not print
- them -- the answer below and the tables underneath will pull from these.
- Reach for the chapter's shared machinery rather than restating it;
- _scratch/probe.py prints api() on every run, so what exists is already on
- screen. Run _lint.py before recording: it catches hand-typed numbers, code
- repeated across entries, and an answer placed after its evidence.>
-```
-
-**Answer.** <Only when the question can only be answered in prose. Every number
-here is an inline expression, never typed: `{python} f"{x_np*1e3:.1f}"` mm. Type
-a number by hand and it will eventually disagree with the cell above it.>
-
-```{python}
-#| label: tbl-<name>
-#| tbl-cap: "<what the table shows. Not what to conclude from it.>"
-import pandas as pd
-<A DataFrame, `.style.hide(axis="index")`. Quarto renders it as a real table,
- cross-referenceable as @tbl-<name>. Prefer this to a block of print().>
-```
-
-```{python}
 #| label: fig-<name>
-#| fig-cap: "<what is plotted. Not what to conclude from it.>"
+#| fig-cap: "<what is plotted. Not what to conclude from it. 50 words max.>"
 <plotting code — plain matplotlib, legends rather than direct labels>
 ```
 
@@ -64,24 +60,31 @@ render as a "Published" block, tag chips and a subtitle, which is clutter.
 Filenames carry the date, and the sidebar sorts on filename, so ordering is
 unaffected.
 
-NO RESTATED QUESTION in the body — the title is the question.
+NO RESTATED QUESTION, AND NO SETUP LINE. The title is the question; the callouts
+carry the conditions. A sentence saying what was run before the reader reaches
+the answer is throat-clearing.
 
-ORDER MATTERS. Setup, assumptions, the compute cell, then the **Answer.**, then
-the evidence. The reader should reach the answer without scrolling past the
-first code cell; `code-fold` collapses that cell to a single line. Everything
-below the answer is there to be checked, not to be waded through.
+THREE WORD BUDGETS, ALL LINTED.
+  100  words of prose per entry — hero label, answer, warnings, an assembly
+       section: everything addressed to the reader, added up.
+   50  words per figure caption.
+   10  words per Specified/Assumed item. Attribution goes in a preamble line
+       above the list, not inside every item.
+An inline expression counts as one word.
 
-NO **Answer.** LINE unless the question can only be answered in prose (e.g.
-"what are this model's limitations?"). A numeric question is answered by its
-printed output; a visual one by its figure.
+ORDER MATTERS. Compute cell, hero, answer, callouts, evidence. The reader should
+reach the answer without scrolling past the first code cell; `code-fold`
+collapses that cell to a single line.
+
+ONE HERO, OR NONE. `.hero` carries the single value the entry exists to produce.
+Use `.hero-pair` when the answer IS a comparison (measured vs predicted,
+as-built vs as-designed). Use NOTHING when the answer is a figure, a yes/no, or
+a number nobody asked for -- a hero that isn't the answer to the title tells the
+reader to look at the wrong thing.
 
 NUMBERS IN PROSE ARE INLINE EXPRESSIONS, always. `{python} f"{value:.2f}"`.
 This is not a style preference: hand-typed numbers drift from the cells above
 them, and the drift is invisible until someone re-derives the result.
-
-DON'T PRINT WHAT A TABLE SHOULD SHOW. A block of f-string print() output is
-harder to scan than a DataFrame, cannot be cross-referenced, and cannot be
-scanned by a reader looking for one row.
 
 DON'T PRINT WORKING. Intermediates (a fit slope, a Reynolds number you already
 stated, an all-up mass nobody asked for) are clutter. Print results.

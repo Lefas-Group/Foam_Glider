@@ -36,6 +36,26 @@ Five rules, each earned by a failure that actually happened in this notebook:
    guard that raises; a round number someone picked also hides non-convergence,
    since a loop that never converged returns exactly like one that did.
 
+6. PROSE FITS IN 100 WORDS. Everything the reader must read as prose -- the
+   answer, any warning, an assembly section -- across the whole entry. Entries
+   drift long one clause at a time, and the fix is always the same: the sentence
+   that explains why a number is what it is belongs in the figure or the code
+   comment, not in the answer. Only `## Specified`, `## Assumed` and figure
+   captions are excluded, each having its own budget below. A `callout-warning`
+   counts: moving a paragraph into a coloured box does not make it shorter.
+
+7. A FIGURE CAPTION FITS IN 50 WORDS. It says what is plotted, not what to
+   conclude; a caption that needs more than fifty words is carrying an argument
+   that belongs in the prose.
+
+8. A SPECIFIED OR ASSUMED ITEM FITS IN 10 WORDS. These are a numbered list of
+   inputs, not a discussion of them. One entry recorded a static margin with
+   three lines of justification, which reads as hedging a decision that was
+   actually made.
+
+A value written as an inline expression counts as one word, so tightening prose
+is never at odds with computing the numbers in it.
+
 The leading underscore keeps Quarto from rendering this file.
 """
 import ast
@@ -49,7 +69,10 @@ from collections import defaultdict
 # deliberate act someone has to write down. An opt-in list quietly leaves new
 # work unchecked until somebody remembers, which is how a checker becomes
 # decoration.
-SKIP = ["01-aerobuildup-bfg"]   # predates the format; its freeze holds solver runs
+SKIP = [
+    "01-aerobuildup-bfg",       # predates the format; its freeze holds solver runs
+    "02-mceagle-300",           # frozen reference copy of 00-, kept for comparison
+]
 
 # Two decimals or more reads as a result. One decimal is usually a condition --
 # 6 m/s, 0.5 deg, 10% -- and flagging those is noise. Measured on this notebook:
@@ -76,6 +99,57 @@ SWEPT_LITERAL = re.compile(r"^\s*(\w+)\s*=\s*\[\s*([-\d.eE, ]+)\]\s*$", re.M)
 # failure that earned this rule was aerodynamic.
 AERO_CALLS = {"polars", "AeroBuildup", "run", "run_with_stability_derivatives",
               "solve", "trim", "stall", "neutral_point"}
+
+
+# Word budgets. Prose is the whole entry's readable text; the two callouts and
+# the figure captions are excluded because they are indexes rather than reading.
+MAX_PROSE, MAX_FIG_CAP, MAX_CALLOUT_ITEM = 100, 50, 10
+
+
+def words(text):
+    """
+    Word count, with an inline expression counting as one word.
+
+    A computed value is one thing the reader takes in, however long its format
+    string -- so `{python} f"{x*1e3:.2f}"` mm is two words, not six. Counting the
+    source verbatim would penalise exactly the habit rule 1 exists to enforce.
+    """
+    t = re.sub(r"`\{python\}[^`]*`", "N", text)
+    t = re.sub(r"\(@[\w-]+\)|@[\w-]+", "", t)        # cross-references
+    t = re.sub(r"\]\{\.[\w\s.-]+\}|\[", "", t)       # span syntax, not content
+    t = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", t)  # links: keep the label
+    t = re.sub(r"^\s*#\|.*$", "", t, flags=re.M)     # cell options
+    t = re.sub(r"[*_`#>]|^\s*\d+\.\s*|^\s*[-+]\s+", " ", t, flags=re.M)
+    return len(t.split())
+
+
+def callouts_of(text):
+    """(title, body) for each ::: callout block, however it is fenced."""
+    for m in re.finditer(r"^:{3,}\s*\{\.callout-\w+\}\s*\n(.*?)^:{3,}\s*$",
+                         text, re.S | re.M):
+        body = m.group(1)
+        head = re.match(r"\s*##\s*(.+)", body)
+        yield (head.group(1).strip() if head else ""),\
+              re.sub(r"^\s*##.*$", "", body, count=1, flags=re.M)
+
+
+def body_prose(text):
+    """
+    Everything the reader reads straight through, across the whole entry.
+
+    Only `## Specified` and `## Assumed` are removed -- they are an index of
+    inputs with their own per-item budget. A `callout-warning` stays in: it is
+    addressed to the reader in sentences, and putting a caveat in a coloured box
+    does not make it shorter. Hero blocks stay in too; a headline is words.
+    """
+    t = re.sub(r"^---\n.*?\n---\n", "", text, flags=re.S)
+    # Drop only the two input callouts, by title, leaving warnings in place.
+    t = re.sub(
+        r"^:{3,}\s*\{\.callout-\w+\}\s*\n\s*##\s*(?:Specified|Assumed)\b"
+        r".*?^:{3,}\s*$", "", t, flags=re.S | re.M)
+    t = re.sub(r"```\{python\}.*?```", "", t, flags=re.S)
+    t = re.sub(r"\{\{<[^>]*>\}\}", "", t)
+    return re.sub(r"^:{3,}.*$", "", t, flags=re.M)   # callout and hero fences
 
 
 def _calls_aero(node):
@@ -200,6 +274,33 @@ def check(chapters):
         for n in dict.fromkeys(RESULT_NUMBER.findall(prose_of(text))):
             problems.append(
                 (f, f"hand-typed number {n!r} in prose — use `{{python}} …`"))
+
+        # The three word budgets.
+        n = words(body_prose(text))
+        if n > MAX_PROSE:
+            problems.append(
+                (f, f"{n} words of prose, over the {MAX_PROSE}-word budget — "
+                    f"answer, warnings and any other running text, added up; "
+                    f"only Specified/Assumed and figure captions are excluded"))
+
+        for cap in re.findall(r"^\s*#\|\s*fig-cap:\s*(.+)$", text, re.M):
+            n = words(cap.strip().strip('"'))
+            if n > MAX_FIG_CAP:
+                problems.append(
+                    (f, f"figure caption is {n} words, over {MAX_FIG_CAP} — say "
+                        f"what is plotted, not what to conclude from it"))
+
+        for title, body in callouts_of(text):
+            if title not in ("Specified", "Assumed"):
+                continue
+            for item in re.findall(r"^\s*\d+\.\s+(.*(?:\n(?!\s*\d+\.).*)*)",
+                                   body, re.M):
+                n = words(item)
+                if n > MAX_CALLOUT_ITEM:
+                    problems.append(
+                        (f, f"{title} item is {n} words, over "
+                            f"{MAX_CALLOUT_ITEM} — record the input, not the "
+                            f"argument for it: {' '.join(item.split())[:56]}…"))
 
         # A swept design choice with no recorded decision.
         if "## Specified" not in text:

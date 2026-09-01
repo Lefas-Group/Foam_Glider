@@ -9,16 +9,12 @@ wing, stab, fin = mceagle.wings
 l_fus_m = mceagle.fuselages[0].length()
 ```
 
-::: {.hero}
-[`{python} f"{b_proj*100:.1f}"` cm]{.hero-value}
-[wingspan as built, tip to tip]{.hero-label}
-:::
-
-**Answer.** A shoulder-wing glider on a
+**Answer.** A shoulder-wing glider spanning
+[`{python} f"{b_proj*100:.1f}"` cm]{.key} tip to tip, on a
 [`{python} f"{l_fus_m*100:.1f}"` cm]{.key} fuselage plate, with
 [`{python} f"{dihedral:.1f}"`°]{.key} of dihedral (@fig-three-view). The flat
-pattern you cut is wider than the span above, because bending the tips up
-shortens it — the dimension of this aircraft most easily got wrong.
+pattern you cut is wider, because bending the tips up shortens the span — the
+dimension of this aircraft most easily got wrong.
 
 ```{python}
 #| label: fig-three-view

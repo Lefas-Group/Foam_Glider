@@ -8,29 +8,24 @@ title: "What are the lift and drag polars from −15° to +15° angle of attack?
 alpha = np.linspace(-15, 15, 121)
 p = polars(alpha, V=6.0)
 
-LD = np.array(p["CL"]) / np.array(p["CD"])
-i_best = int(np.argmax(LD))
+a_stall, _ = stall(6.0)
 ```
 
-::: {.hero}
-[`{python} f"{LD[i_best]:.2f}"`:1]{.hero-value}
-[best glide ratio on the polar, at [`{python} f"{alpha[i_best]:.1f}"`°]{.key}]{.hero-label}
-:::
-
-**Answer.** That is the polar's headline number, not the aircraft's
-(@fig-polars). The glider trims nose-higher and slower, so it never reaches this
-point. Read this entry as the section's capability, and the glide entry for what
-the airframe actually does with it.
+**Answer.** @fig-polars. Lift is linear to about
+[`{python} f"{a_stall:.1f}"`°]{.key} and drag rises steeply either side of zero,
+so the useful range is narrow. These are the section's curves at one fixed
+speed, not the aircraft's performance — the glider trims nose-higher and slower
+than the polar's best point, which is why the glide entry solves for trim
+instead of reading a figure off here.
 
 ::: {.callout-note}
 ## Assumed
-1. **Fixed 6 m/s**, the speed chapter 1 ran the BFG at, so the two chapters'
-   polars are read at comparable Reynolds number.
+1. **Fixed 6 m/s** — matches chapter 1's BFG run.
 :::
 
 ```{python}
 #| label: fig-polars
-#| fig-cap: "Lift curve, drag curve, and drag polar. The marker on each is the best-L/D point — the polar's most favourable condition, which the trimmed glider does not reach."
+#| fig-cap: "Lift curve, drag curve and drag polar, at a fixed 6 m/s. The shaded band on the first two marks where the glider actually flies."
 fig, ax = plt.subplots(1, 3, figsize=(9, 3.0))
 
 ax[0].plot(alpha, p["CL"])
@@ -45,11 +40,10 @@ ax[2].plot(p["CD"], p["CL"])
 ax[2].set_xlabel(r"$C_D$"); ax[2].set_ylabel(r"$C_L$")
 ax[2].set_title("Drag polar")
 
-# The best-L/D point, marked on all three so the same condition is locatable.
-for a, (x, y) in zip(ax, [(alpha[i_best], p["CL"][i_best]),
-                          (alpha[i_best], p["CD"][i_best]),
-                          (p["CD"][i_best], p["CL"][i_best])]):
-    a.plot(x, y, "o", color="C1", ms=6, zorder=3)
+# Where the glider actually flies, on the two curves that are read against alpha.
+for a in ax[:2]:
+    a.axvspan(0, a_stall, color="0.92", zorder=0)
+for a in ax:
     a.grid(alpha=0.3)
 plt.tight_layout()
 plt.show()

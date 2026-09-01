@@ -52,9 +52,8 @@ assert heavy["alpha"] > stall(heavy["V"])[0]            # as built, past the sta
 
 **Answer.** It flew as designed, within
 [`{python} f"{abs(t_aloft-pred_t)/pred_t*100:.0f}"`%]{.key} of the predicted
-time. Time is the number to trust, counted in frames and needing no calibration.
-The release was a level push, not a throw (@fig-flight), so the comparison is
-fair — and the glide is clean: wings level, dihedral holding, no mush.
+time — counted in frames, needing no calibration. The release was a level push,
+not a throw (@fig-flight); the glide is clean, wings level.
 
 ::: {.callout-tip}
 ## Specified
@@ -62,32 +61,25 @@ fair — and the glide is clean: wings level, dihedral holding, no mush.
 flown carries the euro 50 cent, not the 1p. Read off the video:
 
 1. **Decodes at 640 × 360, 30 fps.**
-2. **Leaves the hand at frame 100**, lying still on the grass by frame 156.
-3. **Wingspan measures 20 px** across at rest, off a 12× crop with a 5 px rule.
+2. **Released frame 100**, at rest by frame 156.
+3. **Wingspan measures 20 px** at rest.
 :::
 
 ::: {.callout-note}
 ## Assumed
-1. **Horizontal field of view 66°**, typical of a phone's main lens — this is
-   what converts pixels to metres, and nothing in the video states it.
-2. **The glider lies broadside at rest**, so its measured span is not
-   foreshortened; the fuselage appears shorter than the span despite being
-   longer, which is what a fuselage pointing away looks like.
-3. **Release height 1.5 m**, from the video: eye level, arm extended, level push.
+1. **Horizontal field of view 66°**, a typical phone lens.
+2. **The glider lies broadside at rest** — span not foreshortened.
+3. **Release height 1.5 m**, from the video.
 :::
 
 ::: {.callout-warning}
 ## What the video cannot measure
-**Launch speed, directly** — the glider's attitude changes faster than its range
-does, so apparent span is unusable early on. It is boxed in from both sides
-though: below the stall it would have dropped, and the absence of any phugoid
-rules out much above trim. Launch was therefore at essentially the trim speed.
+**Launch speed.** Attitude changes faster than range, so apparent span is
+unusable early. It is bounded either side: below the stall it drops, and no
+phugoid rules out much above trim.
 
-**Range, reliably.** The measured range implies an average speed below the stall,
-impossible for a flight this long — so the range is underestimated, not the model
-overestimated. Flight time alone puts a floor on it, and the model's own trim
-speed over the measured time lands within a percent of the prediction. A metre
-rule laid on the grass would remove the assumed lens entirely.
+**Range.** The measured range implies a speed below the stall, so it is
+underestimated. A metre rule on the grass would fix it.
 :::
 
 ```{python}

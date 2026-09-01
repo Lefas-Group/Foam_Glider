@@ -37,17 +37,17 @@ Reynolds number than the polar is read at, both pushing the same way.
 
 ::: {.callout-tip}
 ## Specified
-1. **Still-air steady glide, released at trim speed** · asked of the user,
-   2026-08-28 · the aircraft's performance, not anyone's throwing arm.
-2. **Release height: 1.5 m** · asked of the user, 2026-08-28 · a normal standing
-   throw. Range scales linearly with it.
+Asked of the user, 2026-08-28:
+
+1. **Still-air steady glide, released at trim speed.**
+2. **Release height: 1.5 m** — a normal standing throw.
 :::
 
 ::: {.callout-note}
 ## Assumed
 1. **Still air** — no thermal, no wind.
-2. **Glide already settled at trim** — no launch transient.
-3. **Ballast at the nose**, as the previous entry concluded.
+2. **Settled at trim** — no launch transient.
+3. **Ballast at the nose**, per the previous entry.
 :::
 
 ```{python}

@@ -11,32 +11,21 @@ given and what is guessed, for the chapter as a whole:
 
 ::: {.callout-tip}
 ## Specified
-1. **Aircraft: the McEagle plan**, scaled to a
-   `{python} f"{b_w*1e3:.0f}"` mm wingspan.
-2. **Foam: `{python} f"{sigma*0.297*0.420*1e3:.2f}"` g per A3 sheet** — weighed,
-   not taken from the brief.
-3. **Method: `AeroBuildup` on 3D geometry**, with NeuralFoil section data.
-4. **Geometry traced off the plan sheet**, scaled
-   `{python} f"{b_w/b_plan:.3f}"`× from its printed
-   `{python} f"{b_plan*1e3:.0f}"` mm span.
-5. **Ballast is not fixed by the plan** — it trims by taping a dime to the
-   fuselage, so placement is a question for an entry.
+1. **Aircraft: the McEagle plan**, at `{python} f"{b_w*1e3:.0f}"` mm span.
+2. **Foam: `{python} f"{sigma*0.297*0.420*1e3:.2f}"` g per A3 sheet**, weighed.
+3. **Method: `AeroBuildup`**, with NeuralFoil section data.
+4. **Geometry traced off the plan**, scaled `{python} f"{b_w/b_plan:.3f}"`×.
+5. **Ballast is not fixed by the plan.**
 :::
 
 ::: {.callout-note}
 ## Assumed
-1. **Section: NACA 0006** for the flat foam,
-   `{python} f"{t_foam/c_w*100:.1f}"`% thick.
-2. **Sheet thickness and tail incidence** — the only two dimensions not readable
-   off the plan.
-3. **Fuselage plate as a body**, `{python} f"{w_fus*1e3:.0f}"` mm wide, carrying
-   force as well as mass; its mass comes from the traced plan area, not the
-   body's volume, because a super-ellipse under-fills a rectangular slab.
-4. **Glue is not modelled.** On the one glider built, the adhesive came to
-   `{python} f"{m_glue_measured*1e3:.2f}"` g centred
-   `{python} f"{x_glue_measured*1e3:.0f}"` mm aft of the nose — a quarter of the
-   airframe, behind the balance point. Budget for it.
-5. **Fixed speed per run**, since Re is ~2–4 × 10⁴ here.
+1. **Section: NACA 0006**, `{python} f"{t_foam/c_w*100:.1f}"`% thick.
+2. **Sheet thickness and tail incidence**, not on the plan.
+3. **Fuselage plate as a body**, `{python} f"{w_fus*1e3:.0f}"` mm wide.
+4. **Glue is not modelled** (budget `{python} f"{m_glue_measured*1e3:.2f}"` g,
+   `{python} f"{x_glue_measured*1e3:.0f}"` mm).
+5. **Fixed speed per run** (Re ~2–4 × 10⁴).
 :::
 
 ## The model

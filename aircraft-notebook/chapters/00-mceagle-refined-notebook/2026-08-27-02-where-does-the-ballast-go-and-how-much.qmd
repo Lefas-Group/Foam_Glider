@@ -32,14 +32,14 @@ plan's dime is not enough here.
 
 ::: {.callout-tip}
 ## Specified
-1. **Static margin: 10% MAC** · asked of the user, 2026-08-27 · a conventional
-   free-flight value; the plan does not specify one.
+Asked of the user, 2026-08-27:
+
+1. **Static margin: 10% MAC** — conventional for free flight.
 :::
 
 ::: {.callout-note}
 ## Assumed
-1. **Neutral-point fit band: α = 0–8°** — a modelling convention, bracketing the
-   best-L/D angle.
+1. **Neutral-point fit band: α = 0–8°**, bracketing best L/D.
 :::
 
 ```{python}
