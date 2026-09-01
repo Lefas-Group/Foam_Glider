@@ -33,6 +33,8 @@
 # actually enclose. The two agree to 0.5%, which is the cost of representing a
 # rounded tip with straight-line sections.
 # =============================================================================
+import time
+
 import aerosandbox as asb
 import aerosandbox.numpy as np
 import matplotlib.pyplot as plt
@@ -292,6 +294,12 @@ def polars(alpha, V=6.0, airplane=None):
     so V is part of the answer, not a detail. Returns the AeroBuildup dict with
     alpha, V and mean-chord Reynolds number added.
     """
+    # Counted, because this call is what the notebook spends its time on and
+    # nothing else was in a position to notice. See aero_report() in
+    # _notebook.py; _scratch/probe.py prints it on every run.
+    _t0 = time.perf_counter()
     op = asb.OperatingPoint(velocity=V, alpha=alpha)
     aero = asb.AeroBuildup(airplane=airplane or mceagle, op_point=op).run()
+    aero_cost["calls"] += 1
+    aero_cost["seconds"] += time.perf_counter() - _t0
     return {**aero, "alpha": alpha, "V": V, "Re_c": op.reynolds(c_w)}

@@ -13,9 +13,20 @@ website:
   sidebar:
     style: docked
     contents:
-      # Subdirectories become sections. Entry filenames start with their date,
-      # so alphabetical order is chronological order.
-      - auto: "chapters"
+      # One `auto:` per chapter, listed newest-design-first. Entries within a
+      # chapter are still discovered automatically -- filenames start with their
+      # date, so alphabetical order is chronological order -- but the CHAPTER
+      # order is fixed here on purpose.
+      #
+      # A bare `auto: "chapters"` does not work: it emits sections in raw
+      # directory-listing order, which on APFS is unsorted. Neither the
+      # directory name nor the chapter title changes it (both tested), so the
+      # only way to put the live design on top is to name the chapters here.
+      # Adding a chapter means adding a line -- the one bit of maintenance this
+      # buys, in exchange for an order that survives a fresh clone.
+      - auto: "chapters/00-mceagle-refined-notebook"
+      - auto: "chapters/02-mceagle-300"
+      - auto: "chapters/01-aerobuildup-bfg"
 
 format:
   html:

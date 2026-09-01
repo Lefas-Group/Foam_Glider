@@ -62,7 +62,12 @@ With no user to ask — an agent running unattended — assume, and write
    stopping anyway, so resolving the inputs costs no extra round trip. If the
    proposal covers more than one question, split it into one entry each. Say
    what the entry will cost to render if any cell runs a solver or a sweep;
-   freeze pays it once, and it survives edits to `_model.py`. Ask
+   freeze pays it once, and it survives edits to `_model.py`. **Take that cost
+   from the probe, not from a guess**: `aero_report()` prints the solves the
+   probe just ran, and `aerosandbox.md` gives the per-strip price to turn them
+   into seconds. Guessing is how a helper spending sixty solves to converge in
+   twelve went unnoticed — and freeze records no timing, so an entry's cost
+   leaves no trace once written. Ask
    whether to record it and where. **Write nothing into the notebook until the
    user agrees.**
 

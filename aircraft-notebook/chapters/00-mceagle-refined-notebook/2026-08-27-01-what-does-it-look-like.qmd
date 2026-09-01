@@ -1,0 +1,34 @@
+---
+title: "What does it look like?"
+---
+
+{{< include _model.qmd >}}
+
+A three-view of the airframe, and the three dimensions that fix its size.
+
+```{python}
+wing, stab, fin = mceagle.wings
+l_fus_m = mceagle.fuselages[0].length()
+```
+
+**Answer.** A shoulder-wing glider spanning
+`{python} f"{b_proj*100:.1f}"` cm as built, on a
+`{python} f"{l_fus_m*100:.1f}"` cm fuselage plate, with
+`{python} f"{dihedral:.1f}"`° of dihedral (@fig-three-view).
+
+The span above is the finished glider, tip to tip. The flat pattern you cut is
+wider, because bending the tips up shortens the projected span — a distinction
+the cutting entry depends on, and the one dimension of this aircraft most easily
+got wrong. Everything here is read back off the `Airplane` object rather than
+recomputed from the tables that built it, so it is the geometry `AeroBuildup`
+actually sees.
+
+```{python}
+#| label: fig-three-view
+#| fig-cap: "The airframe as modelled. The dihedral shows in the front view (top right); the stabilizer hangs below the fuselage plate and the fin stands above it, both with their trailing edges at the tail."
+#| fig-width: 7
+#| fig-height: 7
+# Bind the returned axes -- otherwise their repr renders as a second output and
+# demotes the figure to a subfigure.
+_ = mceagle.draw_three_view(show=True)
+```

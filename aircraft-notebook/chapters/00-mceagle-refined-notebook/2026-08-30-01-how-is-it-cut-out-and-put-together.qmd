@@ -1,0 +1,121 @@
+---
+title: "How is it cut out and put together?"
+---
+
+{{< include _model.qmd >}}
+
+Every part flattened from the model's own tables and nested on one sheet, then
+written out at 1:1. The outlines are generated here rather than drawn, so the
+template cannot drift from the aircraft the rest of the chapter analyses.
+
+::: {.callout-tip}
+## Specified
+1. **Sheet: A3** · from the original brief · it sets the space available, so it
+   decides the nesting.
+2. **Output: a scale layout plus a true 1:1 PDF** · asked of the user,
+   2026-08-30 · the PDF is the usable artefact.
+:::
+
+::: {.callout-note}
+## Assumed
+1. **The two fuselage laminations are spliced at different stations**, so each
+   butt joint is bridged by continuous material in the other layer. The original
+   plan interlocks a single pair with zigzag teeth instead.
+2. **Cut lines are the finished outline** — no allowance for the knife.
+:::
+
+```{python}
+MM, A3 = 1e3, (420.0, 297.0)             # mm, the specified sheet, landscape
+SPLIT_A, SPLIT_B = 0.2665, 0.1800        # m, staggered splice stations
+
+parts = {
+    "wing": sym_surface(wing_eta, wing_c, b_w / 2),
+    "stabilizer": sym_surface(stab_eta, stab_c, b_h / 2),
+    "fin": fin_outline(),
+    "fuselage A, nose": fuselage_outline(0, SPLIT_A),
+    "fuselage A, tail": fuselage_outline(SPLIT_A, l_fus),
+    "fuselage B, nose": fuselage_outline(0, SPLIT_B),
+    "fuselage B, tail": fuselage_outline(SPLIT_B, l_fus),
+}
+# nest() raises if anything falls off the sheet or two parts overlap, so a bad
+# template stops the render rather than reaching the printer.
+placed = nest(parts, {
+    "wing": (10, 8), "fin": (320, 8), "stabilizer": (10, 113),
+    "fuselage B, tail": (160, 113), "fuselage A, nose": (10, 184),
+    "fuselage B, nose": (10, 228), "fuselage A, tail": (200, 228),
+}, A3)
+
+foam = S_w + S_h + S_v + 2 * S_fus
+PDF = "chapters/00-mceagle-refined-notebook/mceagle-300-cutting-plan-a3.pdf"
+
+# The build's own numbers, quoted in the assembly steps below.
+x_np = neutral_point()
+m_b = ballast_for(x_np - 0.10 * c_w, 0.0)
+mp = mass_properties(m_ballast=m_b, x_ballast=0.0)
+```
+
+**Answer.** All seven pieces fit one A3 sheet, using
+`{python} f"{foam/(A3[0]*A3[1]/MM**2)*100:.0f}"`% of its area
+(@fig-cutting) — so one sheet builds the glider with more than half left over.
+
+The fuselage is what forces the layout. It is longer than A3's long edge, so it
+cannot be cut in one piece squared up to the sheet; it would fit laid across the
+diagonal, but that wastes the rest of the sheet and gains nothing, because the
+build wants the fuselage in two laminations anyway. Splitting it lets the two
+layers' butt joints be staggered, so each is backed by unbroken foam in the
+other. The original plan reaches the same conclusion at its own scale, and
+interlocks the halves with zigzag teeth instead.
+
+[**Download the 1:1 cutting plan (A3 PDF)**](mceagle-300-cutting-plan-a3.pdf) —
+print at 100%, not "fit to page", and check the printed wing measures
+`{python} f"{b_w*MM:.0f}"` mm tip to tip before cutting anything.
+
+```{python}
+#| label: fig-cutting
+#| fig-cap: "The seven parts nested on one A3 sheet. Drawn from the model's own chord tables and depth profile, and written out at 1:1 as the linked PDF."
+def draw(ax):
+    for n, p in placed.items():
+        ax.fill(p[:, 0], p[:, 1], facecolor="none", edgecolor="k", lw=0.6)
+    ax.set_xlim(0, A3[0]); ax.set_ylim(0, A3[1])
+    ax.set_aspect("equal"); ax.axis("off")
+
+
+# The 1:1 artefact: an A3 page with one drawing unit to the millimetre.
+pdf = plt.figure(figsize=(A3[0] / 25.4, A3[1] / 25.4))
+draw(pdf.add_axes([0, 0, 1, 1]))
+pdf.savefig(PDF); plt.close(pdf)
+
+fig, ax = plt.subplots(figsize=(8, 5.7))
+draw(ax)
+ax.add_patch(plt.Rectangle((0, 0), *A3, fill=False, ec="0.6", lw=1))
+for n, p in placed.items():
+    ax.text(p[:, 0].mean(), p[:, 1].mean(), n, ha="center", va="center",
+            fontsize=6.5, color="0.45")
+plt.tight_layout()
+plt.show()
+```
+
+**Assembly.** Cut all seven pieces, marking the forward direction on each.
+Laminate the two fuselage layers face to face with the splices offset, and let
+them dry flat under a weight. Glue the stabilizer under the tail and the fin on
+top of it, both trailing edges flush with the square end, and set the stabilizer
+`{python} f"{abs(i_h):.0f}"`° trailing-edge-up relative to the wing — that
+negative incidence is what lifts the nose out of a stall.
+
+Divide the wing along its centreline, sand about 10 mm of each cut edge to a
+`{python} f"{dihedral:.1f}"`° bevel, and glue the halves back together on top of
+the fuselage with the leading edge `{python} f"{x_le_w*MM:.1f}"` mm aft of the
+nose, propping the tips `{python} f"{z_tip*MM:.1f}"` mm up while it dries. The
+finished wing spans `{python} f"{b_proj*MM:.0f}"` mm across the tips even though
+`{python} f"{b_w*MM:.0f}"` mm of foam went into it — the dihedral takes the
+difference.
+
+Finally add `{python} f"{m_b*1e3:.2f}"` g at the nose and check it balances
+`{python} f"{mp.x_cg*MM:.1f}"` mm back. Balance is the one thing worth measuring
+rather than trusting: everything else tolerates a millimetre, and this does not.
+
+```{python}
+#| echo: false
+#| output: asis
+show_source(sym_surface, fin_outline, fuselage_outline, nest)
+```

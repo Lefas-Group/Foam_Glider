@@ -1,0 +1,12 @@
+{
+  "hash": "649d7e3d9d2fd79e5694cc52286b3e6b",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: \"What does it look like?\"\n---\n\n\nA three-view of the airframe, and the three dimensions that fix its size.\n\n::: {#f519ebaf .cell execution_count=2}\n``` {.python .cell-code}\nwing, stab, fin = mceagle.wings\nl_fus_m = mceagle.fuselages[0].length()\n```\n:::\n\n\n**Answer.** A shoulder-wing glider spanning\n29\\.2 cm as built, on a\n43\\.8 cm fuselage plate, with\n13\\.3° of dihedral (@fig-three-view).\n\nThe span above is the finished glider, tip to tip. The flat pattern you cut is\nwider, because bending the tips up shortens the projected span — a distinction\nthe cutting entry depends on, and the one dimension of this aircraft most easily\ngot wrong. Everything here is read back off the `Airplane` object rather than\nrecomputed from the tables that built it, so it is the geometry `AeroBuildup`\nactually sees.\n\n::: {#cell-fig-three-view .cell fig-height='7' fig-width='7' execution_count=3}\n``` {.python .cell-code}\n# Bind the returned axes -- otherwise their repr renders as a second output and\n# demotes the figure to a subfigure.\n_ = mceagle.draw_three_view(show=True)\n```\n\n::: {.cell-output .cell-output-display}\n![The airframe as modelled. The dihedral shows in the front view (top right); the stabilizer hangs below the fuselage plate and the fin stands above it, both with their trailing edges at the tail.](2026-08-27-01-what-does-it-look-like_files/figure-html/fig-three-view-output-1.png){#fig-three-view width=1896 height=1896}\n:::\n:::\n\n\n",
+    "supporting": [
+      "2026-08-27-01-what-does-it-look-like_files"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}

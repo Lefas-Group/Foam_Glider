@@ -1,0 +1,60 @@
+---
+title: "If so, how far?"
+---
+
+{{< include _model.qmd >}}
+
+The glide that follows from the built glider's own trim, set against the design's,
+from the same release height.
+
+::: {.callout-tip}
+## Specified
+1. **All-up mass: 16 g, balance point 15 mm aft of the plan's** · measured on
+   the built glider by the user, 2026-08-30.
+2. **Release height: 1.5 m** · as for the design, so the two are comparable.
+:::
+
+::: {.callout-note}
+## Assumed
+1. **Still air, and a glide already settled at trim.**
+2. **The trim lies past the stall**, where `AeroBuildup` is reading NeuralFoil
+   beyond the attached-flow regime it represents well. The range below is what
+   the model says, not what the model can support.
+:::
+
+```{python}
+H, BUILT_M, SHIFT = 1.5, 0.016, 0.015
+
+x_np = neutral_point()
+x_cg_plan = x_np - 0.10 * c_w
+plan = trim(0.01550, x_cg_plan)
+built = trim(BUILT_M, x_cg_built := x_cg_plan + SHIFT)
+a_stall, _ = stall(built["V"])
+
+# The two claims the prose makes without quoting numbers.
+assert built["alpha"] > a_stall                      # as built, past the stall
+assert plan["alpha"] < stall(plan["V"])[0]           # as planned, below it
+```
+
+**Answer.** The model says `{python} f"{built['LD']*H:.1f}"` m, against
+`{python} f"{plan['LD']*H:.1f}"` m for the design — roughly
+`{python} f"{(1 - built['LD']/plan['LD'])*100:.0f}"`% less, from the same
+release.
+
+**Do not trust that number.** The built glider trims *past* the stall, not below
+it, so the flow is no longer attached and the section data behind it is a smooth
+approximation to a flat plate — optimistic before the stall and unreliable after
+it. Read it as an upper bound on what will really be
+a nose-high mush, landing nearer the thrower than this, in a direction largely
+decided by which wing drops first.
+
+The useful comparison is not the two distances but their cause. The design flies
+below its stall and the article flies past it, so recovering the distance is not
+a matter of trimming for range — it is a matter of moving the balance point
+forward until the aircraft is on the right side of its own polar again.
+
+```{python}
+#| echo: false
+#| output: asis
+show_source(trim)
+```

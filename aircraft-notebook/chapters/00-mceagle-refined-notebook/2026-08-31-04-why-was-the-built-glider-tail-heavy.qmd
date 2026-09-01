@@ -1,0 +1,110 @@
+---
+title: "Why was the built glider tail-heavy?"
+---
+
+{{< include _model.qmd >}}
+
+The built glider weighed what the model predicted but balanced 20 mm further
+aft. This reconciles the two, working from the article back to the model rather
+than forward.
+
+::: {.callout-tip}
+## Specified
+Measured on the built glider and its material by the user, 2026-08-30/31:
+
+1. **16 g all-up**, balancing **164.0 mm** aft of the nose with a 1p at 24 mm.
+2. **Wing leading edge 91 mm** aft of the nose.
+3. **Bevels: 4 mm at the leading edge, 10 mm at the trailing edge**, each
+   tapered to a point.
+4. **Four A3 sheets of foam weighing 87 g.**
+:::
+
+```{python}
+MM = 1e3
+M, XCG, PENNY, PENNY_X = 0.016, 0.1640, 3.56e-3, 0.0240
+WING_LE, LE_W, TE_W = 0.091, 4.0, 10.0
+SIGMA_BRIEF = 0.027 / (0.297 * 0.420)        # what the brief claimed
+
+# The article, with the known coin stripped off.
+m_built = M - PENNY
+x_built = (M * XCG - PENNY * PENNY_X) / m_built
+
+# The model as it stood: the brief's foam, and the wing where the plan put it.
+pred = mass_properties()
+old_m = pred.mass * SIGMA_BRIEF / sigma
+old_x = pred.x_cg + (S_w * SIGMA_BRIEF) * (WING_LE - x_le_w) / old_m
+new_x = pred.x_cg + (S_w * sigma) * (WING_LE - x_le_w) / pred.mass
+
+# Bevels: a wedge w*t/2 off each edge, at the measured density.
+rho = sigma / t_foam / 1e9
+bev = [(span * MM * w * t_foam * MM / 2, x)
+       for span, xle, xte in [(b_w, WING_LE, WING_LE + c_w),
+                              (b_h, x_le_h, x_te_v),
+                              (b_v, x_te_v - fin_c[0], x_te_v)]
+       for w, x in [(LE_W, xle), (TE_W, xte)]]
+m_bev = sum(v for v, _ in bev) * rho
+x_bev = sum(v * x for v, x in bev) / sum(v for v, _ in bev)
+
+after_m = pred.mass - m_bev
+after_x = (pred.mass * new_x - m_bev * x_bev) / after_m
+glue_m = m_built - after_m
+glue_x = (m_built * x_built - after_m * after_x) / glue_m
+
+# The ballast this chapter used to call for, on the brief's foam.
+x_t = neutral_point() - 0.10 * c_w
+old_ballast = old_m * (pred.x_cg - x_t) / x_t
+new_ballast = ballast_for(x_t, 0.0)
+```
+
+**Answer.** Two errors, pulling opposite ways on mass and the same way on
+balance — which is why the total looked right and the trim did not. The foam is
+`{python} f"{(1 - sigma/SIGMA_BRIEF)*100:.0f}"`% lighter than the brief said,
+and the build carries about `{python} f"{glue_m*1e3:.1f}"` g of unmodelled glue
+centred `{python} f"{glue_x*MM:.0f}"` mm aft of the nose (@fig-reconcile).
+
+Phantom foam removed from everywhere and real glue added at the tail nearly
+cancel in total mass. They do not cancel in moment, and that is the whole
+discrepancy: almost no change in grams, a large one in millimetres.
+
+Two suspects turn out to be innocent. The bevels are real, and about a fifth of
+the airframe, but weighted by edge length they remove foam from *behind* the
+balance point, so cutting them pulled the centre of gravity forward. Nor was the
+wing misplaced: as measured it sits slightly forward of where the plan put it,
+which widens the gap rather than closing it. Both worked against the shift.
+
+**What changed in the model.** `sigma` is now the measured value rather than the
+brief's, so the structure mass and the nose ballast for 10% MAC both fall. The
+neutral point does not move at all — areal density never enters the
+aerodynamics. Glue is still not modelled; the measurement above is recorded in
+`_model.py` as a budget, not folded into the build-up, because one aircraft is
+not a rule.
+
+```{python}
+#| label: fig-reconcile
+#| fig-cap: "From the model as it stood to the glider on the bench, one correction at a time. The first and last points are what was predicted and what was weighed: near-identical in mass, far apart in balance. Each correction moves both, and only the pair together identifies the cause."
+steps = ["model, as it\nstood", "foam corrected", "wing as\nmeasured",
+         "less the bevels", "plus glue\n(= measured)"]
+mass = [old_m, pred.mass, pred.mass, after_m, m_built]
+bal = [old_x, pred.x_cg, new_x, after_x, x_built]
+
+fig, (a1, a2) = plt.subplots(2, 1, figsize=(7, 4), sharex=True)
+
+a1.step(range(len(steps)), np.array(mass) * 1e3, where="mid", color="C0", lw=2)
+a1.plot(range(len(steps)), np.array(mass) * 1e3, "o", color="C0", ms=6)
+a1.set_ylabel("mass [g]"); a1.grid(alpha=0.3)
+
+a2.step(range(len(steps)), np.array(bal) * MM, where="mid", color="C3", lw=2)
+a2.plot(range(len(steps)), np.array(bal) * MM, "o", color="C3", ms=6)
+a2.set_ylabel("balance [mm]"); a2.grid(alpha=0.3)
+
+a2.set_xticks(range(len(steps)))
+a2.set_xticklabels(steps, fontsize=8)
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+show_source(ballast_for)
+```

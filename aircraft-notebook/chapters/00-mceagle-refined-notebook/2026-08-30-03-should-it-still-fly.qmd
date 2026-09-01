@@ -1,0 +1,83 @@
+---
+title: "Should it still fly?"
+---
+
+{{< include _model.qmd >}}
+
+The built glider's own mass and balance point put through the same trim solve as
+the design, and the restoring moment measured at the trim it actually reaches.
+
+::: {.callout-tip}
+## Specified
+1. **All-up mass: 16 g** · measured on the built glider by the user, 2026-08-30.
+2. **Balance point: 15 mm aft of the plan's** · same measurement · the plan
+   called for 149.0 mm aft of the nose, so as built it is at 164.0 mm.
+:::
+
+```{python}
+BUILT_M, SHIFT = 0.016, 0.015
+
+x_np = neutral_point()
+x_cg_plan = x_np - 0.10 * c_w
+x_cg_built = x_cg_plan + SHIFT
+
+plan = trim(0.01550, x_cg_plan)
+built = trim(BUILT_M, x_cg_built)
+a_stall, CL_stall = stall(built["V"])
+
+# Pitching moment about the CG, the curve whose zero crossing IS the trim.
+# Same shift trim() applies internally: Cm_cg = Cm_ref + CL * (x_cg - x_ref)/c.
+a_sweep = np.linspace(0, 14, 141)
+Cm_of = lambda x_cg, V: (
+    np.array(polars(a_sweep, V=V)["Cm"])
+    + np.array(polars(a_sweep, V=V)["CL"]) * (x_cg - x_qc_w) / c_w)
+```
+
+**Answer.** Yes — but only just, and not well. It trims at
+`{python} f"{built['alpha']:.1f}"`° where the wing stalls at
+`{python} f"{a_stall:.1f}"`°, so it sits
+`{python} f"{abs(built['alpha']-a_stall):.1f}"`° **past** the stall
+(@fig-asbuilt). Expect it to mush: nose high, sinking fast, unwilling to pick up
+speed, and liable to drop a wing.
+
+It is not unstable. The restoring moment at its trim is negative and in fact
+slightly *stronger* than the design's, so a nose-up disturbance is still pushed
+back down. Stability was never the problem — where it trims is.
+
+The fix is a little more weight at the nose, well under a gram. Easier still is
+to move whatever ballast is already fitted as far forward as it will go, and
+only add metal if that runs out of nose.
+
+**A warning about the number this chapter has been quoting.** Static margin says
+this aircraft is *unstable* — the balance point sits behind the neutral point.
+The direct test disagrees, and the direct test is right. The neutral point here
+is a straight line fitted across α = 0–8°, and this glider trims well outside
+that band, so the label stops describing the aircraft before the aircraft stops
+flying. Where they disagree, believe `dCm/dα` at the trim: it needs no neutral
+point, and so inherits none of the ambiguity in defining one.
+
+```{python}
+#| label: fig-asbuilt
+#| fig-cap: "Pitching moment about the centre of gravity. Each curve crosses zero where that glider trims, and the shading marks angles beyond the built glider's stall. Both curves slope downwards through their crossing — both aircraft are stable — but the built one trims on the wrong side of the stall."
+fig, ax = plt.subplots(figsize=(7, 3.4))
+
+for name, t, x_cg, colour in [("as planned", plan, x_cg_plan, "C0"),
+                              ("as built", built, x_cg_built, "C3")]:
+    ax.plot(a_sweep, Cm_of(x_cg, t["V"]), color=colour, lw=1.8, label=name)
+    ax.plot(t["alpha"], 0, "o", color=colour, ms=8, zorder=3)
+
+ax.axvspan(a_stall, 14, color="0.9", zorder=0)
+ax.text(a_stall + 0.2, ax.get_ylim()[1] * 0.8, "past the stall",
+        fontsize=8, color="0.45")
+ax.axhline(0, color="0.3", lw=1)
+ax.set_xlabel(r"$\alpha$ [deg]"); ax.set_ylabel(r"$C_m$ about the CG")
+ax.set_xlim(0, 14); ax.grid(alpha=0.3); ax.legend()
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+show_source(trim, stall)
+```

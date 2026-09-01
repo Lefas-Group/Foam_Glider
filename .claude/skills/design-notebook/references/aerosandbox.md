@@ -47,11 +47,41 @@ answer. Whichever you use, state the angle or the band.
   `float(aero["CLa"][0])`. Same for `RegularGridInterpolator` output.
 - `op_point.reynolds(c)` returns a **scalar** when `velocity` is scalar, even if
   `alpha` is a vector — indexing it raises `IndexError`.
-- **Cost is per call, not per point.** `AeroBuildup` is fully vectorized: 61
-  angles of attack cost about the same as one (~40 ms here), because fixed
-  overhead dominates. Sweep in one vectorized call rather than looping.
+- **Cost is per call, not per point.** `AeroBuildup` is fully vectorized, so
+  alpha is nearly free: on the McEagle-300, 1 angle costs 350 ms, 161 cost
+  480 ms and 641 cost 830 ms. Sweep in one vectorized call rather than looping.
   `run_with_stability_derivatives()` costs ~5× a plain `run()`, since it
   finite-differences over several perturbations.
+- **The corollary: the number of calls is the entire budget.** If a point is
+  free and a call is not, then the thing to count is calls — and the usual place
+  they hide is a loop whose trip count was chosen rather than measured. An
+  iteration runs to a tolerance, with a max-iteration guard that *raises*; it
+  does not run to a round number someone picked. `trim()` in the McEagle chapter
+  was written `for _ in range(60)` around a fixed point that converges in 9–13,
+  which is ~20 s of solving per call, thrown away, at a dozen call sites. The
+  vectorization advice above did not catch it: `trim()` obeys that rule
+  perfectly, sweeping 161 alphas in one call — and then makes 60 such calls. The
+  rule governs the inner dimension; this one governs the outer.
+  The notebook already had the right pattern when `trim()` was written —
+  `01-aerobuildup-bfg`'s launch-speed entry solves the same lift-equals-weight
+  fixed point with `for _ in range(40)` plus `if abs(V_new - V) < 1e-5: break`
+  and 50% under-relaxation, three weeks earlier. Copy that shape: a trip cap as
+  a guard, a tolerance as the actual exit.
+- **Cost scales with spanwise strips, not with the aircraft's complexity as you
+  might judge it by eye.** Count them with
+  `sum((len(w.xsecs) - 1) * (2 if w.symmetric else 1) for w in airplane.wings)`
+  — that is exactly how many times `compute_section_aerodynamics` runs per call.
+  Measured here: **BFG, 5 strips, 41 ms; McEagle-300, 47 strips, 350 ms** —
+  9.4× the strips for 8.5× the time. Always quote a timing with the aircraft it
+  was measured on. An unlabelled figure reads as a property of `AeroBuildup`
+  when it is a property of the geometry, and that is what once made a
+  60-iteration loop look affordable.
+- **Where the time actually goes**, so nobody optimizes the wrong end: only
+  ~13% of a call is NeuralFoil's network. The rest is AeroSandbox re-deriving
+  the same per-strip geometry and atmosphere every time — Kulfan refits of an
+  unchanged airfoil, thickness lookups, sea-level density. It is upstream
+  structure, not something to work around. In particular, **shrinking an alpha
+  grid buys nothing**; only cutting calls does.
 
 ## Geometry and aerodynamics
 

@@ -1,0 +1,58 @@
+---
+title: "What are the lift and drag polars from −15° to +15° angle of attack?"
+---
+
+{{< include _model.qmd >}}
+
+`AeroBuildup` swept across the whole angle-of-attack range, at a fixed speed.
+
+::: {.callout-note}
+## Assumed
+1. **Fixed 6 m/s**, the speed chapter 1 ran the BFG at, so the two chapters'
+   polars are read at comparable Reynolds number.
+:::
+
+```{python}
+alpha = np.linspace(-15, 15, 121)
+p = polars(alpha, V=6.0)
+
+LD = np.array(p["CL"]) / np.array(p["CD"])
+i_best = int(np.argmax(LD))
+```
+
+**Answer.** The best glide ratio on the polar is
+`{python} f"{LD[i_best]:.2f}"`:1, reached at
+`{python} f"{alpha[i_best]:.1f}"`° (@fig-polars).
+
+That is the polar's headline number, not the aircraft's. The glider trims
+nose-higher than this and slower, so it never reaches the best-L/D point — which
+is why the glide entry solves for trim rather than reading a figure off this
+curve. Read this entry as the section's capability, and the glide entry for what
+the airframe does with it.
+
+```{python}
+#| label: fig-polars
+#| fig-cap: "Lift curve, drag curve, and drag polar. The marker on each is the best-L/D point — the polar's most favourable condition, which the trimmed glider does not reach."
+fig, ax = plt.subplots(1, 3, figsize=(9, 3.0))
+
+ax[0].plot(alpha, p["CL"])
+ax[0].set_xlabel(r"$\alpha$ [deg]"); ax[0].set_ylabel(r"$C_L$")
+ax[0].set_title("Lift curve")
+
+ax[1].plot(alpha, p["CD"])
+ax[1].set_xlabel(r"$\alpha$ [deg]"); ax[1].set_ylabel(r"$C_D$")
+ax[1].set_title("Drag curve")
+
+ax[2].plot(p["CD"], p["CL"])
+ax[2].set_xlabel(r"$C_D$"); ax[2].set_ylabel(r"$C_L$")
+ax[2].set_title("Drag polar")
+
+# The best-L/D point, marked on all three so the same condition is locatable.
+for a, (x, y) in zip(ax, [(alpha[i_best], p["CL"][i_best]),
+                          (alpha[i_best], p["CD"][i_best]),
+                          (p["CD"][i_best], p["CL"][i_best])]):
+    a.plot(x, y, "o", color="C1", ms=6, zorder=3)
+    a.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
+```

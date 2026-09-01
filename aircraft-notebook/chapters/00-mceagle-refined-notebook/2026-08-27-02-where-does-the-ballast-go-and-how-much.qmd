@@ -1,0 +1,73 @@
+---
+title: "Where does the ballast go, and how much?"
+---
+
+{{< include _model.qmd >}}
+
+The neutral point from a straight-line fit of `Cm` against `CL` over α = 0–8° at
+6 m/s, then the ballast mass that puts the CG the required static margin ahead
+of it.
+
+::: {.callout-tip}
+## Specified
+1. **Static margin: 10% MAC** · asked of the user, 2026-08-27 · a conventional
+   free-flight value; the plan does not specify one.
+:::
+
+::: {.callout-note}
+## Assumed
+1. **Neutral-point fit band: α = 0–8°** — a modelling convention, bracketing the
+   best-L/D angle.
+:::
+
+```{python}
+mp0 = mass_properties()
+x_np = neutral_point(band=(0, 8), V=6.0)
+
+SM = 0.10                            # specified above
+x_cg = x_np - SM * c_w
+
+x_b = np.linspace(0, x_le_w, 200)
+m_b = ballast_for(x_cg, x_b, mp0)
+nose, le = ballast_for(x_cg, 0.0, mp0), ballast_for(x_cg, x_le_w, mp0)
+
+DIME = 2.268e-3                      # kg, a US dime, the plan's own ballast
+dime = mass_properties(m_ballast=DIME, x_ballast=0.0)
+```
+
+**Answer.** On the nose, and `{python} f"{nose*1e3:.2f}"` g of it — against
+`{python} f"{le*1e3:.2f}"` g if taped at the wing leading edge instead
+(@fig-ballast).
+
+Unballasted the airframe is unstable: a stabilizer a third the area of the wing,
+plus the fin, sit at the end of a long fuselage plate, which drags the neutral
+point forward of the bare structure's own centre of gravity. Station then matters
+more than mass does — the further forward the ballast sits, the less of it you
+need, and the penalty for taping it at the wing rather than the nose is most of a
+gram on an aircraft this light. The dime the original plan calls for is not
+enough at this scale; on the nose it leaves the centre of gravity under half a
+percent of MAC ahead of the neutral point, which is stable in name only.
+
+```{python}
+#| label: fig-ballast
+#| fig-cap: "Ballast mass needed against the station it is taped to, from the nose back to the wing leading edge, for the specified 10% MAC. The dashed line marks the 2.27 g of the dime the plan calls for."
+fig, ax = plt.subplots(figsize=(7, 4))
+
+ax.plot(x_b * 1e3, m_b * 1e3, label=f"static margin {SM:.0%} MAC")
+ax.axhline(DIME * 1e3, ls="--", c="0.4", lw=1,
+           label=f"a dime, {DIME*1e3:.2f} g")
+ax.set_xlabel("ballast station [mm aft of the nose]")
+ax.set_ylabel("ballast mass [g]")
+ax.set_xlim(0, x_le_w * 1e3)
+ax.set_ylim(0, 10)
+ax.grid(alpha=0.3)
+ax.legend()
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+show_source(neutral_point, ballast_for)
+```
