@@ -4,12 +4,6 @@ title: "What are the lift and drag polars from −15° to +15° angle of attack?
 
 {{< include _model.qmd >}}
 
-::: {.callout-note}
-## Assumed
-1. **Fixed 6 m/s**, the speed chapter 1 ran the BFG at, so the two chapters'
-   polars are read at comparable Reynolds number.
-:::
-
 ```{python}
 alpha = np.linspace(-15, 15, 121)
 p = polars(alpha, V=6.0)
@@ -27,6 +21,12 @@ i_best = int(np.argmax(LD))
 (@fig-polars). The glider trims nose-higher and slower, so it never reaches this
 point. Read this entry as the section's capability, and the glide entry for what
 the airframe actually does with it.
+
+::: {.callout-note}
+## Assumed
+1. **Fixed 6 m/s**, the speed chapter 1 ran the BFG at, so the two chapters'
+   polars are read at comparable Reynolds number.
+:::
 
 ```{python}
 #| label: fig-polars

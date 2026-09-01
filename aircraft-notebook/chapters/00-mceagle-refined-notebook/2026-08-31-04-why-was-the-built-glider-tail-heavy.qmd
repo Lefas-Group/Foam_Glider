@@ -4,17 +4,6 @@ title: "Why was the built glider tail-heavy?"
 
 {{< include _model.qmd >}}
 
-::: {.callout-tip}
-## Specified
-Measured on the built glider and its material by the user, 2026-08-30/31:
-
-1. **16 g all-up**, balancing **164.0 mm** aft of the nose with a 1p at 24 mm.
-2. **Wing leading edge 91 mm** aft of the nose.
-3. **Bevels: 4 mm at the leading edge, 10 mm at the trailing edge**, each
-   tapered to a point.
-4. **Four A3 sheets of foam weighing 87 g.**
-:::
-
 ```{python}
 MM = 1e3
 M, XCG, PENNY, PENNY_X = 0.016, 0.1640, 3.56e-3, 0.0240
@@ -52,11 +41,16 @@ old_ballast = old_m * (pred.x_cg - x_t) / x_t
 new_ballast = ballast_for(x_t, 0.0)
 ```
 
-::: {.hero}
+:::: {.hero-pair}
+::: {.hero-item}
 [`{python} f"{(x_built - old_x)*MM:+.0f}"` mm]{.hero-value}
-[balance point, against a mass error of only
-[`{python} f"{(m_built - old_m)*1e3:+.2f}"` g]{.key}]{.hero-label}
+[balance point, off prediction]{.hero-label}
 :::
+::: {.hero-item}
+[`{python} f"{(m_built - old_m)*1e3:+.2f}"` g]{.hero-value .hero-ref}
+[mass, off prediction]{.hero-label}
+:::
+::::
 
 **Answer.** Two errors: the foam is
 [`{python} f"{(1 - sigma/SIGMA_BRIEF)*100:.0f}"`%]{.key} lighter than the brief
@@ -64,7 +58,18 @@ said, and the build carries unmodelled glue at the tail (@fig-reconcile). They
 nearly cancel in mass but not in moment — hence a right-looking total and a wrong
 trim. Bevels and wing position both worked *against* the shift.
 
-::: {.callout-note}
+::: {.callout-tip}
+## Specified
+Measured on the built glider and its material by the user, 2026-08-30/31:
+
+1. **16 g all-up**, balancing **164.0 mm** aft of the nose with a 1p at 24 mm.
+2. **Wing leading edge 91 mm** aft of the nose.
+3. **Bevels: 4 mm at the leading edge, 10 mm at the trailing edge**, each
+   tapered to a point.
+4. **Four A3 sheets of foam weighing 87 g.**
+:::
+
+::: {.callout-warning}
 ## What changed in the model
 `sigma` is now the measured value, so structure mass and nose ballast both fall;
 the neutral point does not move at all, since areal density never enters the

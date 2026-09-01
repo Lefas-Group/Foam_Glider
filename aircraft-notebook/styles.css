@@ -29,10 +29,25 @@ figure img,
   --key-accent: #14655c;
 }
 
-.hero {
+.hero,
+.hero-pair {
   margin: 1.4rem 0 1.1rem;
   padding-left: 0.9rem;
   border-left: 3px solid var(--key-accent);
+}
+
+/* Two values at equal size, for the entries whose answer IS a comparison:
+   measured against predicted, as-built against as-designed. The reference half
+   is muted rather than smaller -- they are peers, but only one of them is the
+   finding. */
+.hero-pair {
+  display: flex;
+  gap: 2.4rem;
+  flex-wrap: wrap;
+}
+
+.hero-ref {
+  color: #5c6670;
 }
 
 .hero-value {
@@ -53,6 +68,7 @@ figure img,
 }
 
 .key {
+  font-size: 1.15em;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--key-accent);

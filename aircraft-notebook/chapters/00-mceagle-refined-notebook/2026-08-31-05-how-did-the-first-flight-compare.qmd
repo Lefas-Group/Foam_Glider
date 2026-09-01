@@ -4,26 +4,6 @@ title: "How did the first flight compare?"
 
 {{< include _model.qmd >}}
 
-::: {.callout-tip}
-## Specified
-**Flight video `IMG_1665.mov`** · filmed by the user, 2026-08-31 · the glider as
-flown carries the euro 50 cent, not the 1p. Read off the video:
-
-1. **Decodes at 640 × 360, 30 fps.**
-2. **Leaves the hand at frame 100**, lying still on the grass by frame 156.
-3. **Wingspan measures 20 px** across at rest, off a 12× crop with a 5 px rule.
-:::
-
-::: {.callout-note}
-## Assumed
-1. **Horizontal field of view 66°**, typical of a phone's main lens — this is
-   what converts pixels to metres, and nothing in the video states it.
-2. **The glider lies broadside at rest**, so its measured span is not
-   foreshortened; the fuselage appears shorter than the span despite being
-   longer, which is what a fuselage pointing away looks like.
-3. **Release height 1.5 m**, from the video: eye level, arm extended, level push.
-:::
-
 ```{python}
 FPS, WIDTH_PX, HFOV = 30.0, 640, 66.0
 F_RELEASE, F_DOWN = 100, 156          # last frame in hand / first frame at rest
@@ -59,10 +39,16 @@ assert abs(rng_trim - pred_rng) / pred_rng < 0.02       # trim speed reproduces 
 assert heavy["alpha"] > stall(heavy["V"])[0]            # as built, past the stall
 ```
 
-::: {.hero}
+:::: {.hero-pair}
+::: {.hero-item}
 [`{python} f"{t_aloft:.2f}"` s]{.hero-value}
-[airborne, against `{python} f"{pred_t:.2f}"` s predicted]{.hero-label}
+[measured, airborne]{.hero-label}
 :::
+::: {.hero-item}
+[`{python} f"{pred_t:.2f}"` s]{.hero-value .hero-ref}
+[predicted]{.hero-label}
+:::
+::::
 
 **Answer.** It flew as designed, within
 [`{python} f"{abs(t_aloft-pred_t)/pred_t*100:.0f}"`%]{.key} of the predicted
@@ -70,7 +56,27 @@ time. Time is the number to trust, counted in frames and needing no calibration.
 The release was a level push, not a throw (@fig-flight), so the comparison is
 fair — and the glide is clean: wings level, dihedral holding, no mush.
 
+::: {.callout-tip}
+## Specified
+**Flight video `IMG_1665.mov`** · filmed by the user, 2026-08-31 · the glider as
+flown carries the euro 50 cent, not the 1p. Read off the video:
+
+1. **Decodes at 640 × 360, 30 fps.**
+2. **Leaves the hand at frame 100**, lying still on the grass by frame 156.
+3. **Wingspan measures 20 px** across at rest, off a 12× crop with a 5 px rule.
+:::
+
 ::: {.callout-note}
+## Assumed
+1. **Horizontal field of view 66°**, typical of a phone's main lens — this is
+   what converts pixels to metres, and nothing in the video states it.
+2. **The glider lies broadside at rest**, so its measured span is not
+   foreshortened; the fuselage appears shorter than the span despite being
+   longer, which is what a fuselage pointing away looks like.
+3. **Release height 1.5 m**, from the video: eye level, arm extended, level push.
+:::
+
+::: {.callout-warning}
 ## What the video cannot measure
 **Launch speed, directly** — the glider's attitude changes faster than its range
 does, so apparent span is unusable early on. It is boxed in from both sides

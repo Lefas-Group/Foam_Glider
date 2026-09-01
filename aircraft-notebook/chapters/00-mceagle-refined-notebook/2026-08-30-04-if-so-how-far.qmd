@@ -4,21 +4,6 @@ title: "If so, how far?"
 
 {{< include _model.qmd >}}
 
-::: {.callout-tip}
-## Specified
-1. **All-up mass: 16 g, balance point 15 mm aft of the plan's** · measured on
-   the built glider by the user, 2026-08-30.
-2. **Release height: 1.5 m** · as for the design, so the two are comparable.
-:::
-
-::: {.callout-note}
-## Assumed
-1. **Still air, and a glide already settled at trim.**
-2. **The trim lies past the stall**, where `AeroBuildup` is reading NeuralFoil
-   beyond the attached-flow regime it represents well. The range below is what
-   the model says, not what the model can support.
-:::
-
 ```{python}
 H, BUILT_M, SHIFT = 1.5, 0.016, 0.015
 
@@ -33,15 +18,38 @@ assert built["alpha"] > a_stall                      # as built, past the stall
 assert plan["alpha"] < stall(plan["V"])[0]           # as planned, below it
 ```
 
-::: {.hero}
+:::: {.hero-pair}
+::: {.hero-item}
 [`{python} f"{built['LD']*H:.1f}"` m]{.hero-value}
-[as built, against [`{python} f"{plan['LD']*H:.1f}"` m]{.key} for the design]{.hero-label}
+[as built]{.hero-label}
+:::
+::: {.hero-item}
+[`{python} f"{plan['LD']*H:.1f}"` m]{.hero-value .hero-ref}
+[as designed]{.hero-label}
+:::
+::::
+
+::: {.callout-warning}
+## Do not trust that number
+The built glider trims *past* the stall, where the flow has separated and the
+section data is unreliable. Read it as an upper bound on a nose-high mush.
+Recovering the distance means moving the balance forward, not trimming for range.
 :::
 
-**Do not trust that number.** The built glider trims *past* the stall, where the
-flow has separated and the section data is unreliable. Read it as an upper bound
-on a nose-high mush. Recovering the distance means moving the balance forward,
-not trimming for range.
+::: {.callout-tip}
+## Specified
+1. **All-up mass: 16 g, balance point 15 mm aft of the plan's** · measured on
+   the built glider by the user, 2026-08-30.
+2. **Release height: 1.5 m** · as for the design, so the two are comparable.
+:::
+
+::: {.callout-note}
+## Assumed
+1. **Still air, and a glide already settled at trim.**
+2. **The trim lies past the stall**, where `AeroBuildup` is reading NeuralFoil
+   beyond the attached-flow regime it represents well. The range above is what
+   the model says, not what the model can support.
+:::
 
 ```{python}
 #| echo: false

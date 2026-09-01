@@ -4,23 +4,8 @@ title: "How far should it fly?"
 
 {{< include _model.qmd >}}
 
-::: {.callout-tip}
-## Specified
-1. **Still-air steady glide, released at trim speed** · asked of the user,
-   2026-08-28 · the aircraft's performance, not anyone's throwing arm.
-2. **Release height: 1.5 m** · asked of the user, 2026-08-28 · a normal standing
-   throw. Range scales linearly with it.
-:::
-
-::: {.callout-note}
-## Assumed
-1. **Still air** — no thermal, no wind.
-2. **Glide already settled at trim** — no launch transient.
-3. **Ballast at the nose**, as the previous entry concluded.
-:::
-
 ```{python}
-H = 1.5                              # m, release height, specified above
+H = 1.5                              # m, release height, specified below
 
 x_np = neutral_point()
 mp = mass_properties(m_ballast=ballast_for(x_np - 0.10 * c_w, 0.0), x_ballast=0.0)
@@ -49,6 +34,21 @@ assert (1 - LD / LD_6) > 0.10
 [`{python} f"{H/sink:.1f}"` s]{.key}. It never reaches its best glide ratio:
 trimmed, the wing sits above the drag-minimising lift coefficient and at a lower
 Reynolds number than the polar is read at, both pushing the same way.
+
+::: {.callout-tip}
+## Specified
+1. **Still-air steady glide, released at trim speed** · asked of the user,
+   2026-08-28 · the aircraft's performance, not anyone's throwing arm.
+2. **Release height: 1.5 m** · asked of the user, 2026-08-28 · a normal standing
+   throw. Range scales linearly with it.
+:::
+
+::: {.callout-note}
+## Assumed
+1. **Still air** — no thermal, no wind.
+2. **Glide already settled at trim** — no launch transient.
+3. **Ballast at the nose**, as the previous entry concluded.
+:::
 
 ```{python}
 #| echo: false

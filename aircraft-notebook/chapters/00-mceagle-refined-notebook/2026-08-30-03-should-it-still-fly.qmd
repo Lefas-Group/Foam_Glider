@@ -4,13 +4,6 @@ title: "Should it still fly?"
 
 {{< include _model.qmd >}}
 
-::: {.callout-tip}
-## Specified
-1. **All-up mass: 16 g** · measured on the built glider by the user, 2026-08-30.
-2. **Balance point: 15 mm aft of the plan's** · same measurement · the plan
-   called for 149.0 mm aft of the nose, so as built it is at 164.0 mm.
-:::
-
 ```{python}
 BUILT_M, SHIFT = 0.016, 0.015
 
@@ -39,6 +32,13 @@ Cm_of = lambda x_cg, V: (
 nose high, sinking fast, liable to drop a wing. It is not unstable — the
 restoring moment is if anything *stronger* than the design's. Stability was never
 the problem; where it trims is.
+
+::: {.callout-tip}
+## Specified
+1. **All-up mass: 16 g** · measured on the built glider by the user, 2026-08-30.
+2. **Balance point: 15 mm aft of the plan's** · same measurement · the plan
+   called for 149.0 mm aft of the nose, so as built it is at 164.0 mm.
+:::
 
 ::: {.callout-warning}
 ## The static margin disagrees, and it is wrong

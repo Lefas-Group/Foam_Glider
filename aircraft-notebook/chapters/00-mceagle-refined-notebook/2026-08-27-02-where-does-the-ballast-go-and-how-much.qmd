@@ -4,18 +4,6 @@ title: "Where does the ballast go, and how much?"
 
 {{< include _model.qmd >}}
 
-::: {.callout-tip}
-## Specified
-1. **Static margin: 10% MAC** · asked of the user, 2026-08-27 · a conventional
-   free-flight value; the plan does not specify one.
-:::
-
-::: {.callout-note}
-## Assumed
-1. **Neutral-point fit band: α = 0–8°** — a modelling convention, bracketing the
-   best-L/D angle.
-:::
-
 ```{python}
 mp0 = mass_properties()
 x_np = neutral_point(band=(0, 8), V=6.0)
@@ -41,6 +29,18 @@ dime = mass_properties(m_ballast=DIME, x_ballast=0.0)
 Unballasted the airframe is unstable, because tail surfaces on a long fuselage
 pull the neutral point ahead of the structure's own centre of gravity. The
 plan's dime is not enough here.
+
+::: {.callout-tip}
+## Specified
+1. **Static margin: 10% MAC** · asked of the user, 2026-08-27 · a conventional
+   free-flight value; the plan does not specify one.
+:::
+
+::: {.callout-note}
+## Assumed
+1. **Neutral-point fit band: α = 0–8°** — a modelling convention, bracketing the
+   best-L/D angle.
+:::
 
 ```{python}
 #| label: fig-ballast
