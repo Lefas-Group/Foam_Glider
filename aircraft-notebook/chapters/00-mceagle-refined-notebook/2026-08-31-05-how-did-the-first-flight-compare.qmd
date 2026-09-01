@@ -4,9 +4,6 @@ title: "How did the first flight compare?"
 
 {{< include _model.qmd >}}
 
-The first flight of the corrected glider, filmed and measured, against what this
-chapter predicted for it.
-
 ::: {.callout-tip}
 ## Specified
 **Flight video `IMG_1665.mov`** · filmed by the user, 2026-08-31 · the glider as
@@ -62,42 +59,30 @@ assert abs(rng_trim - pred_rng) / pred_rng < 0.02       # trim speed reproduces 
 assert heavy["alpha"] > stall(heavy["V"])[0]            # as built, past the stall
 ```
 
-**Answer.** It flew as designed. The glider was airborne for
-`{python} f"{t_aloft:.2f}"` s against a predicted
-`{python} f"{pred_t:.2f}"` s — agreement to
-`{python} f"{abs(t_aloft-pred_t)/pred_t*100:.0f}"`%.
+::: {.hero}
+[`{python} f"{t_aloft:.2f}"` s]{.hero-value}
+[airborne, against `{python} f"{pred_t:.2f}"` s predicted]{.hero-label}
+:::
 
-Time is the number to trust: it is counted in frames and needs no camera
-calibration, whereas range rests on a twenty-pixel measurement and an assumed
-lens.
+**Answer.** It flew as designed, within
+[`{python} f"{abs(t_aloft-pred_t)/pred_t*100:.0f}"`%]{.key} of the predicted
+time. Time is the number to trust, counted in frames and needing no calibration.
+The release was a level push, not a throw (@fig-flight), so the comparison is
+fair — and the glide is clean: wings level, dihedral holding, no mush.
 
-**It was not thrown.** @fig-flight shows a level push at eye height with the arm
-extending — the release the glide prediction assumes, not a hard overarm throw.
-That matters, because it is what makes the comparison fair; an earlier read of
-this same video as a hard throw was wrong, and the wide frames are what settle
-it. There is no zoom, no ballooning and no pitch oscillation after release,
-which is what an over-speed launch produces and which would be plainly visible.
+::: {.callout-note}
+## What the video cannot measure
+**Launch speed, directly** — the glider's attitude changes faster than its range
+does, so apparent span is unusable early on. It is boxed in from both sides
+though: below the stall it would have dropped, and the absence of any phugoid
+rules out much above trim. Launch was therefore at essentially the trim speed.
 
-**On launch speed.** The video cannot measure it directly — the glider's
-attitude changes faster than its range does, so apparent span is unusable in the
-first half-second — but it is boxed in tightly from both sides. It cannot have
-left the hand below the stall speed or it would have dropped, and the absence of
-any phugoid rules out much above trim. Launch was therefore at essentially the
-trim speed, which is what a level hand push should give, and why the flight
-settled immediately instead of hunting.
-
-**The one inconsistency, and what it means.** The measured range implies an
-average speed below the stall — physically impossible for a flight this long. So
-the range is underestimated, not the model overestimated: flight time alone puts
-a floor on it, and the model's own trim speed over the measured time lands
-within a percent of the prediction. Two pixels of span at rest is all it takes.
-That is the measurement to improve, and a metre rule laid on the grass would
-remove the assumed lens entirely.
-
-The glide itself is clean (@fig-flight, third panel): wings level, dihedral
-holding, no wing drop, no mush. That is the corrected balance doing its job —
-the same aircraft at its as-built balance point was predicted to trim past the
-stall and to do none of those things.
+**Range, reliably.** The measured range implies an average speed below the stall,
+impossible for a flight this long — so the range is underestimated, not the model
+overestimated. Flight time alone puts a floor on it, and the model's own trim
+speed over the measured time lands within a percent of the prediction. A metre
+rule laid on the grass would remove the assumed lens entirely.
+:::
 
 ```{python}
 #| label: fig-flight

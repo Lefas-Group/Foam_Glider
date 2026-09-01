@@ -4,12 +4,6 @@ title: "How far should it fly?"
 
 {{< include _model.qmd >}}
 
-The speed and angle of attack at which the ballasted glider flies itself, then
-the still-air glide that follows from them. Trim is solved by iteration because
-the two conditions are coupled: the angle where the pitching moment about the CG
-vanishes sets the lift coefficient, that sets the speed, and the speed moves the
-polar through Reynolds number.
-
 ::: {.callout-tip}
 ## Specified
 1. **Still-air steady glide, released at trim speed** · asked of the user,
@@ -46,16 +40,15 @@ LD_6 = float((np.array(p6["CL"]) / np.array(p6["CD"])).max())
 assert (1 - LD / LD_6) > 0.10
 ```
 
-**Answer.** About `{python} f"{LD*H:.1f}"` m — a glide of
-`{python} f"{LD:.2f}"`:1, lasting `{python} f"{H/sink:.1f}"` seconds.
+::: {.hero}
+[`{python} f"{LD*H:.1f}"` m]{.hero-value}
+[still-air range from a `{python} f"{H:.1f}"` m release]{.hero-label}
+:::
 
-It does not fly at its best glide ratio, and the gap is not small. Trimmed, the
-wing sits well above the lift coefficient that
-minimises drag, and the trim speed puts it at a lower Reynolds number than the
-polar is read at; both push the same way. Quoting the best-L/D figure for this
-aircraft would be quoting a condition it never reaches. The trim itself is a
-genuine stable equilibrium — the pitching moment slope through the crossing is
-negative, so a nose-up disturbance is pushed back down.
+**Answer.** A glide of [`{python} f"{LD:.2f}"`:1]{.key} lasting
+[`{python} f"{H/sink:.1f}"` s]{.key}. It never reaches its best glide ratio:
+trimmed, the wing sits above the drag-minimising lift coefficient and at a lower
+Reynolds number than the polar is read at, both pushing the same way.
 
 ```{python}
 #| echo: false

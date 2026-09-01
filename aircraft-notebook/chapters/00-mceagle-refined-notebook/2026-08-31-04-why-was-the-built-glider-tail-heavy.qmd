@@ -4,10 +4,6 @@ title: "Why was the built glider tail-heavy?"
 
 {{< include _model.qmd >}}
 
-The built glider weighed what the model predicted but balanced 20 mm further
-aft. This reconciles the two, working from the article back to the model rather
-than forward.
-
 ::: {.callout-tip}
 ## Specified
 Measured on the built glider and its material by the user, 2026-08-30/31:
@@ -56,28 +52,25 @@ old_ballast = old_m * (pred.x_cg - x_t) / x_t
 new_ballast = ballast_for(x_t, 0.0)
 ```
 
-**Answer.** Two errors, pulling opposite ways on mass and the same way on
-balance — which is why the total looked right and the trim did not. The foam is
-`{python} f"{(1 - sigma/SIGMA_BRIEF)*100:.0f}"`% lighter than the brief said,
-and the build carries about `{python} f"{glue_m*1e3:.1f}"` g of unmodelled glue
-centred `{python} f"{glue_x*MM:.0f}"` mm aft of the nose (@fig-reconcile).
+::: {.hero}
+[`{python} f"{(x_built - old_x)*MM:+.0f}"` mm]{.hero-value}
+[balance point, against a mass error of only
+[`{python} f"{(m_built - old_m)*1e3:+.2f}"` g]{.key}]{.hero-label}
+:::
 
-Phantom foam removed from everywhere and real glue added at the tail nearly
-cancel in total mass. They do not cancel in moment, and that is the whole
-discrepancy: almost no change in grams, a large one in millimetres.
+**Answer.** Two errors: the foam is
+[`{python} f"{(1 - sigma/SIGMA_BRIEF)*100:.0f}"`%]{.key} lighter than the brief
+said, and the build carries unmodelled glue at the tail (@fig-reconcile). They
+nearly cancel in mass but not in moment — hence a right-looking total and a wrong
+trim. Bevels and wing position both worked *against* the shift.
 
-Two suspects turn out to be innocent. The bevels are real, and about a fifth of
-the airframe, but weighted by edge length they remove foam from *behind* the
-balance point, so cutting them pulled the centre of gravity forward. Nor was the
-wing misplaced: as measured it sits slightly forward of where the plan put it,
-which widens the gap rather than closing it. Both worked against the shift.
-
-**What changed in the model.** `sigma` is now the measured value rather than the
-brief's, so the structure mass and the nose ballast for 10% MAC both fall. The
-neutral point does not move at all — areal density never enters the
-aerodynamics. Glue is still not modelled; the measurement above is recorded in
-`_model.py` as a budget, not folded into the build-up, because one aircraft is
-not a rule.
+::: {.callout-note}
+## What changed in the model
+`sigma` is now the measured value, so structure mass and nose ballast both fall;
+the neutral point does not move at all, since areal density never enters the
+aerodynamics. Glue stays unmodelled — the figure above is recorded in `_model.py`
+as a budget, not folded into the build-up, because one aircraft is not a rule.
+:::
 
 ```{python}
 #| label: fig-reconcile

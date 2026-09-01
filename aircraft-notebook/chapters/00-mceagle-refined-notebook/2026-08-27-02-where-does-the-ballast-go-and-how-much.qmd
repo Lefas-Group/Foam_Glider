@@ -4,10 +4,6 @@ title: "Where does the ballast go, and how much?"
 
 {{< include _model.qmd >}}
 
-The neutral point from a straight-line fit of `Cm` against `CL` over α = 0–8° at
-6 m/s, then the ballast mass that puts the CG the required static margin ahead
-of it.
-
 ::: {.callout-tip}
 ## Specified
 1. **Static margin: 10% MAC** · asked of the user, 2026-08-27 · a conventional
@@ -35,18 +31,16 @@ DIME = 2.268e-3                      # kg, a US dime, the plan's own ballast
 dime = mass_properties(m_ballast=DIME, x_ballast=0.0)
 ```
 
-**Answer.** On the nose, and `{python} f"{nose*1e3:.2f}"` g of it — against
-`{python} f"{le*1e3:.2f}"` g if taped at the wing leading edge instead
-(@fig-ballast).
+::: {.hero}
+[`{python} f"{nose*1e3:.2f}"` g]{.hero-value}
+[on the nose, for the specified 10% MAC]{.hero-label}
+:::
 
-Unballasted the airframe is unstable: a stabilizer a third the area of the wing,
-plus the fin, sit at the end of a long fuselage plate, which drags the neutral
-point forward of the bare structure's own centre of gravity. Station then matters
-more than mass does — the further forward the ballast sits, the less of it you
-need, and the penalty for taping it at the wing rather than the nose is most of a
-gram on an aircraft this light. The dime the original plan calls for is not
-enough at this scale; on the nose it leaves the centre of gravity under half a
-percent of MAC ahead of the neutral point, which is stable in name only.
+**Answer.** Station matters more than mass: the same margin costs
+[`{python} f"{le*1e3:.2f}"` g]{.key} at the wing leading edge (@fig-ballast).
+Unballasted the airframe is unstable, because tail surfaces on a long fuselage
+pull the neutral point ahead of the structure's own centre of gravity. The
+plan's dime is not enough here.
 
 ```{python}
 #| label: fig-ballast

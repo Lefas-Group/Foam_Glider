@@ -4,10 +4,6 @@ title: "How is it cut out and put together?"
 
 {{< include _model.qmd >}}
 
-Every part flattened from the model's own tables and nested on one sheet, then
-written out at 1:1. The outlines are generated here rather than drawn, so the
-template cannot drift from the aircraft the rest of the chapter analyses.
-
 ::: {.callout-tip}
 ## Specified
 1. **Sheet: A3** · from the original brief · it sets the space available, so it
@@ -54,17 +50,15 @@ m_b = ballast_for(x_np - 0.10 * c_w, 0.0)
 mp = mass_properties(m_ballast=m_b, x_ballast=0.0)
 ```
 
-**Answer.** All seven pieces fit one A3 sheet, using
-`{python} f"{foam/(A3[0]*A3[1]/MM**2)*100:.0f}"`% of its area
-(@fig-cutting) — so one sheet builds the glider with more than half left over.
+::: {.hero}
+[`{python} f"{foam/(A3[0]*A3[1]/MM**2)*100:.0f}"`%]{.hero-value}
+[of one A3 sheet, for all seven pieces]{.hero-label}
+:::
 
-The fuselage is what forces the layout. It is longer than A3's long edge, so it
-cannot be cut in one piece squared up to the sheet; it would fit laid across the
-diagonal, but that wastes the rest of the sheet and gains nothing, because the
-build wants the fuselage in two laminations anyway. Splitting it lets the two
-layers' butt joints be staggered, so each is backed by unbroken foam in the
-other. The original plan reaches the same conclusion at its own scale, and
-interlocks the halves with zigzag teeth instead.
+**Answer.** One sheet builds the glider with more than half left over
+(@fig-cutting). The fuselage forces the layout: longer than A3's edge, it cannot
+be cut squared up to the sheet. Splitting it into two laminations lets their butt
+joints be staggered, each backed by unbroken foam in the other.
 
 [**Download the 1:1 cutting plan (A3 PDF)**](mceagle-300-cutting-plan-a3.pdf) —
 print at 100%, not "fit to page", and check the printed wing measures

@@ -4,24 +4,21 @@ title: "What does it look like?"
 
 {{< include _model.qmd >}}
 
-A three-view of the airframe, and the three dimensions that fix its size.
-
 ```{python}
 wing, stab, fin = mceagle.wings
 l_fus_m = mceagle.fuselages[0].length()
 ```
 
-**Answer.** A shoulder-wing glider spanning
-`{python} f"{b_proj*100:.1f}"` cm as built, on a
-`{python} f"{l_fus_m*100:.1f}"` cm fuselage plate, with
-`{python} f"{dihedral:.1f}"`° of dihedral (@fig-three-view).
+::: {.hero}
+[`{python} f"{b_proj*100:.1f}"` cm]{.hero-value}
+[wingspan as built, tip to tip]{.hero-label}
+:::
 
-The span above is the finished glider, tip to tip. The flat pattern you cut is
-wider, because bending the tips up shortens the projected span — a distinction
-the cutting entry depends on, and the one dimension of this aircraft most easily
-got wrong. Everything here is read back off the `Airplane` object rather than
-recomputed from the tables that built it, so it is the geometry `AeroBuildup`
-actually sees.
+**Answer.** A shoulder-wing glider on a
+[`{python} f"{l_fus_m*100:.1f}"` cm]{.key} fuselage plate, with
+[`{python} f"{dihedral:.1f}"`°]{.key} of dihedral (@fig-three-view). The flat
+pattern you cut is wider than the span above, because bending the tips up
+shortens it — the dimension of this aircraft most easily got wrong.
 
 ```{python}
 #| label: fig-three-view

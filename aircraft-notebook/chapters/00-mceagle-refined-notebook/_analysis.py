@@ -135,7 +135,7 @@ def nest(parts, layout, sheet):
     return placed
 
 
-def trim(mass, x_cg, V=5.0, alpha=None, iters=60):
+def trim(mass, x_cg, V=5.0, alpha=None, iters=60, tol=1e-9):
     """
     The angle of attack and speed at which an aircraft of this mass and balance
     flies itself: pitching moment about the CG zero, lift equal to weight.
@@ -151,13 +151,32 @@ def trim(mass, x_cg, V=5.0, alpha=None, iters=60):
     `slope` is dCm/dalpha at the crossing -- negative is a restoring moment.
     That is the honest stability test: it needs no neutral point, so it does not
     inherit the ambiguity in defining one.
+
+    Iterates to `tol` rather than a fixed trip count, and raises if it runs out
+    of iterations. Each trip is one AeroBuildup call, and calls are the whole
+    budget here; a fixed count both pays for trips it does not need and hides
+    non-convergence, because a loop that never settled returns exactly like one
+    that did.
     """
     a = np.linspace(-2, 14, 161) if alpha is None else alpha
     for _ in range(iters):
         p = polars(a, V=V)
         Cm_cg = np.array(p["Cm"]) + np.array(p["CL"]) * (x_cg - x_qc_w) / c_w
         i = int(np.argmin(abs(Cm_cg)))
-        V = (2 * mass * 9.81 / (1.225 * S_w * float(np.array(p["CL"])[i]))) ** 0.5
+        V, V_prev = (2 * mass * 9.81
+                     / (1.225 * S_w * float(np.array(p["CL"])[i]))) ** 0.5, V
+        # alpha is picked off a fixed grid, so once the index settles the next
+        # speed is bit-for-bit the previous one and this is an exact stop, not
+        # an approximate one. If the index instead oscillates between two
+        # neighbours the difference never falls below tol and the guard fires --
+        # which is the point: a silent non-convergence used to look identical to
+        # a converged answer.
+        if abs(V - V_prev) <= tol * max(1.0, abs(V)):
+            break
+    else:
+        raise RuntimeError(
+            f"trim() did not converge in {iters} iterations: speed still moving "
+            f"by {abs(V - V_prev):.3g} m/s at mass={mass:.4g} kg, x_cg={x_cg:.4g} m")
     CL, CD = float(np.array(p["CL"])[i]), float(np.array(p["CD"])[i])
     return dict(alpha=a[i], V=V, CL=CL, CD=CD, LD=CL / CD,
                 slope=(Cm_cg[i + 1] - Cm_cg[i - 1]) / (a[i + 1] - a[i - 1]),

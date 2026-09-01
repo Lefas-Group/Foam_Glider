@@ -4,8 +4,6 @@ title: "What are the lift and drag polars from −15° to +15° angle of attack?
 
 {{< include _model.qmd >}}
 
-`AeroBuildup` swept across the whole angle-of-attack range, at a fixed speed.
-
 ::: {.callout-note}
 ## Assumed
 1. **Fixed 6 m/s**, the speed chapter 1 ran the BFG at, so the two chapters'
@@ -20,15 +18,15 @@ LD = np.array(p["CL"]) / np.array(p["CD"])
 i_best = int(np.argmax(LD))
 ```
 
-**Answer.** The best glide ratio on the polar is
-`{python} f"{LD[i_best]:.2f}"`:1, reached at
-`{python} f"{alpha[i_best]:.1f}"`° (@fig-polars).
+::: {.hero}
+[`{python} f"{LD[i_best]:.2f}"`:1]{.hero-value}
+[best glide ratio on the polar, at [`{python} f"{alpha[i_best]:.1f}"`°]{.key}]{.hero-label}
+:::
 
-That is the polar's headline number, not the aircraft's. The glider trims
-nose-higher than this and slower, so it never reaches the best-L/D point — which
-is why the glide entry solves for trim rather than reading a figure off this
-curve. Read this entry as the section's capability, and the glide entry for what
-the airframe does with it.
+**Answer.** That is the polar's headline number, not the aircraft's
+(@fig-polars). The glider trims nose-higher and slower, so it never reaches this
+point. Read this entry as the section's capability, and the glide entry for what
+the airframe actually does with it.
 
 ```{python}
 #| label: fig-polars

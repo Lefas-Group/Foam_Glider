@@ -4,9 +4,6 @@ title: "If so, how far?"
 
 {{< include _model.qmd >}}
 
-The glide that follows from the built glider's own trim, set against the design's,
-from the same release height.
-
 ::: {.callout-tip}
 ## Specified
 1. **All-up mass: 16 g, balance point 15 mm aft of the plan's** · measured on
@@ -36,22 +33,15 @@ assert built["alpha"] > a_stall                      # as built, past the stall
 assert plan["alpha"] < stall(plan["V"])[0]           # as planned, below it
 ```
 
-**Answer.** The model says `{python} f"{built['LD']*H:.1f}"` m, against
-`{python} f"{plan['LD']*H:.1f}"` m for the design — roughly
-`{python} f"{(1 - built['LD']/plan['LD'])*100:.0f}"`% less, from the same
-release.
+::: {.hero}
+[`{python} f"{built['LD']*H:.1f}"` m]{.hero-value}
+[as built, against [`{python} f"{plan['LD']*H:.1f}"` m]{.key} for the design]{.hero-label}
+:::
 
-**Do not trust that number.** The built glider trims *past* the stall, not below
-it, so the flow is no longer attached and the section data behind it is a smooth
-approximation to a flat plate — optimistic before the stall and unreliable after
-it. Read it as an upper bound on what will really be
-a nose-high mush, landing nearer the thrower than this, in a direction largely
-decided by which wing drops first.
-
-The useful comparison is not the two distances but their cause. The design flies
-below its stall and the article flies past it, so recovering the distance is not
-a matter of trimming for range — it is a matter of moving the balance point
-forward until the aircraft is on the right side of its own polar again.
+**Do not trust that number.** The built glider trims *past* the stall, where the
+flow has separated and the section data is unreliable. Read it as an upper bound
+on a nose-high mush. Recovering the distance means moving the balance forward,
+not trimming for range.
 
 ```{python}
 #| echo: false
