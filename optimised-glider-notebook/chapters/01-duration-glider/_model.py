@@ -28,26 +28,49 @@ import matplotlib.pyplot as plt
 #
 # Sea level, still air. Every number in this chapter is quoted at the trimmed
 # glide speed the model solves for -- at 30 cm span the chord Reynolds number
-# sits near 2e4, where the section polar moves fast enough that a coefficient
-# without its speed means nothing.
+# sits between 1e4 and 2e4, where the section polar moves fast enough that a
+# coefficient without its speed means nothing.
 ATMOSPHERE = asb.Atmosphere(altitude=0.0)
 G = 9.81  # m/s^2
 
 # Hand launch. Duration is launch height divided by sink rate, so the chapter
-# needs a launch height to have an objective at all. Modelled as a ballistic
-# zoom from a javelin-style throw: the glider converts a fraction ZOOM_EFF of
-# its launch kinetic energy into height before it noses over into the glide.
-V_LAUNCH = 12.0  # m/s, a hard overarm throw
+# needs a launch height to have an objective at all. Height comes from two
+# places: the hand it leaves, and the zoom it climbs afterwards, in which the
+# glider converts a fraction ZOOM_EFF of its launch kinetic energy into height
+# before nosing over into the glide.
+#
+# A gentle level toss, not a javelin launch. At this speed the release height is
+# the larger of the two terms, which is worth knowing before reading any
+# duration in this chapter: most of the flight is paid for by the arm, not the
+# throw.
+V_LAUNCH = 8.0  # m/s, a light overarm toss
+H_RELEASE = 1.5  # m, height of the hand at release
 ZOOM_EFF = 0.55  # fraction of launch KE recovered as height
 
 ##### Material
 #
-# Styrofoam food tray. The flat floor of the tray is the only usable stock; its
-# thickness is what sets both the section and the mass, so it is the single most
-# load-bearing assumption in the chapter.
-FOAM_T = 1.6e-3  # m, tray sheet thickness
-FOAM_RHO = 65.0  # kg/m^3, expanded-polystyrene tray stock
-FUSE_PLIES = 2  # fuselage is laminated from this many sheets
+# Styrofoam food tray, measured rather than assumed: 5 mm thick, 174.4 g per
+# square metre of sheet. Areal mass is what a kitchen scale and a ruler give you
+# and is what every part's mass is computed from; the density below is derived
+# from it, and is used nowhere except to state what the foam is.
+#
+# Both numbers are load-bearing, and in opposite directions. Thickness sets the
+# section -- at a 50 mm chord this stock is a 10% thick slab, not a plate -- and
+# areal mass sets the wing loading.
+FOAM_T = 5.0e-3  # m, tray sheet thickness
+FOAM_AREAL = 0.1744  # kg/m^2 of single-ply sheet
+FOAM_RHO = FOAM_AREAL / FOAM_T  # kg/m^3, ~35 -- expanded polystyrene
+
+# Two plies, as McEagle has, but for a different reason: a fuselage longer than
+# one sheet has to be spliced, and splicing means two plies side by side with
+# their joints staggered. Since the fuselage length is a free variable here, the
+# splice is assumed always needed, which is the conservative reading -- it prices
+# length honestly instead of capping it at an invented number.
+#
+# The cost is real: 10 mm of width and twice the mass on the heaviest single
+# part. That is the term that stops the optimiser asking for an arbitrarily long
+# tail arm.
+FUSE_PLIES = 2
 
 # Angle of attack at which stability derivatives are taken -- mid lift curve,
 # well clear of the plate's stall, so the neutral point is a property of the
@@ -91,12 +114,51 @@ def flat_plate(chord, thickness=FOAM_T, bevel=0.15, n=80):
     )
 
 
+# The plate above, fitted once to Kulfan (CST) weights at a reference thickness
+# ratio. Everything downstream uses the scaled version below rather than the
+# coordinates, for two reasons.
+#
+# It is not an approximation: Airfoil.get_aero_from_neuralfoil() performs this
+# same fit internally on every call, so the coordinates were never what got
+# analysed. Doing it explicitly changes nothing and makes visible what is being
+# modelled -- see the entry on what section the model actually analyses.
+#
+# And it makes chord a symbolic variable. A CST section of fixed shape scales
+# linearly in every weight with thickness ratio (verified: halving and doubling
+# t/c scales all eight weights by exactly 0.5 and 2.0), so the weights can be
+# multiplied by an MX and handed to KulfanAirfoil, which is built for it. The
+# coordinate path cannot do this -- it would need the fit, itself an
+# optimisation, inside the optimisation. That is the difference between the
+# whole design solve taking six seconds and needing an outer search.
+BEVEL = 0.15  # razor bevel, as a fraction of chord, at each edge
+TC_REF = 0.10  # thickness ratio the reference fit is taken at
+_PLATE_REF = flat_plate(FOAM_T / TC_REF, bevel=BEVEL).to_kulfan_airfoil().kulfan_parameters
+
+
+def plate_section(chord, thickness=FOAM_T):
+    """
+    The section as analysed: Kulfan weights scaled linearly from one reference fit.
+
+    Accepts a symbolic chord, which is what lets the design solve run inside a
+    single Opti rather than an outer search.
+    """
+    k = (thickness / chord) / TC_REF
+    return asb.KulfanAirfoil(
+        name="foam-plate",
+        upper_weights=_PLATE_REF["upper_weights"] * k,
+        lower_weights=_PLATE_REF["lower_weights"] * k,
+        leading_edge_weight=_PLATE_REF["leading_edge_weight"] * k,
+        TE_thickness=_PLATE_REF["TE_thickness"] * k,
+    )
+
+
 def glider(
     span=0.30,
     aspect_ratio=6.0,
     taper=1.0,
     dihedral=9.5,
-    tail_arm_ratio=0.60,
+    tail_arm_chords=3.6,
+    nose_chords=1.5,
     h_tail_ratio=0.22,
     v_tail_ratio=0.08,
     h_tail_incidence=-2.0,
@@ -105,16 +167,25 @@ def glider(
     The airframe, as a set of ratios a builder can lay out on a tray.
 
     Defaults reproduce McEagle proportions at a 30 cm span. Everything is
-    dimensionless against span or wing area so the same call serves as both the
-    baseline and the design vector.
+    dimensionless against wing chord or wing area so the same call serves as
+    both the baseline and the design vector.
+
+    Longitudinal stations are measured in ROOT CHORDS, not in spans. Span is
+    fixed by the brief, so an optimiser moving aspect_ratio is really moving
+    chord -- and a tail arm pinned to span then shrinks in chords as the chord
+    grows, collapsing the tail volume coefficient at exactly the configurations
+    worth exploring. Pinned to chord instead, tail volume is held while aspect
+    ratio varies, which is the comparison an aspect-ratio sweep is trying to
+    make. The defaults are the span fractions they replace (0.60 and 0.25 of
+    span) evaluated at the baseline, so baseline geometry is unchanged.
 
     Args:
         span: m, tip to tip. Fixed by the brief at 0.30.
         aspect_ratio: span^2 / wing area.
         taper: tip chord / root chord.
         dihedral: deg, per panel, measured from the horizontal.
-        tail_arm_ratio: quarter-chord to quarter-chord distance, as a fraction
-            of span.
+        tail_arm_chords: quarter-chord to quarter-chord distance, in root chords.
+        nose_chords: wing leading edge aft of the nose, in root chords.
         h_tail_ratio: horizontal tail area / wing area.
         v_tail_ratio: fin area / wing area.
         h_tail_incidence: deg, tail rigged nose-down relative to the wing, as
@@ -126,9 +197,9 @@ def glider(
     S = span**2 / aspect_ratio
     c_root = 2 * S / (span * (1 + taper))
     c_tip = c_root * taper
-    section = flat_plate(c_root)
+    section = plate_section(c_root)
 
-    arm = tail_arm_ratio * span
+    arm = tail_arm_chords * c_root
     S_h = h_tail_ratio * S
     c_h = np.sqrt(S_h / 3.0)  # tail panels are AR 3, as McEagle's is
     b_h = S_h / c_h
@@ -137,7 +208,7 @@ def glider(
     b_v = S_v / c_v
 
     # Fuselage runs from a nose ahead of the wing to the tail trailing edge.
-    nose = 0.25 * span
+    nose = nose_chords * c_root
     fuse_len = nose + arm + c_h
     fuse_h = 0.05 * span  # slab depth, the tray's usable width
     fuse_w = FUSE_PLIES * FOAM_T
@@ -235,7 +306,7 @@ def structural_mass(layout):
     Returns:
         dict of asb.MassProperties per part, plus the sum under key "total".
     """
-    sheet = FOAM_T * FOAM_RHO  # kg per m^2 of single-ply stock
+    sheet = FOAM_AREAL  # kg per m^2 of single-ply stock, as measured
     parts = {
         "wing": asb.MassProperties(
             mass=layout["S"] * sheet,
@@ -258,21 +329,21 @@ def structural_mass(layout):
     return parts
 
 
-def launch_height(v_launch=V_LAUNCH, eff=ZOOM_EFF):
+def launch_height(v_launch=V_LAUNCH, eff=ZOOM_EFF, h_release=H_RELEASE):
     """
-    Height won from the throw, as a ballistic zoom at efficiency `eff`.
+    Height the glide starts from: the hand, plus a ballistic zoom above it.
 
     Mass does not appear: a ballistic zoom trades speed for height at a rate
     independent of it. That is the model's weakest point, because a lighter
     glider is thrown faster and decelerates harder in the climb, and neither
     effect is here.
     """
-    return eff * v_launch**2 / (2 * G)
+    return h_release + eff * v_launch**2 / (2 * G)
 
 
 ##### The analysis
-def glide(airplane, layout, ballast=0.0, static_margin=0.20,
-          alpha_bounds=(-2, 7), verbose=False):
+def glide(airplane, layout, ballast=0.0, static_margin=0.30,
+          alpha_bounds=(-2, 9), verbose=False):
     """
     Trim the glider and return its steady glide, sink rate and duration.
 
@@ -284,11 +355,15 @@ def glide(airplane, layout, ballast=0.0, static_margin=0.20,
     Args:
         airplane, layout: from glider().
         ballast: kg. If 0, solved for so the CG sits at the requested margin.
-        static_margin: (x_np - x_cg) / MAC.
-        alpha_bounds: deg, the trim search range. Capped below the flat plate's
-            ~7 deg stall: past it the lift curve turns over, dCm/dalpha changes
-            sign, and the neutral point the solver is chasing stops meaning
-            anything.
+        static_margin: (x_np - x_cg) / MAC. The default is large for a chuck
+            glider, and is forced rather than chosen: on 5 mm stock the baseline
+            -2 deg tail incidence will not trim inside the alpha bounds at 20%.
+            That is a symptom of the tail rigging, not a preference.
+        alpha_bounds: deg, the trim search range. Capped below the whole-aircraft
+            stall, near 10 deg on 5 mm stock: past it the lift curve turns over,
+            dCm/dalpha changes sign, and the neutral point the solver is chasing
+            stops meaning anything. This bound is stock-dependent -- the section
+            drives it, and 1.6 mm stock stalls three degrees earlier.
         verbose: pass the solver's log through.
 
     Returns:
@@ -365,3 +440,96 @@ def glide(airplane, layout, ballast=0.0, static_margin=0.20,
         static_margin=(sol(x_np) - sol(x_cg)) / mac,
         Re=ATMOSPHERE.density() * V * mac / ATMOSPHERE.dynamic_viscosity(),
     )
+
+
+# What the design solve is allowed to move, and how far. Dihedral and fin are
+# absent on purpose: the model has no lateral dynamics, so their only benefit is
+# invisible to it while their cost in span, wetted area and mass is fully
+# visible, and an optimiser would delete both.
+DESIGN_BOUNDS = dict(
+    aspect_ratio=(2.5, 12.0),
+    tail_arm_chords=(1.5, 8.0),
+    h_tail_ratio=(0.08, 0.45),
+    h_tail_incidence=(-6.0, 2.0),
+)
+
+
+def optimise(span=0.30, static_margin=0.10, start=(6.0, 3.6, 0.22, -2.0),
+             alpha_bounds=(-2, 9), verbose=False):
+    """
+    Minimum sink over the four design variables, trimmed, in one solve.
+
+    Same physics as glide() -- identical trim, force balance and neutral-point
+    treatment -- with the geometry made symbolic and sink minimised rather than
+    reported. Static margin is a constraint, not an objective term: left free it
+    goes to zero, since nothing here penalises being twitchy.
+
+    There is no fuselage length cap. Length pays for itself through the two-ply
+    splice it requires, which is a real cost rather than an invented bound.
+
+    Args:
+        span: m, fixed by the brief.
+        static_margin: (x_np - x_cg) / MAC, imposed.
+        start: initial guess, as (aspect_ratio, tail_arm_chords, h_tail_ratio,
+            h_tail_incidence). Vary it to check the optimum is not local.
+        alpha_bounds: deg, capped below the whole-aircraft stall.
+        verbose: pass the solver's log through.
+
+    Returns:
+        dict of the design, its trim state and its performance.
+    """
+    opti = asb.Opti()
+    v = {}
+    for i, (name, (lo, hi)) in enumerate(DESIGN_BOUNDS.items()):
+        v[name] = opti.variable(init_guess=start[i], lower_bound=lo, upper_bound=hi)
+    alpha = opti.variable(init_guess=4.0, lower_bound=alpha_bounds[0],
+                          upper_bound=alpha_bounds[1])
+    V = opti.variable(init_guess=4.5, lower_bound=0.5, upper_bound=30.0)
+    m_ballast = opti.variable(init_guess=1.5e-3, lower_bound=0.0, upper_bound=2e-2)
+
+    airplane, layout = glider(span=span, **v)
+    total = structural_mass(layout)["total"] + asb.MassProperties(mass=m_ballast, x_cg=0.0)
+    S_ref, mac = airplane.s_ref, airplane.c_ref
+    ref = [total.x_cg, 0, airplane.xyz_ref[2]]
+
+    # Counted like glide()'s solves, though what is timed here is CasADi graph
+    # construction rather than evaluation -- the graph is built once and then
+    # walked by every IPOPT iteration, so it is still the number that predicts
+    # what the page costs. Without this the footer reports only the solves the
+    # entry's baseline spent, and an optimisation looks free.
+    t0 = time.perf_counter()
+    d = asb.AeroBuildup(
+        airplane=airplane, xyz_ref=ref,
+        op_point=asb.OperatingPoint(atmosphere=ATMOSPHERE, velocity=V, alpha=ALPHA_LINEAR),
+    ).run_with_stability_derivatives(alpha=True, beta=False, p=False, q=False, r=False)
+    x_np = total.x_cg - d["Cma"] / d["CLa"] * mac
+
+    aero = asb.AeroBuildup(
+        airplane=airplane, xyz_ref=ref,
+        op_point=asb.OperatingPoint(atmosphere=ATMOSPHERE, velocity=V, alpha=alpha),
+    ).run()
+    aero_cost["calls"] += 2
+    aero_cost["seconds"] += time.perf_counter() - t0
+    CL, CD = aero["CL"], aero["CD"]
+    gamma = np.arctan2(CD, CL)
+    sink = V * np.sin(gamma)
+
+    opti.subject_to([
+        aero["Cm"] == 0,
+        CL * 0.5 * ATMOSPHERE.density() * V**2 * S_ref == total.mass * G * np.cos(gamma),
+        (x_np - total.x_cg) / mac == static_margin,
+    ])
+    opti.minimize(sink)
+    sol = opti.solve(verbose=verbose)
+
+    out = {k: float(sol(x)) for k, x in v.items()}
+    out.update({k: float(sol(x)) for k, x in dict(
+        alpha=alpha, V=V, CL=CL, CD=CD, LD=CL / CD, sink=sink,
+        gamma_deg=np.degrees(gamma), duration=launch_height() / sink,
+        mass=total.mass, ballast=m_ballast, x_cg=total.x_cg, x_np=x_np,
+        static_margin=(x_np - total.x_cg) / mac,
+        chord=layout["c_root"], fuse_len=layout["fuse_len"],
+        tc=FOAM_T / layout["c_root"],
+        Re=ATMOSPHERE.density() * V * mac / ATMOSPHERE.dynamic_viscosity(),
+    ).items()})
+    return out

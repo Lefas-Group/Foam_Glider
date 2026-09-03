@@ -36,6 +36,10 @@ Asked of the user, 2026-09-03:
 2. Objective is time aloft from a hand launch.
 3. Flat-plate foam only, edges razor-bevelled to a point.
 4. No camber and no heat forming.
+5. Tray sheet `{python} f"{FOAM_T * 1e3:.1f}"` mm, `{python} f"{FOAM_AREAL * 1e3:.1f}"` g/m².
+6. Gentle toss at `{python} f"{V_LAUNCH:.0f}"` m/s, released `{python} f"{H_RELEASE:.1f}"` m.
+7. Optimised designs constrained to 10% static margin.
+8. Dihedral and fin held fixed, never optimised.
 :::
 
 ::: {.callout-note}
@@ -43,10 +47,10 @@ Asked of the user, 2026-09-03:
 
 No owner yet — each is a candidate for its own entry:
 
-1. Tray sheet `{python} f"{FOAM_T * 1e3:.1f}"` mm, `{python} f"{FOAM_RHO:.0f}"` kg/m³.
-2. Launch `{python} f"{V_LAUNCH:.0f}"` m/s, `{python} f"{ZOOM_EFF * 100:.0f}"`% recovered as height.
-3. Static margin `{python} f"{inspect.signature(glide).parameters['static_margin'].default:.0%}"`.
-4. Ballast is lead at the extreme nose.
+1. `{python} f"{ZOOM_EFF * 100:.0f}"`% of launch energy recovered as height.
+2. Static margin `{python} f"{inspect.signature(glide).parameters['static_margin'].default:.0%}"`, forced by tail incidence.
+3. Ballast is lead at the extreme nose.
+4. Fuselage one ply, not McEagle's two.
 :::
 
 ## The model

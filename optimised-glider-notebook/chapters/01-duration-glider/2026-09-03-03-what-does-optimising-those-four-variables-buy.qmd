@@ -1,0 +1,103 @@
+---
+title: "What does optimising those four variables buy?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+opt = optimise(static_margin=0.10)
+
+# The comparable baseline: McEagle proportions, same stock, same two-ply
+# fuselage, same launch. It differs from the optimum in the four design
+# variables and in nothing else.
+base_plane, base_layout = glider()
+base = glide(base_plane, base_layout, static_margin=0.30)
+
+rows = [
+    ("aspect ratio", f"{base_layout['span']**2 / base_plane.s_ref:.2f}",
+     f"{opt['aspect_ratio']:.2f}"),
+    ("root chord, mm", f"{base_layout['c_root'] * 1e3:.0f}", f"{opt['chord'] * 1e3:.0f}"),
+    ("thickness ratio", f"{FOAM_T / base_layout['c_root']:.1%}", f"{opt['tc']:.1%}"),
+    ("tail arm, chords", "3.60", f"{opt['tail_arm_chords']:.2f}"),
+    ("tail area / wing", "22.0%", f"{opt['h_tail_ratio']:.1%}"),
+    ("tail incidence, deg", "-2.00", f"{opt['h_tail_incidence']:.2f}"),
+    ("static margin", f"{base['static_margin']:.0%}", f"{opt['static_margin']:.0%}"),
+    ("flying mass, g", f"{base['mass'] * 1e3:.2f}", f"{opt['mass'] * 1e3:.2f}"),
+    ("trim alpha, deg", f"{base['alpha']:.2f}", f"{opt['alpha']:.2f}"),
+    ("L/D", f"{base['LD']:.2f}", f"{opt['LD']:.2f}"),
+    ("sink, m/s", f"{base['sink']:.3f}", f"{opt['sink']:.3f}"),
+    ("time aloft, s", f"{base['duration']:.2f}", f"{opt['duration']:.2f}"),
+]
+
+assert opt["sink"] < base["sink"]
+assert opt["tc"] < FOAM_T / base_layout["c_root"]  # it thinned the section
+assert opt["alpha"] < 9.0  # the answer is not sitting on the stall bound
+```
+
+::: {.hero}
+[`{python} f"{opt['duration']:.1f} s"`]{.hero-value}
+[time aloft, optimised, from the same gentle toss]{.hero-label}
+:::
+
+**Answer.** It doubles the flight. Sink falls to
+[`{python} f"{opt['sink']:.2f}"` m/s]{.key} (@tbl-design), almost entirely by
+thinning the section: chord grows to `{python} f"{opt['chord'] * 1e3:.0f}"` mm,
+so thickness ratio drops to [`{python} f"{opt['tc']:.1%}"`]{.key} at the cost of
+aspect ratio. The tail comes forward and rigs
+`{python} f"{opt['h_tail_incidence']:.1f}"`°, which is what lets a
+`{python} f"{opt['static_margin']:.0%}"` margin trim at all. An earlier
+[baseline](2026-09-03-01-how-long-should-it-fly-for.qmd) assumed one ply; with
+the splice it gives `{python} f"{base['duration']:.2f}"` s.
+
+::: {.callout-warning}
+## Two caveats
+It trims at `{python} f"{opt['alpha']:.1f}"`°, near the stall. The launch model
+is flat in mass, so it under-penalises the heavier optimum.
+:::
+
+::: {.callout-tip}
+## Specified
+
+Asked of the user, 2026-09-03:
+
+1. **Static margin: 10%** — imposed, never optimised.
+2. **Free: aspect ratio, tail arm, tail area, tail incidence.**
+3. **Fixed: span, dihedral, fin, bevel.**
+4. **Fuselage spliced from two plies**, at any length.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **One solve, one start** — multistart is another question.
+2. **Section as fitted**, not as
+   [drawn](2026-09-03-02-what-section-is-the-model-actually-analysing.qmd).
+:::
+
+```{python}
+#| label: tbl-design
+#| tbl-cap: "The baseline and the optimum, on the same stock and the same launch. Both are trimmed; they differ in the four design variables and in the static margin each will accept."
+#| echo: false
+#| output: asis
+print("| | baseline | optimised |")
+print("|---|---:|---:|")
+for name, b, o in rows:
+    print(f"| {name} | {b} | {o} |")
+```
+
+```{python}
+#| label: fig-threeview
+#| fig-cap: "The optimised airframe, drawn to scale. Broader in chord and shorter in tail arm than the McEagle proportions it started from, with a long bare nose carrying the ballast. Dihedral and fin are held at baseline values, so they are not results."
+plane, layout = glider(
+    aspect_ratio=opt["aspect_ratio"], tail_arm_chords=opt["tail_arm_chords"],
+    h_tail_ratio=opt["h_tail_ratio"], h_tail_incidence=opt["h_tail_incidence"],
+)
+plane.draw_three_view(show=False)
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```

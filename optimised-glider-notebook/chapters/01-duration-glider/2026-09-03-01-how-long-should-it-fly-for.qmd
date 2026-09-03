@@ -1,0 +1,76 @@
+---
+title: "How long should it fly for?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+plane, layout = glider()
+res = glide(plane, layout)
+
+h_total = launch_height()
+h_zoom = h_total - H_RELEASE
+h_sweep = np.linspace(0, 6, 61)
+
+# The 1:1 between metres of height and seconds aloft is a coincidence of this
+# configuration, not a law -- assert it so the prose fails loudly if the model
+# moves off it rather than quietly reading as a rule.
+assert 0.95 < res["sink"] < 1.05
+assert h_zoom > H_RELEASE
+```
+
+::: {.hero}
+[`{python} f"{res['duration']:.1f} s"`]{.hero-value}
+[time aloft, from a gentle toss, in still air]{.hero-label}
+:::
+
+**Answer.** It sinks at `{python} f"{res['sink']:.2f}"` m/s, so it trades launch
+height for time at very nearly a second per metre (@fig-duration). The toss
+supplies `{python} f"{h_total:.1f}"` m — `{python} f"{H_RELEASE:.1f}"` m from
+the hand and `{python} f"{h_zoom:.1f}"` m from the zoom — and the glide spends
+it at L/D [`{python} f"{res['LD']:.1f}"`]{.key}, flying at
+`{python} f"{res['V']:.1f}"` m/s.
+
+::: {.callout-warning}
+## This is the floor, not the target
+Nothing is optimised yet. Nearly half the height is arm, not aircraft.
+:::
+
+::: {.callout-tip}
+## Specified
+
+Asked of the user, 2026-09-03:
+
+1. **Launch: `{python} f"{V_LAUNCH:.0f}"` m/s**, a gentle level toss.
+2. **Release height: `{python} f"{H_RELEASE:.1f}"` m** — thrown from the shoulder.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **Zoom efficiency: `{python} f"{ZOOM_EFF:.0%}"`** of launch energy becomes height.
+2. **Static margin: `{python} f"{res['static_margin']:.0%}"`**, the tightest that trims.
+3. **Still air** — no thermal, no gust, no lift.
+:::
+
+```{python}
+#| label: fig-duration
+#| fig-cap: "Time aloft against the height the glide starts from, at the trimmed sink rate. The marker is the specified toss; the dashed line is the release height alone, before any zoom."
+fig, ax = plt.subplots()
+ax.plot(h_sweep, h_sweep / res["sink"], label="glide from height $h$")
+ax.axvline(H_RELEASE, ls="--", color="C2", lw=1.2, label="release height")
+ax.plot(h_total, res["duration"], "o", color="C1", ms=7, label="specified toss")
+ax.set_xlabel("launch height, m")
+ax.set_ylabel("time aloft, s")
+ax.set_xlim(0, 6)
+ax.set_ylim(0, None)
+ax.grid()
+ax.legend()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```
