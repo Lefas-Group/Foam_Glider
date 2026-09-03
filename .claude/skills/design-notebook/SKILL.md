@@ -308,7 +308,8 @@ a deliberate deletion means the refactor altered the model.
 
 ## Where the work goes
 
-Read each chapter's `index.qmd` — it states what defines that chapter.
+When the work belongs to a notebook that already exists, read that chapter's
+`index.qmd` — it states what defines the chapter.
 
 | The question needs | Goes to |
 |---|---|
@@ -317,6 +318,15 @@ Read each chapter's `index.qmd` — it states what defines that chapter.
 | a different aircraft project | new notebook — ask first |
 
 New chapter or notebook: see `templates/new-notebook.md`.
+
+**A new notebook is built from `templates/new-notebook.md` and the skill's
+`notebook.py` alone. Do not read an existing notebook to create one** — nothing
+in it is needed, and it is the largest avoidable context cost. Notebooks share
+nothing at runtime: each has its own `_quarto.yml`, `_freeze/`, `_scratch/` and
+chapters, and `execute-dir: project` scopes every path inside its own notebook.
+Put a second notebook in a sibling directory of the first, so both use the one
+copy of this skill, its linter and its `notebook.py`. Start it in a fresh
+session where possible — conversation history is the larger pollution.
 
 ## Entry files
 
