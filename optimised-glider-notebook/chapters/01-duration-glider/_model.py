@@ -417,11 +417,21 @@ def glide(airplane, layout, ballast=0.0, static_margin=0.30,
     )
 
     CL, CD = aero["CL"], aero["CD"]
-    gamma = np.arctan2(CD, CL)  # glide path angle below the horizon
 
+    # BOTH force equations, with the glide angle as a variable. Writing
+    # gamma := arctan2(CD, CL) and imposing lift alone looks equivalent -- the
+    # drag equation follows as D = L tan(gamma) = W sin(gamma) -- but that step
+    # is 0 x inf at CL = 0, so at zero lift the drag equation quietly stops
+    # being implied. A minimiser walks straight into that hole: it found a
+    # vertical dive at the speed lower bound, gamma = 90 deg, CL = -5e-13,
+    # drag residual 99% of weight, and reported it as the best glider.
+    gamma = opti.variable(init_guess=np.radians(10.0),
+                          lower_bound=np.radians(0.5), upper_bound=np.radians(80.0))
+    q = 0.5 * ATMOSPHERE.density() * V**2
     opti.subject_to([
         aero["Cm"] == 0,  # trimmed
-        CL * 0.5 * ATMOSPHERE.density() * V**2 * S_ref == weight * np.cos(gamma),
+        CL * q * S_ref == weight * np.cos(gamma),
+        CD * q * S_ref == weight * np.sin(gamma),
     ])
     if not ballast:
         opti.subject_to((x_np - x_cg) / mac == static_margin)
@@ -511,12 +521,20 @@ def optimise(span=0.30, static_margin=0.10, start=(6.0, 3.6, 0.22, -2.0),
     aero_cost["calls"] += 2
     aero_cost["seconds"] += time.perf_counter() - t0
     CL, CD = aero["CL"], aero["CD"]
-    gamma = np.arctan2(CD, CL)
+
+    # Both force equations, glide angle a variable -- see the note in glide().
+    # This matters more here than there: glide() only had to find a root, while
+    # this function is actively searching for the cheapest way to satisfy the
+    # constraints, and the CL = 0 degeneracy was the cheapest way of all.
+    gamma = opti.variable(init_guess=np.radians(10.0),
+                          lower_bound=np.radians(0.5), upper_bound=np.radians(80.0))
+    q = 0.5 * ATMOSPHERE.density() * V**2
     sink = V * np.sin(gamma)
 
     opti.subject_to([
         aero["Cm"] == 0,
-        CL * 0.5 * ATMOSPHERE.density() * V**2 * S_ref == total.mass * G * np.cos(gamma),
+        CL * q * S_ref == total.mass * G * np.cos(gamma),
+        CD * q * S_ref == total.mass * G * np.sin(gamma),
         (x_np - total.x_cg) / mac == static_margin,
     ])
     opti.minimize(sink)

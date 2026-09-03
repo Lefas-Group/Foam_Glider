@@ -45,9 +45,9 @@ thinning the section: chord grows to `{python} f"{opt['chord'] * 1e3:.0f}"` mm,
 so thickness ratio drops to [`{python} f"{opt['tc']:.1%}"`]{.key} at the cost of
 aspect ratio. The tail comes forward and rigs
 `{python} f"{opt['h_tail_incidence']:.1f}"`°, which is what lets a
-`{python} f"{opt['static_margin']:.0%}"` margin trim at all. An earlier
-[baseline](2026-09-03-01-how-long-should-it-fly-for.qmd) assumed one ply; with
-the splice it gives `{python} f"{base['duration']:.2f}"` s.
+`{python} f"{opt['static_margin']:.0%}"` margin trim at all. The
+[unoptimised baseline](2026-09-03-01-how-long-should-it-fly-for.qmd) manages
+`{python} f"{base['duration']:.2f}"` s on the same stock and throw.
 
 ::: {.callout-warning}
 ## Two caveats

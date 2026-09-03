@@ -1,0 +1,90 @@
+---
+title: "How do our free variables compare to their limits?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+opt = optimise(static_margin=0.10)
+
+# Two readings, because "free" is not one question. Distance to the bound says
+# whether a bound binds now; re-solving with the box widened says whether it is
+# shaping the answer, which a variable can suffer from while sitting well inside
+# its own limits. Widened toward physically meaningful values only -- scaling
+# each box by a fixed fraction drove the aspect-ratio floor negative, and the
+# NaN geometry that followed read as though the bound had been helping.
+WIDER = dict(aspect_ratio=(1.2, 20.0), tail_arm_chords=(0.8, 14.0),
+             h_tail_ratio=(0.03, 0.70), h_tail_incidence=(-12.0, 6.0))
+
+rows = []
+for k, (lo, hi) in DESIGN_BOUNDS.items():
+    v = opt[k]
+    _saved = DESIGN_BOUNDS[k]
+    DESIGN_BOUNDS[k] = WIDER[k]
+    try:
+        widened = optimise(static_margin=0.10)["sink"]
+    finally:
+        DESIGN_BOUNDS[k] = _saved
+    rows.append(dict(name=k.replace("_", " "), lo=lo, hi=hi, v=v,
+                     frac=(v - lo) / (hi - lo),
+                     near=min(v - lo, hi - v) / (hi - lo),
+                     gain=widened / opt["sink"] - 1))
+
+tightest = min(rows, key=lambda r: r["near"])
+worst_gain = max(abs(r["gain"]) for r in rows)
+alpha_headroom = (9.0 - opt["alpha"]) / 11.0
+
+# The claim of the entry: nothing binds, and nothing is being shaped by a bound.
+assert all(r["near"] > 0.01 for r in rows)
+assert worst_gain < 1e-4
+```
+
+**Answer.** All four sit inside their limits, and widening any one box changes
+the sink rate by under `{python} f"{max(worst_gain, 1e-6):.0e}"` — so no bound
+is shaping this design (@fig-bounds). The closest is
+**`{python} tightest['name']`** at [`{python} f"{tightest['near']:.1%}"`]{.key}
+of its range from the floor. Trim angle is the real constraint to watch, sitting
+`{python} f"{9.0 - opt['alpha']:.1f}"`° below the stall cap.
+
+::: {.callout-warning}
+## The first version of this test was wrong
+It reported the aspect-ratio bound as helpful. That was a zero-lift dive, not a glider.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **Widened boxes** stay physically meaningful, not merely wider.
+2. **One start per solve**; the surface has several basins.
+:::
+
+```{python}
+#| label: fig-bounds
+#| fig-cap: "Each design variable's optimum as a fraction of its allowed range, with the range drawn as a bar. A value against either end would mean the bound, not the aerodynamics, chose it. Trim angle is shown for reference; it is solved, not a design variable."
+fig, ax = plt.subplots(figsize=(7.0, 2.4))
+labels = [r["name"] for r in rows] + ["trim alpha"]
+fracs = [r["frac"] for r in rows] + [(opt["alpha"] + 2) / 11.0]
+colors = ["C0"] * len(rows) + ["C2"]
+y = np.arange(len(labels))
+
+ax.barh(y, 1.0, height=0.45, color="0.90", zorder=1)
+ax.scatter(fracs, y, s=90, color=colors, zorder=3)
+for yi, (lab, r) in enumerate(zip(labels, rows + [None])):
+    lo, hi = (r["lo"], r["hi"]) if r else (-2.0, 9.0)
+    ax.text(-0.03, yi, f"{lo:g}", ha="right", va="center", fontsize=7, color="0.4")
+    ax.text(1.03, yi, f"{hi:g}", ha="left", va="center", fontsize=7, color="0.4")
+ax.set_yticks(y, labels)
+ax.set_xlim(-0.14, 1.14)
+ax.set_xticks([0, 0.5, 1.0], ["lower\nbound", "mid-range", "upper\nbound"])
+ax.invert_yaxis()
+for s in ["top", "right", "left"]:
+    ax.spines[s].set_visible(False)
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```
