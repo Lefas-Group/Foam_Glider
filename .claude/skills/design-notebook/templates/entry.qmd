@@ -21,6 +21,9 @@ superseded_by("<successor stem>", "<one short sentence on what changed>")
  page fails to render rather than going quietly stale.>
 ```
 
+<!-- One hero, or none. Use .hero-pair when the answer IS a comparison; delete
+     the block entirely when the answer is a figure, a yes/no, or a value nobody
+     asked for. A hero that isn't the answer to the title is worse than none. -->
 ::: {.hero}
 [`{python} f"<the one value this entry exists to produce>"`]{.hero-value}
 [<one line: what it means. Not what to conclude from it.>]{.hero-label}
@@ -29,18 +32,19 @@ superseded_by("<successor stem>", "<one short sentence on what changed>")
 **Answer.** <The answer, in prose. Supporting values get [`{python} …`]{.key}.
 Cross-reference the figure as (@fig-<name>). If the question also asks HOW --
 build steps, a procedure -- it continues here as a numbered list, never as a
-second `**Assembly.**` section.>
+second `**Assembly.**` section. 100 WORDS for all prose on this page: this, the
+warning below, and anything else addressed to the reader.>
 
 ::: {.callout-tip}
 ## Specified
 <Asked of the user, <date>:>
 
-1. **<quantity>: <value>** — <why, if it fits>.
+1. **<quantity>: <value>** — <why, if it fits. 10 words max, each>.
 :::
 
 ::: {.callout-note}
 ## Assumed
-1. **<quantity>: <value>**, <the one-clause reason>.
+1. **<quantity>: <value>**, <the one-clause reason. 10 words max, each>.
 :::
 
 ::: {.callout-warning}
@@ -66,57 +70,13 @@ footer(<the shared functions this entry called -- from _analysis.py. footer()
 <!--
 Notes on this template — delete this comment in real entries.
 
-FRONT MATTER IS THE TITLE ONLY. No `date`, `categories` or `description`: they
-render as a "Published" block, tag chips and a subtitle, which is clutter.
-Filenames carry the date, and the sidebar sorts on filename, so ordering is
-unaffected.
+The shape above is the instruction, and SKILL.md's "Entry format" carries the
+rules. One thing neither shows:
 
-NO RESTATED QUESTION, AND NO SETUP LINE. The title is the question; the callouts
-carry the conditions. A sentence saying what was run before the reader reaches
-the answer is throat-clearing.
+FRONT MATTER IS THE TITLE ONLY. No `date`, `categories` or `description` -- they
+render as a "Published" block, tag chips and a subtitle. Filenames carry the
+date and the sidebar sorts on filename, so ordering is unaffected either way.
 
-THREE WORD BUDGETS, ALL LINTED.
-  100  words of prose per entry — hero label, answer, warnings, an assembly
-       section: everything addressed to the reader, added up.
-   50  words per figure caption.
-   10  words per Specified/Assumed item. Attribution goes in a preamble line
-       above the list, not inside every item.
-An inline expression counts as one word.
-
-ONE PROSE SECTION. The answer is the only run of prose; a second headed block
-(`**Assembly.**`, a `##` heading) is how an entry inside budget in each part ends
-up long overall. Procedures fold into the answer as a list; caveats become a
-`callout-warning`.
-
-ORDER MATTERS. Compute cell, hero, answer, callouts, evidence. The reader should
-reach the answer without scrolling past the first code cell; `code-fold`
-collapses that cell to a single line.
-
-ONE HERO, OR NONE. `.hero` carries the single value the entry exists to produce.
-Use `.hero-pair` when the answer IS a comparison (measured vs predicted,
-as-built vs as-designed). Use NOTHING when the answer is a figure, a yes/no, or
-a number nobody asked for -- a hero that isn't the answer to the title tells the
-reader to look at the wrong thing.
-
-NUMBERS IN PROSE ARE INLINE EXPRESSIONS, always. `{python} f"{value:.2f}"`.
-This is not a style preference: hand-typed numbers drift from the cells above
-them, and the drift is invisible until someone re-derives the result.
-
-DON'T PRINT WORKING. Intermediates (a fit slope, a Reynolds number you already
-stated, an all-up mass nobody asked for) are clutter. Print results.
-
-EVERY ENTRY ENDS WITH ONE footer(...) CELL. It shows the machinery the entry
-called -- read off the live object, so it cannot drift from what ran -- and then
-what the entry cost to run. Freeze stores no timing, so that line is the only
-trace an entry's cost leaves.
-
-A SIBLING ENTRY IS A LINK, never bare prose. "the previous entry" drifts when the
-target is retitled or deleted; [the ballast entry](2026-….qmd) is checked at
-render. _lint.py flags the bare form.
-
-FIGURES SHARE ONE STYLE, set in _notebook.py: width 7.0, accent matching the hero
-number, C3 reserved for alarm. Don't set fonts or colours per figure.
-
-A CELL RETURNING AN OBJECT dumps its repr as a second output and demotes the
-figure to a subfigure. Bind it: `_ = bfg.draw_three_view(show=True)`.
+Then run `uv run python .claude/skills/design-notebook/lint.py <notebook>`; its
+messages name the fix. Render traps live in `references/quarto.md`.
 -->

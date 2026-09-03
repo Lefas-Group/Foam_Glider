@@ -279,93 +279,56 @@ for _sig, _doc in api():
 
 ## `notebook/_notebook.py`
 
-Notebook furniture, one copy for every chapter. Copy verbatim; nothing in it is
-project-specific. Deliberately invisible in the rendered site — the chapter index
-lists `_model.py` and `_analysis.py` only, and `api()` filters to `_analysis.py`,
-so neither function appears in the notebook a reader sees.
+**Copy `.claude/skills/design-notebook/notebook.py` verbatim** to
+`<notebook>/_notebook.py`. That file is the canonical copy; nothing in it is
+project-specific, and the linter checks the two match (rule 11), so an
+improvement to `footer()` or the plot style surfaces in every notebook that has
+not taken it yet.
 
-````python
-import inspect
-import pathlib
-import re
-import time
+It is vendored rather than run from the skill, unlike `lint.py`, because it is
+`exec`'d into every page at render time and its output is baked into the
+published HTML. Sharing it would make the notebook unrenderable without the
+skill installed, and would put a render-affecting file outside the Quarto
+project — where **freeze cannot see edits to it**, which is how stale pages get
+served.
 
-import matplotlib as mpl
-
-# One plot style for the whole notebook, so figures read against each other.
-# C0 matches --key-accent in styles.css, so a curve and the hero number above it
-# are the same colour. NOT set: axes.grid and spines -- entries call ax.grid()
-# themselves, and forcing either would also reach library-drawn figures.
-mpl.rcParams.update({
-    "figure.figsize": (7.0, 3.2),
-    "font.size": 9, "axes.labelsize": 9, "axes.titlesize": 10,
-    "xtick.labelsize": 8, "ytick.labelsize": 8, "legend.fontsize": 8,
-    "lines.linewidth": 1.8, "grid.alpha": 0.3, "grid.linewidth": 0.6,
-    "axes.prop_cycle": mpl.cycler(color=["#14655c", "#b8860b",
-                                         "#5c6670", "#b3412c"]),
-})
-
-aero_cost = {"calls": 0, "seconds": 0.0}   # incremented by the chapter's solver
-
-
-def superseded_by(stem, reason):
-    """Banner naming the entry that replaced this one; title read off disk."""
-    hit = pathlib.Path(globals()["_CHAPTER"]) / f"{stem}.qmd"
-    if not hit.exists():
-        raise FileNotFoundError(f"superseded_by({stem!r}): no {hit}")
-    title = re.search(r'^title:\s*"(.+)"$', hit.read_text(), re.M).group(1)
-    print('::: {.callout-important}')
-    print("## Superseded\n")
-    print(f"{reason} See [{title}]({stem}.qmd).")
-    print(":::\n")
-
-
-def footer(*objs):
-    """Closing cell: the machinery this entry called, then what it cost to run."""
-    if objs:
-        show_source(*objs)
-    n = aero_cost["calls"]
-    cost = f" \u00b7 {n} solve{'s' if n != 1 else ''}" if n else ""
-    print(f"[Executed in {time.perf_counter() - _T0:.1f} s{cost}]{{.runtime}}")
-
-
-def show_source(*objs):
-    """Render the source of the shared functions an entry called."""
-    print('::: {.callout-note collapse="true"}')
-    print("## The method, as called\n")
-    print("```python")
-    for o in objs:
-        print(inspect.getsource(o).rstrip())
-        print()
-    print("```")
-    print(":::")
-
-
-def api(filename="_analysis.py"):
-    """Every function defined in `filename`, with signature and summary line."""
-    for name, obj in sorted(globals().items()):
-        if inspect.isfunction(obj) and obj.__code__.co_filename.endswith(filename):
-            yield (name + str(inspect.signature(obj)),
-                   (inspect.getdoc(obj) or "").strip().split("\n")[0])
-````
+Deliberately invisible in the rendered site: the chapter index lists `_model.py`
+and `_analysis.py` only, and `api()` filters to `_analysis.py`, so none of this
+file's functions appear in the notebook a reader sees.
 
 ---
 
-## `notebook/_lint.py`
+## Linting — no file to create
 
-Format checks, run before recording any entry. **Copy it from an existing
-notebook** — `aircraft-notebook/_lint.py` is the reference copy — rather than
-retyping it. It checks four things, each earned by a failure that actually
-happened: no hand-typed numbers in prose, no code repeated across entries, the
-`**Answer.**` before the evidence, and no design decision swept over several
-values instead of being asked about.
+**A notebook carries no lint configuration.** The linter lives in the skill and
+is run against a notebook by path:
 
-Chapters are discovered from `chapters/*/` and all are checked; `SKIP` names the
-ones deliberately excluded. Opt-out, not opt-in — a chapter added tomorrow is
-checked the moment it exists.
+```bash
+uv run python .claude/skills/design-notebook/lint.py <notebook>
+```
 
-`SKILL.md` instructs every session to run this, so a notebook without it makes
-that instruction a lie.
+Nothing needs configuring, because nothing is declared that could be derived:
+the helpers that cost an aero solve are worked out from each chapter's own call
+graph, and a reference to a sibling entry is matched generically. A notebook
+scaffolded a minute ago lints correctly with nothing added to it.
+
+One shared copy is safe here and not for `_notebook.py` because this is a
+*checker*: it runs at authoring time, reads the notebook and writes nothing, so
+nothing it does reaches the rendered site and a notebook does not need it
+present in order to render.
+
+**To exempt a chapter**, put a `_lint-skip` file in the chapter directory whose
+contents say why:
+
+```
+Predates the entry format; its freeze holds solver runs that would be
+expensive to reproduce.
+```
+
+Opt-out, not opt-in — a chapter added tomorrow is checked the moment it exists.
+The marker sits in the chapter it describes, so deleting the chapter deletes its
+exemption; a central list of names outlives the chapter and then silently
+exempts whatever is created with that name next.
 
 ---
 

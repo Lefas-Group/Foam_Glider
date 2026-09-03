@@ -6,8 +6,12 @@ mass-properties code.
 ## Don't reimplement what the library has
 
 Look it up with the `library-explorer` MCP server before writing a calculation:
-`list_scoped_classes`, then `get_methods` on the class. It is scoped on purpose
-— don't substitute your own `dir()` dump.
+`search` when you know the concept but not the name, `list_classes` /
+`list_functions` to browse, then `get_methods` on the class. It introspects the
+installed version, so it is always current — don't substitute your own `dir()`
+dump. Note `search` is lexical: `"static margin"` finds nothing because no
+aerosandbox docstring uses that phrase, though `run_with_stability_derivatives`
+computes what you want.
 
 Every row below was written by hand in this notebook before someone noticed the
 library already had it:

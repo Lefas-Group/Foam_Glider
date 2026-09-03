@@ -1,12 +1,26 @@
 """
-Format checks for notebook entries.
+Format checks for notebook entries. One copy, shared by every notebook.
 
-    uv run python aircraft-notebook/_lint.py [chapter ...]
+    uv run python <skill>/lint.py <notebook-dir> [chapter ...]
 
-Defaults to every chapter that has opted in (see OPTED_IN). Exits non-zero if
+Defaults to every chapter except those a notebook opts out of. Exits non-zero if
 anything is flagged, so it can gate a commit.
 
-Five rules, each earned by a failure that actually happened in this notebook:
+This lives in the skill rather than in each notebook because it is a CHECKER: it
+runs at authoring time, reads the notebook and writes nothing. Nothing it does
+ends up in the rendered site, so a notebook does not need it present to render.
+`_notebook.py` is the opposite -- exec'd into every page at render time, with its
+output baked into the published HTML -- which is why that one stays vendored in
+each notebook and this one does not.
+
+**A notebook carries no lint configuration.** Everything that once looked
+notebook-specific is either derived or declared where it belongs: the helpers
+that cost an aero solve are derived from each chapter's own call graph, a
+sibling entry is matched generically, and a chapter opts out with a `_lint-skip`
+file whose contents say why. A freshly scaffolded notebook has none of these,
+and lints correctly with nothing added.
+
+Eleven rules, each earned by a failure that actually happened:
 
 1. NO HAND-TYPED NUMBERS IN PROSE. Three separate corrections were needed in one
    session where an entry's prose disagreed with its own rendered output. Every
@@ -67,10 +81,14 @@ Five rules, each earned by a failure that actually happened in this notebook:
     notebook's whole structure is later entries revising earlier ones -- so
     those references are the structure, not decoration.
 
+11. `_notebook.py` MATCHES THE SKILL'S COPY. It is vendored into each notebook
+    because it runs at render time, so a shared one would make a notebook
+    unrenderable without the skill and would hide edits from Quarto's freeze.
+    Vendoring costs propagation; this rule buys it back, so an improvement to
+    footer() or the plot style surfaces in every notebook that has not taken it.
+
 A value written as an inline expression counts as one word, so tightening prose
 is never at odds with computing the numbers in it.
-
-The leading underscore keeps Quarto from rendering this file.
 """
 import ast
 import pathlib
@@ -78,15 +96,10 @@ import re
 import sys
 from collections import defaultdict
 
-# Every chapter is checked unless it is named here. Opt-out, not opt-in: a
-# chapter added tomorrow is checked the moment it exists, and excluding one is a
-# deliberate act someone has to write down. An opt-in list quietly leaves new
-# work unchecked until somebody remembers, which is how a checker becomes
-# decoration.
-SKIP = [
-    "01-aerobuildup-bfg",       # predates the format; its freeze holds solver runs
-    "02-mceagle-300",           # frozen reference copy of 00-, kept for comparison
-]
+# An entry is a date-prefixed .qmd. Matched by shape rather than by a literal
+# year: the first version of this globbed "2026-*.qmd", which would have stopped
+# checking every new entry on 1 January without failing or saying anything.
+ENTRY_FILE = re.compile(r"^\d{4}-\d{2}-\d{2}-")
 
 # Two decimals or more reads as a result. One decimal is usually a condition --
 # 6 m/s, 0.5 deg, 10% -- and flagging those is noise. Measured on this notebook:
@@ -106,25 +119,87 @@ BLOCK = 3  # consecutive code lines that count as a repeated block
 # from calls, and an analysis sweep uses linspace -- neither trips this.
 SWEPT_LITERAL = re.compile(r"^\s*(\w+)\s*=\s*\[\s*([-\d.eE, ]+)\]\s*$", re.M)
 
-# A sibling entry named in prose. Matched only outside links, so the fix -- turn
-# it into one -- silences it. "this chapter"/"this entry" are self-reference and
-# point at nothing that can drift, so they are not listed.
-ENTRY_REFERENCE = re.compile(
-    r"\bthe\s+(previous|next|last|earlier|later|first|glide|ballast|cutting|"
-    r"polars?|stall|flight|trim)\s+entry\b", re.I)
+# Library calls that cost a full aero solve -- ~350 ms each on a small glider,
+# and rising with spanwise strip count. A chapter's own helpers are DERIVED from
+# these rather than listed (see aero_calls_of): a hand-written list is wrong the
+# first time a helper is renamed, and the one written for this notebook was
+# wrong immediately, claiming a mass calculation cost a solve. Bare `run`
+# catches `AeroBuildup(...).run()` however it was spelled, and `solve` is here
+# for the same reason even though the failure that earned this rule was
+# aerodynamic.
+AERO_PRIMITIVES = {"AeroBuildup", "run", "run_with_stability_derivatives", "solve"}
 
-
-# Calls that cost a full aero solve -- ~350 ms each on the McEagle, and rising
-# with spanwise strip count. Bare `run` catches `AeroBuildup(...).run()` however
-# it was spelled, and `opti.solve` is here for the same reason even though the
-# failure that earned this rule was aerodynamic.
-AERO_CALLS = {"polars", "AeroBuildup", "run", "run_with_stability_derivatives",
-              "solve", "trim", "stall", "neutral_point"}
-
+# Any "the <word> entry" is a reference to a sibling. Matched generically rather
+# than against a list of topic words: an enumerated list silently misses the
+# first entry about something new, which is the failure this rule exists to
+# prevent. Only self-reference is exempt -- it points at nothing that can drift.
+ENTRY_REFERENCE = re.compile(r"\bthe\s+(\w+)\s+entry\b", re.I)
+ENTRY_SELF = {"this", "that", "the", "a", "an", "each", "every", "same",
+              "whole", "current", "present", "other"}
 
 # Word budgets. Prose is the whole entry's readable text; the two callouts and
 # the figure captions are excluded because they are indexes rather than reading.
 MAX_PROSE, MAX_FIG_CAP, MAX_CALLOUT_ITEM = 100, 50, 10
+
+
+def chapters_of(root):
+    """
+    Chapters to check: all of them, minus any holding a `_lint-skip` file.
+
+    Opt-out, not opt-in -- a chapter added tomorrow is checked the moment it
+    exists, and excluding one is a deliberate act someone writes down. The
+    marker's CONTENTS are the reason, and it lives in the chapter it describes,
+    so deleting the chapter deletes its exemption. A central list of names
+    outlives the chapter it names and then silently exempts whatever is created
+    with that name next.
+
+    A notebook therefore carries no lint configuration at all: a freshly
+    scaffolded one has nothing to exempt, so no such file exists.
+    """
+    return sorted(d.name for d in (root / "chapters").iterdir()
+                  if d.is_dir() and not (d / "_lint-skip").exists())
+
+
+def aero_calls_of(chapter):
+    """
+    Every name in this chapter that costs an aero solve, derived not declared.
+
+    Seeded with the library primitives, then a fixed point over the chapter's
+    own `_model.py` and `_analysis.py`: a local function is expensive if it
+    calls something already known to be. So `trim` counts because it calls
+    `polars`, and `ballast_for` does not, because nothing it reaches solves
+    anything.
+
+    Derived rather than configured because the alternative was measurably
+    wrong: the hand-written list for this notebook named `ballast_for` as an
+    aero call within minutes of being written, and would have gone on being
+    wrong every time a helper was renamed.
+    """
+    defs = {}
+    for name in ("_model.py", "_analysis.py"):
+        f = chapter / name
+        if not f.exists():
+            continue
+        try:
+            tree = ast.parse(f.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                defs[node.name] = {
+                    (c.func.attr if isinstance(c.func, ast.Attribute)
+                     else getattr(c.func, "id", None))
+                    for c in ast.walk(node) if isinstance(c, ast.Call)}
+
+    expensive = set(AERO_PRIMITIVES)
+    changed = True
+    while changed:                      # fixed point: helpers calling helpers
+        changed = False
+        for name, called in defs.items():
+            if name not in expensive and (called & expensive):
+                expensive.add(name)
+                changed = True
+    return expensive
 
 
 def words(text):
@@ -173,13 +248,13 @@ def body_prose(text):
     return re.sub(r"^:{3,}.*$", "", t, flags=re.M)   # callout and hero fences
 
 
-def _calls_aero(node):
+def _calls_aero(node, aero_calls):
     """Does this subtree make a call that costs a solve?"""
     for n in ast.walk(node):
         if isinstance(n, ast.Call):
             f = n.func
             if (f.attr if isinstance(f, ast.Attribute) else
-                    getattr(f, "id", None)) in AERO_CALLS:
+                    getattr(f, "id", None)) in aero_calls:
                 return True
     return False
 
@@ -207,7 +282,7 @@ def _can_exit_early(body):
     return False
 
 
-def fixed_count_solves(source):
+def fixed_count_solves(source, aero_calls):
     """
     Line numbers of `for ... in range(...)` loops that solve every trip and
     cannot stop early.
@@ -227,7 +302,7 @@ def fixed_count_solves(source):
         if isinstance(node, ast.For)
         and isinstance(node.iter, ast.Call)
         and getattr(node.iter.func, "id", None) == "range"
-        and _calls_aero(node)
+        and _calls_aero(node, aero_calls)
         and not _can_exit_early(node.body))
 
 
@@ -251,15 +326,56 @@ def code_of(text):
     return out
 
 
-def check(chapters):
-    root = pathlib.Path(__file__).parent
+def _notebook_drift(root):
+    """
+    Rule 11: the notebook's `_notebook.py` matches the skill's canonical copy.
+
+    `_notebook.py` is VENDORED into each notebook rather than shared from here,
+    unlike this file. It is exec'd into every page at render time and its output
+    is baked into the published HTML, so sharing it would make a notebook
+    unrenderable without the skill installed, and would put a render-affecting
+    file outside the Quarto project -- where freeze cannot see edits to it, which
+    is the failure mode that has already served stale pages here three times.
+
+    Vendoring costs propagation, so this is what buys it back: an improvement to
+    footer() or the plot style shows up as a problem in every notebook that has
+    not taken it. Byte equality is the right test because nothing in the file is
+    project-specific; any difference is either an un-propagated improvement or an
+    accident, and both want a person to decide which.
+    """
+    canonical = pathlib.Path(__file__).parent / "notebook.py"
+    local = root / "_notebook.py"
+    if not canonical.exists():
+        return []                       # skill is the thing that is broken
+    if not local.exists():
+        return [(local, f"missing — copy it from {canonical}")]
+
+    want, got = canonical.read_text().splitlines(), local.read_text().splitlines()
+    if want == got:
+        return []
+    n = next((i for i, (a, b) in enumerate(zip(want, got), 1) if a != b),
+             min(len(want), len(got)) + 1)
+    return [(local, f"differs from {canonical} (first at line {n}) — copy the "
+                    f"skill's version down, or promote the local change up so "
+                    f"every notebook gets it")]
+
+
+def check(root, chapters):
     entries = [f for c in chapters
-               for f in sorted((root / "chapters" / c).glob("2026-*.qmd"))]
+               for f in sorted((root / "chapters" / c).glob("*.qmd"))
+               if ENTRY_FILE.match(f.name)]
     # Chapter indexes get the prose checks too. They are prose about the model
     # like any entry, and an unchecked index is how "5.7% thick" survived in
     # one after the model started saying 5.6%.
-    pages = entries + [root / "chapters" / c / "index.qmd" for c in chapters]
+    pages = entries + [root / "chapters" / c / "index.qmd" for c in chapters
+                       if (root / "chapters" / c / "index.qmd").exists()]
     problems = []
+
+    # Derived per chapter: two chapters model different aircraft with different
+    # helpers, and one chapter's `trim` says nothing about another's.
+    aero = {c: aero_calls_of(root / "chapters" / c) for c in chapters}
+
+    problems += _notebook_drift(root)
 
     # Rule 5 reads the shared modules too. The other rules are about how an
     # entry is written, so they only ever looked at .qmd files -- but the loop
@@ -270,7 +386,7 @@ def check(chapters):
             f = root / "chapters" / c / name
             if not f.exists():
                 continue
-            for line in fixed_count_solves(f.read_text()):
+            for line in fixed_count_solves(f.read_text(), aero[c]):
                 problems.append(
                     (f, f"line {line}: `for … in range(…)` runs a solve every "
                         f"trip and cannot stop early — iterate to a tolerance "
@@ -286,7 +402,7 @@ def check(chapters):
         cells = "\n".join(
             re.sub(r"^\s*#\|.*$", "", cell, flags=re.M)
             for cell in re.findall(r"```\{python\}(.*?)```", text, re.S))
-        if fixed_count_solves(cells):
+        if fixed_count_solves(cells, aero[f.parent.name]):
             problems.append(
                 (f, "`for … in range(…)` runs a solve every trip and cannot "
                     "stop early — iterate to a tolerance with a guard that "
@@ -325,9 +441,11 @@ def check(chapters):
         # stripped first, so "[the ballast entry](….qmd)" is the fix rather than
         # a permanent offence.
         unlinked = re.sub(r"\[[^\]]*\]\([^)]*\)", " ", prose_of(text))
-        for ref in dict.fromkeys(m.group(0) for m in ENTRY_REFERENCE.finditer(unlinked)):
+        for ref in dict.fromkeys(
+                m.group(0) for m in ENTRY_REFERENCE.finditer(unlinked)
+                if m.group(1).lower() not in ENTRY_SELF):
             problems.append(
-                (f, f"{ref!r} in prose — link it: [{ref}](2026-….qmd). A bare "
+                (f, f"{ref!r} in prose — link it: [{ref}](YYYY-MM-DD-….qmd). A bare "
                     f"reference drifts when the target is retitled or removed"))
 
         for cap in re.findall(r"^\s*#\|\s*fig-cap:\s*(.+)$", text, re.M):
@@ -376,23 +494,35 @@ def check(chapters):
         if len(where) >= 2:
             problems.append(
                 (None, f"{BLOCK} code lines repeated in {len(where)} entries "
-                       f"({', '.join(sorted(n[11:34] for n in where))}) — promote "
+                       f"({', '.join(sorted(_label(n)[:23] for n in where))}) — promote "
                        f"to _analysis.py:\n        " + "\n        ".join(block)))
     return problems
 
 
-if __name__ == "__main__":
-    root = pathlib.Path(__file__).parent
-    chapters = sys.argv[1:] or sorted(
-        d.name for d in (root / "chapters").iterdir()
-        if d.is_dir() and d.name not in SKIP)
-    found = check(chapters)
+def _label(name):
+    """An entry's name without its date, which is the same for every line."""
+    return ENTRY_FILE.sub("", name)
+
+
+def main(argv):
+    if not argv:
+        print(__doc__.strip().split("\n\n")[1].strip())
+        return 2
+    root = pathlib.Path(argv[0]).resolve()
+    if not (root / "chapters").is_dir():
+        print(f"  {root} is not a notebook (no chapters/ directory)")
+        return 2
+
+    chapters = argv[1:] or chapters_of(root)
+    found = check(root, chapters)
     for where, msg in found:
-        # Entries are named by date, and the date is the same for every line of
-        # a run -- so it is dropped. Shared modules have no date to drop.
         label = "" if where is None else (
-            where.name[11:44] if where.name.startswith("2026-")
+            _label(where.name) if ENTRY_FILE.match(where.name)
             else f"{where.parent.name}/{where.name}")
         print(f"  {label + ': ' if label else ''}{msg}")
     print(f"\n{len(found)} problem(s) in {', '.join(chapters)}")
-    sys.exit(1 if found else 0)
+    return 1 if found else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -1,0 +1,2 @@
+Predates the entry format; its freeze holds solver runs that would be
+expensive to reproduce.

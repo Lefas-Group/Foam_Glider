@@ -2,7 +2,7 @@
 name: design-notebook
 description: Records aircraft design work in a chronological Quarto lab notebook. Use when the user is designing or analysing an aircraft, running AeroSandbox studies, or asks to record a finding. Scaffolds the notebook if none exists.
 when_to_use: Designing or sizing an aircraft, running a trajectory or aero study, sweeping a design parameter, or saying "add this to the notebook".
-allowed-tools: Bash(uv run quarto *) Bash(uv run python *) mcp__library-explorer__list_scoped_classes mcp__library-explorer__list_scoped_functions mcp__library-explorer__get_docstring mcp__library-explorer__get_methods
+allowed-tools: Bash(uv run quarto *) Bash(uv run python *) mcp__library-explorer__search mcp__library-explorer__list_classes mcp__library-explorer__list_functions mcp__library-explorer__get_docstring mcp__library-explorer__get_methods
 ---
 
 Now: !`date "+%Y-%m-%d %H:%M"`
@@ -15,7 +15,7 @@ Every request, before anything else.
 **1. Design, or meta?**
 Design is the aircraft and any model of it, including "can I trust this model?".
 Meta is the notebook system itself — this skill, its templates and references,
-`_lint.py`, `_notebook.py`, the MCP config, rendering. *Meta work gets done and
+`lint.py`, `_notebook.py`, the MCP config, rendering. *Meta work gets done and
 committed. It never becomes an entry.*
 
 **2. Design: where does it go?** See "Where the work goes" — same model becomes
@@ -37,7 +37,7 @@ noise.
 **Never sweep a Specified input instead of asking for it.** Carrying three
 values because nobody chose one turns a missing input into extra analysis, which
 is worse than either asking or assuming — it triples the output and still does
-not answer the question. `_lint.py` checks for this.
+not answer the question. The linter checks for this.
 
 **4. On the reply:**
 
@@ -56,36 +56,33 @@ With no user to ask — an agent running unattended — assume, and write
 1. **Explore in the notebook's `_scratch/`** — gitignored, skipped by project
    renders, so nothing in the notebook is touched. See "Scratch probes" below.
 
-2. **When a question has been answered, stop and propose.** Give the entry
-   title (the user's question, verbatim) and its figures — nothing else. **Ask
-   the Specified questions from triage step 3 in this same message**: you are
-   stopping anyway, so resolving the inputs costs no extra round trip. If the
-   proposal covers more than one question, split it into one entry each. Say
-   what the entry will cost to render if any cell runs a solver or a sweep;
-   freeze pays it once, and it survives edits to `_model.py`. **Take that cost
-   from the probe, not from a guess**: `aero_report()` prints the solves the
-   probe just ran, and `aerosandbox.md` gives the per-strip price to turn them
-   into seconds. Guessing is how a helper spending sixty solves to converge in
-   twelve went unnoticed — and freeze records no timing, so an entry's cost
-   leaves no trace once written. Ask
-   whether to record it and where. **Write nothing into the notebook until the
-   user agrees.**
+2. **When a question has been answered, stop and propose.** Give the entry title
+   (the user's question, verbatim) and its figures — nothing else — and ask
+   whether to record it and where. **Ask the Specified questions from triage step
+   3 in the same message**: you are stopping anyway, so the inputs cost no extra
+   round trip. A proposal covering more than one question splits into one entry
+   each. If any cell runs a solver or a sweep, say what it will cost to render,
+   and **take that from the probe, not a guess** — `aero_report()` prints the
+   solves it just ran, and `aerosandbox.md` turns them into seconds.
+   **Write nothing into the notebook until the user agrees.**
 
 3. **On approval**, write the entry's code, render it, and read every figure and
    printed block. **Then** write the prose and the `**Answer.**` line against
    what actually rendered, and re-render. An entry must never contradict its own
    outputs — prose written from the conversation rather than from the output is
-   how that happens.
+   how that happens. **Draft it to the budgets under "Entry format" — 100 words
+   of prose for the whole page** — rather than writing long and cutting back.
 
 Repeat per question. A discussion that answers nothing gets no entry.
 
-**Run `uv run python <notebook>/_lint.py` before recording an entry.** Ten
-rules, each earned by a failure that actually happened here: no hand-typed
-numbers in prose, no code repeated across entries, the `**Answer.**` before the
-evidence, no swept decision that should have been asked, no fixed trip count
-around an aero solve, the three word budgets (100 prose / 50 caption / 10 per
-callout item), one prose section per entry, and sibling entries linked
-rather than named in prose. It exits non-zero, so it can gate a commit.
+**Run `uv run python .claude/skills/design-notebook/lint.py <notebook>` before
+recording an entry.** It re-checks the budgets and the entry format under "Entry
+format" below, and catches eight things easier to detect than to remember: a
+hand-typed number in prose, code repeated across entries, the `**Answer.**` after
+the evidence, a swept decision that should have been asked, a fixed trip count
+around an aero solve, a sibling entry named rather than linked, a stale
+`_notebook.py`, and a caption or callout item over budget. Its messages name the
+fix. Exits non-zero, so it can gate a commit.
 
 ## Scope
 
@@ -109,56 +106,9 @@ broken most; when in doubt, write less.
 - **State the reference for any quantity that has one.** A `Cm` is meaningless
   without saying what it is taken about; a coefficient at chuck-glider scale is
   meaningless without the speed, since Re moves the polar materially.
-- **Three word budgets, all enforced by `_lint.py`.**
-  **100 words of prose per entry** — the answer, any warning, an assembly
-  section, everything addressed to the reader, added up across the page.
-  **50 words per figure caption.** **10 words per `## Specified` or `## Assumed`
-  item.** An inline expression counts as one word, so tightening prose never
-  fights computing the numbers in it. Entries drift long one clause at a time,
-  and the fix is always the same: the sentence explaining *why* a number is what
-  it is belongs in the figure or a code comment, not the answer.
-- **One prose section, not several.** The entry has a single run of prose — the
-  answer — and everything else is a callout, a figure or code. A second headed
-  block (`**Assembly.**`, `**Method.**`, a `##` heading) reads as its own essay
-  with its own budget, which is how an entry inside 100 words in each part ends
-  up long overall. A build procedure belongs *inside* the answer, as a numbered
-  list under it; a caveat belongs in a `callout-warning`.
-- **A reference to another entry is a link**, never bare prose. "the previous
-  entry" points at something that can be retitled or deleted with nothing
-  noticing; `[the ballast entry](2026-08-27-02-….qmd)` is checked at render.
-  Later entries revising earlier ones *is* the notebook's structure.
-- **An entry the work has moved past says so, at the top.** Call
-  `superseded_by("<successor stem>", "<one short sentence>")` in a cell directly
-  under the include. The successor's title and link are read off disk, so they
-  cannot go stale, and a wrong stem stops the render. Without this, an entry
-  describing a configuration that was later corrected reads — to anyone arriving
-  from the sidebar — as the current state of the aircraft.
-- **Every entry ends with one `footer(...)` cell**, passing the shared functions
-  it called. It renders the method and then what the entry cost to run. Freeze
-  records no timing of its own, so this is the only trace an entry's cost leaves.
-- **Figures share one style**, set once in `_notebook.py` — width 7.0, the
-  accent matching the hero number, `C3` reserved for alarm. Don't set fonts or
-  colours per figure.
-- **No setup line.** The title is the question and the callouts carry the
-  conditions; a sentence restating what was run before the reader reaches the
-  answer is throat-clearing.
-- **The answer goes first**, above everything: hero, `**Answer.**`, then the
-  callouts, then the evidence. `code-fold` collapses the compute cell to one
-  line, so the reader reaches the answer without scrolling.
-- **One hero number, or none.** `::: {.hero}` carries the single value the entry
-  exists to produce, with a one-line label saying what it means. Use
-  `.hero-pair` when the answer *is* a comparison — measured against predicted,
-  as-built against as-designed — and nothing when the answer is a figure, a
-  yes/no, or a value nobody asked for. A hero that isn't the answer to the
-  title is worse than no hero: it tells the reader to look at the wrong thing.
-  Supporting values in the sentence get `[…]{.key}`.
-- **Every number in prose is an inline expression**, `` `{python} f"{x:.2f}"` ``,
-  never typed. Hand-typed numbers drift from the cells above them and the drift
-  is silent until someone re-derives the result.
 - **Rectangular results are a table, not a `print()` block.** A labelled
   `tbl-` cell is cross-referenceable and scannable; a wall of f-strings is
-  neither. Don't print working — a fit slope, a Reynolds number already stated,
-  a mass nobody asked for.
+  neither.
 - **Captions describe, they don't conclude.** "Lift curve, drag curve and drag
   polar at 6 m/s", not "notice that everything is symmetric because…".
 - **Specified and Assumed are different things.** *Assumed* is a weakness —
@@ -181,15 +131,85 @@ broken most; when in doubt, write less.
 The same restraint applies before the entry exists: don't probe in scratch for
 tangents, only for what was asked.
 
+## Entry format
+
+The shape is `templates/entry.qmd`; copy it.
+
+### Budgets — know these before writing, not after
+
+| | limit | counts |
+|---|---|---|
+| **prose, whole entry** | **100 words** | the answer, every warning, and any other running text, added up across the page |
+| figure caption | 50 words | each |
+| `## Specified` / `## Assumed` item | 10 words | each |
+
+An inline expression counts as one word, so tightening prose never fights
+computing the numbers in it. Only Specified/Assumed items and figure captions are
+excluded from the 100 — they have their own budgets above.
+
+Entries drift long one clause at a time, and the fix is always the same: the
+sentence explaining *why* a number is what it is belongs in the figure caption or
+a code comment, not the answer. The linter checks all three, but by then the
+prose is written — budget it while drafting.
+
+### The rest
+
+- **One prose section, not several.** The answer is the entry's only run of
+  prose; everything else is a callout, a figure or code. A second headed block
+  (`**Assembly.**`, `**Method.**`, a `##` heading) reads as its own essay with
+  its own budget, which is how an entry inside 100 words in each part ends up
+  long overall. A procedure folds into the answer as a numbered list; a caveat
+  becomes a `callout-warning`.
+- **Don't print working.** A fit slope, a Reynolds number already stated, a mass
+  nobody asked for: print results, not intermediates.
+- **The answer goes first** — hero, `**Answer.**`, callouts, then the evidence.
+  `code-fold` collapses the compute cell to one line, so the reader reaches the
+  answer without scrolling. No setup line: the title is the question and the
+  callouts carry the conditions.
+- **One hero number, or none.** `::: {.hero}` carries the single value the entry
+  exists to produce; `.hero-pair` when the answer *is* a comparison; nothing when
+  the answer is a figure, a yes/no, or a value nobody asked for. A hero that
+  isn't the answer to the title tells the reader to look at the wrong thing.
+  Supporting values in the sentence get `[…]{.key}`.
+- **An entry the work has moved past says so, at the top** — call
+  `superseded_by("<successor stem>", "<one sentence>")` directly under the
+  include. Title and link are read off disk, so they cannot go stale, and a wrong
+  stem stops the render. Without it, a corrected configuration reads, to anyone
+  arriving from the sidebar, as the current state of the aircraft.
+- **Every entry ends with one `footer(...)` cell**, passing the shared functions
+  it called. It renders the method, then what the entry cost to run — freeze
+  records no timing, so this is the only trace that cost leaves.
+- **Figures share one style**, set once in `_notebook.py`. Don't set fonts or
+  colours per figure.
+
 ## Use AeroSandbox's own functions
 
 **Before writing any geometry or aerodynamic calculation, ask what already
-exists.** Use the `library-explorer` MCP server — `list_scoped_classes`, then
-`get_methods` on the class you want. It is scoped deliberately: 81 curated
-classes and 353 functions, against ~183 modules in `aerosandbox`. **Do not write
-your own introspection** — a `dir()` or `inspect` dump bypasses that scoping and
-buries the answer in internals. (`uv run python -c` is still right for *checking*
-a call you have already found; that is not discovery.)
+exists.** Use the `library-explorer` MCP server. It introspects the *installed*
+aerosandbox — every class and function — so it cannot go stale against the
+version the notebook actually imports.
+
+Three tools, in the order that works:
+
+1. **`search(query)` first**, when you know what you want but not where it
+   lives. It matches full docstrings across functions, classes **and methods**,
+   which is the only way to find things whose name gives no clue:
+   `search("neutral")` returns `AeroBuildup.run_with_stability_derivatives`.
+   Matching is lexical — a no-hit result means those *words* are absent, not
+   that the capability is. Retry with one distinctive word before concluding
+   anything.
+2. **`list_classes()` / `list_functions(area=…)`** to browse when you don't know
+   what to search for. Both group by area (`geometry`, `aerodynamics`,
+   `dynamics`, `weights`, …); `library/*` and `tools/*` are mostly
+   transport-aircraft correlations and plotting, rarely what a small glider
+   needs.
+3. **`get_methods(class)` / `get_docstring(path)`** to go deep once you have a
+   name. Signatures live here, never in the listings.
+
+**Do not write your own introspection** — a `dir()` or `inspect` dump re-derives
+what these tools already return deduped and grouped, and buries the answer in
+internals. (`uv run python -c` is still right for *checking* a call you have
+already found; that is not discovery.)
 
 Then three rules. The third is the one that catches things:
 
@@ -236,20 +256,8 @@ The leading underscore is load-bearing: `_scratch/` sits inside the Quarto
 project, and Quarto skips `_`-prefixed paths, so `quarto render <notebook>`
 never sees it. Don't rename it to `scratch/`.
 
-````markdown
----
-title: "Probe"
-execute:
-  # _freeze/ is committed and holds entry results. Probes must never land in it.
-  freeze: false
----
-
-{{< include ../chapters/NN-name/_model.qmd >}}
-
-```{python}
-<the question being explored>
-```
-````
+Both skeletons are in `templates/new-notebook.md` — copy from there, for the
+reason above. What the template cannot tell you:
 
 - **The include path is relative to the probe file**, hence `../chapters/…`.
 - **Cell code runs from the notebook root**, not from `_scratch/`, because the

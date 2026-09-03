@@ -1,117 +1,238 @@
 #!/usr/bin/env python3
 """
 library_explorer_server.py
-MCP Server that exposes library exploration tools for aerosandbox.
+MCP server exposing the installed AeroSandbox for discovery.
+
+The question this exists to answer is "does aerosandbox already have this?",
+asked before any geometry or aero code gets written. It is answered by walking
+the INSTALLED package, so the inventory is always the version actually imported
+by the notebook. Nothing here is curated by hand, and there are no generated
+data files to go stale.
 
 Tools:
-- list_scoped_classes: List all relevant classes with summaries
-- list_scoped_functions: List all relevant functions with signatures and summaries
-- get_docstring: Get docstring and signature for a class/function/method
-- get_methods: Get all methods and parameters for a class
+- search:         find something by name or docstring, across functions,
+                  classes AND methods. The entry point when you know what you
+                  want but not where it lives.
+- list_classes:   every class, grouped by area
+- list_functions: every function, grouped by area
+- get_docstring:  docstring + signature for any dotted path
+- get_methods:    every method of a class
 """
 
-import os
-import sys
+import contextlib
 import importlib
 import inspect
-from typing import Optional, List, Dict
+import os
+import pkgutil
+import sys
+from typing import Dict, List, Optional
+
+import numpy as _real_numpy
 
 from mcp.server.fastmcp import FastMCP
 
-# Initialize FastMCP server
 mcp = FastMCP("library-explorer")
 
-# Configuration - paths to trace outputs
-TRACES_DIR = os.path.dirname(__file__)
+PACKAGE = "aerosandbox"
+
+# `library` and `tools` are split one level deeper: they are large and
+# heterogeneous (library/weights holds 46 transport-aircraft weight
+# correlations, library/aerodynamics another 45), so a single "library" bucket
+# would hide the distinction that decides whether an entry is relevant at all.
+# Everything else groups at the top level. Structural rather than curated, so a
+# new aerosandbox release re-groups itself with no mapping to maintain.
+_SPLIT_DEEPER = {"library", "tools"}
+
+
+def _area(path: str) -> str:
+    """The group a dotted path belongs to, derived from the path itself."""
+    parts = path.split(".")
+    if len(parts) < 2:
+        return "?"
+    if parts[1] in _SPLIT_DEEPER and len(parts) > 2:
+        return f"{parts[1]}/{parts[2]}"
+    return parts[1]
+
+
+def _summary(obj) -> str:
+    """First line of the docstring, or ''."""
+    doc = inspect.getdoc(obj) or ""
+    return doc.strip().split("\n")[0].strip()
+
+
+def _unwrap(obj):
+    """
+    The underlying function of a property, staticmethod or classmethod.
+
+    A bare inspect.isfunction() sees none of these three, which would drop
+    Fuselage.area_wetted and most of the geometry API from the index -- exactly
+    the things worth finding.
+    """
+    if isinstance(obj, property):
+        return obj.fget
+    return getattr(obj, "__func__", obj)
 
 
 # ============================================================================
-# Helper Functions (from get_docstring.py and get_methods.py)
+# The index
+# ============================================================================
+
+_INDEX: Optional[dict] = None
+
+
+def _build_index() -> dict:
+    """
+    Walk the installed aerosandbox once and record what it defines.
+
+    Entities are keyed by `obj.__module__`, not by the module they were found
+    in. aerosandbox re-exports heavily -- `aerosandbox.Wing` is really
+    `aerosandbox.geometry.wing.Wing` -- so keying on the DEFINING module dedupes
+    the re-exports and yields one canonical dotted path per entity.
+    """
+    package = importlib.import_module(PACKAGE)
+    root = os.path.dirname(package.__file__)
+
+    modules, failed = [], []
+
+    # Imports must not write to stdout. This server speaks JSON-RPC over stdio,
+    # so a single stray print from an imported module corrupts the stream and
+    # takes down the transport rather than just the answer. aerosandbox is clean
+    # today (measured: 0 chars), but that is a property of its current __init__
+    # files, not a promise -- so redirect rather than trust.
+    with contextlib.redirect_stdout(sys.stderr):
+        for mi in pkgutil.walk_packages([root], f"{PACKAGE}."):
+            try:
+                modules.append(importlib.import_module(mi.name))
+            except BaseException as e:
+                # BaseException, not Exception: some optional-dependency import
+                # failures do not subclass Exception, and one of those escaping
+                # would take the whole index down. Three modules fail today
+                # (plotly x2, sympy_interactive); they are reported, not hidden,
+                # because a silently absent module looks like a missing feature.
+                failed.append({"module": mi.name, "error": type(e).__name__})
+
+    classes: Dict[str, type] = {}
+    functions: Dict[str, object] = {}
+
+    for m in modules:
+        for name, obj in vars(m).items():
+            if name.startswith("_"):
+                continue
+            mod = getattr(obj, "__module__", "") or ""
+            if not mod.startswith(PACKAGE):
+                continue
+            path = f"{mod}.{getattr(obj, '__qualname__', name)}"
+            if inspect.isclass(obj):
+                classes[path] = obj
+            elif inspect.isfunction(obj):
+                functions[path] = obj
+
+    # Methods are indexed for search only -- they are not listed by
+    # list_functions (that is what get_methods is for). Without them, a search
+    # for "neutral point" finds nothing at all, because the call that computes
+    # it is AeroBuildup.run_with_stability_derivatives.
+    methods: Dict[str, object] = {}
+    for cpath, cls in classes.items():
+        for name, raw in vars(cls).items():
+            if name.startswith("_"):
+                continue
+            fn = _unwrap(raw)
+            if inspect.isfunction(fn):
+                methods[f"{cpath}.{name}"] = fn
+
+    return {
+        "classes": classes,
+        "functions": functions,
+        "methods": methods,
+        "failed": failed,
+        "n_modules": len(modules),
+    }
+
+
+def _index() -> dict:
+    """The index, built once per server process and cached.
+
+    The installed package cannot change under a running process, so a rebuild
+    could only ever return the same answer. Built lazily on first use: startup
+    stays instant and the ~2.6 s walk is paid by whichever call comes first.
+    """
+    global _INDEX
+    if _INDEX is None:
+        _INDEX = _build_index()
+    return _INDEX
+
+
+def _is_numpy_shadow(path: str, obj) -> bool:
+    """
+    True for aerosandbox.numpy functions that reimplement a real numpy name.
+
+    aerosandbox.numpy holds two different kinds of thing. 48 of its 87 functions
+    shadow numpy (`sin`, `dot`, `inv`) as CasADi-safe versions of an API the
+    caller already knows -- used via `import aerosandbox.numpy as np`, never
+    browsed, so listing them is pure noise. The other 39 are original and
+    discoverable only by listing: cosspace, sinspace, softmax, blend, sind,
+    rotation_matrix_3D, integrate_discrete_intervals, is_casadi_type.
+
+    Membership of dir(numpy) draws that line by computation, so it needs no
+    hand-maintained list and follows both libraries as they change. Shadowed
+    functions stay fully resolvable by path through get_docstring.
+    """
+    return path.split(".")[1] == "numpy" and path.split(".")[-1] in dir(_real_numpy)
+
+
+# ============================================================================
+# Shared helpers for the path-resolving tools
 # ============================================================================
 
 def get_object_from_path(full_path: str):
-    """
-    Given a full dotted path, import and return the object.
-    """
-    parts = full_path.split('.')
-    
+    """Import and return the object at a dotted path."""
+    parts = full_path.split(".")
     for i in range(len(parts), 0, -1):
-        module_path = '.'.join(parts[:i])
+        module_path = ".".join(parts[:i])
         attr_path = parts[i:]
-        
         try:
-            module = importlib.import_module(module_path)
-            obj = module
+            obj = importlib.import_module(module_path)
             for attr in attr_path:
                 obj = getattr(obj, attr)
             return obj
-        except (ImportError, ModuleNotFoundError):
+        except (ImportError, ModuleNotFoundError, AttributeError):
             continue
-        except AttributeError:
-            continue
-    
     raise ImportError(f"Could not resolve path: {full_path}")
 
 
 def get_signature_string(obj) -> Optional[str]:
-    """Get signature as a string."""
+    """Signature as a string, or None if it has none."""
     try:
-        sig = inspect.signature(obj)
-        return str(sig)
+        return str(inspect.signature(obj))
     except (ValueError, TypeError):
         return None
 
 
 def get_docstring_summary(obj, max_lines: Optional[int] = None) -> str:
-    """Get docstring summary with optional line limit."""
+    """Docstring, optionally trimmed to the first `max_lines` lines."""
     docstring = inspect.getdoc(obj)
-    
     if not docstring:
         return ""
-    
     if max_lines is None or max_lines == 0:
         return docstring
-    
-    lines = docstring.split('\n')
-    if max_lines > 0:
-        lines = lines[:max_lines]
-    else:
-        lines = lines[:max_lines]
-    
-    return '\n'.join(lines)
+    return "\n".join(docstring.split("\n")[:max_lines])
 
 
 def get_class_parameters(cls) -> List[str]:
-    """Get list of class parameters from __init__ signature."""
+    """Constructor parameter names, excluding self."""
     try:
-        init_method = getattr(cls, '__init__', None)
-        if init_method is None:
-            return []
-        
-        sig = inspect.signature(init_method)
-        params = []
-        
-        for param_name, param in sig.parameters.items():
-            if param_name == 'self':
-                continue
-            params.append(param_name)
-        
-        return params
-    except (ValueError, TypeError):
+        sig = inspect.signature(getattr(cls, "__init__"))
+        return [p for p in sig.parameters if p != "self"]
+    except (ValueError, TypeError, AttributeError):
         return []
 
 
-def get_class_methods_dict(cls, include_private: bool = False) -> Dict[str, callable]:
-    """Get dictionary of method name -> method object for a class."""
-    methods = {}
-    
-    for name, obj in inspect.getmembers(cls):
-        if not include_private and name.startswith('_'):
-            continue
-        if inspect.ismethod(obj) or inspect.isfunction(obj):
-            methods[name] = obj
-    
-    return methods
+def _grouped(paths, entry_fn) -> dict:
+    """Group entries by area, areas and entries both sorted."""
+    out: Dict[str, list] = {}
+    for p in sorted(paths):
+        out.setdefault(_area(p), []).append(entry_fn(p))
+    return dict(sorted(out.items()))
 
 
 # ============================================================================
@@ -119,147 +240,168 @@ def get_class_methods_dict(cls, include_private: bool = False) -> Dict[str, call
 # ============================================================================
 
 @mcp.tool()
-def get_docstring(
-    full_path: str,
-    max_lines: int = 0,
-    include_signature: bool = True
-) -> dict:
+def search(query: str, kind: str = "all", limit: int = 40) -> dict:
+    """
+    Find an aerosandbox function, class or method by name or docstring.
+
+    Start here when you know what you want but not where it lives. Unlike the
+    listings, this searches FULL docstrings and includes methods, so it finds
+    things whose name gives no clue: search("neutral") returns
+    AeroBuildup.run_with_stability_derivatives, which is what computes x_np.
+
+    Matching is lexical, not semantic: a multi-word query requires ALL its words
+    to appear somewhere in the path or docstring, in any order. A query that
+    returns nothing means those words are absent from aerosandbox's docstrings
+    -- it is not proof the capability is missing. Try a single distinctive word,
+    or browse with list_classes / list_functions.
+
+    Args:
+        query: one or more words, case-insensitive
+        kind: "all" (default), "function", "class" or "method"
+        limit: maximum results
+
+    Returns:
+        Matches with path, kind and summary; name matches ranked first.
+    """
+    idx = _index()
+    tokens = query.lower().split()
+    if not tokens:
+        return {"error": "empty query"}
+
+    pools = {"function": idx["functions"], "class": idx["classes"], "method": idx["methods"]}
+    if kind != "all":
+        if kind not in pools:
+            return {"error": f"kind must be one of all, function, class, method (got {kind!r})"}
+        pools = {kind: pools[kind]}
+
+    hits = []
+    for k, pool in pools.items():
+        for path, obj in pool.items():
+            name = path.split(".")[-1].lower()
+            doc = (inspect.getdoc(obj) or "").lower()
+            haystack = f"{path.lower()} {doc}"
+            if not all(t in haystack for t in tokens):
+                continue
+            # Rank: all tokens in the bare name beats a path match beats a
+            # docstring-only match, so an exact name lands at the top.
+            if all(t in name for t in tokens):
+                rank = 0
+            elif all(t in path.lower() for t in tokens):
+                rank = 1
+            else:
+                rank = 2
+            hits.append((rank, path, {"path": path, "kind": k, "summary": _summary(obj)}))
+
+    hits.sort(key=lambda h: (h[0], h[1]))
+    results = [h[2] for h in hits[:limit]]
+    out = {"query": query, "count": len(hits), "results": results}
+    if len(hits) > limit:
+        out["truncated"] = f"showing {limit} of {len(hits)}; narrow the query or raise limit"
+    return out
+
+
+@mcp.tool()
+def list_classes(area: str = "") -> dict:
+    """
+    Every class defined in the installed aerosandbox, grouped by area.
+
+    The whole set is small enough to read in one call, so there is no need to
+    filter unless you want to. Use get_methods on anything interesting.
+
+    Args:
+        area: optional group to restrict to, e.g. "geometry", "aerodynamics",
+              "dynamics", "weights". Omit for everything.
+
+    Returns:
+        Classes by area: path, summary and constructor parameters.
+    """
+    idx = _index()
+    paths = [p for p in idx["classes"] if not area or _area(p) == area]
+    if area and not paths:
+        return {"error": f"no area {area!r}", "areas": sorted({_area(p) for p in idx["classes"]})}
+
+    def entry(p):
+        cls = idx["classes"][p]
+        return {"path": p, "summary": _summary(cls), "parameters": get_class_parameters(cls)}
+
+    return {"count": len(paths), "areas": _grouped(paths, entry)}
+
+
+@mcp.tool()
+def list_functions(area: str = "", include_numpy_shadows: bool = False) -> dict:
+    """
+    Every module-level function in the installed aerosandbox, grouped by area.
+
+    With no arguments: the complete inventory, names only, so it stays readable
+    in one call. Name an `area` to get one-line summaries for that group.
+    Signatures are never included -- they run to hundreds of characters; call
+    get_docstring once you have a name.
+
+    Methods are not listed here: use get_methods on a class, or search().
+
+    By default this omits the 48 aerosandbox.numpy functions that merely shadow
+    real numpy names (sin, dot, inv -- CasADi-safe versions of an API you
+    already know). The 39 aerosandbox-original numpy helpers (cosspace, softmax,
+    blend, sind, rotation_matrix_3D...) are always shown.
+
+    Args:
+        area: optional group, e.g. "geometry", "aerodynamics", "numpy",
+              "library/weights", "tools/pretty_plots"
+        include_numpy_shadows: also list the numpy-shadowing functions
+
+    Returns:
+        Functions by area; summaries included when `area` is given.
+    """
+    idx = _index()
+    fns = idx["functions"]
+    paths = [
+        p for p in fns
+        if (include_numpy_shadows or not _is_numpy_shadow(p, fns[p]))
+        and (not area or _area(p) == area)
+    ]
+    if area and not paths:
+        return {"error": f"no area {area!r}", "areas": sorted({_area(p) for p in fns})}
+
+    entry = (lambda p: {"path": p, "summary": _summary(fns[p])}) if area else (lambda p: p)
+
+    out = {"count": len(paths), "areas": _grouped(paths, entry)}
+    if not area:
+        out["note"] = "names only; call list_functions(area=...) for summaries"
+    if idx["failed"]:
+        out["import_failures"] = idx["failed"]
+    return out
+
+
+@mcp.tool()
+def get_docstring(full_path: str, max_lines: int = 0, include_signature: bool = True) -> dict:
     """
     Get the docstring and signature of an aerosandbox class, function, or method.
-    
+
     Args:
-        full_path: Full dotted path (e.g., "aerosandbox.geometry.wing.Wing" or 
+        full_path: Full dotted path (e.g., "aerosandbox.geometry.wing.Wing" or
                    "aerosandbox.Atmosphere.density")
         max_lines: Number of docstring lines to return (0 = full docstring,
-                   positive = first N lines, negative = remove last N lines)
+                   positive = first N lines)
         include_signature: Whether to include the function/method signature
-    
+
     Returns:
         Dictionary with path, name, signature (optional), and docstring
     """
     try:
         obj = get_object_from_path(full_path)
-        
-        result = {
-            "path": full_path,
-            "name": full_path.split('.')[-1]
-        }
-        
-        # Signature
-        if include_signature:
-            sig = get_signature_string(obj)
-            if sig:
-                result["signature"] = sig
-        
-        # Docstring
-        docstring = get_docstring_summary(obj, max_lines if max_lines != 0 else None)
-        result["docstring"] = docstring if docstring else None
-        
-        return result
-    
     except (ImportError, AttributeError) as e:
         return {"error": f"Could not resolve '{full_path}': {e}"}
 
+    result = {"path": full_path, "name": full_path.split(".")[-1]}
 
-@mcp.tool()
-def list_scoped_classes() -> dict:
-    """
-    List all classes available in relevant aerosandbox modules.
-    
-    Returns:
-        Dictionary with list of class information (path, summary)
-    """
-    classes_file = os.path.join(TRACES_DIR, "scoped_classes.txt")
-    
-    if not os.path.exists(classes_file):
-        return {"error": "scoped_classes.txt not found. Run generate_scoped_docs.py first."}
-    
-    classes = []
-    current_class = None
-    summary_lines = []
-    
-    with open(classes_file, 'r') as f:
-        for line in f:
-            line = line.rstrip()
-            
-            # Skip header lines
-            if not line or line.startswith('Classes from') or line.startswith('===='):
-                continue
-            
-            # New class entry (no leading whitespace)
-            if line and not line.startswith(' '):
-                if current_class:
-                    current_class["summary"] = '\n'.join(summary_lines).strip()
-                    classes.append(current_class)
-                current_class = {"path": line}
-                summary_lines = []
-            
-            # Summary or metadata lines (indented)
-            elif line.startswith('  ') and current_class:
-                # Stop collecting summary at Parameters or Methods
-                if line.strip().startswith('Parameters:') or line.strip().startswith('Methods:'):
-                    continue
-                summary_lines.append(line.strip())
-    
-    if current_class:
-        current_class["summary"] = '\n'.join(summary_lines).strip()
-        classes.append(current_class)
-    
-    return {"classes": classes, "count": len(classes)}
+    if include_signature:
+        sig = get_signature_string(obj)
+        if sig:
+            result["signature"] = sig
 
-
-@mcp.tool()
-def list_scoped_functions() -> dict:
-    """
-    List all functions available in relevant aerosandbox modules.
-    
-    Returns:
-        Dictionary with list of function information (path, signature, summary)
-    """
-    functions_file = os.path.join(TRACES_DIR, "scoped_functions.txt")
-    
-    if not os.path.exists(functions_file):
-        return {"error": "scoped_functions.txt not found. Run generate_scoped_docs.py first."}
-    
-    functions = []
-    current_function = None
-    summary_lines = []
-    
-    with open(functions_file, 'r') as f:
-        for line in f:
-            line = line.rstrip()
-            
-            # Skip header lines and empty lines
-            if not line or line.startswith('Functions from') or line.startswith('===='):
-                continue
-            
-            # Function entries start with module path (no leading whitespace)
-            if line and not line.startswith(' '):
-                # Save previous function if any
-                if current_function:
-                    current_function["summary"] = '\n'.join(summary_lines).strip() if summary_lines else None
-                    functions.append(current_function)
-                
-                # Parse new function
-                if '(' in line:
-                    paren_idx = line.index('(')
-                    path = line[:paren_idx]
-                    signature = line[paren_idx:]
-                    current_function = {"path": path, "signature": signature}
-                else:
-                    current_function = {"path": line, "signature": None}
-                summary_lines = []
-            
-            # Summary lines (indented)
-            elif line.startswith('  ') and current_function:
-                summary_lines.append(line.strip())
-    
-    # Don't forget the last function
-    if current_function:
-        current_function["summary"] = '\n'.join(summary_lines).strip() if summary_lines else None
-        functions.append(current_function)
-    
-    return {"functions": functions, "count": len(functions)}
+    docstring = get_docstring_summary(obj, max_lines if max_lines != 0 else None)
+    result["docstring"] = docstring if docstring else None
+    return result
 
 
 @mcp.tool()
@@ -267,70 +409,57 @@ def get_methods(
     full_path: str,
     docstring_lines: int = 2,
     include_signature: bool = True,
-    include_private: bool = False
+    include_private: bool = False,
 ) -> dict:
     """
     Get all methods and parameters from an aerosandbox class.
-    
+
     Args:
         full_path: Full dotted path to the class (e.g., "aerosandbox.geometry.wing.Wing")
-        docstring_lines: Number of docstring lines per method (0 = full, positive = first N,
-                         negative = remove last N)
+        docstring_lines: Number of docstring lines per method (0 = full, positive = first N)
         include_signature: Whether to include method signatures
         include_private: Whether to include private methods (starting with _)
-    
+
     Returns:
         Dictionary with path, name, docstring, parameters, and methods list
     """
     try:
         cls = get_object_from_path(full_path)
-        
-        if not inspect.isclass(cls):
-            return {"error": f"'{full_path}' is not a class"}
-        
-        result = {
-            "path": full_path,
-            "name": full_path.split('.')[-1]
-        }
-        
-        # Class docstring
-        class_doc = get_docstring_summary(cls, docstring_lines if docstring_lines != 0 else None)
-        result["docstring"] = class_doc if class_doc else None
-        
-        # Parameters
-        params = get_class_parameters(cls)
-        result["parameters"] = params
-        
-        # Methods
-        methods = get_class_methods_dict(cls, include_private)
-        methods_list = []
-        
-        for method_name in sorted(methods.keys()):
-            method_obj = methods[method_name]
-            method_info = {"name": method_name}
-            
-            # Signature
-            if include_signature:
-                sig = get_signature_string(method_obj)
-                if sig:
-                    method_info["signature"] = sig
-            
-            # Docstring
-            if docstring_lines != 0:
-                doc = get_docstring_summary(
-                    method_obj, 
-                    docstring_lines if docstring_lines > 0 else None
-                )
-                method_info["docstring"] = doc if doc else None
-            
-            methods_list.append(method_info)
-        
-        result["methods"] = methods_list
-        
-        return result
-    
     except (ImportError, AttributeError) as e:
         return {"error": f"Could not resolve '{full_path}': {e}"}
+
+    if not inspect.isclass(cls):
+        return {"error": f"'{full_path}' is not a class"}
+
+    result = {"path": full_path, "name": full_path.split(".")[-1]}
+
+    class_doc = get_docstring_summary(cls, docstring_lines if docstring_lines != 0 else None)
+    result["docstring"] = class_doc if class_doc else None
+    result["parameters"] = get_class_parameters(cls)
+
+    methods = {}
+    for name, obj in inspect.getmembers(cls):
+        if not include_private and name.startswith("_"):
+            continue
+        if inspect.ismethod(obj) or inspect.isfunction(obj):
+            methods[name] = obj
+
+    methods_list = []
+    for name in sorted(methods):
+        info = {"name": name}
+        if include_signature:
+            sig = get_signature_string(methods[name])
+            if sig:
+                info["signature"] = sig
+        if docstring_lines != 0:
+            doc = get_docstring_summary(
+                methods[name], docstring_lines if docstring_lines > 0 else None
+            )
+            info["docstring"] = doc if doc else None
+        methods_list.append(info)
+
+    result["methods"] = methods_list
+    return result
 
 
 # ============================================================================
