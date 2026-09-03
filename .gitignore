@@ -14,6 +14,8 @@ wheels/
 # without re-running any optimizations.
 aircraft-notebook/_site/
 aircraft-notebook/.quarto/
+optimised-glider-notebook/_site/
+optimised-glider-notebook/.quarto/
 
 # Draft/probe work, never committed. Each notebook has its own; the leading
 # underscore is what keeps Quarto from rendering it as part of the project.

@@ -1,0 +1,67 @@
+---
+title: "Duration glider"
+# There is no notebook title page, so Quarto redirects the site root to whatever
+# it rendered first. Claim that redirect for the chapter instead.
+aliases:
+  - /index.html
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+#| include: false
+# Only so the numbers below can be read off the model rather than typed. No aero
+# solve runs here -- glider() is pure geometry.
+_plane, _layout = glider()
+```
+
+A hand-launched glider cut from flat Styrofoam tray in the McEagle tradition,
+trimmed for the longest time aloft from one throw.
+
+- **AeroBuildup**, inside an `asb.Opti` that trims and balances the glide
+  together.
+- **Flat-plate section**, generated from tray thickness and razor bevel, not a
+  catalogue aerofoil.
+- **Duration is launch height over sink rate.** Launch height is a fixed
+  ballistic zoom, so only sink rate is optimised.
+- **Left out:** launch transition, gusts, thermals, build warp.
+- **Held fixed:** sea level, still air, span, single-ply stock.
+
+::: {.callout-tip}
+## Specified
+
+Asked of the user, 2026-09-03:
+
+1. Span `{python} f"{_layout['span'] * 1e3:.0f}"` mm, tip to tip.
+2. Objective is time aloft from a hand launch.
+3. Flat-plate foam only, edges razor-bevelled to a point.
+4. No camber and no heat forming.
+:::
+
+::: {.callout-note}
+## Assumed
+
+No owner yet — each is a candidate for its own entry:
+
+1. Tray sheet `{python} f"{FOAM_T * 1e3:.1f}"` mm, `{python} f"{FOAM_RHO:.0f}"` kg/m³.
+2. Launch `{python} f"{V_LAUNCH:.0f}"` m/s, `{python} f"{ZOOM_EFF * 100:.0f}"`% recovered as height.
+3. Static margin `{python} f"{inspect.signature(glide).parameters['static_margin'].default:.0%}"`.
+4. Ballast is lead at the extreme nose.
+:::
+
+## The model
+
+````{python}
+#| echo: false
+#| output: asis
+import pathlib
+
+code = pathlib.Path("chapters/01-duration-glider/_model.py").read_text()
+
+print('::: {.callout-note collapse="true"}')
+print("## `_model.py`\n")
+print("```python")
+print(code.strip())
+print("```")
+print(":::")
+````
