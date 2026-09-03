@@ -1,0 +1,113 @@
+---
+title: "How are we modelling the drag?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+# Taken at the optimised design's own trim point -- a drag breakdown without a
+# speed is meaningless at this scale, where the section polar moves fast with Re.
+opt = optimise(static_margin=0.10)
+plane, layout = glider(
+    aspect_ratio=opt["aspect_ratio"], tail_arm_chords=opt["tail_arm_chords"],
+    h_tail_ratio=opt["h_tail_ratio"], h_tail_incidence=opt["h_tail_incidence"])
+op = asb.OperatingPoint(atmosphere=ATMOSPHERE, velocity=opt["V"], alpha=opt["alpha"])
+res = asb.AeroBuildup(airplane=plane, op_point=op,
+                      xyz_ref=[opt["x_cg"], 0, layout["fuse_h"] / 2]).run()
+
+q, S = float(op.dynamic_pressure()), float(plane.s_ref)
+CD, Dp, Di = (float(np.sum(res[k])) for k in ["CD", "D_profile", "D_induced"])
+mu, rho = ATMOSPHERE.dynamic_viscosity(), ATMOSPHERE.density()
+
+parts = []
+for nm, c, comp in zip(
+    [w.name for w in plane.wings] + [f.name for f in plane.fuselages],
+    [opt["chord"], layout["c_h"], layout["c_v"], layout["fuse_len"]],
+    res["wing_aero_components"] + res["fuselage_aero_components"],
+):
+    parts.append(dict(name=nm, cd=-float(np.sum(comp.F_w[0])) / (q * S),
+                      re=float(rho * opt["V"] * c / mu),
+                      e=float(np.sum(comp.oswalds_efficiency))))
+
+# The claim the entry rests on: per-component drag sums to the PROFILE term
+# only, because run() calls each component with include_induced_drag=False and
+# then adds one aircraft-level induced term on top.
+assert abs(sum(p["cd"] for p in parts) - Dp / (q * S)) < 1e-9
+assert abs(Dp + Di - CD * q * S) < 1e-12
+re_ratio = parts[0]["re"] / parts[1]["re"]
+```
+
+**Answer.** Two levels. Profile drag is a per-component sum — each surface cut
+into spanwise strips carrying their own local angle and Reynolds number, section
+data from NeuralFoil, fuselage from Jorgensen slender-body theory (@tbl-drag).
+Induced drag is a single aircraft-level expression,
+$D_i = (L^2 + Y^2) / (q \pi b_\text{eff}^2)$, with $b_\text{eff}$ a blend of each
+surface's effective span and Oswald efficiency — no vortex lattice, no wake
+model. It contributes [`{python} f"{Di / (CD * q * S):.0%}"`]{.key} here.
+
+::: {.callout-warning}
+## Interference is absent
+Components are summed in isolation, so junction and wake drag are missing.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **Quoted at the optimum's trim**: `{python} f"{opt['V']:.2f}"` m/s,
+   `{python} f"{opt['alpha']:.1f}"`°.
+2. **Tails run at `{python} f"{re_ratio:.1f}"`× lower Reynolds** than the wing.
+3. **Oswald efficiency is an output**, near
+   `{python} f"{parts[0]['e']:.2f}"`.
+:::
+
+```{python}
+#| label: fig-drag
+#| fig-cap: "Where the drag comes from, as a fraction of total. The four profile contributions are computed per component and summed; the induced term is computed once for the whole aircraft from its total lift, so it cannot be attributed to any surface."
+fig, ax = plt.subplots(figsize=(7.0, 1.9))
+# Short labels: the full component names do not fit inside a 3% segment, and a
+# label wider than its own bar collides with its neighbour's.
+segs = [("wing", parts[0]["cd"]), ("h. tail", parts[1]["cd"]),
+        ("fin", parts[2]["cd"]), ("fuselage", parts[3]["cd"]),
+        ("induced", Di / (q * S))]
+left = 0.0
+for i, (lab, cd) in enumerate(segs):
+    frac = cd / CD
+    ax.barh(0, frac, left=left, height=0.5,
+            color=f"C{i % 4}", alpha=1.0 if i < len(parts) else 0.40,
+            edgecolor="white", linewidth=1.2, label=f"{lab} ({frac:.0%})")
+    # Inline only where the text fits; the rest are carried by the legend.
+    if frac > 0.15:
+        ax.text(left + frac / 2, 0, f"{lab}\n{frac:.0%}", ha="center", va="center",
+                fontsize=8, color="white" if i < len(parts) else "black")
+    left += frac
+ax.set_xlim(0, 1)
+ax.set_ylim(-0.45, 0.45)
+ax.set_yticks([])
+ax.set_xticks([0, 0.25, 0.5, 0.75, 1.0], ["0", "25%", "50%", "75%", "100%"])
+ax.set_xlabel(f"share of total $C_D$ = {CD:.4f}")
+ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.55), ncol=5, frameon=False)
+for s in ["top", "right", "left"]:
+    ax.spines[s].set_visible(False)
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| label: tbl-drag
+#| tbl-cap: "Profile drag by component, on the airplane reference area, at the trim point above. Reynolds number is on each surface's own chord. The induced term is absent from this table by construction — it is not computed per component."
+#| echo: false
+#| output: asis
+print("| component | Re | Oswald e | CD profile | share of total |")
+print("|---|---:|---:|---:|---:|")
+for p in parts:
+    print(f"| {p['name']} | {p['re']:.0f} | {p['e']:.3f} | {p['cd']:.5f} "
+          f"| {p['cd']/CD:.1%} |")
+print(f"| **profile total** | | | **{Dp/(q*S):.5f}** | **{Dp/(CD*q*S):.1%}** |")
+print(f"| **induced** | | | **{Di/(q*S):.5f}** | **{Di/(CD*q*S):.1%}** |")
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```

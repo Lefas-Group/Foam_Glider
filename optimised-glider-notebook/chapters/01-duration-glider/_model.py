@@ -465,7 +465,7 @@ DESIGN_BOUNDS = dict(
 
 
 def optimise(span=0.30, static_margin=0.10, start=(6.0, 3.6, 0.22, -2.0),
-             alpha_bounds=(-2, 9), verbose=False):
+             alpha_bounds=(-2, 9), hold=None, verbose=False):
     """
     Minimum sink over the four design variables, trimmed, in one solve.
 
@@ -483,15 +483,24 @@ def optimise(span=0.30, static_margin=0.10, start=(6.0, 3.6, 0.22, -2.0),
         start: initial guess, as (aspect_ratio, tail_arm_chords, h_tail_ratio,
             h_tail_incidence). Vary it to check the optimum is not local.
         alpha_bounds: deg, capped below the whole-aircraft stall.
+        hold: {name: value} for design variables to pin rather than free. The
+            rest still optimise around them, which is what makes a sweep over
+            one variable a fair comparison -- otherwise the swept point is being
+            judged against rivals that were never allowed to adapt to it.
         verbose: pass the solver's log through.
 
     Returns:
-        dict of the design, its trim state and its performance.
+        dict of the design, its trim state and its performance, including the
+        profile/induced drag split taken from AeroBuildup rather than recomputed.
     """
+    hold = hold or {}
+    if set(hold) - set(DESIGN_BOUNDS):
+        raise KeyError(f"hold: not design variables: {set(hold) - set(DESIGN_BOUNDS)}")
     opti = asb.Opti()
     v = {}
     for i, (name, (lo, hi)) in enumerate(DESIGN_BOUNDS.items()):
-        v[name] = opti.variable(init_guess=start[i], lower_bound=lo, upper_bound=hi)
+        v[name] = (hold[name] if name in hold else
+                   opti.variable(init_guess=start[i], lower_bound=lo, upper_bound=hi))
     alpha = opti.variable(init_guess=4.0, lower_bound=alpha_bounds[0],
                           upper_bound=alpha_bounds[1])
     V = opti.variable(init_guess=4.5, lower_bound=0.5, upper_bound=30.0)
@@ -549,5 +558,11 @@ def optimise(span=0.30, static_margin=0.10, start=(6.0, 3.6, 0.22, -2.0),
         chord=layout["c_root"], fuse_len=layout["fuse_len"],
         tc=FOAM_T / layout["c_root"],
         Re=ATMOSPHERE.density() * V * mac / ATMOSPHERE.dynamic_viscosity(),
+        # AeroBuildup's own split, nondimensionalised on the same reference as
+        # CD, so CDp + CDi recovers it. Not recomputed from a span-efficiency
+        # formula -- the point of having the library do the buildup is that its
+        # decomposition is the one behind the CD being reported.
+        CDp=aero["D_profile"] / (q * S_ref),
+        CDi=aero["D_induced"] / (q * S_ref),
     ).items()})
     return out
