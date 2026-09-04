@@ -246,3 +246,36 @@ converged result:
   n=40 and 4.04 s at n=60 -- 8% apart -- and n=80 did not converge at all where
   n=40 did, so the usual grid-convergence study was not available and the answer
   stayed a 40-node answer. Say so rather than quoting the number that converged.
+
+### Solver options, benchmarked on a collocated design solve
+
+40 nodes, one start, aero via AeroBuildup/NeuralFoil (~1900 network evaluations
+in the graph). `Opti.solve()` exposes four accelerators, all off by default:
+
+| variant | wall | iters | ms/iter | converged to |
+|---|---|---|---|---|
+| baseline | 107 s | 192 | 636 | 3.669 s |
+| `options={'ipopt.hessian_approximation':'limited-memory'}` | **25 s** | 107 | **238** | 3.330 s |
+| `detect_simple_bounds=True` | 27 s | 42 | 651 | 2.915 s |
+| `expand=True` | killed at 200 s | -- | -- | -- |
+| `jit=True` | killed at 200 s | -- | -- | -- |
+
+**L-BFGS is the one that pays: 4.2x overall.** Exact second derivatives through a
+neural-network aero model dominate everything else, and approximating the Hessian
+removes that. Reach for it first on any collocated problem with NeuralFoil in the
+graph.
+
+**`expand` and `jit` are unusable at this graph size.** SX expansion and C
+compilation of ~1900 network evaluations both exceeded a 200 s watchdog before
+running a single iteration. `expand=True` is also a silent time sink -- it ate
+ten minutes of a benchmark run with no output and no error.
+
+**Every flag changed WHICH optimum was found**, from an identical start: 3.669 ->
+3.330 -> 2.915 s. They alter the search path, not just its cost, so a flag is not
+a free win on a non-convex problem -- and `detect_simple_bounds` was not even
+faster per iteration (651 vs 636 ms), it merely took a shorter route somewhere
+worse.
+
+So spend the speedup on MORE STARTS rather than on a single quicker answer: what
+determines the result on a multi-modal problem is coverage, and 4x cheaper solves
+buy 4x the coverage for the same budget.
