@@ -21,42 +21,44 @@ superseded_by("<successor stem>", "<one short sentence on what changed>")
  page fails to render rather than going quietly stale.>
 ```
 
-<!-- One hero, or none. Use .hero-pair when the answer IS a comparison; delete
-     the block entirely when the answer is a figure, a yes/no, or a value nobody
-     asked for. A hero that isn't the answer to the title is worse than none. -->
+<!-- One hero, or none. .hero-pair when the answer IS a comparison; delete the
+     block when the answer is a figure, a yes/no, or a value nobody asked for. -->
 ::: {.hero}
 [`{python} f"<the one value this entry exists to produce>"`]{.hero-value}
 [<one line: what it means. Not what to conclude from it.>]{.hero-label}
 :::
 
 **Answer.** <The answer, in prose. Supporting values get [`{python} …`]{.key}.
-Cross-reference the figure as (@fig-<name>). If the question also asks HOW --
+Cross-reference the visual as (@fig-<name>). If the question also asks HOW --
 build steps, a procedure -- it continues here as a numbered list, never as a
-second `**Assembly.**` section. 100 WORDS for all prose on this page: this, the
-warning below, and anything else addressed to the reader.>
+second `**Assembly.**` section.>
 
 ::: {.callout-tip}
 ## Specified
 <Asked of the user, <date>:>
 
-1. **<quantity>: <value>** — <why, if it fits. 10 words max, each>.
+1. **<quantity>: <value>** — <why, if it fits>.
 :::
 
 ::: {.callout-note}
 ## Assumed
-1. **<quantity>: <value>**, <the one-clause reason. 10 words max, each>.
+1. **<quantity>: <value>**, <the one-clause reason>.
 :::
 
 ::: {.callout-warning}
 ## <The caveat, as a title>
 <Only when the answer comes with a real health warning -- "do not trust that
-number", "what this cannot measure". Counts against the 100-word prose budget.>
+number", "what this cannot measure".>
 :::
 
+<!-- ONE visual, or none. Prefer none, then a table, then a plot: a figure costs
+     far more to read than a small table, so plot only when the SHAPE is the
+     argument. A table uses `#| label: tbl-<name>` and `#| tbl-cap:` instead. -->
 ```{python}
 #| label: fig-<name>
-#| fig-cap: "<what is plotted. Not what to conclude from it. 50 words max.>"
-<plotting code — plain matplotlib, legends rather than direct labels>
+#| fig-cap: "<what is plotted. Not what to conclude from it.>"
+<plotting code — plain matplotlib, legends rather than direct labels; pass an
+ explicit figsize, since draw_three_view() and friends ignore the rcParams>
 ```
 
 ```{python}

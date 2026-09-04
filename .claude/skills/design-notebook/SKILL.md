@@ -75,16 +75,53 @@ With no user to ask — an agent running unattended — assume, and write
 
 Repeat per question. A discussion that answers nothing gets no entry.
 
-**Run `uv run python .claude/skills/design-notebook/lint.py <notebook>` before
-recording an entry.** It re-checks the budgets and the entry format under "Entry
-format" below, and catches twelve things easier to detect than to remember: a
-hand-typed number in prose, code repeated across entries, the `**Answer.**` after
-the evidence, a swept decision that should have been asked, a fixed trip count
-around an aero solve, a sibling entry named rather than linked, a stale
-`_notebook.py`, a caption or callout item over budget, a freeze older than the
-model that froze it, shared machinery an entry calls without rendering, a second
-visual where there should be one, and a table too big to read. Its messages name
-the fix. Exits non-zero, so it can gate a commit.
+## The rules lint checks
+
+**Know these before drafting, not after.** Finding one of them from a lint run
+means the prose is already written; finding it from a *render* means paying for
+the render twice. Run `uv run python <skill>/check.py <notebook> --no-render` to
+check them without rendering, and the full `check.py` once the entry is right.
+
+```
+ 1  no hand-typed number in prose — use `{python} …` (2+ decimals)
+ 2  no 3 consecutive code lines repeated across entries — promote to _analysis.py
+ 3  `**Answer.**` comes before the last code cell
+ 4  no sweeping a decision that should have been asked — record it as Specified
+ 5  no `for … in range(…)` around an aero solve — iterate to a tolerance
+ 6  prose ≤ 100 words for the whole entry, warnings included
+ 7  figure caption ≤ 50 words
+ 8  each Specified / Assumed item ≤ 10 words
+ 9  one prose section — no second `**Heading.**` or `##`
+10  a sibling entry is linked, never named in bare prose
+11  `_notebook.py` byte-matches the skill's copy
+12  the freeze is not older than the model that froze it
+13  every `_analysis.py` function the entry calls is passed to `footer(…)`
+14  one visual per entry — a table counts as a figure
+15  a table is at most 3×4 or 4×3, excluding the header
+```
+
+Why each exists, and the failure that earned it: `references/why.md`.
+
+## Working cheaply
+
+Context is the scarce resource; these cost nothing to follow.
+
+- **Prefer no visual, then a table, then a plot.** Prose and the hero often carry
+  the answer alone. A figure costs roughly thirty times a small table to read, so
+  reach for one only when the *shape* is the argument — a curve, a crossover, a
+  geometry — and a table genuinely cannot carry it. Pass an explicit `figsize`:
+  `draw_three_view()` and friends ignore the notebook's rcParams and render
+  several times larger than anything else.
+- **`Edit`, never `sed`, on a file already in context.** A script edit makes the
+  harness re-sync and echo the file back; `Edit` echoes nothing. The exception is
+  a file *not* in context — copying a chapter — where `cp`/`sed` still beats
+  reading it in to write it out.
+- **Lint before rendering**, and **read a figure only when its bytes changed** —
+  `check.py` names the ones that moved.
+- **Don't re-read a file you just wrote.** `Edit` and `Write` already confirm.
+- **Ask subagents for the finding, not the transcript.** Verbatim quoting is
+  worth requesting when a claim must be checked against exact wording, and
+  expensive as a default.
 
 ## Scope
 
@@ -201,87 +238,54 @@ exists.** Use the `library-explorer` MCP server. It introspects the *installed*
 aerosandbox — every class and function — so it cannot go stale against the
 version the notebook actually imports.
 
-Three tools, in the order that works:
-
-1. **`search(query)` first**, when you know what you want but not where it
-   lives. It matches full docstrings across functions, classes **and methods**,
-   which is the only way to find things whose name gives no clue:
-   `search("neutral")` returns `AeroBuildup.run_with_stability_derivatives`.
-   Matching is lexical — a no-hit result means those *words* are absent, not
-   that the capability is. Retry with one distinctive word before concluding
-   anything.
-2. **`list_classes()` / `list_functions(area=…)`** to browse when you don't know
-   what to search for. Both group by area (`geometry`, `aerodynamics`,
-   `dynamics`, `weights`, …); `library/*` and `tools/*` are mostly
-   transport-aircraft correlations and plotting, rarely what a small glider
-   needs.
-3. **`get_methods(class)` / `get_docstring(path)`** to go deep once you have a
-   name. Signatures live here, never in the listings.
+`search(query)` first when you know what you want but not where it lives — it
+matches full docstrings across methods too, which is the only way to find things
+whose name gives no clue. `list_classes()` / `list_functions(area=…)` to browse,
+`get_methods` / `get_docstring` to go deep once you have a name. Each tool's
+traps are in `references/aerosandbox.md`.
 
 **Do not write your own introspection** — a `dir()` or `inspect` dump re-derives
-what these tools already return deduped and grouped, and buries the answer in
-internals. (`uv run python -c` is still right for *checking* a call you have
-already found; that is not discovery.)
+what these tools already return deduped and grouped. (`uv run python -c` is still
+right for *checking* a call you have already found; that is not discovery.)
 
 Then three rules. The third is the one that catches things:
 
 1. **Use the library's function.** Areas, spans, aspect ratios, chords, volumes,
    wetted areas, stability derivatives and neutral points all exist already.
-   `references/aerosandbox.md` lists the ones this notebook reimplemented before
-   noticing.
-2. **If you reimplement anyway, say why, at the point of deviation.** Sometimes
-   you must: fuselage mass in the McEagle chapter deliberately does not come
-   from `Fuselage.volume()`, because a super-ellipse under-fills the rectangular
-   foam slab by up to 22%. The comment saying so is the model working correctly.
+2. **If you reimplement anyway, say why, at the point of deviation.**
 3. **Where both exist, compute both and compare.** The disagreement is the
-   finding. `Wing.area()` against a traced integral is what exposed a wing built
-   2.75% too large; `Fuselage.volume()` against the slab is what exposed the
-   mass trap. Neither was caught by reading the code. Agreement costs one line
-   and becomes a regression test.
+   finding, agreement costs one line and becomes a regression test.
+
+`references/aerosandbox.md` has the cases where this caught something, and the
+API traps worth knowing before writing dynamics or mass-properties code.
 
 ## Scratch probes
 
-Every notebook owns `<notebook>/_scratch/`, holding `probe.py` and `probe.qmd`.
-Both are scaffolded with the notebook; create them if a notebook predates this.
-Overwrite them per question rather than accumulating `probe-<slug>` files; a
-second file is fine when a long run is worth keeping while a new question is
-explored.
+Every notebook owns `<notebook>/_scratch/`, holding `_probe_base.py` (the
+preamble — chapter loaded, `api()` printed), `probe.py` (the question) and
+`probe.qmd`. All are scaffolded with the notebook.
 
-**Reach for `probe.py` first.** The chapter is plain Python, so a script gets
-it with a few `exec`s and gives you real tracebacks and stdout. Quarto gives you
-`Cell 3/5 ... An error occurred` and then makes you scrape the output back out
-of HTML. The exact preamble — which files, in which order, and why they are
-`compile`d rather than `exec`d raw — is in `templates/new-notebook.md`. Copy it
-from there rather than from memory; the copy that used to live here drifted out
-of date and stopped working.
+**Reach for `probe.py` first**, and **edit its question block rather than
+rewriting the file**. The chapter is plain Python, so a script gets real
+tracebacks and stdout; Quarto gives you `Cell 3/5 ... An error occurred` and then
+makes you scrape the output back out of HTML.
 
-**Use `probe.qmd` when the question produces a figure**, or when you are
-rehearsing cells that are about to become an entry — its cells paste across
-unchanged. For a one-off API check that needs no model at all, `uv run python -c`
-beats both.
+```python
+"""Scratch probe. Gitignored, never rendered. Edit the question, not the file."""
+from _probe_base import *  # noqa: F403 -- chapter loaded, api() printed
 
-Iterating on a plot re-runs every cell above it, cold, on each render. If that
-starts to hurt, `exec` the model into a persistent Jupyter kernel instead and
-re-plot without re-solving.
+# --- the question ----------------------------------------------------------
+```
+
+**Use `probe.qmd` only when the question produces a figure.** For a one-off API
+check that needs no model, `uv run python -c` beats both.
 
 The leading underscore is load-bearing: `_scratch/` sits inside the Quarto
-project, and Quarto skips `_`-prefixed paths, so `quarto render <notebook>`
-never sees it. Don't rename it to `scratch/`.
+project, and Quarto skips `_`-prefixed paths, so `quarto render <notebook>` never
+sees it. Don't rename it to `scratch/`.
 
-Both skeletons are in `templates/new-notebook.md` — copy from there, for the
-reason above. What the template cannot tell you:
-
-- **The include path is relative to the probe file**, hence `../chapters/…`.
-- **Cell code runs from the notebook root**, not from `_scratch/`, because the
-  project sets `execute-dir: project`. Any path inside a cell is relative to the
-  notebook directory.
-- Run it: `uv run quarto render <notebook>/_scratch/probe.qmd`
-- Output stays put — Quarto renders it standalone, not into `_site/`. Printed
-  output is in `_scratch/probe.html`; figures are
-  `_scratch/probe_files/figure-html/*.png`, named `cell-N-output-1.png` unless
-  the cell has a `#| label:`. Read every figure before reporting on it.
-- Each render costs ~8 s of fixed overhead regardless of the code, so put
-  several probes in one file rather than rendering repeatedly.
+Mechanics — paths inside cells, where output lands, the ~8 s render overhead:
+`references/probing.md`.
 
 ## Where machinery lives
 
@@ -296,58 +300,28 @@ entries. A helper moves up a tier only when it earns it:
 | model | `_model.py` | the chapter index | it describes the aircraft, not a measurement |
 | furniture | `_notebook.py` | nothing — it is plumbing | it is about the notebook, not any aircraft |
 
-`_notebook.py` holds `show_source()` and `api()` and is deliberately invisible in
-the rendered site: the chapter index lists `_model.py` and `_analysis.py` only,
-and `api()` filters to `_analysis.py`. A reader of the design does not need a
-function inventory.
-
-**`_scratch/probe.py` prints `api()` on every run**, which is the moment someone
-is about to write a helper. That is where discovery belongs — not on a rendered
-page the author has no reason to open. Four subtly different neutral points once
-existed in one chapter because nothing advertised the first, and one of the four
-took its moment reference from the wrong station.
+**`_scratch/_probe_base.py` prints `api()` on every run**, which is the moment
+someone is about to write a helper. That is where discovery belongs — not on a
+rendered page the author has no reason to open.
 
 **An entry that calls shared machinery must render it**, with `show_source()`.
 Moving code out of an entry must not move the method out of sight — the
 notebook exists to be reviewed.
 
-Promoting a helper means editing an earlier entry to call it. That is allowed,
-and is *not* the thing "entries are written once and left alone" forbids: that
-rule protects conclusions from being quietly rewritten. A refactor is different
-in kind, and the difference must be **proven, not asserted**.
-
-**Git is the instrument.** `_freeze/**/execute-results/html.json` stores each
-page's rendered markdown with its inline expressions *already evaluated*, and
-the figure PNGs sit alongside it — all committed. So the baseline exists before
-you start, with nothing to capture:
+Changing a chapter's `_model.py` or `_analysis.py` means proving what moved:
 
 ```bash
-rm -rf <notebook>/_freeze/chapters/<chapter> <notebook>/.quarto
-quarto render <notebook>
-git diff <notebook>/_freeze
+uv run python .claude/skills/design-notebook/check.py <notebook> [chapter ...]
 ```
 
-Deleting the freeze is not optional — freeze tracks the page, not its includes,
-so without it you compare a fresh render against a cache hit and the match is an
-artefact. There is no `--no-freeze` flag.
-
-`git diff` cannot read that file usefully, though: each `markdown` field is one
-JSON line, so a single changed digit reports the whole page as modified. Use the
-skill's tool, which parses both sides, normalises the per-render noise (runtime
-seconds, Quarto's random cell ids) while keeping the solve count, hashes the
-figure PNGs, and refuses to compare a freeze whose code no longer matches its
-page:
-
-```bash
-uv run python .claude/skills/design-notebook/freezediff.py <notebook> [chapter ...]
-```
-
-Reach for it after any change to a chapter's shared modules — a model
-correction, a material change, a dependency upgrade that shifts every polar, or
-a refactor that is supposed to change nothing at all.
+It lints, deletes the freeze, renders and diffs, and names the figures whose
+bytes changed. **Deleting the freeze is not optional** — freeze tracks the page,
+not its includes, so without it you compare a fresh render against a cache hit
+and the match is an artefact. There is no `--no-freeze` flag.
 
 Any change that is not a deliberate deletion means the refactor altered the
-model.
+model. The workflow, and why `git diff` alone cannot do this:
+`references/refactoring.md`.
 
 ## Where the work goes
 
@@ -361,27 +335,13 @@ When the work belongs to a notebook that already exists, read that chapter's
 | a different aircraft project | new notebook — ask first |
 
 **When the model itself changes, the fork criterion is whether you want to keep
-both answers** — not which file the change lands in.
-
-| | |
-|---|---|
-| The old answer is **superseded**: wrong physics, wrong arithmetic, or a known omission now closed | Fix in place, delete the freeze, re-render, and update the chapter index if a "left out" bullet stopped being true. The correction goes in a **later entry**. Same chapter. |
-| The old answer stays **valid under its own stated assumptions**, and the comparison is the point | **New chapter.** |
-
-An assumption of yours that the user later replaces with a measurement or a
-brief is the first case, not the second: it was never the design. A genuinely
-different aircraft, or a method you would want to compare against, is the
-second — the old chapter then keeps rendering its own numbers *correctly*,
-because the model it references has not moved.
-
-A forked chapter copies **both** `_model.py` and `_analysis.py`: chapters share
-nothing at runtime, so one without its own `_analysis.py` cannot measure
-anything. The copy's header names its parent chapter, the commit it was taken
-at, and every deliberate difference — so `diff` between the two files is the
-review, and an empty `diff` on the file that was *not* meant to change is a
-positive check rather than an absence of information. Copy with `cp` and edit
-constants with `sed`; reading a long `_model.py` in only to write it back out
-costs a great deal and buys nothing.
+both answers** — not which file the change lands in. If the old answer is simply
+superseded (wrong physics, or a known omission now closed) fix it in place and
+put the correction in a later entry; if it stays valid under its own stated
+assumptions and the comparison is the point, fork. An assumption of yours that
+the user later replaces with a measurement or a brief is the first case: it was
+never the design. Worked examples and the copying mechanics:
+`references/forking.md`.
 
 New chapter or notebook: see `templates/new-notebook.md`.
 
@@ -411,9 +371,17 @@ state.
 
 ## Reference
 
-- `freezediff.py` — did any rendered number move? Run it after any change to a
-  chapter's `_model.py` or `_analysis.py`. Shares `lint.py`'s conventions:
-  `uv run python <skill>/freezediff.py <notebook> [chapter ...]`.
+- `check.py` — lint, render, and report what moved, in one call.
+  `uv run python <skill>/check.py <notebook> [chapter ...] [--no-render]`.
+  `lint.py` and `freezediff.py` do the first and last steps alone.
+- `references/why.md` — the failure behind each lint rule. Read when a rule looks
+  arbitrary, or before arguing one away.
+- `references/refactoring.md` — proving a change to `_model.py`/`_analysis.py`
+  moved nothing. Read before touching either.
+- `references/forking.md` — when a model change earns a new chapter, and how to
+  copy one cheaply.
+- `references/probing.md` — scratch-probe mechanics. Read when a probe
+  misbehaves or needs a figure.
 - `references/quarto.md` — render and tooling traps. Read when a render fails, a
   figure misbehaves, or output needs extracting.
 - `references/aerosandbox.md` — API traps and solver behaviour. Read before

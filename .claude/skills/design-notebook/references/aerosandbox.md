@@ -147,3 +147,35 @@ included, so they will not render standalone. Filenames say what each chapter
 covers; `SKILL.md` names the ones that come up most.
 
 Upstream, to refresh the copy: <https://github.com/peterdsharpe/AeroSandbox>
+
+## Where "compute both and compare" caught something
+
+SKILL.md carries the three rules; these are the cases that earned the third one.
+Neither was caught by reading the code.
+
+- **`Wing.area()` against a traced integral** exposed a wing built 2.75% too
+  large.
+- **`Fuselage.volume()` against a slab volume** exposed a mass trap: a
+  super-ellipse under-fills a rectangular foam slab by up to 22%, so fuselage
+  mass in the McEagle chapter deliberately does *not* come from `volume()`. The
+  comment saying so, at the point of deviation, is the model working correctly.
+
+Both agreements are now one-line assertions in the chapters, i.e. regression
+tests that cost nothing to keep.
+
+## Using library-explorer
+
+Three tools, in the order that works:
+
+1. **`search(query)` first**, when you know what you want but not where it lives.
+   It matches full docstrings across functions, classes **and methods**, which is
+   the only way to find things whose name gives no clue: `search("neutral")`
+   returns `AeroBuildup.run_with_stability_derivatives`. Matching is lexical — a
+   no-hit result means those *words* are absent, not that the capability is.
+   Retry with one distinctive word before concluding anything.
+2. **`list_classes()` / `list_functions(area=…)`** to browse when you don't know
+   what to search for. Both group by area (`geometry`, `aerodynamics`,
+   `dynamics`, `weights`, …); `library/*` and `tools/*` are mostly
+   transport-aircraft correlations and plotting, rarely what a small glider needs.
+3. **`get_methods(class)` / `get_docstring(path)`** to go deep once you have a
+   name. Signatures live here, never in the listings.

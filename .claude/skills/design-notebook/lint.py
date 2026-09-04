@@ -20,108 +20,31 @@ sibling entry is matched generically, and a chapter opts out with a `_lint-skip`
 file whose contents say why. A freshly scaffolded notebook has none of these,
 and lints correctly with nothing added.
 
-Fifteen rules, each earned by a failure that actually happened:
+Fifteen rules, each earned by a failure that actually happened. The failure
+behind each one is in `references/why.md` -- read that when a rule looks
+arbitrary, or before arguing one away. SKILL.md carries the same list, so an
+entry can be written compliant rather than corrected afterwards.
 
-1. NO HAND-TYPED NUMBERS IN PROSE. Three separate corrections were needed in one
-   session where an entry's prose disagreed with its own rendered output. Every
-   result in prose must be an inline expression, `{python} f"{x:.2f}"`, so the
-   number is the computation rather than a copy of it.
+     1  no hand-typed number in prose -- use `{python} …` (2+ decimals)
+     2  no 3 consecutive code lines repeated across entries
+     3  `**Answer.**` comes before the last code cell
+     4  no sweeping a decision that should have been asked
+     5  no `for … in range(…)` around an aero solve
+     6  prose <= 100 words for the whole entry, warnings included
+     7  figure caption <= 50 words
+     8  each Specified / Assumed item <= 10 words
+     9  one prose section -- no second `**Heading.**` or `##`
+    10  a sibling entry is linked, never named in bare prose
+    11  `_notebook.py` byte-matches the skill's copy
+    12  the freeze is not older than the model that froze it
+    13  every `_analysis.py` function the entry calls is passed to `footer(…)`
+    14  one visual per entry -- a table counts as a figure
+    15  a table is at most 3x4 or 4x3, excluding the header
 
-2. NO REPEATED CODE ACROSS ENTRIES. Machinery that a second entry reaches for
-   belongs in the chapter's _analysis.py. Four subtly different neutral points
-   were once written in one chapter, one of which took its moment reference from
-   the wrong station and put wrong numbers in front of the reader.
-
-3. THE ANSWER COMES BEFORE THE EVIDENCE. An entry is read to find out what was
-   learned; the working is there to be checked afterwards.
-
-4. NO SWEEPING A DECISION THAT SHOULD HAVE BEEN ASKED. "Where does the ballast
-   go?" was once answered with three static margins because nobody asked which
-   one was wanted -- turning a missing input into extra analysis, which is worse
-   than either asking or assuming. A design decision gets asked for and recorded
-   in a `## Specified` callout, not swept.
-
-5. NO FIXED TRIP COUNT AROUND AN AERO SOLVE. `trim()` was written
-   `for _ in range(60)` around a fixed point that settles in 9 to 13, so every
-   call spent about twenty seconds re-deriving an answer it already had, at a
-   dozen call sites. An AeroBuildup call costs the same whether you ask it for
-   one angle of attack or six hundred -- the count of CALLS is the whole budget,
-   and a loop is where they hide. Iterate to a tolerance with a max-iteration
-   guard that raises; a round number someone picked also hides non-convergence,
-   since a loop that never converged returns exactly like one that did.
-
-6. PROSE FITS IN 100 WORDS. Everything the reader must read as prose -- the
-   answer, any warning, an assembly section -- across the whole entry. Entries
-   drift long one clause at a time, and the fix is always the same: the sentence
-   that explains why a number is what it is belongs in the figure or the code
-   comment, not in the answer. Only `## Specified`, `## Assumed` and figure
-   captions are excluded, each having its own budget below. A `callout-warning`
-   counts: moving a paragraph into a coloured box does not make it shorter.
-
-7. A FIGURE CAPTION FITS IN 50 WORDS. It says what is plotted, not what to
-   conclude; a caption that needs more than fifty words is carrying an argument
-   that belongs in the prose.
-
-8. A SPECIFIED OR ASSUMED ITEM FITS IN 10 WORDS. These are a numbered list of
-   inputs, not a discussion of them. One entry recorded a static margin with
-   three lines of justification, which reads as hedging a decision that was
-   actually made.
-
-9. ONE PROSE SECTION, NOT SEVERAL. An entry has a single run of prose -- the
-   answer -- and everything else is a callout, a figure or code. A second
-   headed block (`**Assembly.**`, `**Method.**`, a `##` heading) reads as its
-   own little essay with its own budget, which is how an entry that is inside
-   100 words in each part ends up long overall. If a procedure or a caveat is
-   worth keeping, it belongs inside the answer or inside a callout.
-
-10. A REFERENCE TO ANOTHER ENTRY IS A LINK. "the previous entry", "the glide
-    entry" as bare prose is the same defect as a hand-typed number: it points at
-    something that can be retitled, reordered or deleted, and nothing notices.
-    A markdown link to the `.qmd` is checked by Quarto at render, and the
-    notebook's whole structure is later entries revising earlier ones -- so
-    those references are the structure, not decoration.
-
-11. `_notebook.py` MATCHES THE SKILL'S COPY. It is vendored into each notebook
-    because it runs at render time, so a shared one would make a notebook
-    unrenderable without the skill and would hide edits from Quarto's freeze.
-    Vendoring costs propagation; this rule buys it back, so an improvement to
-    footer() or the plot style surfaces in every notebook that has not taken it.
-
-12. A FREEZE IS NOT OLDER THAN THE MODEL IT FROZE. Freeze tracks the page, not
-    its includes, so editing `_model.py` leaves every entry serving values the
-    current model does not produce -- silently. A fuselage ply count changed
-    here, nothing re-executed, and an entry went on rendering a duration the
-    model no longer gave; it surfaced only because that entry happened to carry
-    an assert. Detected through git: a shared module dirty while the chapter's
-    freeze is not means the freeze predates it.
-
-13. AN ENTRY RENDERS THE SHARED MACHINERY IT CALLS. Moving code into
-    `_analysis.py` must not move the method out of sight -- the notebook exists
-    to be reviewed -- so every `_analysis.py` function an entry calls is passed
-    to its `footer(...)`. Checked against inline expressions as well as cells,
-    because a value quoted only in prose is a call that appears in no cell.
-    Scoped to `_analysis.py`: `_model.py` is rendered in full by the chapter
-    index and `_notebook.py` is deliberately invisible. Only what the entry
-    NAMES, never the transitive closure, which would reproduce the whole file in
-    every entry and make splitting a function break entries whose conclusions
-    never changed.
-
-14. A TABLE COUNTS AS A FIGURE, SO AN ENTRY SHOWS ONE OR NONE. A table is a way
-    of presenting evidence, not an appendix riding along beside the real one.
-    Three entries here printed a grid directly beneath a plot that already showed
-    the same quantities -- entry 05's was 72 numbers under a figure plotting four
-    of its eight columns.
-
-15. A TABLE FITS IN 3x4 OR 4x3, EXCLUDING THE HEADER. Past that it stops being
-    something a reader takes in and becomes a grid to be searched. A wide
-    two-row table is still a grid, so 2x5 fails too. Measured on the RENDERED
-    output: a table built by `print()` inside an `output: asis` cell is not
-    parseable as a table anywhere in the source, but the frozen markdown holds
-    it as literal pipe-markdown. A table hand-written into the .qmd is caught
-    there as well, before it has ever been rendered.
-
-A value written as an inline expression counts as one word, so tightening prose
-is never at odds with computing the numbers in it.
+Two details the list cannot carry. A value written as an inline expression counts
+as ONE word, so tightening prose is never at odds with computing the numbers in
+it. And rules 12 and 15 read the rendered freeze, so they are silent when there
+is none -- an unrendered notebook is not thereby clean.
 """
 import ast
 import json

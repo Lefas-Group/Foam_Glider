@@ -252,27 +252,53 @@ Run with `uv run quarto render notebook/_scratch/probe.qmd`. Output stays in
 
 ---
 
+## `notebook/_scratch/_probe_base.py`
+
+The preamble every probe repeats, so no probe has to. Written once per notebook;
+set `CHAPTER` when working on a different one.
+
+````python
+"""
+The preamble every scratch probe repeats. Import it; don't retype it.
+
+    from _probe_base import *      # chapter loaded, api() printed
+
+compile() with the real path is load-bearing, as in the _model.qmd shim: a bare
+exec() of file text labels every function "<string>", and then
+inspect.getsource() raises OSError, breaking show_source() and api() together.
+Probes are where a helper is about to be written, so api() must work here or the
+discovery listing is empty.
+"""
+import pathlib
+
+CHAPTER = "NN-name"
+
+_root = pathlib.Path(__file__).resolve().parent.parent
+_chapter = _root / "chapters" / CHAPTER
+for _p in [_root / "_notebook.py", _chapter / "_model.py", _chapter / "_analysis.py"]:
+    exec(compile(_p.read_text(), str(_p), "exec"))
+
+print(f"[{CHAPTER}] already available -- check here before writing a helper:")
+for _sig, _doc in api():
+    print(f"  {_sig:52s} {_doc[:44]}")
+print()
+````
+
+---
+
 ## `notebook/_scratch/probe.py`
 
 For questions that need a real traceback and stdout instead of Quarto's
 render-then-scrape-HTML loop. Run with `uv run python notebook/_scratch/probe.py`.
 
+**Edit the question block; do not rewrite the file.** Successive probes then cost
+the delta rather than the whole thing.
+
 ````python
-"""Scratch probe. Gitignored, never rendered."""
-import pathlib
+"""Scratch probe. Gitignored, never rendered. Edit the question, not the file."""
+from _probe_base import *  # noqa: F403 -- chapter loaded, api() printed
 
-_root = pathlib.Path(__file__).parent.parent
-_chapter = _root / "chapters" / "NN-name"
-for _p in [_root / "_notebook.py", _chapter / "_model.py", _chapter / "_analysis.py"]:
-    # compile() with the real path so api() and inspect.getsource() work here
-    # exactly as they do in a rendered entry.
-    exec(compile(_p.read_text(), str(_p), "exec"))
-
-print("already available -- check here before writing a helper:")
-for _sig, _doc in api():
-    print(f"  {_sig:52s} {_doc}")
-
-# <the question being explored>
+# --- the question ----------------------------------------------------------
 ````
 
 ---
