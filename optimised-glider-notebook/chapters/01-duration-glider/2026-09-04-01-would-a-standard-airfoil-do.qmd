@@ -1,0 +1,76 @@
+---
+title: "Would a standard airfoil do?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+# Both arms at the same chord and the same Reynolds number at each aspect ratio,
+# so the only difference between them is whether thickness ratio tracks chord.
+ARS = np.geomspace(*DESIGN_BOUNDS["aspect_ratio"], 4)
+AL = np.linspace(-2, 12, 29)
+V = 6.0
+naca = asb.Airfoil("naca0009").to_kulfan_airfoil()
+
+def max_ld(af, Re):
+    p = af.get_aero_from_neuralfoil(alpha=AL, Re=np.full_like(AL, Re), mach=0.0)
+    return float(np.max(p["CL"] / p["CD"]))
+
+rows = []
+for ar in ARS:
+    _, lay = glider(aspect_ratio=float(ar))
+    c = lay["c_root"]
+    Re = V * c / ATMOSPHERE.kinematic_viscosity()
+    rows.append(dict(ar=float(ar), tc=FOAM_T / c, plate=max_ld(plate_section(c), Re),
+                     fixed=max_ld(naca, Re)))
+
+peak, thin, thick = max(rows, key=lambda r: r["plate"]), rows[0], rows[-1]
+ratio = thick["fixed"] / thick["plate"]
+
+assert peak is not thin               # the plate has an INTERIOR optimum
+assert thin["fixed"] > thin["plate"]  # the arms disagree at the thin end too
+assert ratio > 2                      # and badly where the stock is thick
+```
+
+::: {.hero}
+[`{python} f"{ratio:.1f}"`×]{.hero-value}
+[optimistic at aspect ratio `{python} f"{thick['ar']:.0f}"`, once thickness is pinned]{.hero-label}
+:::
+
+**Answer.** No. A standard section pins thickness ratio; 5 mm stock on a varying
+chord does not — t/c runs `{python} f"{thin['tc']:.1%}"` to
+[`{python} f"{thick['tc']:.0%}"`]{.key} across the sweep. Section lift-to-drag
+peaks at aspect ratio `{python} f"{peak['ar']:.1f}"`, then collapses to
+[`{python} f"{thick['plate']:.1f}"`]{.key} where NACA 0009 still reads
+`{python} f"{thick['fixed']:.1f}"` (@tbl-section). Pinning t/c deletes the
+[penalty that sets aspect ratio](2026-09-03-05-why-has-the-aspect-ratio-been-driven-so-low.qmd).
+
+::: {.callout-warning}
+## Cheap for the wrong reason
+The polar loses a dimension, and the design trade goes with it.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **Speed `{python} f"{V:.0f}"` m/s**, setting Reynolds at each chord.
+2. **NACA 0009** as the stand-in standard section.
+3. **Section lift-to-drag only**, not the whole aircraft.
+:::
+
+```{python}
+#| label: tbl-section
+#| tbl-cap: "Best section lift-to-drag across the chapter's aspect-ratio bounds. Both columns share that aspect ratio's chord and Reynolds number, so only the section differs: 5 mm stock, whose thickness ratio tracks the chord, against a NACA 0009 fixed at nine percent."
+#| echo: false
+#| output: asis
+print("| aspect ratio | 5 mm plate | NACA 0009 |")
+print("|---:|---:|---:|")
+for r in rows:
+    print(f"| {r['ar']:.1f} | {r['plate']:.1f} | {r['fixed']:.1f} |")
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```
