@@ -1,0 +1,93 @@
+---
+title: "What's the way to fix it so it flies sensibly?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+# A stable glider trims at a fixed angle of attack whatever its speed, so the
+# only lever on the launch pull-up is trim SPEED. Nose ballast raises it.
+EXTRA = 1.0e-3  # kg of lead added at the nose, beyond what trim needs
+CLEAN = dict(alpha=15.0, theta=180.0)  # no stall, no loop
+
+opt = optimise(static_margin=0.10)
+plane, layout = design_geometry(opt)
+fixed = glide(plane, layout, ballast=opt["ballast"] + EXTRA)
+
+
+def flies_clean(s):
+    return (s["alpha_max"] < CLEAN["alpha"]
+            and float(np.max(np.abs(s["theta"]))) < CLEAN["theta"])
+
+
+before = simulate(plane, layout, ballast=opt["ballast"], launch_angle=45)
+after = {a: simulate(plane, layout, ballast=opt["ballast"] + EXTRA, launch_angle=a)
+         for a in [10, 20, 30]}
+best = max((s for s in after.values() if flies_clean(s)), key=lambda s: s["duration"])
+turn = lambda s: float(np.max(np.abs(s["theta"])))  # noqa: E731
+
+assert not flies_clean(before)                       # it loops as delivered
+assert flies_clean(best)                             # and does not, ballasted
+assert fixed["V"] > opt["V"]                         # via a higher trim speed
+assert fixed["sink"] > opt["sink"]                   # which is what it costs
+assert not flies_clean(after[30])                    # angle matters too
+```
+
+::: {.hero}
+[`{python} f"+{EXTRA*1e3:.1f} g"`]{.hero-value}
+[nose ballast; the loop disappears]{.hero-label}
+:::
+
+**Answer.** Raise the trim speed toward the throw. A stable glider holds one
+angle of attack at any speed, so at
+[`{python} f"{V_LAUNCH/opt['V']:.1f}"`×]{.key} trim it must make several times
+its weight in lift. `{python} f"{EXTRA*1e3:.1f}"` g of nose lead takes trim from
+`{python} f"{opt['V']:.1f}"` to [`{python} f"{fixed['V']:.1f}"` m/s]{.key}
+(@tbl-fix), and α now peaks at `{python} f"{best['alpha_max']:.0f}"`°. Throw it
+flat: `{python} f"{best['launch_angle']:.0f}"`° flies clean,
+`{python} f"{after[30]['launch_angle']:.0f}"`° still stalls.
+
+::: {.callout-warning}
+## The objective was wrong, not the design
+Chapter 01 minimised sink, which drives trim speed as low as it goes — exactly what makes a glider unable to absorb a throw.
+:::
+
+::: {.callout-tip}
+## Specified
+
+Asked of the user, 2026-09-04:
+
+1. Fix it so it neither loops nor stalls.
+2. Launch speed unchanged at `{python} f"{V_LAUNCH:.0f}"` m/s.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **Clean** means α < `{python} f"{CLEAN['alpha']:.0f}"`°, pitch < 180°.
+2. Ballast is lead at the extreme nose.
+3. Chapter 01's geometry, unchanged.
+:::
+
+```{python}
+#| label: tbl-fix
+#| tbl-cap: "The same airframe before and after the ballast, at each one's best clean launch angle. Pitch excursion is the largest attitude change from level; past 180° the glider has gone over the top."
+#| echo: false
+#| output: asis
+rows = [
+    ("trim speed, m/s", f"{opt['V']:.1f}", f"{fixed['V']:.1f}"),
+    ("launch ÷ trim", f"{V_LAUNCH/opt['V']:.1f}", f"{V_LAUNCH/fixed['V']:.1f}"),
+    ("α max, deg", f"{before['alpha_max']:.0f}", f"{best['alpha_max']:.0f}"),
+    ("pitch excursion, deg", f"{turn(before):.0f}", f"{turn(best):.0f}"),
+]
+print("| | as delivered | + ballast |")
+print("|---|---:|---:|")
+for name, a, b in rows:
+    print(f"| {name} | {a} | {b} |")
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(simulate, glide, optimise, design_geometry)
+```
