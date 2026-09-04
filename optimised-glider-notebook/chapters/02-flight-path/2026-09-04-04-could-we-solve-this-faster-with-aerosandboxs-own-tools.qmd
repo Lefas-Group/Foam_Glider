@@ -1,0 +1,59 @@
+---
+title: "Could we solve this faster with AeroSandbox's own tools?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+# Geometry, ballast and the whole trajectory in one Opti, with the aerodynamics
+# traced into it symbolically rather than sampled onto a grid. Several starts,
+# because one solve lands in whichever basin it started nearest.
+f = optimise_flight(n=40)
+
+assert f["Cm_residual"] < 1e-6           # trimmed at every node, not just claimed
+assert f["static_margin"] >= SM_FLOOR - 1e-6
+assert np.max(f["alpha"]) < CLEAN_ALPHA  # never stalls, within this model
+assert f["n_converged"] >= 2             # enough starts landed to see a spread
+assert f["spread"] > 0.01                # local optima, not one global answer
+```
+
+::: {.hero}
+[`{python} f"{f['duration']:.2f}"` s]{.hero-value}
+[best of `{python} f"{f['n_converged']}"` local optima, at `{python} f"{len(f['t'])}"` nodes]{.hero-label}
+:::
+
+**Answer.** Yes: `dyn.op_point` feeds the state to `AeroBuildup`, collocation
+states the flight as constraints, and IPOPT differentiates through it — the
+surrogate goes, with its interpolation error and the CG mismatch it invited. But
+IPOPT is a *local* optimiser and this space is not convex, so the speed must be
+spent on starts: `{python} f"{f['n_converged']}"` converge, to optima up to
+[`{python} f"{f['spread']:.1f}"` s apart]{.key}. More starts can only raise it.
+
+::: {.callout-warning}
+## It cannot loop
+A point mass has no pitch state, so it never sees the launch transient.
+:::
+
+::: {.callout-tip}
+## Specified
+
+Asked of the user, 2026-09-04:
+
+1. Collocation only; no time-marched verification.
+2. Static margin at least `{python} f"{SM_FLOOR:.0%}"`.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. Point mass: attitude follows trim instantly.
+2. **Trimmed at every node**, so α is the airframe's.
+3. `{python} f"{len(FLIGHT_STARTS)}"` starts at `{python} f"{len(f['t'])}"` nodes.
+4. **Not grid-converged**: 60 nodes gives 8% less.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimise_flight)
+```

@@ -179,3 +179,70 @@ Three tools, in the order that works:
    transport-aircraft correlations and plotting, rarely what a small glider needs.
 3. **`get_methods(class)` / `get_docstring(path)`** to go deep once you have a
    name. Signatures live here, never in the listings.
+
+## Trajectories: use `dyn.op_point`, and pick the class by conditioning
+
+**`dyn.op_point` is the bridge from dynamics to aerodynamics.** Every `Dynamics`
+instance exposes it, rigid-body classes included, and it derives velocity, alpha
+*and* the body rates from the state:
+
+```python
+aero = asb.AeroBuildup(airplane=airplane, op_point=dyn.op_point,
+                       xyz_ref=[total.x_cg, 0, z_ref]).run()
+dyn.add_force(*aero["F_b"], axes="body")     # or F_w with axes="wind"
+dyn.add_moment(My=aero["M_b"][1], axes="body")
+```
+
+Assembling that operating point by hand is where three separate bugs lived in
+this project, each of which produced a plausible trajectory rather than an error:
+the pitch rate was omitted, so an aircraft with `Cmq = -12.7` had no damping at
+all; a wind-to-body rotation was written out longhand; and a tabulated surrogate
+was built about a different CG than the simulation used -- 16 mm, 19% of chord,
+and since `Cm` is measured ABOUT that point the pitching moment was wrong from
+the first step. `op_point` removes all three by construction.
+
+One trap: it builds an `Atmosphere` at the instance's own altitude. If the
+chapter's stated condition is a fixed one, pin it back (`op = dyn.op_point;
+op.atmosphere = ATMOSPHERE`) or durations shift by ~0.1%.
+
+**Collocation vs time-marching is a conditioning question, not a taste one.**
+Measured on a 300 mm hand-launched glider:
+
+| | result |
+|---|---|
+| point-mass collocation, design variables free | converged, 113 s, 184 iters, exact gradients |
+| rigid-body collocation, tumbling flight | infeasible, even seeded from a converged RK4 trajectory |
+
+Collocation states the whole trajectory as one algebraic system, so it needs the
+flight to be *findable* from a guess. An uncontrolled aircraft thrown well above
+its trim speed loops and tumbles; that map from initial conditions to final state
+is chaotically sensitive, the constraint Jacobian is ill-conditioned, and no
+storyboard fixes it -- seeding from an RK4 solution still failed, in 11 s rather
+than 140 s. Time-march that case. Collocate the smooth one, where the payoff is
+large: symbolic aero over all nodes in one call, and design variables carried in
+the same solve as the trajectory, with no surrogate anywhere.
+
+**A point mass cannot loop.** With `alpha` a control it trims instantly, so it
+reports a longer flight than the rigid body (6.0 s against 3.8 s here) and the
+gap is exactly the launch transient. Constrain `aero["Cm"] == 0` at every node to
+keep it honest for a free-flight glider -- alpha is then whatever the airframe
+trims at, not a pilot's choice -- and report the launch-to-trim speed ratio,
+which is the diagnostic for whether the omission matters.
+
+### Collocation is fast, but the speed is not the answer
+
+Measured on the glider design solve, and worth knowing before trusting a first
+converged result:
+
+- **It is multi-modal.** Four alpha boxes differing only in bounds nobody had a
+  physical reason to place exactly gave 3.7, 4.2, 5.1 and 5.6 s. A single solve
+  lands in whichever basin it started nearest, so vary the START at FIXED
+  bounds and report the spread -- that is what a hundred-second solve is *for*.
+- **A bound can be load-bearing rather than merely binding.** Widening the alpha
+  box did not relax the answer, it made the problem infeasible. So "is the
+  optimum on a bound?" is not the whole check; "does it still solve when the
+  bound moves?" is the other half.
+- **Refinement can fail rather than refine.** A 4-start multistart gave 4.37 s at
+  n=40 and 4.04 s at n=60 -- 8% apart -- and n=80 did not converge at all where
+  n=40 did, so the usual grid-convergence study was not available and the answer
+  stayed a 40-node answer. Say so rather than quoting the number that converged.

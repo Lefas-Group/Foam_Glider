@@ -12,17 +12,18 @@ plane, layout = design_geometry(opt)
 ANGLES = [5, 10, 20, 30, 45, 60]
 flights = {a: simulate(plane, layout, ballast=opt["ballast"], launch_angle=a)
            for a in ANGLES}
-best = max(flights.values(), key=lambda f: f["duration"])
+# The exemplar is whichever launch flies longest, not a hand-picked angle: with
+# a ground plane the 45 deg flight is cut off mid-rotation at 358 deg, so naming
+# an angle in the prose would have made the finding an artefact of that choice.
+loop = best = max(flights.values(), key=lambda f: f["duration"])
 stall = flights[30]
-loop = flights[45]
 speed_ratio = V_LAUNCH / opt["V"]
 turn = float(np.max(np.abs(loop["theta"])))
 
 assert all(f["landed"] for f in flights.values())   # none ran out of t_max
 assert best["duration"] < opt["duration"]           # the trim method was optimistic
-assert turn > 360                                   # it really does go right over
-assert stall["alpha_max"] > 90                      # and shallow launches fly backwards
-assert loop["skim_altitude"] < 0.05                 # the best flight grazes the ground
+assert turn > 360                                   # the best launch really loops
+assert stall["alpha_max"] > 90                      # shallow launches fly backwards
 ```
 
 ::: {.hero-pair}
@@ -46,11 +47,9 @@ Shallower, it runs out of airspeed at the apex, flips backwards through
 `{python} f"{stall['range']:.1f}"` m away.
 
 ::: {.callout-warning}
-## Two reasons to read this as a ceiling
-It grazes `{python} f"{loop['skim_altitude']*1e3:.0f}"` mm at
-`{python} f"{loop['skim_t']:.1f}"` s — over grass it lands there, not at
-`{python} f"{best['duration']:.1f}"` s. And no section model is fitted near
-`{python} f"{stall['alpha_max']:.0f}"`°.
+## Extrapolated past the stall
+No section model is fitted near
+`{python} f"{stall['alpha_max']:.0f}"`°, so read the tumble as qualitative.
 :::
 
 ::: {.callout-tip}
@@ -80,7 +79,7 @@ for f, lab, c in [(loop, f"{loop['launch_angle']:.0f}° — loops, then glides",
             label=f"{lab}  ({f['duration']:.1f} s)")
     m = np.arange(0, len(f["t"]), max(1, int(0.5 / (f["t"][1] - f["t"][0]))))
     ax.plot(f["x"][m], f["altitude"][m], "o", color=c, ms=3)
-ax.axhline(0, ls="--", lw=1, color="C2")
+ax.axhline(GROUND, ls="--", lw=1, color="C2")
 ax.plot(0, H_RELEASE, "k*", ms=10, label="release")
 ax.set_xlabel("horizontal distance, m")
 ax.set_ylabel("altitude, m")

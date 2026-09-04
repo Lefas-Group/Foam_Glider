@@ -8,13 +8,14 @@ The same glider as [chapter 01](../01-duration-glider/index.qmd), flown rather
 than trimmed: the flight is integrated from release, so neither the launch nor
 the glide is assumed.
 
-- **3-DOF rigid body**, `DynamicsRigidBody2DBody`, RK4.
-- **Forward integration, not collocation** — collocation must *find* the
-  trajectory from a guess, and this aircraft loops.
-- **Quasi-steady aero**, with pitch rate in the operating point, so damping is
-  present.
-- **No gradients**: every aero call is numeric. This chapter evaluates a
-  design, it cannot optimise one.
+Two models, because no single one does both jobs:
+
+- **Rigid body, marched** — RK4. Shows the launch transient, which is what makes
+  this glider loop. Numeric, so no gradients.
+- **Point mass, collocated** — trimmed at every node, differentiable, no
+  surrogate. Cannot loop.
+- **Rigid-body collocation is infeasible here**: a tumbling flight is
+  chaotically sensitive.
 - **Left out:** roll, yaw, unsteady aerodynamics, the hand itself.
 
 ::: {.callout-tip}

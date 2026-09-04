@@ -1,0 +1,90 @@
+---
+title: "What design maximises time aloft under a real launch?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+best, res = optimise_launch(maxiter=200)
+d = dict(zip(LAUNCH_BOUNDS, best["x"]))
+
+# The two arms it has to beat, each at its own best launch angle.
+prev = optimise(static_margin=0.10)
+pl, lay = design_geometry(prev)
+arms = {}
+for label, ballast in [("trim-optimised", prev["ballast"]),
+                       ("+1 g patch", prev["ballast"] + 1.0e-3)]:
+    tab = aero_table(pl, lay, ballast)
+    arms[label] = max((simulate(pl, lay, ballast=ballast, launch_angle=a, table=tab)
+                       for a in [0, 10, 20, 30, 45]), key=lambda s: s["duration"])
+patch, trimmed = arms["+1 g patch"], arms["trim-optimised"]
+
+assert best["penalty"] == 0                              # the winner is legal
+assert best["duration"] > patch["duration"]              # and beats the patch
+assert best["alpha_max"] < CLEAN_ALPHA                    # flying clean
+assert best["pitch_max"] < CLEAN_PITCH
+assert np.max(np.abs(trimmed["theta"])) > CLEAN_PITCH     # unlike ch.01's design
+assert abs(best["apex"] - H_RELEASE) < 0.2                # it never climbs
+assert best["static_margin"] < SM_FLOOR + 0.01            # the floor is binding
+```
+
+::: {.hero}
+[`{python} f"{best['duration']:.1f} s"`]{.hero-value}
+[time aloft, flying clean, launch and design optimised together]{.hero-label}
+:::
+
+**Answer.** Don't zoom. It throws flat — `{python} f"{d['launch_angle']:.0f}"`° —
+and spends the launch on distance, covering
+[`{python} f"{best['range']:.0f}"` m]{.key} without ever climbing above the
+hand. It wants `{python} f"{d['ballast_g']:.1f}"` g of nose lead and a far
+longer tail, `{python} f"{d['tail_arm_chords']:.1f}"` chords against
+`{python} f"{prev['tail_arm_chords']:.1f}"` (@tbl-design). That buys
+[`{python} f"{best['duration']:.2f}"` s]{.key} against
+`{python} f"{patch['duration']:.2f}"` s for the ballast patch.
+
+::: {.callout-warning}
+## Two things bound this answer
+Durations come from a surrogate, good to 1–2%. And the static-margin floor is
+active, so a twitchier glider would fly longer.
+:::
+
+::: {.callout-tip}
+## Specified
+
+Asked of the user, 2026-09-04:
+
+1. Must fly clean: no stall, no loop.
+2. Ballast free; static margin above `{python} f"{SM_FLOOR:.0%}"`.
+3. Launch angle optimised with the design.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. Tabulated aero, `{python} f"{len(TABLE_ALPHA)}"`×`{python} f"{len(TABLE_SPEED)}"` grid.
+2. Flight ends at `{python} f"{GROUND*1e3:.0f}"` mm, roughly grass.
+3. Nelder-Mead from one start; no multistart.
+:::
+
+```{python}
+#| label: tbl-design
+#| tbl-cap: "The four geometry variables, trim-optimised against launch-optimised. Ballast and launch angle are in the answer above; span is fixed at 300 mm throughout."
+#| echo: false
+#| output: asis
+rows = [
+    ("aspect ratio", prev["aspect_ratio"], d["aspect_ratio"], "{:.1f}"),
+    ("tail arm, chords", prev["tail_arm_chords"], d["tail_arm_chords"], "{:.1f}"),
+    ("tail area / wing", prev["h_tail_ratio"], d["h_tail_ratio"], "{:.0%}"),
+    ("tail incidence, deg", prev["h_tail_incidence"], d["h_tail_incidence"], "{:+.1f}"),
+]
+print("| | trim-optimised | launch-optimised |")
+print("|---|---:|---:|")
+for name, a, b, f in rows:
+    print(f"| {name} | {f.format(a)} | {f.format(b)} |")
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimise_launch, evaluate, aero_table, simulate, optimise, design_geometry)
+```
