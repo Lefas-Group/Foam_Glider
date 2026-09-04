@@ -1,6 +1,13 @@
 # =============================================================================
 # Duration glider model.
 #
+# COPIED VERBATIM from chapters/01-duration-glider/_model.py at commit 41ff401.
+# This chapter forks on METHOD, not on the aircraft: chapter 01 measures a steady
+# trimmed glide, this one integrates the flight path. So there is deliberately NO
+# difference in this file, and `diff` against the parent returning empty is a
+# positive check that the two chapters are flying the same glider. The difference
+# lives in _analysis.py.
+#
 # A 30 cm-span hand-launched glider cut from flat Styrofoam food tray, in the
 # McEagle tradition: every surface is a single sheet of tray stock, flat, with
 # the leading and trailing edges razor-bevelled to a point. Nothing is cambered

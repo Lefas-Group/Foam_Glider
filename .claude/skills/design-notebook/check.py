@@ -69,17 +69,26 @@ def main(argv):
         return 2
     chapters = argv[1:] or lint.chapters_of(root)
 
-    # 1. Lint. Cheap, and catches most of what a render would only reveal later.
+    # 1. Lint, cheaply, before spending a render on an entry that will fail it.
+    #
+    # Rule 12 ("the freeze is older than the model") is excluded from THIS pass
+    # when a render is coming: it is a complaint that the render about to happen
+    # is exactly the fix, so gating the render on it deadlocks. The post-render
+    # lint below runs the full set, so nothing is skipped, only reordered.
     code, out = _run(lint.main, [str(root)] + chapters)
-    if code:
-        print(out.strip())
+    problems = [l for l in out.splitlines()
+                if l.startswith("  ") and (not render
+                                           or "but the freeze is not" not in l)]
+    if problems:
+        print("\n".join(problems))
         print("\nlint       FAILED — fix these before rendering")
         return 1
-    print("lint       0 problems")
+    print("lint       0 problems" if not code else
+          "lint       0 authoring problems (freeze is stale; rendering next)")
 
     if not render:
         print("render     skipped (--no-render)")
-        return 0
+        return 0 if not code else 1
 
     # 2. Render. The freeze must go first: it tracks the page, not its includes,
     # so a change to _model.py or _analysis.py invalidates nothing and the
@@ -103,6 +112,13 @@ def main(argv):
         "*/execute-results/html.json"))) for c in chapters
         if (root / "_freeze" / "chapters" / c).exists())
     print(f"render     ok ({pages} pages)")
+
+    # 2b. The full lint, now that the freeze is current -- rule 12 among them.
+    code, out = _run(lint.main, [str(root)] + chapters)
+    if code:
+        print(out.strip())
+        print("\nlint       FAILED after render")
+        return 1
 
     # 3. What moved.
     code, out = _run(freezediff.main, [str(root)] + chapters + ref_args)

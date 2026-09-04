@@ -1,0 +1,54 @@
+---
+title: "Flight path"
+---
+
+{{< include _model.qmd >}}
+
+The same glider as [chapter 01](../01-duration-glider/index.qmd), flown rather
+than trimmed: the flight is integrated from release, so neither the launch nor
+the glide is assumed.
+
+- **3-DOF rigid body**, `DynamicsRigidBody2DBody`, RK4.
+- **Forward integration, not collocation** — collocation must *find* the
+  trajectory from a guess, and this aircraft loops.
+- **Quasi-steady aero**, with pitch rate in the operating point, so damping is
+  present.
+- **No gradients**: every aero call is numeric. This chapter evaluates a
+  design, it cannot optimise one.
+- **Left out:** roll, yaw, unsteady aerodynamics, the hand itself.
+
+::: {.callout-tip}
+## Specified
+
+Asked of the user, 2026-09-04:
+
+1. Launch angle free, chosen to maximise time aloft.
+2. Report an unsteady result rather than constraining it away.
+3. Same aircraft as chapter 01, unchanged.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. Released along its own axis, at zero incidence.
+2. Aero is quasi-steady at every instant.
+3. Coefficients hold past stall, where they are extrapolated.
+:::
+
+## The model
+
+````{python}
+#| echo: false
+#| output: asis
+import pathlib
+
+for name in ["_model.py", "_analysis.py"]:
+    code = pathlib.Path(f"chapters/02-flight-path/{name}").read_text()
+    print('::: {.callout-note collapse="true"}')
+    print(f"## `{name}`\n")
+    print("```python")
+    print(code.strip())
+    print("```")
+    print(":::")
+    print()
+````

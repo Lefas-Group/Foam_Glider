@@ -1,10 +1,18 @@
 # =============================================================================
-# How this chapter measures the duration glider.
+# How this chapter measures the duration glider: by integrating the flight path.
+#
+# COPIED from chapters/01-duration-glider/_analysis.py at commit 41ff401, and
+# this file is where the fork's deliberate difference lives. The parent measures
+# a steady trimmed glide and assumes the launch is a ballistic zoom at a fixed
+# efficiency; this one integrates the whole flight as a 3-DOF rigid body and
+# assumes neither.
+#
+# The parent's trim machinery -- design_problem(), glide(), optimise(), sweep()
+# -- is kept unchanged, because it is the arm this chapter compares against, and
+# chapters share nothing at runtime so it cannot be borrowed from next door.
+# Everything under "The flight path" is new.
 #
 # The vehicle is next door in _model.py; this file is every way of measuring it.
-# The split is the tier rule: a measurement lives here once a SECOND entry
-# reaches for it, and two entries reached for glide() while four reached for
-# optimise().
 #
 # It also makes the chapter discoverable. api() filters to this file, and
 # _scratch/probe.py prints api() on every run -- so while everything lived in
@@ -331,3 +339,119 @@ def design_geometry(opt, span=0.30):
     lines which then exist in every such entry.
     """
     return glider(span=span, **{k: opt[k] for k in DESIGN_BOUNDS})
+
+
+##### The flight path
+#
+# What this chapter adds, and the whole of its difference from chapter 01.
+def simulate(airplane, layout, ballast, launch_angle, alpha_release=0.0,
+             v_launch=V_LAUNCH, h_release=H_RELEASE, dt=0.02, t_max=15.0):
+    """
+    Integrate the flight forward in time, launch to ground. No solver.
+
+    Collocation was tried first and abandoned for this: it states the whole
+    flight as one algebraic system, which is efficient and differentiable but
+    needs the trajectory to be findable from an initial guess. This one tumbles
+    -- thrown at 2.6x its trim speed it pulls up hard, stalls and porpoises --
+    and five collocation attempts up to 120 nodes all reached "local
+    infeasibility" after as long as 140 s. Forward integration cannot fail to
+    converge, because there is nothing to converge.
+
+    What it costs is gradients. Every AeroBuildup call here is numeric, so no
+    CasADi graph exists and nothing downstream can be differentiated. That is
+    the trade: robustness for a tumbling flight, against the ability to optimise
+    a design through it.
+
+    RK4, because the pitch mode has a ~0.45 s period and rates reach several
+    hundred deg/s: the flight is stiff enough that a cheap integrator would need
+    a smaller step than four evaluations of a good one.
+
+    Args:
+        airplane, layout: from glider().
+        ballast: kg of nose lead.
+        launch_angle: deg above horizontal, of the velocity at release.
+        alpha_release: deg between the glider's axis and its flight path at
+            release. Zero means thrown along its own axis.
+        v_launch, h_release: the throw, as specified.
+        dt: s. RK4 step.
+        t_max: s. Guard against a flight that never lands.
+
+    Returns:
+        dict of arrays over time, plus scalars. `landed` is False if it ran out
+        of t_max, in which case nothing else should be believed.
+    """
+    total = structural_mass(layout)["total"] + asb.MassProperties(mass=ballast, x_cg=0.0)
+    ref = [total.x_cg, 0, airplane.xyz_ref[2]]
+    calls = [0]
+
+    def deriv(s):
+        dyn = asb.DynamicsRigidBody2DBody(
+            mass_props=total, x_e=s[0], z_e=s[1], u_b=s[2], w_b=s[3],
+            theta=s[4], q=s[5])
+        speed = float(np.sqrt(s[2] ** 2 + s[3] ** 2))
+        alpha = float(np.degrees(np.arctan2(s[3], s[2])))
+        # The pitch rate must go into the operating point, not just the state.
+        # Without it AeroBuildup returns static coefficients only, the aircraft
+        # has no pitch damping at all, and an oscillation that should decay runs
+        # forever -- Cmq is -12.7 /rad here, so this is not a small term.
+        aero = asb.AeroBuildup(
+            airplane=airplane, xyz_ref=ref,
+            op_point=asb.OperatingPoint(atmosphere=ATMOSPHERE,
+                                        velocity=max(speed, 0.05), alpha=alpha,
+                                        q=float(s[5])),
+        ).run()
+        calls[0] += 1
+        dyn.add_force(Fx=aero["F_b"][0], Fz=aero["F_b"][2], axes="body")
+        dyn.add_moment(My=aero["M_b"][1], axes="body")
+        dyn.add_gravity_force(g=G)
+        d = dyn.state_derivatives()
+        # np.sum() first: AeroBuildup returns length-1 arrays for a scalar
+        # operating point, and float() refuses anything not 0-dimensional.
+        return np.array([float(np.sum(d[k])) for k in
+                         ["x_e", "z_e", "u_b", "w_b", "theta", "q"]])
+
+    a0 = np.radians(alpha_release)
+    g0 = np.radians(launch_angle)
+    s = np.array([0.0, -h_release, v_launch * np.cos(a0), v_launch * np.sin(a0),
+                  g0 + a0, 0.0])
+
+    t0 = time.perf_counter()
+    hist, t, landed = [s.copy()], [0.0], False
+    while t[-1] < t_max:
+        k1 = deriv(s)
+        k2 = deriv(s + 0.5 * dt * k1)
+        k3 = deriv(s + 0.5 * dt * k2)
+        k4 = deriv(s + dt * k3)
+        s = s + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+        t.append(t[-1] + dt)
+        hist.append(s.copy())
+        if s[1] >= 0:                       # z_e is positive DOWN: ground
+            landed = True
+            break
+    aero_cost["calls"] += calls[0]
+    aero_cost["seconds"] += time.perf_counter() - t0
+
+    h = np.array(hist)
+    alpha = np.degrees(np.arctan2(h[:, 3], h[:, 2]))
+    # The lowest approach BEFORE the final descent. A glider that skims the
+    # ground and balloons back up has, on grass, landed -- and the integrator
+    # will happily fly on if it misses by a centimetre, so the duration alone
+    # can quietly describe a flight nobody gets. Reported so the caller can
+    # judge rather than have a contact threshold chosen for them.
+    _alt = -h[:, 1]
+    _i = int(np.argmin(_alt[: max(2, int(len(_alt) * 0.8))]))
+    # Linear interpolation onto the ground, so duration is not quantised by dt.
+    duration = t[-1]
+    if landed and len(t) > 1 and h[-1, 1] != h[-2, 1]:
+        f = -h[-2, 1] / (h[-1, 1] - h[-2, 1])
+        duration = t[-2] + f * dt
+    return dict(
+        t=np.array(t), x=h[:, 0], altitude=-h[:, 1],
+        speed=np.sqrt(h[:, 2] ** 2 + h[:, 3] ** 2), alpha=alpha,
+        theta=np.degrees(h[:, 4]), q=np.degrees(h[:, 5]),
+        duration=duration, landed=landed, launch_angle=launch_angle,
+        apex=float(np.max(-h[:, 1])), range=float(h[-1, 0]),
+        alpha_max=float(np.max(alpha)), mass=float(total.mass),
+        aero_calls=calls[0],
+        skim_altitude=float(_alt[_i]), skim_t=float(t[_i]), skim_x=float(h[_i, 0]),
+    )

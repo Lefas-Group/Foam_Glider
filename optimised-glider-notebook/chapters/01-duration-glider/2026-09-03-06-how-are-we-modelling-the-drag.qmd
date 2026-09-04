@@ -8,9 +8,7 @@ title: "How are we modelling the drag?"
 # Taken at the optimised design's own trim point -- a drag breakdown without a
 # speed is meaningless at this scale, where the section polar moves fast with Re.
 opt = optimise(static_margin=0.10)
-plane, layout = glider(
-    aspect_ratio=opt["aspect_ratio"], tail_arm_chords=opt["tail_arm_chords"],
-    h_tail_ratio=opt["h_tail_ratio"], h_tail_incidence=opt["h_tail_incidence"])
+plane, layout = design_geometry(opt)
 op = asb.OperatingPoint(atmosphere=ATMOSPHERE, velocity=opt["V"], alpha=opt["alpha"])
 res = asb.AeroBuildup(airplane=plane, op_point=op,
                       xyz_ref=[opt["x_cg"], 0, layout["fuse_h"] / 2]).run()
@@ -95,5 +93,5 @@ plt.show()
 ```{python}
 #| echo: false
 #| output: asis
-footer(optimise, design_problem)
+footer(optimise, design_geometry, design_problem)
 ```

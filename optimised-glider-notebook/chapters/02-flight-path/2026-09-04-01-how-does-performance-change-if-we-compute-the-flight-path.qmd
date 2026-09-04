@@ -1,0 +1,98 @@
+---
+title: "How does performance change if we actually compute the flight path?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+# The aircraft is chapter 01's optimum, unchanged; only the method differs.
+opt = optimise(static_margin=0.10)
+plane, layout = design_geometry(opt)
+
+ANGLES = [5, 10, 20, 30, 45, 60]
+flights = {a: simulate(plane, layout, ballast=opt["ballast"], launch_angle=a)
+           for a in ANGLES}
+best = max(flights.values(), key=lambda f: f["duration"])
+stall = flights[30]
+loop = flights[45]
+speed_ratio = V_LAUNCH / opt["V"]
+turn = float(np.max(np.abs(loop["theta"])))
+
+assert all(f["landed"] for f in flights.values())   # none ran out of t_max
+assert best["duration"] < opt["duration"]           # the trim method was optimistic
+assert turn > 360                                   # it really does go right over
+assert stall["alpha_max"] > 90                      # and shallow launches fly backwards
+assert loop["skim_altitude"] < 0.05                 # the best flight grazes the ground
+```
+
+::: {.hero-pair}
+::: {.hero-ref}
+[`{python} f"{opt['duration']:.1f} s"`]{.hero-value}
+[assumed: zoom then steady glide]{.hero-label}
+:::
+::: {}
+[`{python} f"{best['duration']:.1f} s"`]{.hero-value}
+[computed: the flight it actually flies]{.hero-label}
+:::
+:::
+
+**Answer.** It loops. Thrown at
+[`{python} f"{speed_ratio:.1f}"`×]{.key} its trim speed the wing makes several
+times the glider's weight, so at
+`{python} f"{loop['launch_angle']:.0f}"`° it goes right over the top through
+[`{python} f"{turn:.0f}"`°]{.key} before settling into a glide (@fig-path).
+Shallower, it runs out of airspeed at the apex, flips backwards through
+`{python} f"{stall['alpha_max']:.0f}"`° and lands
+`{python} f"{stall['range']:.1f}"` m away.
+
+::: {.callout-warning}
+## Two reasons to read this as a ceiling
+It grazes `{python} f"{loop['skim_altitude']*1e3:.0f}"` mm at
+`{python} f"{loop['skim_t']:.1f}"` s — over grass it lands there, not at
+`{python} f"{best['duration']:.1f}"` s. And no section model is fitted near
+`{python} f"{stall['alpha_max']:.0f}"`°.
+:::
+
+::: {.callout-tip}
+## Specified
+
+Asked of the user, 2026-09-04:
+
+1. Launch angle free, maximising time aloft.
+2. Report unsteady behaviour rather than constraining it away.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. Released along its own axis, zero incidence.
+2. Quasi-steady aero, pitch damping included.
+3. Chapter 01's aircraft and ballast, unchanged.
+:::
+
+```{python}
+#| label: fig-path
+#| fig-cap: "Flight path, side on, for the best launch and a shallow one, with markers every half second. Dashed line is the ground, star is the release point."
+fig, ax = plt.subplots(figsize=(7.0, 3.0))
+for f, lab, c in [(loop, f"{loop['launch_angle']:.0f}° — loops, then glides", "C0"),
+                  (stall, f"{stall['launch_angle']:.0f}° — stalls at the apex", "C3")]:
+    ax.plot(f["x"], f["altitude"], color=c,
+            label=f"{lab}  ({f['duration']:.1f} s)")
+    m = np.arange(0, len(f["t"]), max(1, int(0.5 / (f["t"][1] - f["t"][0]))))
+    ax.plot(f["x"][m], f["altitude"][m], "o", color=c, ms=3)
+ax.axhline(0, ls="--", lw=1, color="C2")
+ax.plot(0, H_RELEASE, "k*", ms=10, label="release")
+ax.set_xlabel("horizontal distance, m")
+ax.set_ylabel("altitude, m")
+ax.set_ylim(-0.2, None)
+ax.grid()
+ax.legend(loc="upper left", fontsize=7)
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(simulate, optimise, design_geometry)
+```
