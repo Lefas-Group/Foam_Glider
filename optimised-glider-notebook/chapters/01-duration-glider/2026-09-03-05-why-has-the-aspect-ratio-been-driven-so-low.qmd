@@ -9,12 +9,12 @@ title: "Why has the aspect ratio been driven so low?"
 # around it, so a swept design is never judged against rivals that were not
 # allowed to adapt to it.
 ARS = [2.5, 3.0, 3.5, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0]
-sweep = [optimise(static_margin=0.10, hold={"aspect_ratio": ar}) for ar in ARS]
+points = sweep("aspect_ratio", ARS, static_margin=0.10)
 
-lo, hi = sweep[0], sweep[-1]
-best = min(sweep, key=lambda r: r["sink"])
+lo, hi = points[0], points[-1]
+best = min(points, key=lambda r: r["sink"])
 prof_share = best["CDp"] / (best["CDp"] + best["CDi"])
-flat = [r for r in sweep if r["sink"] < 1.02 * best["sink"]]
+flat = [r for r in points if r["sink"] < 1.02 * best["sink"]]
 
 assert best["CDp"] > best["CDi"]  # the section, not the span, is the cost
 assert hi["CDp"] > lo["CDp"] and hi["CDi"] < lo["CDi"]  # the two terms oppose
@@ -30,7 +30,7 @@ assert hi["mass"] < lo["mass"]  # low AR is the HEAVIER choice, and still wins
 5 mm stock on a `{python} f"{hi['chord']*1e3:.0f}"` mm chord is a
 [`{python} f"{hi['tc']:.0%}"`]{.key} slab. Across the sweep profile drag rises
 `{python} f"{hi['CDp']/lo['CDp']:.1f}"`× while induced drag falls
-`{python} f"{lo['CDi']/hi['CDi']:.0f}"`× (@fig-ar, @tbl-ar). Low aspect ratio is
+`{python} f"{lo['CDi']/hi['CDi']:.0f}"`× (@fig-ar). Low aspect ratio is
 also the heavier choice, by [`{python} f"{lo['mass']/hi['mass']:.1f}"`×]{.key},
 and still wins.
 
@@ -52,12 +52,12 @@ Thinner stock would move this more than any reshaping.
 #| fig-cap: "Left: the two drag components against aspect ratio, each at its own re-optimised design. Right: the resulting sink rate, with the swept minimum marked and the band within 2% of it shaded. Aspect ratio is on a log scale."
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.0, 2.7))
 
-ax1.plot(ARS, [r["CDp"] for r in sweep], "o-", ms=4, label="profile")
-ax1.plot(ARS, [r["CDi"] for r in sweep], "s-", ms=4, label="induced")
+ax1.plot(ARS, [r["CDp"] for r in points], "o-", ms=4, label="profile")
+ax1.plot(ARS, [r["CDi"] for r in points], "s-", ms=4, label="induced")
 ax1.set_ylabel("drag coefficient")
 ax1.legend()
 
-ax2.plot(ARS, [r["sink"] for r in sweep], "o-", ms=4, color="C2")
+ax2.plot(ARS, [r["sink"] for r in points], "o-", ms=4, color="C2")
 ax2.axvspan(min(r["aspect_ratio"] for r in flat),
             max(r["aspect_ratio"] for r in flat), color="C0", alpha=0.12)
 ax2.plot(best["aspect_ratio"], best["sink"], "o", ms=8, color="C0")
@@ -74,20 +74,7 @@ plt.show()
 ```
 
 ```{python}
-#| label: tbl-ar
-#| tbl-cap: "The swept designs. Chord, thickness ratio and Reynolds number are consequences of aspect ratio at fixed span; mass, the two drag components and sink are results of the solve at each point."
 #| echo: false
 #| output: asis
-print("| AR | chord, mm | t/c | Re | mass, g | CD profile | CD induced | sink, m/s |")
-print("|---:|---:|---:|---:|---:|---:|---:|---:|")
-for r in sweep:
-    print(f"| {r['aspect_ratio']:.1f} | {r['chord']*1e3:.0f} | {r['tc']:.1%} "
-          f"| {r['Re']:.0f} | {r['mass']*1e3:.2f} | {r['CDp']:.4f} "
-          f"| {r['CDi']:.4f} | {r['sink']:.3f} |")
-```
-
-```{python}
-#| echo: false
-#| output: asis
-footer()
+footer(sweep, design_problem)
 ```

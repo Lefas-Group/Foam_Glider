@@ -77,12 +77,14 @@ Repeat per question. A discussion that answers nothing gets no entry.
 
 **Run `uv run python .claude/skills/design-notebook/lint.py <notebook>` before
 recording an entry.** It re-checks the budgets and the entry format under "Entry
-format" below, and catches eight things easier to detect than to remember: a
+format" below, and catches twelve things easier to detect than to remember: a
 hand-typed number in prose, code repeated across entries, the `**Answer.**` after
 the evidence, a swept decision that should have been asked, a fixed trip count
 around an aero solve, a sibling entry named rather than linked, a stale
-`_notebook.py`, and a caption or callout item over budget. Its messages name the
-fix. Exits non-zero, so it can gate a commit.
+`_notebook.py`, a caption or callout item over budget, a freeze older than the
+model that froze it, shared machinery an entry calls without rendering, a second
+visual where there should be one, and a table too big to read. Its messages name
+the fix. Exits non-zero, so it can gate a commit.
 
 ## Scope
 
@@ -106,9 +108,19 @@ broken most; when in doubt, write less.
 - **State the reference for any quantity that has one.** A `Cm` is meaningless
   without saying what it is taken about; a coefficient at chuck-glider scale is
   meaningless without the speed, since Re moves the polar materially.
-- **Rectangular results are a table, not a `print()` block.** A labelled
-  `tbl-` cell is cross-referenceable and scannable; a wall of f-strings is
-  neither.
+- **A table counts as a figure, so an entry shows one or none.** A table is a
+  way of presenting evidence, not an appendix riding along beside the real one.
+  Printing a grid under a plot that already shows the same quantities is the
+  failure — one entry here put 72 numbers beneath a figure plotting four of its
+  eight columns. Choose whichever carries the answer and delete the other.
+- **A table is at most 3×4 or 4×3, excluding the header.** Past that it stops
+  being something a reader takes in and becomes a grid to be searched. A wide
+  two-row table is still a grid, so 2×5 is out too. If the values will not fit,
+  that is the signal to plot them, or to quote the two or three that matter in
+  the prose and drop the rest.
+- **When you do show rectangular values, use a labelled `tbl-` cell**, not a
+  wall of f-strings: it is cross-referenceable and scannable, and neither is
+  true of printed output.
 - **Captions describe, they don't conclude.** "Lift curve, drag curve and drag
   polar at 6 m/s", not "notice that everything is symmetric because…".
 - **Specified and Assumed are different things.** *Assumed* is a weakness —
@@ -302,9 +314,40 @@ notebook exists to be reviewed.
 Promoting a helper means editing an earlier entry to call it. That is allowed,
 and is *not* the thing "entries are written once and left alone" forbids: that
 rule protects conclusions from being quietly rewritten. A refactor is different
-in kind, and the difference must be **proven, not asserted** — dump every
-entry's rendered numbers before and after and diff them. Any change that is not
-a deliberate deletion means the refactor altered the model.
+in kind, and the difference must be **proven, not asserted**.
+
+**Git is the instrument.** `_freeze/**/execute-results/html.json` stores each
+page's rendered markdown with its inline expressions *already evaluated*, and
+the figure PNGs sit alongside it — all committed. So the baseline exists before
+you start, with nothing to capture:
+
+```bash
+rm -rf <notebook>/_freeze/chapters/<chapter> <notebook>/.quarto
+quarto render <notebook>
+git diff <notebook>/_freeze
+```
+
+Deleting the freeze is not optional — freeze tracks the page, not its includes,
+so without it you compare a fresh render against a cache hit and the match is an
+artefact. There is no `--no-freeze` flag.
+
+`git diff` cannot read that file usefully, though: each `markdown` field is one
+JSON line, so a single changed digit reports the whole page as modified. Use the
+skill's tool, which parses both sides, normalises the per-render noise (runtime
+seconds, Quarto's random cell ids) while keeping the solve count, hashes the
+figure PNGs, and refuses to compare a freeze whose code no longer matches its
+page:
+
+```bash
+uv run python .claude/skills/design-notebook/freezediff.py <notebook> [chapter ...]
+```
+
+Reach for it after any change to a chapter's shared modules — a model
+correction, a material change, a dependency upgrade that shifts every polar, or
+a refactor that is supposed to change nothing at all.
+
+Any change that is not a deliberate deletion means the refactor altered the
+model.
 
 ## Where the work goes
 
@@ -316,6 +359,29 @@ When the work belongs to a notebook that already exists, read that chapter's
 | the same model as an existing chapter | new entry in that chapter |
 | a different model, fidelity or vehicle | new chapter |
 | a different aircraft project | new notebook — ask first |
+
+**When the model itself changes, the fork criterion is whether you want to keep
+both answers** — not which file the change lands in.
+
+| | |
+|---|---|
+| The old answer is **superseded**: wrong physics, wrong arithmetic, or a known omission now closed | Fix in place, delete the freeze, re-render, and update the chapter index if a "left out" bullet stopped being true. The correction goes in a **later entry**. Same chapter. |
+| The old answer stays **valid under its own stated assumptions**, and the comparison is the point | **New chapter.** |
+
+An assumption of yours that the user later replaces with a measurement or a
+brief is the first case, not the second: it was never the design. A genuinely
+different aircraft, or a method you would want to compare against, is the
+second — the old chapter then keeps rendering its own numbers *correctly*,
+because the model it references has not moved.
+
+A forked chapter copies **both** `_model.py` and `_analysis.py`: chapters share
+nothing at runtime, so one without its own `_analysis.py` cannot measure
+anything. The copy's header names its parent chapter, the commit it was taken
+at, and every deliberate difference — so `diff` between the two files is the
+review, and an empty `diff` on the file that was *not* meant to change is a
+positive check rather than an absence of information. Copy with `cp` and edit
+constants with `sed`; reading a long `_model.py` in only to write it back out
+costs a great deal and buys nothing.
 
 New chapter or notebook: see `templates/new-notebook.md`.
 
@@ -345,6 +411,9 @@ state.
 
 ## Reference
 
+- `freezediff.py` — did any rendered number move? Run it after any change to a
+  chapter's `_model.py` or `_analysis.py`. Shares `lint.py`'s conventions:
+  `uv run python <skill>/freezediff.py <notebook> [chapter ...]`.
 - `references/quarto.md` — render and tooling traps. Read when a render fails, a
   figure misbehaves, or output needs extracting.
 - `references/aerosandbox.md` — API traps and solver behaviour. Read before

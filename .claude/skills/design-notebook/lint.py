@@ -20,7 +20,7 @@ sibling entry is matched generically, and a chapter opts out with a `_lint-skip`
 file whose contents say why. A freshly scaffolded notebook has none of these,
 and lints correctly with nothing added.
 
-Eleven rules, each earned by a failure that actually happened:
+Fifteen rules, each earned by a failure that actually happened:
 
 1. NO HAND-TYPED NUMBERS IN PROSE. Three separate corrections were needed in one
    session where an entry's prose disagreed with its own rendered output. Every
@@ -87,10 +87,44 @@ Eleven rules, each earned by a failure that actually happened:
     Vendoring costs propagation; this rule buys it back, so an improvement to
     footer() or the plot style surfaces in every notebook that has not taken it.
 
+12. A FREEZE IS NOT OLDER THAN THE MODEL IT FROZE. Freeze tracks the page, not
+    its includes, so editing `_model.py` leaves every entry serving values the
+    current model does not produce -- silently. A fuselage ply count changed
+    here, nothing re-executed, and an entry went on rendering a duration the
+    model no longer gave; it surfaced only because that entry happened to carry
+    an assert. Detected through git: a shared module dirty while the chapter's
+    freeze is not means the freeze predates it.
+
+13. AN ENTRY RENDERS THE SHARED MACHINERY IT CALLS. Moving code into
+    `_analysis.py` must not move the method out of sight -- the notebook exists
+    to be reviewed -- so every `_analysis.py` function an entry calls is passed
+    to its `footer(...)`. Checked against inline expressions as well as cells,
+    because a value quoted only in prose is a call that appears in no cell.
+    Scoped to `_analysis.py`: `_model.py` is rendered in full by the chapter
+    index and `_notebook.py` is deliberately invisible. Only what the entry
+    NAMES, never the transitive closure, which would reproduce the whole file in
+    every entry and make splitting a function break entries whose conclusions
+    never changed.
+
+14. A TABLE COUNTS AS A FIGURE, SO AN ENTRY SHOWS ONE OR NONE. A table is a way
+    of presenting evidence, not an appendix riding along beside the real one.
+    Three entries here printed a grid directly beneath a plot that already showed
+    the same quantities -- entry 05's was 72 numbers under a figure plotting four
+    of its eight columns.
+
+15. A TABLE FITS IN 3x4 OR 4x3, EXCLUDING THE HEADER. Past that it stops being
+    something a reader takes in and becomes a grid to be searched. A wide
+    two-row table is still a grid, so 2x5 fails too. Measured on the RENDERED
+    output: a table built by `print()` inside an `output: asis` cell is not
+    parseable as a table anywhere in the source, but the frozen markdown holds
+    it as literal pipe-markdown. A table hand-written into the .qmd is caught
+    there as well, before it has ever been rendered.
+
 A value written as an inline expression counts as one word, so tightening prose
 is never at odds with computing the numbers in it.
 """
 import ast
+import json
 import pathlib
 import re
 import sys
@@ -108,9 +142,18 @@ ENTRY_FILE = re.compile(r"^\d{4}-\d{2}-\d{2}-")
 RESULT_NUMBER = re.compile(r"\d+\.\d{2,}")
 
 # Lines that recur legitimately and say nothing about duplicated machinery.
+#
+# `footer(` is here because rule 13 REQUIRES one in every entry: a line the rules
+# demand everywhere can never be "promoted to _analysis.py", so flagging it as
+# duplication puts two rules in direct contradiction. That surfaced the moment
+# deleting a table moved a footer cell up against two lines of plot styling and
+# completed a three-line block.
+#
+# Axis cosmetics are here for the older reason: every figure hides the same
+# spines and sets the same labels, and that says nothing about shared machinery.
 BOILERPLATE = re.compile(
-    r"^(plt\.|ax\.grid|ax\.legend|ax\.set_|fig, ax|import |show_source\(|for side in|"
-    r"\)|\]|\}|else:|try:|finally:)"
+    r"^(plt\.|ax\d?\.|fig, ax|fig\.|import |show_source\(|footer\(|"
+    r"for s(ide)? in|\)|\]|\}|else:|try:|finally:)"
 )
 BLOCK = 3  # consecutive code lines that count as a repeated block
 
@@ -160,6 +203,89 @@ def chapters_of(root):
                   if d.is_dir() and not (d / "_lint-skip").exists())
 
 
+def _defs_of(chapter):
+    """
+    {name: (filename, {names it calls})} for the chapter's shared modules.
+
+    One AST pass, two consumers: aero_calls_of() runs its fixed point over the
+    call sets, and rule 13 filters by filename to find what `_analysis.py`
+    defines. Keeping "what does this chapter define" in one place means the two
+    cannot drift apart.
+    """
+    defs = {}
+    for name in ("_model.py", "_analysis.py"):
+        f = chapter / name
+        if not f.exists():
+            continue
+        try:
+            tree = ast.parse(f.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                defs[node.name] = (name, {
+                    (c.func.attr if isinstance(c.func, ast.Attribute)
+                     else getattr(c.func, "id", None))
+                    for c in ast.walk(node) if isinstance(c, ast.Call)})
+    return defs
+
+
+def entry_calls(text):
+    """
+    Every function name an entry calls, from its cells AND its inline expressions.
+
+    The inline half is not optional: a value quoted only in prose, as
+    `{python} f"{trim(ap)['alpha']:.1f}"`, is a call that appears in no cell, and
+    an entry whose only use of a helper is in its answer sentence is exactly the
+    shape that would otherwise slip through unrendered.
+    """
+    sources = re.findall(r"```\{python\}(.*?)```", text, re.S)
+    called = set()
+    for src in sources:
+        src = re.sub(r"^\s*#\|.*$", "", src, flags=re.M)
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:
+            continue
+        called |= {(c.func.attr if isinstance(c.func, ast.Attribute)
+                    else getattr(c.func, "id", None))
+                   for c in ast.walk(tree) if isinstance(c, ast.Call)}
+    for expr in re.findall(r"`\{python\}([^`]*)`", text):
+        try:
+            tree = ast.parse(expr.strip(), mode="eval")
+        except SyntaxError:
+            continue
+        called |= {(c.func.attr if isinstance(c.func, ast.Attribute)
+                    else getattr(c.func, "id", None))
+                   for c in ast.walk(tree) if isinstance(c, ast.Call)}
+    return called
+
+
+def rendered_by_footer(text):
+    """
+    (names passed to footer()/show_source(), how many footer() cells there are).
+
+    Bare names only: both take live function objects, so `getattr(m, "f")` or a
+    comprehension is not something anyone writes there.
+    """
+    names, footers = set(), 0
+    for src in re.findall(r"```\{python\}(.*?)```", text, re.S):
+        src = re.sub(r"^\s*#\|.*$", "", src, flags=re.M)
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:
+            continue
+        for c in ast.walk(tree):
+            if not isinstance(c, ast.Call):
+                continue
+            fn = getattr(c.func, "id", None)
+            if fn in ("footer", "show_source"):
+                if fn == "footer":
+                    footers += 1
+                names |= {a.id for a in c.args if isinstance(a, ast.Name)}
+    return names, footers
+
+
 def aero_calls_of(chapter):
     """
     Every name in this chapter that costs an aero solve, derived not declared.
@@ -175,22 +301,7 @@ def aero_calls_of(chapter):
     aero call within minutes of being written, and would have gone on being
     wrong every time a helper was renamed.
     """
-    defs = {}
-    for name in ("_model.py", "_analysis.py"):
-        f = chapter / name
-        if not f.exists():
-            continue
-        try:
-            tree = ast.parse(f.read_text())
-        except SyntaxError:
-            continue
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                defs[node.name] = {
-                    (c.func.attr if isinstance(c.func, ast.Attribute)
-                     else getattr(c.func, "id", None))
-                    for c in ast.walk(node) if isinstance(c, ast.Call)}
-
+    defs = {n: called for n, (_, called) in _defs_of(chapter).items()}
     expensive = set(AERO_PRIMITIVES)
     changed = True
     while changed:                      # fixed point: helpers calling helpers
@@ -360,6 +471,116 @@ def _notebook_drift(root):
                     f"every notebook gets it")]
 
 
+def tables_in(md):
+    """
+    Every markdown pipe table in `md`, as (body_rows, columns).
+
+    A table is a header line, a `|---|` separator, then body rows. Counting the
+    body only, and the columns from the header, is what the size rule is stated
+    in: "3x4 or 4x3, excluding the header".
+    """
+    lines = [l.strip() for l in md.splitlines()]
+    found, i = [], 0
+    while i < len(lines) - 1:
+        if (lines[i].startswith("|")
+                and re.fullmatch(r"\|[\s:|-]+\|", lines[i + 1] or "")):
+            cols = lines[i].strip("|").count("|") + 1
+            body = i + 2
+            while body < len(lines) and lines[body].startswith("|"):
+                body += 1
+            found.append((body - i - 2, cols))
+            i = body
+        else:
+            i += 1
+    return found
+
+
+def _visuals_and_tables(root, chapters, entries):
+    """
+    Rules 14 and 15: one visual per entry, and a table small enough to read.
+
+    Rule 14 is static -- it counts `fig-` and `tbl-` labels in the .qmd.
+
+    Rule 15 has to reach the RENDERED output, because a table produced by
+    `print()` inside an `output: asis` cell is not parseable as a table anywhere
+    in the source. The frozen markdown holds it as literal pipe-markdown, so that
+    is where it is measured; a table written by hand into the .qmd is caught
+    there as well, before it has ever been rendered. No freeze means no check,
+    exactly as rule 12 -- and rule 12 is what keeps the freeze honest.
+    """
+    found = []
+    for f in entries:
+        text = f.read_text()
+        labels = re.findall(r"^\s*#\|\s*label:\s*((?:fig|tbl)-[\w-]+)", text, re.M)
+        if len(labels) > 1:
+            found.append((f, (
+                f"{len(labels)} visuals ({', '.join(labels)}) — a table counts as "
+                f"a figure, and an entry shows one or none. Delete whichever is "
+                f"not carrying the answer")))
+
+        # Hand-written tables in the .qmd, plus whatever the page rendered.
+        seen = tables_in(re.sub(r"```.*?```", "", text, flags=re.S))
+        frozen = (root / "_freeze" / "chapters" / f.parent.name / f.stem
+                  / "execute-results" / "html.json")
+        if frozen.exists():
+            try:
+                seen += tables_in(json.loads(frozen.read_text())["result"]["markdown"])
+            except (ValueError, KeyError, TypeError):
+                pass
+        for rows, cols in seen:
+            if not ((rows <= 3 and cols <= 4) or (rows <= 4 and cols <= 3)):
+                found.append((f, (
+                    f"table is {rows}×{cols} — at most 3×4 or 4×3 excluding the "
+                    f"header; past that it is a data dump, not evidence")))
+    return found
+
+
+def _stale_freeze(root, chapters):
+    """
+    A chapter's shared module edited without re-rendering.
+
+    Freeze tracks the page, not its includes, so editing `_model.py` leaves
+    every entry serving values the current model does not produce -- silently.
+    That has happened here once: a ply count changed, nothing re-executed, and
+    an entry went on rendering a duration the model no longer gave. It surfaced
+    only because that entry happened to carry an assert.
+
+    Detected through git rather than a stored hash: if a shared module is dirty
+    while the chapter's freeze is not, the freeze predates it. Self-clearing,
+    because footer()'s runtime line means a real re-render always rewrites the
+    freeze. mtimes were rejected -- `_freeze/` is committed so a clone renders
+    without solving, and git writes files at checkout in arbitrary order, so a
+    clean clone would fail at random and train you to ignore the rule.
+    """
+    import subprocess
+    try:
+        out = subprocess.run(["git", "status", "--porcelain"], cwd=root,
+                             capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if out.returncode:                      # not a git repo; nothing to compare
+        return []
+    dirty = {line[3:].strip().strip('"') for line in out.stdout.splitlines()}
+
+    found = []
+    for c in chapters:
+        frozen = list((root / "_freeze" / "chapters" / c).glob(
+            "*/execute-results/html.json")) if (
+            root / "_freeze" / "chapters" / c).exists() else []
+        if not frozen:
+            continue                        # no freeze serves nothing stale
+        touched = sorted(
+            n for n in ("_model.py", "_analysis.py", "_model.qmd")
+            if any(p.endswith(f"chapters/{c}/{n}") for p in dirty))
+        if touched and not any(f"_freeze/chapters/{c}/" in p for p in dirty):
+            found.append((
+                root / "chapters" / c / touched[0],
+                f"modified, but the freeze is not — {len(frozen)} frozen "
+                f"page(s) are serving values the current model may not produce. "
+                f"Delete _freeze/chapters/{c}/ and render"))
+    return found
+
+
 def check(root, chapters):
     entries = [f for c in chapters
                for f in sorted((root / "chapters" / c).glob("*.qmd"))
@@ -376,6 +597,38 @@ def check(root, chapters):
     aero = {c: aero_calls_of(root / "chapters" / c) for c in chapters}
 
     problems += _notebook_drift(root)
+    problems += _stale_freeze(root, chapters)
+    problems += _visuals_and_tables(root, chapters, entries)
+
+    # Rule 13. Scoped to `_analysis.py`: `_model.py` is rendered in full by the
+    # chapter index, and `_notebook.py` is deliberately invisible, so requiring
+    # either would be noise. An entry renders only what it NAMES -- an entry
+    # calling optimise() passes `optimise`, not the private builder optimise
+    # happens to use, or the transitive closure would reproduce the whole file
+    # in every entry and splitting a function would break the rule in entries
+    # whose conclusions never changed.
+    for c in chapters:
+        shared = {n for n, (f, _) in _defs_of(root / "chapters" / c).items()
+                  if f == "_analysis.py" and not n.startswith("_")}
+        for f in [e for e in entries if e.parent.name == c]:
+            text = f.read_text()
+            rendered, n_footers = rendered_by_footer(text)
+            missing = sorted((entry_calls(text) & shared) - rendered)
+            if missing:
+                problems.append((f, (
+                    f"calls {', '.join(m + '()' for m in missing)} from "
+                    f"_analysis.py but does not render "
+                    f"{'them' if len(missing) > 1 else 'it'} — the footer cell "
+                    f"passes the shared functions the entry called: "
+                    f"footer({', '.join(sorted(rendered | set(missing)))})")))
+            if n_footers == 0:
+                problems.append((f, (
+                    "no footer(…) cell — every entry ends with one; it renders "
+                    "the method and what the entry cost to run, which freeze "
+                    "records nowhere else")))
+            elif n_footers > 1:
+                problems.append((f, f"{n_footers} footer(…) cells — an entry "
+                                    f"ends with one"))
 
     # Rule 5 reads the shared modules too. The other rules are about how an
     # entry is written, so they only ever looked at .qmd files -- but the loop

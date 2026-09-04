@@ -78,5 +78,5 @@ plt.show()
 ```{python}
 #| echo: false
 #| output: asis
-footer()
+footer(glide, design_problem)
 ```

@@ -7,11 +7,16 @@
 # and nothing is heat-formed, so the section is fully described by the sheet
 # thickness and the two bevel lengths.
 #
-# This file defines the chapter. A different model gets its own directory and
-# its own _model.py, sharing nothing with this one.
+# This file is the VEHICLE only -- geometry, material, mass, and the operating
+# conditions held fixed. How the chapter measures it is next door in
+# _analysis.py. A different aircraft, fidelity or method gets its own directory
+# and its own copy of both, sharing nothing with these.
 #
 # Loaded two ways, both by exec into the caller's namespace: entries via the
-# _model.qmd shim, scratch scripts via _scratch/probe.py.
+# _model.qmd shim, scratch scripts via _scratch/probe.py. Loaded FIRST, before
+# _analysis.py, so nothing here may reference a name defined there -- which is
+# why plate_section() and _PLATE_REF stay on this side of the split even though
+# "the section as analysed" sounds like analysis.
 #
 # Quarto's freeze tracks page files, not their includes -- so after editing
 # this, delete the chapter's _freeze/ directory before re-rendering.
@@ -71,11 +76,6 @@ FOAM_RHO = FOAM_AREAL / FOAM_T  # kg/m^3, ~35 -- expanded polystyrene
 # part. That is the term that stops the optimiser asking for an arbitrarily long
 # tail arm.
 FUSE_PLIES = 2
-
-# Angle of attack at which stability derivatives are taken -- mid lift curve,
-# well clear of the plate's stall, so the neutral point is a property of the
-# aircraft rather than of wherever it happens to be trimmed.
-ALPHA_LINEAR = 2.0  # deg
 
 
 ##### Vehicle
@@ -339,230 +339,3 @@ def launch_height(v_launch=V_LAUNCH, eff=ZOOM_EFF, h_release=H_RELEASE):
     effect is here.
     """
     return h_release + eff * v_launch**2 / (2 * G)
-
-
-##### The analysis
-def glide(airplane, layout, ballast=0.0, static_margin=0.30,
-          alpha_bounds=(-2, 9), verbose=False):
-    """
-    Trim the glider and return its steady glide, sink rate and duration.
-
-    The chapter's one analysis. Ballast is lead at the nose -- McEagle's taped
-    dime -- and is what places the CG; here the CG is instead placed by the
-    requested static margin and the ballast solved for, because a duration
-    glider wants the least ballast that still trims where it should.
-
-    Args:
-        airplane, layout: from glider().
-        ballast: kg. If 0, solved for so the CG sits at the requested margin.
-        static_margin: (x_np - x_cg) / MAC. The default is large for a chuck
-            glider, and is forced rather than chosen: on 5 mm stock the baseline
-            -2 deg tail incidence will not trim inside the alpha bounds at 20%.
-            That is a symptom of the tail rigging, not a preference.
-        alpha_bounds: deg, the trim search range. Capped below the whole-aircraft
-            stall, near 10 deg on 5 mm stock: past it the lift curve turns over,
-            dCm/dalpha changes sign, and the neutral point the solver is chasing
-            stops meaning anything. This bound is stock-dependent -- the section
-            drives it, and 1.6 mm stock stalls three degrees earlier.
-        verbose: pass the solver's log through.
-
-    Returns:
-        dict: alpha, V, CL, CD, LD, sink, duration, mass, ballast, x_cg, x_np.
-    """
-    opti = asb.Opti()
-    alpha = opti.variable(init_guess=4.0,
-                          lower_bound=alpha_bounds[0], upper_bound=alpha_bounds[1])
-    V = opti.variable(init_guess=6.0, lower_bound=0.5, upper_bound=30.0)
-    m_ballast = ballast if ballast else opti.variable(init_guess=2e-3, lower_bound=0.0)
-
-    # Ballast is lead taped at the very nose, x = 0 -- the furthest forward it
-    # can go, so it is also the least of it that will do the job.
-    empty = structural_mass(layout)["total"]
-    total = empty + asb.MassProperties(mass=m_ballast, x_cg=0.0)
-    mass, x_cg = total.mass, total.x_cg
-    weight = mass * G
-
-    # Reference area and chord come from the Airplane, not from layout: with
-    # dihedral, Wing.area() returns the true panel area (152.1 cm^2 here), which
-    # is 1.4% larger than the projected span*chord the layout records. Every
-    # coefficient below is nondimensionalised on the former, so the force
-    # balance must be too.
-    S_ref, mac = airplane.s_ref, airplane.c_ref
-    ref = [x_cg, 0, airplane.xyz_ref[2]]
-
-    def solve_aero(op, derivatives):
-        t0 = time.perf_counter()
-        ab = asb.AeroBuildup(airplane=airplane, op_point=op, xyz_ref=ref)
-        out = (ab.run_with_stability_derivatives(
-                   alpha=True, beta=False, p=False, q=False, r=False)
-               if derivatives else ab.run())
-        aero_cost["calls"] += 1
-        aero_cost["seconds"] += time.perf_counter() - t0
-        return out
-
-    # The neutral point is measured at a FIXED linear-range alpha, not at trim.
-    # Taken at trim it is not a property of the aircraft at all: as the trim
-    # point approaches the flat plate's ~7 deg stall, dCm/dalpha bends over and
-    # x_np ran from 107 mm to 122 mm across a 0.2 g ballast change, which made
-    # any static-margin constraint non-monotonic and the solve infeasible.
-    d = solve_aero(
-        asb.OperatingPoint(atmosphere=ATMOSPHERE, velocity=V, alpha=ALPHA_LINEAR),
-        derivatives=True,
-    )
-    x_np = x_cg - d["Cma"] / d["CLa"] * mac
-
-    aero = solve_aero(
-        asb.OperatingPoint(atmosphere=ATMOSPHERE, velocity=V, alpha=alpha),
-        derivatives=False,
-    )
-
-    CL, CD = aero["CL"], aero["CD"]
-
-    # BOTH force equations, with the glide angle as a variable. Writing
-    # gamma := arctan2(CD, CL) and imposing lift alone looks equivalent -- the
-    # drag equation follows as D = L tan(gamma) = W sin(gamma) -- but that step
-    # is 0 x inf at CL = 0, so at zero lift the drag equation quietly stops
-    # being implied. A minimiser walks straight into that hole: it found a
-    # vertical dive at the speed lower bound, gamma = 90 deg, CL = -5e-13,
-    # drag residual 99% of weight, and reported it as the best glider.
-    gamma = opti.variable(init_guess=np.radians(10.0),
-                          lower_bound=np.radians(0.5), upper_bound=np.radians(80.0))
-    q = 0.5 * ATMOSPHERE.density() * V**2
-    opti.subject_to([
-        aero["Cm"] == 0,  # trimmed
-        CL * q * S_ref == weight * np.cos(gamma),
-        CD * q * S_ref == weight * np.sin(gamma),
-    ])
-    if not ballast:
-        opti.subject_to((x_np - x_cg) / mac == static_margin)
-
-    sol = opti.solve(verbose=verbose)
-
-    CL, CD = sol(CL), sol(CD)
-    V, gamma, mass = sol(V), sol(gamma), sol(mass)
-    sink = V * np.sin(gamma)
-    return dict(
-        alpha=sol(alpha), V=V, CL=CL, CD=CD, LD=CL / CD,
-        gamma_deg=np.degrees(gamma), sink=sink,
-        duration=launch_height() / sink,
-        mass=mass, ballast=sol(m_ballast),
-        x_cg=sol(x_cg), x_np=sol(x_np),
-        static_margin=(sol(x_np) - sol(x_cg)) / mac,
-        Re=ATMOSPHERE.density() * V * mac / ATMOSPHERE.dynamic_viscosity(),
-    )
-
-
-# What the design solve is allowed to move, and how far. Dihedral and fin are
-# absent on purpose: the model has no lateral dynamics, so their only benefit is
-# invisible to it while their cost in span, wetted area and mass is fully
-# visible, and an optimiser would delete both.
-DESIGN_BOUNDS = dict(
-    aspect_ratio=(2.5, 12.0),
-    tail_arm_chords=(1.5, 8.0),
-    h_tail_ratio=(0.08, 0.45),
-    h_tail_incidence=(-6.0, 2.0),
-)
-
-
-def optimise(span=0.30, static_margin=0.10, start=(6.0, 3.6, 0.22, -2.0),
-             alpha_bounds=(-2, 9), hold=None, verbose=False):
-    """
-    Minimum sink over the four design variables, trimmed, in one solve.
-
-    Same physics as glide() -- identical trim, force balance and neutral-point
-    treatment -- with the geometry made symbolic and sink minimised rather than
-    reported. Static margin is a constraint, not an objective term: left free it
-    goes to zero, since nothing here penalises being twitchy.
-
-    There is no fuselage length cap. Length pays for itself through the two-ply
-    splice it requires, which is a real cost rather than an invented bound.
-
-    Args:
-        span: m, fixed by the brief.
-        static_margin: (x_np - x_cg) / MAC, imposed.
-        start: initial guess, as (aspect_ratio, tail_arm_chords, h_tail_ratio,
-            h_tail_incidence). Vary it to check the optimum is not local.
-        alpha_bounds: deg, capped below the whole-aircraft stall.
-        hold: {name: value} for design variables to pin rather than free. The
-            rest still optimise around them, which is what makes a sweep over
-            one variable a fair comparison -- otherwise the swept point is being
-            judged against rivals that were never allowed to adapt to it.
-        verbose: pass the solver's log through.
-
-    Returns:
-        dict of the design, its trim state and its performance, including the
-        profile/induced drag split taken from AeroBuildup rather than recomputed.
-    """
-    hold = hold or {}
-    if set(hold) - set(DESIGN_BOUNDS):
-        raise KeyError(f"hold: not design variables: {set(hold) - set(DESIGN_BOUNDS)}")
-    opti = asb.Opti()
-    v = {}
-    for i, (name, (lo, hi)) in enumerate(DESIGN_BOUNDS.items()):
-        v[name] = (hold[name] if name in hold else
-                   opti.variable(init_guess=start[i], lower_bound=lo, upper_bound=hi))
-    alpha = opti.variable(init_guess=4.0, lower_bound=alpha_bounds[0],
-                          upper_bound=alpha_bounds[1])
-    V = opti.variable(init_guess=4.5, lower_bound=0.5, upper_bound=30.0)
-    m_ballast = opti.variable(init_guess=1.5e-3, lower_bound=0.0, upper_bound=2e-2)
-
-    airplane, layout = glider(span=span, **v)
-    total = structural_mass(layout)["total"] + asb.MassProperties(mass=m_ballast, x_cg=0.0)
-    S_ref, mac = airplane.s_ref, airplane.c_ref
-    ref = [total.x_cg, 0, airplane.xyz_ref[2]]
-
-    # Counted like glide()'s solves, though what is timed here is CasADi graph
-    # construction rather than evaluation -- the graph is built once and then
-    # walked by every IPOPT iteration, so it is still the number that predicts
-    # what the page costs. Without this the footer reports only the solves the
-    # entry's baseline spent, and an optimisation looks free.
-    t0 = time.perf_counter()
-    d = asb.AeroBuildup(
-        airplane=airplane, xyz_ref=ref,
-        op_point=asb.OperatingPoint(atmosphere=ATMOSPHERE, velocity=V, alpha=ALPHA_LINEAR),
-    ).run_with_stability_derivatives(alpha=True, beta=False, p=False, q=False, r=False)
-    x_np = total.x_cg - d["Cma"] / d["CLa"] * mac
-
-    aero = asb.AeroBuildup(
-        airplane=airplane, xyz_ref=ref,
-        op_point=asb.OperatingPoint(atmosphere=ATMOSPHERE, velocity=V, alpha=alpha),
-    ).run()
-    aero_cost["calls"] += 2
-    aero_cost["seconds"] += time.perf_counter() - t0
-    CL, CD = aero["CL"], aero["CD"]
-
-    # Both force equations, glide angle a variable -- see the note in glide().
-    # This matters more here than there: glide() only had to find a root, while
-    # this function is actively searching for the cheapest way to satisfy the
-    # constraints, and the CL = 0 degeneracy was the cheapest way of all.
-    gamma = opti.variable(init_guess=np.radians(10.0),
-                          lower_bound=np.radians(0.5), upper_bound=np.radians(80.0))
-    q = 0.5 * ATMOSPHERE.density() * V**2
-    sink = V * np.sin(gamma)
-
-    opti.subject_to([
-        aero["Cm"] == 0,
-        CL * q * S_ref == total.mass * G * np.cos(gamma),
-        CD * q * S_ref == total.mass * G * np.sin(gamma),
-        (x_np - total.x_cg) / mac == static_margin,
-    ])
-    opti.minimize(sink)
-    sol = opti.solve(verbose=verbose)
-
-    out = {k: float(sol(x)) for k, x in v.items()}
-    out.update({k: float(sol(x)) for k, x in dict(
-        alpha=alpha, V=V, CL=CL, CD=CD, LD=CL / CD, sink=sink,
-        gamma_deg=np.degrees(gamma), duration=launch_height() / sink,
-        mass=total.mass, ballast=m_ballast, x_cg=total.x_cg, x_np=x_np,
-        static_margin=(x_np - total.x_cg) / mac,
-        chord=layout["c_root"], fuse_len=layout["fuse_len"],
-        tc=FOAM_T / layout["c_root"],
-        Re=ATMOSPHERE.density() * V * mac / ATMOSPHERE.dynamic_viscosity(),
-        # AeroBuildup's own split, nondimensionalised on the same reference as
-        # CD, so CDp + CDi recovers it. Not recomputed from a span-efficiency
-        # formula -- the point of having the library do the buildup is that its
-        # decomposition is the one behind the CD being reported.
-        CDp=aero["D_profile"] / (q * S_ref),
-        CDi=aero["D_induced"] / (q * S_ref),
-    ).items()})
-    return out

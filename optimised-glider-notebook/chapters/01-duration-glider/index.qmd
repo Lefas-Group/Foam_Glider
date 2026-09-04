@@ -60,12 +60,15 @@ No owner yet — each is a candidate for its own entry:
 #| output: asis
 import pathlib
 
-code = pathlib.Path("chapters/01-duration-glider/_model.py").read_text()
-
-print('::: {.callout-note collapse="true"}')
-print("## `_model.py`\n")
-print("```python")
-print(code.strip())
-print("```")
-print(":::")
+# Both files, read off disk rather than copied: _model.py is the vehicle,
+# _analysis.py is every way this chapter measures it.
+for name in ["_model.py", "_analysis.py"]:
+    code = pathlib.Path(f"chapters/01-duration-glider/{name}").read_text()
+    print('::: {.callout-note collapse="true"}')
+    print(f"## `{name}`\n")
+    print("```python")
+    print(code.strip())
+    print("```")
+    print(":::")
+    print()
 ````

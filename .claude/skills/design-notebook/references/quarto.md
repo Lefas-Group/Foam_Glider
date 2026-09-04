@@ -26,6 +26,17 @@ output needs extracting.
   highlighting splits code across spans. Figures land in
   `_freeze/chapters/NN-name/<entry>/figure-html/*.png`; Read every one before
   reporting.
+- **That recipe reads one printed block; it is the wrong tool for a whole page.**
+  Most of an entry's numbers are inline expressions and table cells, which are
+  prose in the HTML, not `<pre><code>`. For "did anything change?", go at
+  `_freeze/**/execute-results/html.json` instead: its `result.markdown` holds
+  every number already evaluated, and it is committed, so `git diff` is the
+  comparison. See "Where machinery lives" in SKILL.md for the workflow.
+- Scraping the HTML of a full page is a trap worth naming: a code cell closes
+  with a **single** `</div>` (`<div class="sourceCode…">…</pre></div>`), so a
+  `</div></div>` pattern runs past the block and silently eats the following
+  prose and sometimes a whole figure. Scope to
+  `<main id="quarto-document-content">` if you must do it at all.
 - **Filter `CasADi` warning lines out of extracted output.** A solve that
   struggles emits dozens of `NaN detected for output g` warnings, which
   interleave with the printed results and swamp them.
@@ -63,6 +74,14 @@ value must appear **above** it. That is compatible with putting the answer befor
 the evidence: compute in one folded cell, answer, then show tables and figures.
 
 ## Tables
+
+**Two questions come before any of this** (SKILL.md has them as rules, and
+`lint.py` checks them). A table counts as a figure, so an entry shows one or the
+other, never both — a grid under a plot that already shows the same quantities is
+the failure. And a table is at most 3×4 or 4×3 excluding the header; if the
+values will not fit, plot them, or quote the two or three that matter in the
+prose. What follows is how to build the table once you have established you want
+one.
 
 Quarto treats tables as their own float type — not images. A cell whose last
 expression is a DataFrame (or a `Styler`) renders as a real HTML table:

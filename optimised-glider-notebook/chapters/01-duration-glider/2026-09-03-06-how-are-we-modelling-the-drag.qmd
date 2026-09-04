@@ -39,7 +39,7 @@ re_ratio = parts[0]["re"] / parts[1]["re"]
 
 **Answer.** Two levels. Profile drag is a per-component sum — each surface cut
 into spanwise strips carrying their own local angle and Reynolds number, section
-data from NeuralFoil, fuselage from Jorgensen slender-body theory (@tbl-drag).
+data from NeuralFoil, fuselage from Jorgensen slender-body theory (@fig-drag).
 Induced drag is a single aircraft-level expression,
 $D_i = (L^2 + Y^2) / (q \pi b_\text{eff}^2)$, with $b_\text{eff}$ a blend of each
 surface's effective span and Oswald efficiency — no vortex lattice, no wake
@@ -93,21 +93,7 @@ plt.show()
 ```
 
 ```{python}
-#| label: tbl-drag
-#| tbl-cap: "Profile drag by component, on the airplane reference area, at the trim point above. Reynolds number is on each surface's own chord. The induced term is absent from this table by construction — it is not computed per component."
 #| echo: false
 #| output: asis
-print("| component | Re | Oswald e | CD profile | share of total |")
-print("|---|---:|---:|---:|---:|")
-for p in parts:
-    print(f"| {p['name']} | {p['re']:.0f} | {p['e']:.3f} | {p['cd']:.5f} "
-          f"| {p['cd']/CD:.1%} |")
-print(f"| **profile total** | | | **{Dp/(q*S):.5f}** | **{Dp/(CD*q*S):.1%}** |")
-print(f"| **induced** | | | **{Di/(q*S):.5f}** | **{Di/(CD*q*S):.1%}** |")
-```
-
-```{python}
-#| echo: false
-#| output: asis
-footer()
+footer(optimise, design_problem)
 ```

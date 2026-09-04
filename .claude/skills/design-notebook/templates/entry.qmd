@@ -63,8 +63,10 @@ number", "what this cannot measure". Counts against the 100-word prose budget.>
 #| echo: false
 #| output: asis
 footer(<the shared functions this entry called -- from _analysis.py. footer()
-        renders them, then what the entry cost to run. Pass none if it called
-        none: bare footer().>)
+        renders them, then what the entry cost to run. Bare footer() ONLY when
+        the entry called nothing from _analysis.py; rule 13 checks this, against
+        inline expressions as well as cells. Pass what the entry NAMES, not what
+        those functions call in turn.>)
 ```
 
 <!--
