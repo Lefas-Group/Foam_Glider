@@ -57,3 +57,39 @@ The leading underscore is load-bearing: `_scratch/` sits inside the Quarto
 project, and Quarto skips `_`-prefixed paths, so `quarto render <notebook>` never
 sees it. Don't rename it to `scratch/`. It is gitignored, so nothing in it needs
 to be tidy — but nothing in it survives either.
+
+## Timing and benchmark hygiene
+
+More time has been lost here than to any slow model. Each of these cost real
+minutes in a single session.
+
+**Never leave a long run unattended and silent.** `_probe_base.py` arms
+`faulthandler.dump_traceback_later`, which prints where the process is stuck
+without killing it, from a separate thread — so unlike a signal it reports from
+inside a long C call. A solver flag that turned one solve into ten silent minutes
+was indistinguishable from a hang until this existed.
+
+**Kill your strays, and check the machine before believing a number.** Two
+orphaned benchmark processes ran 35 minutes unnoticed and corrupted the timing
+they were being compared against. `uptime` before and after; a wall-clock figure
+from a loaded machine measures the machine. The same solve measured 533.9 s
+against a 145 s baseline for this reason.
+
+**Never run two heavy probes at once.** Both starve and neither number means
+anything. Sequential is faster in practice and the results are usable.
+
+**Shell traps that silently produce nothing:**
+
+- `grep` in a pipeline buffers — use `--line-buffered`. Piping a live log through
+  `| tail` buffers everything until exit, so a finished job looks like an empty
+  one. This has twice been mistaken for "still running".
+- `pgrep -f "probe.py"` matches *the shell that is waiting*, so the wait never
+  ends. Use a bracket to break the self-match: `pgrep -f "probe[.]py"`.
+- macOS has no `timeout`, and BSD `find` has no `-newermt` — the latter fails
+  silently and returns nothing. Prefer Python when portability matters.
+
+**Report iterations alongside time.** Wall clock alone inverts conclusions: one
+comparison showed 8.4× faster while the iteration count went 192 → 481. Solve
+counts can mislead too — a collocated solve was 599 s at 8 aero solves against
+112 s at 3070, because the graph is built once and the solver iterates inside C
+where the counter cannot see.

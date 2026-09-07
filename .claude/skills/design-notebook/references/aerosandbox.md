@@ -279,3 +279,41 @@ worse.
 So spend the speedup on MORE STARTS rather than on a single quicker answer: what
 determines the result on a multi-modal problem is coverage, and 4x cheaper solves
 buy 4x the coverage for the same budget.
+
+## Bounding what a solve costs
+
+`asb.Opti.solve` already takes the controls; nothing custom is needed.
+
+- `max_runtime=` → `ipopt.max_cpu_time`. Measures IPOPT's **own** CPU, which does
+  not include your function evaluations — and in a NeuralFoil-in-the-loop model
+  that is nearly all of the time. A 0.05 s budget still took 3.91 s of wall.
+- `options={"ipopt.max_wall_time": …}` is the true wall bound, returning
+  `Maximum_WallTime_Exceeded`. Still coarse: a 1.0 s limit took 4.89 s, because
+  the limit is tested at iteration boundaries and an iteration cannot be
+  interrupted once started.
+- `behavior_on_failure="return_last"` returns the best iterate instead of
+  raising. This is what makes a budget safe to impose — a bound that raises
+  destroys the finding, one that returns degrades it into something reportable.
+  Read the status from `sol.stats()["return_status"]`.
+
+`_notebook.py` sets all three as defaults when a chapter binds `SOLVE_BUDGET`, so
+entries and ad-hoc probes are bounded without passing anything. Read a budget as
+"stop at the first iteration boundary past here": ample against a 599 s runaway,
+useless as a precise deadline.
+
+Note also that **problem construction is outside every one of these limits** —
+tracing the aero into the graph took 3.5 s of a 9.3 s `optimise()` call here, and
+no solver option bounds it.
+
+## Caching NeuralFoil
+
+`AeroBuildup` reaches the section through `xsec.airfoil.get_aero_from_neuralfoil`
+(`aero_buildup.py:890,893`), a plain instance method on an object you own, and
+consumes only `CL`, `CD`, `CM`. Subclassing `KulfanAirfoil` and overriding that
+one method is therefore enough to substitute a cached polar, with no library
+change. (`CL_function`/`CD_function` are deprecated constructor kwargs and are
+**not** read by AeroBuildup — a dead end.)
+
+It is called per bounding cross-section, twice per section and again per mirrored
+side, and `alpha_generalized` spans −90…270°, so a table must either cover that
+range or clamp. See `references/surrogates.md` before building one.

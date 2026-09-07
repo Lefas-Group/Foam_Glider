@@ -20,7 +20,7 @@ sibling entry is matched generically, and a chapter opts out with a `_lint-skip`
 file whose contents say why. A freshly scaffolded notebook has none of these,
 and lints correctly with nothing added.
 
-Fifteen rules, each earned by a failure that actually happened. The failure
+Seventeen rules, each earned by a failure that actually happened. The failure
 behind each one is in `references/why.md` -- read that when a rule looks
 arbitrary, or before arguing one away. SKILL.md carries the same list, so an
 entry can be written compliant rather than corrected afterwards.
@@ -40,6 +40,8 @@ entry can be written compliant rather than corrected afterwards.
     13  every `_analysis.py` function the entry calls is passed to `footer(…)`
     14  one visual per entry -- a table counts as a figure
     15  a table is at most 3x4 or 4x3, excluding the header
+    16  a budgeted chapter does not override SOLVE_BUDGET at a call site
+    17  a frozen entry stays under its chapter's ENTRY_CEILING
 
 Two details the list cannot carry. A value written as an inline expression counts
 as ONE word, so tightening prose is never at odds with computing the numbers in
@@ -500,8 +502,97 @@ def _stale_freeze(root, chapters):
                 root / "chapters" / c / touched[0],
                 f"modified, but the freeze is not — {len(frozen)} frozen "
                 f"page(s) are serving values the current model may not produce. "
-                f"Delete _freeze/chapters/{c}/ and render"))
+                f"Run check.py, which discards what this edit can have "
+                f"invalidated and renders"))
     return found
+
+
+def _budgeted(chapter, name):
+    """The literal a chapter binds to `name` at module level, or None."""
+    f = chapter / "_analysis.py"
+    if not f.exists():
+        return None
+    try:
+        tree = ast.parse(f.read_text())
+    except SyntaxError:
+        return None
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == name for t in node.targets):
+            try:
+                return ast.literal_eval(node.value)
+            except ValueError:
+                return True             # bound, but not to something readable
+    return None
+
+
+def _budget_rules(root, chapters):
+    """
+    Rules 16 and 17: a chapter that took a solve budget actually keeps to it.
+
+    Both are OPT-IN, keyed on the chapter binding SOLVE_BUDGET / ENTRY_CEILING
+    in its _analysis.py. A chapter that never opted in is not checked at all,
+    which is what lets a budget be introduced to a notebook whose earlier
+    chapters are already frozen -- there is no grandfather list to maintain and
+    no way for this to move a number that was published before it existed.
+
+    16 blocks, because it is static and so cannot fail differently on a busy
+    machine. 17 warns, because the same solve here measured 533.9 s against a
+    145 s baseline purely from load -- a hard block on wall clock would fail on
+    a loaded laptop and pass on an idle one. It blocks only past ENTRY_CEILING,
+    a number the user set, where load cannot be the explanation.
+    """
+    problems = []
+    for c in chapters:
+        chapter = root / "chapters" / c
+        budget = _budgeted(chapter, "SOLVE_BUDGET")
+        ceiling = _budgeted(chapter, "ENTRY_CEILING")
+        if budget is None:
+            continue                    # chapter did not opt in
+
+        # 16: the budget is negotiated once, not overridden per call site.
+        f = chapter / "_analysis.py"
+        try:
+            tree = ast.parse(f.read_text())
+        except SyntaxError:
+            tree = None
+        for node in ast.walk(tree) if tree else []:
+            if not (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "solve"):
+                continue
+            local = sorted(k.arg for k in node.keywords
+                           if k.arg in ("max_runtime", "behavior_on_failure"))
+            if local:
+                problems.append(
+                    (f, f"solve() on line {node.lineno} passes "
+                        f"{', '.join(local)} — that silently overrides the "
+                        f"chapter's SOLVE_BUDGET of {budget}. Raise the budget "
+                        f"by agreement and record it in index.qmd instead"))
+
+        # 17: what the frozen pages actually cost.
+        if ceiling is None:
+            continue
+        for hj in sorted((root / "_freeze" / "chapters" / c).glob(
+                "*/execute-results/html.json")) if (
+                root / "_freeze" / "chapters" / c).exists() else []:
+            m = re.search(r"Executed in ([\d.]+) s",
+                          json.loads(hj.read_text())
+                          .get("result", {}).get("markdown", ""))
+            if not m:
+                continue
+            spent, page = float(m.group(1)), hj.parts[-3]
+            where = chapter / f"{page}.qmd"
+            if spent > ceiling:
+                problems.append(
+                    (where, f"took {spent:.0f} s, past the chapter's "
+                            f"ENTRY_CEILING of {ceiling:.0f} s — make it "
+                            f"cheaper, or raise the ceiling by agreement"))
+            elif spent > ceiling / 2:
+                problems.append(
+                    (where, f"(warning) took {spent:.0f} s, over half the "
+                            f"{ceiling:.0f} s ceiling"))
+    return problems
 
 
 def check(root, chapters):
@@ -521,6 +612,7 @@ def check(root, chapters):
 
     problems += _notebook_drift(root)
     problems += _stale_freeze(root, chapters)
+    problems += _budget_rules(root, chapters)
     problems += _visuals_and_tables(root, chapters, entries)
 
     # Rule 13. Scoped to `_analysis.py`: `_model.py` is rendered in full by the
@@ -696,8 +788,14 @@ def main(argv):
             _label(where.name) if ENTRY_FILE.match(where.name)
             else f"{where.parent.name}/{where.name}")
         print(f"  {label + ': ' if label else ''}{msg}")
-    print(f"\n{len(found)} problem(s) in {', '.join(chapters)}")
-    return 1 if found else 0
+    # Warnings are reported and do not fail. Only rule 17's lower tier uses
+    # this: wall clock swings with machine load, so a message about it is worth
+    # printing and not worth failing a render over.
+    blocking = [p for p in found if "(warning)" not in p[1]]
+    warned = len(found) - len(blocking)
+    tail = f", {warned} warning(s)" if warned else ""
+    print(f"\n{len(blocking)} problem(s){tail} in {', '.join(chapters)}")
+    return 1 if blocking else 0
 
 
 if __name__ == "__main__":

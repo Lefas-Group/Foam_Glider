@@ -98,6 +98,8 @@ check them without rendering, and the full `check.py` once the entry is right.
 13  every `_analysis.py` function the entry calls is passed to `footer(…)`
 14  one visual per entry — a table counts as a figure
 15  a table is at most 3×4 or 4×3, excluding the header
+16  a budgeted chapter does not override SOLVE_BUDGET at a call site
+17  a frozen entry stays under its chapter's ENTRY_CEILING
 ```
 
 Why each exists, and the failure that earned it: `references/why.md`.
@@ -122,6 +124,42 @@ Context is the scarce resource; these cost nothing to follow.
 - **Ask subagents for the finding, not the transcript.** Verbatim quoting is
   worth requesting when a claim must be checked against exact wording, and
   expensive as a default.
+
+## Running cheaply
+
+*Working cheaply* is about context. This is about wall clock, which is spent in
+larger lumps and noticed later.
+
+- **Cost is per call, not per point.** An `AeroBuildup` call costs about the same
+  for one operating point as for six hundred — alpha rides along vectorised. A
+  369-point grid is 70 ms from one call and 17 s from a loop, so the number of
+  *calls* is the only figure that predicts what an entry costs. 41,040 airfoil
+  polar points came back in 2.2 s from 9 calls. This is what rule 5 is really
+  about; a loop around a solve is where calls hide.
+- **Budgets live in the solver.** A chapter opts in by binding `SOLVE_BUDGET`,
+  and `_notebook.py` then makes it the default on every `opti.solve` — including
+  ad-hoc probes, which is the point. Raising it is a decision the *user* makes
+  and `index.qmd` records; overriding it at one call site is rule 16.
+- **A signal cannot stop a solve.** It is handled between bytecodes, so it
+  arrives when the C call returns — measured, 1.15 s for a 0.3 s limit. Use the
+  solver's own limit for solves, and `budget()` only for hand-written Python
+  loops. Even the solver's limit is checked at iteration boundaries, so read any
+  budget as "stop at the first boundary past here".
+- **Prefer a deterministic cap to a wall-clock one.** Iterations and step counts
+  behave the same on a loaded machine; wall time does not. The same solve here
+  measured 533.9 s against a 145 s baseline purely from load, which is also why
+  rule 17 only *warns* until a ceiling load cannot explain.
+- **Measure per-iteration cost, not just total.** 636 vs 238 ms/iter is what
+  identified second derivatives as a bottleneck; one comparison showed 8.4× on
+  wall clock while iterations went 192 → 481 — opposite conclusions from the
+  same run.
+- **Before caching a computed surface, read `references/surrogates.md`.** The
+  level you cache at decides whether it works at all.
+
+`check.py` re-executes only what an edit can have invalidated, so adding an entry
+does not re-run the notebook. Run `--all` before committing a chapter: the
+scoping reads the call graph, and a page it wrongly spares is one freezediff
+never gets to compare.
 
 ## Scope
 
@@ -372,16 +410,22 @@ state.
 ## Reference
 
 - `check.py` — lint, render, and report what moved, in one call.
-  `uv run python <skill>/check.py <notebook> [chapter ...] [--no-render]`.
-  `lint.py` and `freezediff.py` do the first and last steps alone.
+  `uv run python <skill>/check.py <notebook> [chapter ...] [--no-render] [--all]`.
+  `lint.py` and `freezediff.py` do the first and last steps alone. Only what an
+  edit can have invalidated is re-executed; `--all` forces the lot, and is the
+  gate to run before committing a chapter.
 - `references/why.md` — the failure behind each lint rule. Read when a rule looks
   arbitrary, or before arguing one away.
 - `references/refactoring.md` — proving a change to `_model.py`/`_analysis.py`
   moved nothing. Read before touching either.
 - `references/forking.md` — when a model change earns a new chapter, and how to
   copy one cheaply.
-- `references/probing.md` — scratch-probe mechanics. Read when a probe
-  misbehaves or needs a figure.
+- `references/probing.md` — scratch-probe mechanics, and timing/benchmark
+  hygiene. Read when a probe misbehaves, needs a figure, or before trusting any
+  wall-clock comparison.
+- `references/surrogates.md` — lookup tables and cached polars: what level to
+  cache at, how to validate one, what it costs. Read before replacing a computed
+  surface with a table.
 - `references/quarto.md` — render and tooling traps. Read when a render fails, a
   figure misbehaves, or output needs extracting.
 - `references/aerosandbox.md` — API traps and solver behaviour. Read before

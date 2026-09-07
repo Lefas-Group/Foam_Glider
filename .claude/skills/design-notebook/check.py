@@ -1,7 +1,7 @@
 """
 Lint, render and diff a notebook in one call. One copy, shared by every notebook.
 
-    uv run python <skill>/check.py <notebook-dir> [chapter ...] [--no-render] [--ref REF]
+    uv run python <skill>/check.py <notebook-dir> [chapter ...] [--no-render] [--all] [--ref REF]
 
 Runs the three checks in the order that costs least: lint first, because almost
 every authoring mistake is catchable without a render and finding one afterwards
@@ -23,10 +23,17 @@ apart.
 `--no-render` is the fast path while drafting: lint alone, no two-minute render.
 `--ref` is passed through to freezediff.
 
+`--all` discards every freeze and re-executes the whole notebook. By default only
+what an edit can have invalidated is discarded, which is what keeps adding one
+entry from costing twenty minutes -- but that scoping reads the call graph, and a
+page it wrongly spares is a page freezediff never gets to compare. So `--all` is
+the release gate: fast path while authoring, exhaustive run before committing.
+
 A checker like lint.py and freezediff.py -- authoring-time, reads the notebook,
 writes nothing into the rendered site -- so it lives in the skill and is not
 vendored. It imports the other two rather than reimplementing either.
 """
+import ast
 import contextlib
 import io
 import pathlib
@@ -38,6 +45,8 @@ import sys
 import freezediff
 import lint
 
+MODEL_FILES = ("_model.py", "_analysis.py", "_model.qmd")
+
 
 def _run(fn, argv):
     """Call another checker's main(), capturing what it printed."""
@@ -47,13 +56,147 @@ def _run(fn, argv):
     return code, buf.getvalue()
 
 
+def _dirty(root):
+    """Paths git reports as modified, relative to the repo."""
+    try:
+        out = subprocess.run(["git", "status", "--porcelain"], cwd=root,
+                             capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None                      # no git: cannot scope, so do not try
+    if out.returncode:
+        return None
+    return {line[3:].strip().strip('"') for line in out.stdout.splitlines()}
+
+
+def _top_level(text):
+    """{name: normalised source} for top-level defs and assignments, or None."""
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return None
+    out = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            out[node.name] = ast.dump(node)
+        elif isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name):
+                    out[t.id] = ast.dump(node.value)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            out[node.target.id] = ast.dump(node.value) if node.value else ""
+    return out
+
+
+def _changed_symbols(root, rel):
+    """
+    (changed function names, changed constant names) for one edited model file.
+
+    Compares ASTs rather than diff hunks, so reformatting is not a change and a
+    renamed symbol shows up as both a removal and an addition. Returns None when
+    anything is uncertain -- no git history, a syntax error, a file that never
+    parsed -- because the caller must then fall back to discarding the whole
+    chapter. Uncertainty is allowed to cost time; it is never allowed to serve a
+    stale number.
+    """
+    path = root / rel
+    try:
+        old = subprocess.run(["git", "show", f"HEAD:./{rel}"], cwd=root,
+                             capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if old.returncode:
+        return None                      # new file, or not in HEAD
+    before, after = _top_level(old.stdout), _top_level(path.read_text())
+    if before is None or after is None:
+        return None
+
+    names = set(before) | set(after)
+    changed = {n for n in names if before.get(n) != after.get(n)}
+    # A function is callable and traceable; anything else is a constant that
+    # could be read anywhere in the chapter, and the call graph will not show it.
+    is_func = {n for n in changed
+               if str(after.get(n, "")).startswith(("FunctionDef", "AsyncFunctionDef"))
+               or str(before.get(n, "")).startswith(("FunctionDef", "AsyncFunctionDef"))}
+    return is_func, changed - is_func
+
+
+def _closure(defs, seed):
+    """Every chapter-defined name reachable from `seed` through the call graph."""
+    seen, queue = set(), list(seed)
+    while queue:
+        name = queue.pop()
+        if name in seen or name not in defs:
+            continue
+        seen.add(name)
+        queue.extend(defs[name][1])
+    return seen
+
+
+def _freeze_targets(root, chapters, force_all):
+    """
+    What to discard before rendering: (whole chapters, individual pages, note).
+
+    Freeze tracks the page and not its includes, so an edit to a chapter's model
+    really can leave every entry in it serving numbers the model no longer
+    produces -- that is why anything is discarded at all. But discarding the
+    WHOLE chapter for any model edit is merely the conservative choice, not the
+    correct one: adding a helper that only the new entry calls cannot move a
+    single existing value, and paying ~1175 s to re-derive that is how adding a
+    0.1 s entry came to cost twenty minutes.
+
+    So: constants and unparseable edits take the chapter, tracked function edits
+    take only the pages that can reach them, and everything else takes nothing.
+    """
+    if force_all:
+        return list(chapters), [], "all (--all)"
+    dirty = _dirty(root)
+    if dirty is None:
+        return list(chapters), [], "all (no git to compare against)"
+    if any(p.endswith("_notebook.py") for p in dirty):
+        return list(chapters), [], "all (_notebook.py is exec'd into every page)"
+
+    whole, pages, why = [], [], []
+    for c in chapters:
+        edited = [n for n in MODEL_FILES
+                  if any(p.endswith(f"chapters/{c}/{n}") for p in dirty)]
+        if not edited:
+            continue
+        funcs, consts = set(), set()
+        for name in edited:
+            if name.endswith(".qmd"):    # the shim: not analysable, assume broad
+                consts.add(name)
+                continue
+            result = _changed_symbols(root, f"chapters/{c}/{name}")
+            if result is None:
+                consts.add(name)
+                continue
+            funcs |= result[0]
+            consts |= result[1]
+        if consts:
+            whole.append(c)
+            why.append(f"{c}: {', '.join(sorted(consts)[:3])} — read anywhere")
+            continue
+        defs = lint._defs_of(root / "chapters" / c)
+        hit = []
+        for page in sorted((root / "chapters" / c).glob("*.qmd")):
+            if page.name.startswith("_"):
+                continue
+            reach = _closure(defs, lint.entry_calls(page.read_text()))
+            if reach & funcs:
+                hit.append(f"{c}/{page.stem}")
+        pages += hit
+        why.append(f"{c}: {len(hit)} page(s) reach {', '.join(sorted(funcs)[:3])}")
+    return whole, pages, "; ".join(why) if why else "nothing stale"
+
+
 def main(argv):
     if not argv:
         print(__doc__.strip().split("\n\n")[1].strip())
         return 2
 
     render = "--no-render" not in argv
-    argv = [a for a in argv if a != "--no-render"]
+    force_all = "--all" in argv
+    argv = [a for a in argv if a not in ("--no-render", "--all")]
     ref_args = []
     if "--ref" in argv:
         i = argv.index("--ref")
@@ -77,8 +220,8 @@ def main(argv):
     # lint below runs the full set, so nothing is skipped, only reordered.
     code, out = _run(lint.main, [str(root)] + chapters)
     problems = [l for l in out.splitlines()
-                if l.startswith("  ") and (not render
-                                           or "but the freeze is not" not in l)]
+                if l.startswith("  ") and "(warning)" not in l
+                and (not render or "but the freeze is not" not in l)]
     if problems:
         print("\n".join(problems))
         print("\nlint       FAILED — fix these before rendering")
@@ -90,11 +233,18 @@ def main(argv):
         print("render     skipped (--no-render)")
         return 0 if not code else 1
 
-    # 2. Render. The freeze must go first: it tracks the page, not its includes,
-    # so a change to _model.py or _analysis.py invalidates nothing and the
-    # render would be a cache hit wearing a fresh render's clothes.
-    for c in chapters:
+    # 2. Render. Discard the freeze for whatever the edit can actually have
+    # invalidated -- see _freeze_targets() for why that is not "everything".
+    # Quarto's own freeze then re-executes the pages whose .qmd changed, which
+    # is the new or edited entry, so nothing here needs to handle that case.
+    whole, pages, why = _freeze_targets(root, chapters, force_all)
+    for c in whole:
         shutil.rmtree(root / "_freeze" / "chapters" / c, ignore_errors=True)
+    for p in pages:
+        shutil.rmtree(root / "_freeze" / "chapters" / p, ignore_errors=True)
+    served = [c for c in chapters if c not in whole]
+    print(f"freeze     discarded {len(whole)} chapter(s), {len(pages)} page(s)"
+          f"; {len(served)} chapter(s) served from cache — {why}")
     shutil.rmtree(root / ".quarto", ignore_errors=True)
     r = subprocess.run(["quarto", "render", str(root)],
                        capture_output=True, text=True)

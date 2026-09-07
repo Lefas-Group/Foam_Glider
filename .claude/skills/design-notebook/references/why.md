@@ -82,3 +82,20 @@ takes in and becomes a grid to be searched. A wide two-row table is still a grid
 so 2×5 fails too. Measured on the rendered output, because a table built by
 `print()` in an `output: asis` cell is not parseable as a table anywhere in the
 source — but the frozen markdown holds it as literal pipe-markdown.
+
+**16 — a budgeted chapter does not override `SOLVE_BUDGET` at a call site.** The
+budget exists so a runaway solve stops; a local `max_runtime=` at one of five
+call sites re-opens the hole silently and nothing downstream shows it. If a solve
+genuinely needs longer that is a decision for the user, recorded in `index.qmd`,
+not a keyword argument nobody reads again. Static, so unlike rule 17 it cannot
+behave differently on a busy machine. Opt-in: a chapter that never binds
+`SOLVE_BUDGET` is not checked, which is what let this be added to a notebook
+whose earlier chapters were already frozen.
+
+**17 — a frozen entry stays under its chapter's `ENTRY_CEILING`.** One entry
+reached 599 s and nothing anywhere said so; the cost of a notebook was invisible
+until `footer()` started recording it. This blocks past a ceiling the *user* set
+and only warns below it, because wall clock is not reproducible — the same solve
+measured 533.9 s against a 145 s baseline purely from machine load, so a single
+hard threshold would fail on a loaded laptop and pass on an idle one. Past a
+user-chosen ceiling, load is no longer a plausible explanation.
