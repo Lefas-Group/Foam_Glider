@@ -507,34 +507,61 @@ def _stale_freeze(root, chapters):
     return found
 
 
-def _budgeted(chapter, name):
-    """The literal a chapter binds to `name` at module level, or None."""
-    f = chapter / "_analysis.py"
-    if not f.exists():
-        return None
+def _bound(source, name):
+    """
+    (was it bound?, to what) for a module-level name in `source`.
+
+    Two-valued because binding None is a real answer -- "deliberately unbounded"
+    -- and must not read the same as having said nothing, which is what takes
+    the default. Conflating them is how an opt-out and an oversight would become
+    indistinguishable to the rules below.
+    """
     try:
-        tree = ast.parse(f.read_text())
+        tree = ast.parse(source)
     except SyntaxError:
-        return None
+        return False, None
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(
                 isinstance(t, ast.Name) and t.id == name for t in node.targets):
             try:
-                return ast.literal_eval(node.value)
+                return True, ast.literal_eval(node.value)
             except ValueError:
-                return True             # bound, but not to something readable
-    return None
+                return True, None       # bound, but not to a readable literal
+    return False, None
+
+
+def _limits(root, chapter):
+    """
+    (solve budget, entry ceiling) in force for a chapter, or (None, None) if it
+    opted out. Defaults come from the notebook's own _notebook.py rather than
+    being restated here: rule 11 already pins that file to the skill's copy, so
+    reading it keeps one source instead of two that can drift.
+    """
+    nb = root / "_notebook.py"
+    nb_src = nb.read_text() if nb.exists() else ""
+    _, default_budget = _bound(nb_src, "DEFAULT_SOLVE_BUDGET")
+    _, default_ceiling = _bound(nb_src, "DEFAULT_ENTRY_CEILING")
+
+    f = chapter / "_analysis.py"
+    src = f.read_text() if f.exists() else ""
+    found_b, budget = _bound(src, "SOLVE_BUDGET")
+    if found_b and budget is None:
+        return None, None               # deliberately unbounded
+    found_c, ceiling = _bound(src, "ENTRY_CEILING")
+    return (budget if found_b else default_budget,
+            None if (found_c and ceiling is None)
+            else (ceiling if found_c else default_ceiling))
 
 
 def _budget_rules(root, chapters):
     """
     Rules 16 and 17: a chapter that took a solve budget actually keeps to it.
 
-    Both are OPT-IN, keyed on the chapter binding SOLVE_BUDGET / ENTRY_CEILING
-    in its _analysis.py. A chapter that never opted in is not checked at all,
-    which is what lets a budget be introduced to a notebook whose earlier
-    chapters are already frozen -- there is no grandfather list to maintain and
-    no way for this to move a number that was published before it existed.
+    Both are OPT-OUT: a chapter is checked unless it binds SOLVE_BUDGET = None,
+    which is how a chapter whose pages are already frozen stays exempt. Keying
+    this on inaction was the earlier design and was wrong -- a guard you skip by
+    forgetting is not a guard, and forgetting is what it defends against. The
+    exemption is a line in the file, so there is no grandfather list to keep.
 
     16 blocks, because it is static and so cannot fail differently on a busy
     machine. 17 warns, because the same solve here measured 533.9 s against a
@@ -545,10 +572,9 @@ def _budget_rules(root, chapters):
     problems = []
     for c in chapters:
         chapter = root / "chapters" / c
-        budget = _budgeted(chapter, "SOLVE_BUDGET")
-        ceiling = _budgeted(chapter, "ENTRY_CEILING")
+        budget, ceiling = _limits(root, chapter)
         if budget is None:
-            continue                    # chapter did not opt in
+            continue                    # chapter opted out, deliberately
 
         # 16: the budget is negotiated once, not overridden per call site.
         f = chapter / "_analysis.py"

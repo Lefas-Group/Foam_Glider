@@ -136,10 +136,15 @@ larger lumps and noticed later.
   *calls* is the only figure that predicts what an entry costs. 41,040 airfoil
   polar points came back in 2.2 s from 9 calls. This is what rule 5 is really
   about; a loop around a solve is where calls hide.
-- **Budgets live in the solver.** A chapter opts in by binding `SOLVE_BUDGET`,
-  and `_notebook.py` then makes it the default on every `opti.solve` — including
-  ad-hoc probes, which is the point. Raising it is a decision the *user* makes
-  and `index.qmd` records; overriding it at one call site is rule 16.
+- **Budgets live in the solver, and are on by default.** `_notebook.py` applies
+  `SOLVE_BUDGET` to every `opti.solve` — including ad-hoc probes, which is the
+  point, since a limit you can skip by forgetting is not a limit. Three ways:
+  bind a number to override, bind `None` to go deliberately unbounded, bind
+  nothing and take `DEFAULT_SOLVE_BUDGET`. `ENTRY_CEILING` reads the same way and
+  bounds a whole entry rather than one solve, because a per-solve budget cannot
+  see many small solves, a marched rollout, or graph construction. Raising either
+  is the *user's* decision and `index.qmd` records it; overriding a budget at one
+  call site is rule 16.
 - **A signal cannot stop a solve.** It is handled between bytecodes, so it
   arrives when the C call returns — measured, 1.15 s for a 0.3 s limit. Use the
   solver's own limit for solves, and `budget()` only for hand-written Python

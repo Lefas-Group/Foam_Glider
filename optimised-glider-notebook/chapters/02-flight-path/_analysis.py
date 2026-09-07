@@ -354,6 +354,13 @@ def design_geometry(opt, span=0.30):
 # fuselage hangs below the CG.
 GROUND = 0.05  # m
 
+##### Solve budget
+# Opted out, as in chapter 01. This chapter's collocated solves run to several
+# minutes each and its pages are already frozen, so any budget would truncate
+# the very solves that produced the published numbers. None takes the same
+# branch those numbers came from. See DEFAULT_SOLVE_BUDGET in _notebook.py.
+SOLVE_BUDGET = None
+
 # What "flies sensibly" means, as numbers. Past ~15 deg the plate is stalling and
 # no section model here is fitted; past 180 deg of pitch it has gone over the top.
 CLEAN_ALPHA, CLEAN_PITCH = 15.0, 180.0

@@ -25,6 +25,14 @@ import time
 import aerosandbox as asb
 import aerosandbox.numpy as np
 
+##### Solve budget
+# Opted out. Every page in this chapter was frozen before _notebook.py applied
+# any limit, so a budget here could only truncate solves that produced numbers
+# already published. None takes the same branch those numbers came from.
+# A chapter written from here on binds a number, or binds nothing and takes the
+# default -- see DEFAULT_SOLVE_BUDGET in _notebook.py.
+SOLVE_BUDGET = None
+
 ##### Measurement conventions
 # Angle of attack at which stability derivatives are taken -- mid lift curve,
 # well clear of the plate's stall, so the neutral point is a property of the

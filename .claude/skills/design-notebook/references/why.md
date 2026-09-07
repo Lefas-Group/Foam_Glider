@@ -88,9 +88,14 @@ budget exists so a runaway solve stops; a local `max_runtime=` at one of five
 call sites re-opens the hole silently and nothing downstream shows it. If a solve
 genuinely needs longer that is a decision for the user, recorded in `index.qmd`,
 not a keyword argument nobody reads again. Static, so unlike rule 17 it cannot
-behave differently on a busy machine. Opt-in: a chapter that never binds
-`SOLVE_BUDGET` is not checked, which is what let this be added to a notebook
-whose earlier chapters were already frozen.
+behave differently on a busy machine. **Opt-out, and the first version got this
+backwards**: it applied only to chapters that bound `SOLVE_BUDGET`, which made
+the budget unforgettable at the call site while leaving it forgettable at the
+chapter — a new chapter that never bound it ran unprotected, and forgetting is
+the failure the whole mechanism exists to catch. A guard you skip by inaction is
+not a guard. A chapter now exempts itself with `SOLVE_BUDGET = None`, a visible
+line someone chose, which is what let this be added to a notebook whose earlier
+chapters were already frozen without keeping a grandfather list.
 
 **17 — a frozen entry stays under its chapter's `ENTRY_CEILING`.** One entry
 reached 599 s and nothing anywhere said so; the cost of a notebook was invisible

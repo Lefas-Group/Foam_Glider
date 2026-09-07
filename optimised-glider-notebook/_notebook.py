@@ -110,13 +110,27 @@ def aero_report(reset=True):
 # policy here reaches entries, probes and one-liners alike, and a policy in the
 # probe scaffold would have reached none of them.
 #
-# OPT-IN PER CHAPTER, and silent otherwise. A chapter takes the budget by
-# binding SOLVE_BUDGET in its _analysis.py; until it does, solve() is untouched
-# and behaves exactly as the library ships it. That is what lets a budget be
-# added to a notebook whose existing chapters are already frozen: chapters that
-# never opted in cannot have their numbers moved by this file. Resolution is at
-# CALL time, not import time, because _analysis.py is exec'd into this same
-# namespace after this file has already run.
+# OPT-OUT, NOT OPT-IN, and the difference is the whole point. The first version
+# of this required a chapter to bind SOLVE_BUDGET before any limit applied --
+# which made the budget unforgettable at the call site while leaving it
+# forgettable at the chapter, so a new chapter that simply never bound it ran
+# with no protection at all. Forgetting is the failure this exists to defend
+# against, so forgetting must land in the protected state.
+#
+# Three ways, and the middle one is why chapters can be exempt without a
+# grandfather list anywhere:
+#
+#     SOLVE_BUDGET = 90.0   raised by agreement; the reason goes in index.qmd
+#     SOLVE_BUDGET = None   deliberately unbounded
+#     (not bound at all)    DEFAULT_SOLVE_BUDGET
+#
+# None takes exactly the branch an absent budget took before this file existed:
+# no solver arguments are injected and solve() is called straight through. That
+# is what lets a chapter whose pages are already frozen stay bit-for-bit as it
+# was, as a visible line someone chose rather than an absence nobody noticed.
+#
+# Resolution is at CALL time, not import time, because _analysis.py is exec'd
+# into this same namespace after this file has already run.
 #
 # behavior_on_failure="return_last" rides along with the budget and only with
 # it: a bound that raises destroys the finding, while one that returns the best
@@ -133,7 +147,23 @@ def aero_report(reset=True):
 # as "stop at the first iteration boundary past here" -- ample against a 599 s
 # runaway, useless as a precise deadline.
 # =============================================================================
-DEFAULT_SOLVE_BUDGET = 60.0  # seconds per solve; what a new chapter should bind
+# Two limits, because they catch different things and neither substitutes for
+# the other. SOLVE_BUDGET bounds ONE opti.solve() call, at runtime, and its
+# effect is a degraded answer. ENTRY_CEILING bounds one entry's TOTAL wall time,
+# after the fact via lint rule 17, and its effect is a failed lint.
+#
+# A per-solve budget is blind to most of what makes an entry slow, measured on
+# this notebook: one entry spends 112.8 s across 3070 aero solves in a marched
+# rollout, with no single solve anywhere near a minute; another spends 599 s
+# across four multistart solves that individually might pass and collectively do
+# not; and problem construction -- 3.5 s of a 9.3 s call here -- sits outside
+# every solver limit that exists. Only a total catches those.
+#
+# Both are starting points, not verdicts, and both read three ways: a number
+# overrides, None opts out, absence takes the default. Raising either is the
+# user's decision and belongs in the chapter's index.qmd as Specified.
+DEFAULT_SOLVE_BUDGET = 60.0    # seconds for any one solve
+DEFAULT_ENTRY_CEILING = 200.0  # seconds for one entry, checked by lint rule 17
 
 
 class BudgetExceeded(RuntimeError):
@@ -141,8 +171,15 @@ class BudgetExceeded(RuntimeError):
 
 
 def _active_budget():
-    """The chapter's SOLVE_BUDGET if it took one, else None for unbounded."""
-    return globals().get("SOLVE_BUDGET")
+    """
+    The budget in force: what the chapter bound, or the default if it bound none.
+
+    Membership rather than .get(), because binding None is a real answer here --
+    "deliberately unbounded" -- and must not be confused with having said nothing.
+    """
+    if "SOLVE_BUDGET" in globals():
+        return globals()["SOLVE_BUDGET"]
+    return DEFAULT_SOLVE_BUDGET
 
 
 @contextlib.contextmanager

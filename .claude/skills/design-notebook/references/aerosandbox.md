@@ -296,8 +296,12 @@ buy 4x the coverage for the same budget.
   destroys the finding, one that returns degrades it into something reportable.
   Read the status from `sol.stats()["return_status"]`.
 
-`_notebook.py` sets all three as defaults when a chapter binds `SOLVE_BUDGET`, so
-entries and ad-hoc probes are bounded without passing anything. Read a budget as
+`_notebook.py` sets all three as defaults unless a chapter opts out with
+`SOLVE_BUDGET = None`, so entries and ad-hoc probes are bounded without passing
+anything — bind a number to override, bind nothing to take the default. A
+separate `ENTRY_CEILING` bounds a whole entry via lint rule 17, because none of
+these solver options can see many small solves, a marched rollout, or the graph
+construction below. Read a budget as
 "stop at the first iteration boundary past here": ample against a 599 s runaway,
 useless as a precise deadline.
 
