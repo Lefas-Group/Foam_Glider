@@ -242,6 +242,29 @@ if not getattr(asb.Opti.solve, "_is_budgeted", False):
     asb.Opti.solve = _budgeted_solve
 
 
+def md_table(header, rows):
+    """
+    Print a labelled markdown table from an `output: asis` cell.
+
+    Furniture rather than analysis: entries kept re-typing the same three lines
+    of pipe-printing, which is duplicated logic by any measure and is what rule 2
+    is for. Right-aligns every column after the first, since the first holds row
+    labels and the rest hold numbers.
+
+    Rule 15 caps a table at 3x4 or 4x3 excluding the header, and this does not
+    enforce that -- the linter reads the rendered output, which is the only place
+    a table built by print() can be counted.
+
+    Args:
+        header: column titles; the first is usually "" for the label column.
+        rows: sequence of row tuples, already formatted as strings.
+    """
+    print("| " + " | ".join(header) + " |")
+    print("|" + "|".join(["---"] + ["---:"] * (len(header) - 1)) + "|")
+    for row in rows:
+        print("| " + " | ".join(str(c) for c in row) + " |")
+
+
 def show_source(*objs):
     """
     Render the source of the shared functions an entry called.

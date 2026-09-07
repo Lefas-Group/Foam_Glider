@@ -1,0 +1,61 @@
+---
+title: "Tabulated section"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+#| include: false
+# Only so the numbers below can be read off the model rather than typed.
+_plane, _layout = glider()
+```
+
+Chapter 01's glider with one substitution: the section polar read from a spline
+fitted to NeuralFoil rather than from NeuralFoil.
+
+- **Same aircraft.** `_model.py` is byte-identical to chapter 01's, so `diff` is
+  the check that only the aerodynamic method moved.
+- **Table over (α, Re, t/c)** — three axes because the plate is a one-parameter
+  family, thickness ratio fixing the shape.
+- **Same solve** both ways; `table=None` is chapter 01's exact path, and the
+  reference every number here is measured against.
+- **Left out:** chapter 02's marched flight, and post-stall angles.
+- **Held fixed:** everything chapter 01 fixed.
+
+::: {.callout-tip}
+## Specified
+
+Asked of the user, 2026-09-07:
+
+1. Answer whether a lookup table makes optimisation more efficient.
+2. New chapter, so chapter 01 keeps its exact-network answers.
+:::
+
+::: {.callout-note}
+## Assumed
+
+No owner yet — each is a candidate for its own entry:
+
+1. Grid spans only this chapter's design box.
+2. Solve budget `{python} f"{_active_budget():.0f}"` s, the notebook default.
+3. One start per solve; the surface has basins.
+:::
+
+## The model
+
+````{python}
+#| echo: false
+#| output: asis
+import pathlib
+
+# Both files, read off disk rather than copied: _model.py is the vehicle,
+# _analysis.py is every way this chapter measures it.
+for name in ["_model.py", "_analysis.py"]:
+    code = pathlib.Path(f"chapters/03-tabulated-section/{name}").read_text()
+    print('::: {.callout-note collapse="true"}')
+    print(f"## `{name}`\n")
+    print("```python")
+    print(code.strip())
+    print("```")
+    print(":::")
+````

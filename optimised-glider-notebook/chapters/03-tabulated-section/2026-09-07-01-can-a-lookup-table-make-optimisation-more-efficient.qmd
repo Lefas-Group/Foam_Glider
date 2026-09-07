@@ -1,0 +1,84 @@
+---
+title: "Can we make optimisation more efficient by building a lookup table for the airfoil?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+# The same design solve twice, differing only in where the section polar comes
+# from. The table's design is then re-trimmed through the exact network, which
+# is the only way to ask whether its answer was real.
+table = section_table()
+
+t0 = time.perf_counter(); exact = optimise()
+t_exact = time.perf_counter() - t0
+t0 = time.perf_counter(); cached = optimise(table=table)
+t_cached = time.perf_counter() - t0
+
+DESIGN = ("aspect_ratio", "tail_arm_chords", "h_tail_ratio", "h_tail_incidence")
+flown = glide(*glider(span=0.30, **{k: cached[k] for k in DESIGN}),
+              static_margin=0.10)
+
+speedup = t_exact / t_cached
+penalty = flown["sink"] / exact["sink"] - 1
+payback = table["seconds"] / (t_exact - t_cached)
+cl_err = section_error(table)
+
+assert speedup > 1                      # the table is faster, or there is no question
+assert payback < 2                      # and pays for itself inside two solves
+assert cl_err < 0.02                    # the section really is well fitted
+assert penalty > 0.1                    # yet the design it picks is much worse
+```
+
+::: {.hero-pair}
+::: {.hero-ref}
+[`{python} f"{speedup:.1f}"`×]{.hero-value}
+[faster per solve]{.hero-label}
+:::
+::: {}
+[`{python} f"{penalty:.0%}"`]{.hero-value}
+[worse, once flown exactly]{.hero-label}
+:::
+:::
+
+**Answer.** Yes, and it does not help. Fitting the table costs
+`{python} f"{table['seconds']:.1f}"` s and repays inside
+`{python} f"{payback:.1f}"` solves. But the optimiser then walks into the
+table's own error: it claims `{python} f"{cached['sink']:.4f}"` m/s at aspect
+ratio `{python} f"{cached['aspect_ratio']:.1f}"`, and that aircraft flown
+through the network sinks at [`{python} f"{flown['sink']:.4f}"`]{.key}
+(@tbl-cost). Worst CL error in the table is only
+`{python} f"{cl_err:.3f}"`: the section is barely wrong, and the design badly
+so.
+
+::: {.callout-warning}
+## A small section error is not a small design error
+An optimiser will find wherever the surrogate is most wrong, and stop there.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **One start** per solve; the surface has basins.
+2. **Static margin 10%**, as chapter 01.
+3. **Error sampled at midpoints**, where a spline is worst.
+:::
+
+```{python}
+#| label: tbl-cost
+#| tbl-cap: "The same design solve, differing only in where the section polar is read from. The last row re-trims each design through the exact network, so both are judged by the same aerodynamics rather than each by its own."
+#| echo: false
+#| output: asis
+md_table(["", "network", "table"], [
+    ("solve, s", f"{t_exact:.1f}", f"{t_cached:.1f}"),
+    ("aspect ratio", f"{exact['aspect_ratio']:.2f}", f"{cached['aspect_ratio']:.2f}"),
+    ("sink claimed, m/s", f"{exact['sink']:.4f}", f"{cached['sink']:.4f}"),
+    ("sink as flown, m/s", f"{exact['sink']:.4f}", f"{flown['sink']:.4f}"),
+])
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(section_table, section_error, optimise, glide)
+```
