@@ -204,6 +204,34 @@ def section_error(table, n=200, seed=0):
     return worst
 
 
+def tabulated_penalty(table, span=0.30, static_margin=0.10):
+    """
+    Optimise both ways, and re-trim the tabulated design through the network.
+
+    The third step is the one that matters. Each optimiser reports its own
+    aircraft judged by its own aerodynamics, which is exactly the comparison
+    that cannot be made -- the table will always flatter the design it chose,
+    because it chose it to suit itself. Trimming that design through the exact
+    network puts both answers on one set of aerodynamics, and is the only
+    number here that says whether the table's design is any good.
+
+    Args:
+        table: from section_table().
+        span, static_margin: as optimise().
+
+    Returns:
+        dict with "exact" (the network's design), "claimed" (the table's, by
+        its own reckoning) and "flown" (the table's design, judged exactly).
+    """
+    exact = optimise(span=span, static_margin=static_margin)
+    claimed = optimise(span=span, static_margin=static_margin, table=table)
+    design = {k: claimed[k] for k in
+              ("aspect_ratio", "tail_arm_chords", "h_tail_ratio",
+               "h_tail_incidence")}
+    flown = glide(*glider(span=span, **design), static_margin=static_margin)
+    return {"exact": exact, "claimed": claimed, "flown": flown}
+
+
 def tabulate(airplane, layout, table):
     """
     Swap every surface onto the tabulated section, in place.
