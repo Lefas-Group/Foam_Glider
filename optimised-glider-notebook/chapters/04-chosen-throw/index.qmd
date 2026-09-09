@@ -1,0 +1,58 @@
+---
+title: "Chosen throw"
+---
+
+{{< include _model.qmd >}}
+
+The glider of [chapter 02](../02-flight-path/index.qmd), collocated as a rigid
+body rather than a point mass, with the throw itself free.
+
+- **Rigid body, collocated.** `theta` is a state, so "no loops" constrains a real
+  variable rather than one the model cannot represent.
+- **The throw is a design variable** — release speed and angle, with the
+  geometry.
+- **Marched verification, always**, through the parent's RK4 `simulate()`.
+- **Left out:** lateral motion, gusts, launches far from the seed.
+- **Held fixed:** everything chapter 01 fixed.
+
+::: {.callout-tip}
+## Specified
+
+Asked of the user, 2026-09-09:
+
+1. Optimise against a real flight path, no loops or stall.
+2. Launch speed and angle free, speed capped `{python} f"{THROW_BOUNDS['speed'][1]:.0f}"` m/s.
+3. Solve budget `{python} f"{SOLVE_BUDGET:.0f}"` s, raised from the default.
+4. Entry ceiling `{python} f"{ENTRY_CEILING:.0f}"` s, raised likewise.
+:::
+
+::: {.callout-note}
+## Assumed
+
+No owner yet — each is a candidate for its own entry:
+
+1. Released along the flight path, at zero incidence.
+2. Pitch attitude bounded `{python} f"{THETA_LIMIT:.0f}"`° either side of level.
+3. Seeded from one converged RK4 launch.
+4. Limited-memory Hessian; the exact one carries NaNs.
+:::
+
+## The model
+
+````{python}
+#| echo: false
+#| output: asis
+import pathlib
+
+# Both files, read off disk rather than copied: _model.py is the vehicle,
+# _analysis.py is every way this chapter measures it.
+for name in ["_model.py", "_analysis.py"]:
+    code = pathlib.Path(f"chapters/04-chosen-throw/{name}").read_text()
+    print('::: {.callout-note collapse="true"}')
+    print(f"## `{name}`\n")
+    print("```python")
+    print(code.strip())
+    print("```")
+    print(":::")
+    print()
+````

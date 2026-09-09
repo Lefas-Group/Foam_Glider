@@ -1,0 +1,79 @@
+---
+title: "Can we optimise against a real flight path, with the throw free?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+# The same collocated rigid body twice: once with nothing to optimise but the
+# trajectory, once with the design and the throw free. Each answer is then
+# re-flown through the parent's RK4, which is an independent statement of the
+# same physics and the only thing that can say whether the answer was real.
+held = throw_flight(n=40, free_design=False)
+free = throw_flight(n=60, start=(4.5, 6.5, 0.40, 1.0))
+
+def marched(r):
+    airplane, layout = glider(**{k: r[k] for k in (
+        "aspect_ratio", "tail_arm_chords", "h_tail_ratio", "h_tail_incidence")})
+    return simulate(airplane, layout, ballast=r["ballast"],
+                    launch_angle=r["launch_angle"], v_launch=r["v_launch"])
+
+m_held, m_free = marched(held), marched(free)
+gap = free["duration"] / m_free["duration"] - 1
+
+assert abs(held["duration"] / m_held["duration"] - 1) < 0.02  # exact when fixed
+assert gap > 0.5                        # and badly optimistic when free
+assert free["alpha_max"] <= CLEAN_ALPHA + 1e-6  # stall bound held, AT THE NODES
+```
+
+::: {.hero-pair}
+::: {.hero-ref}
+[`{python} f"{abs(held['duration']/m_held['duration']-1):.1%}"`]{.hero-value}
+[error with the design held]{.hero-label}
+:::
+::: {}
+[`{python} f"{gap:.0%}"`]{.hero-value}
+[optimistic with it free]{.hero-label}
+:::
+:::
+
+**Answer.** The collocation is sound; optimising through it is not. With the
+design held it reproduces the marched flight to
+`{python} f"{abs(held['duration']/m_held['duration']-1):.1%}"` — so
+[rigid-body collocation is not infeasible](../02-flight-path/index.qmd) once the
+tumble is forbidden. Free the design and the throw and it claims
+`{python} f"{free['duration']:.2f}"` s where integration gives
+[`{python} f"{m_free['duration']:.2f}"` s]{.key} (@tbl-march), riding α to its
+`{python} f"{free['alpha_max']:.1f}"`° bound at the nodes.
+
+::: {.callout-warning}
+## The optimiser finds the gaps between the nodes
+Nothing to optimise, nothing to exploit — the error appears only when the design is free.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **One start**; the surface has several basins.
+2. **Nodes chosen to bracket**, not to converge.
+3. **Marched model is the reference**, finely stepped.
+:::
+
+```{python}
+#| label: tbl-march
+#| tbl-cap: "The same collocated model with the design held and with it free, each re-flown through the RK4 integrator. Node spacing is the collocated duration divided by the node count; the marched model steps at 0.02 s throughout."
+#| echo: false
+#| output: asis
+md_table(["", "design held", "design free"], [
+    ("collocated, s", f"{held['duration']:.2f}", f"{free['duration']:.2f}"),
+    ("marched, s", f"{m_held['duration']:.2f}", f"{m_free['duration']:.2f}"),
+    ("node spacing, s", f"{held['duration']/len(held['t']):.3f}",
+     f"{free['duration']/len(free['t']):.3f}"),
+])
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(throw_flight, simulate)
+```
