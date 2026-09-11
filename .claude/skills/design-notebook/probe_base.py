@@ -32,8 +32,18 @@ import os
 import pathlib
 
 _root = pathlib.Path(__file__).resolve().parent.parent
-CHAPTER = os.environ.get("NB_CHAPTER") or sorted(
-    p.name for p in (_root / "chapters").iterdir() if p.is_dir())[0]
+_chapters = sorted(p.name for p in (_root / "chapters").iterdir() if p.is_dir())
+CHAPTER = os.environ.get("NB_CHAPTER") or _chapters[0]
+
+# Silent when told which chapter, loud when it had to guess. Nothing else prints
+# here -- but a wrong guess surfaces as `NameError: simulate` three functions
+# deep, which reads as a broken probe rather than a mis-set chapter, so this one
+# line earns its place.
+if not os.environ.get("NB_CHAPTER"):
+    import sys as _sys
+    print(f"[_probe_base: NB_CHAPTER unset, defaulting to {CHAPTER}. "
+          f"Others: {', '.join(c for c in _chapters if c != CHAPTER)}]",
+          file=_sys.stderr)
 
 _chapter = _root / "chapters" / CHAPTER
 for _p in [_root / "_notebook.py", _chapter / "_model.py",

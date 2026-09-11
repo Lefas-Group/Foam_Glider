@@ -23,7 +23,17 @@
 # start reports a basin rather than an optimum.
 # =============================================================================
 SOLVE_BUDGET = 600.0   # s for any one solve; entries need ~210 s at n=60
-ENTRY_CEILING = 400.0  # s for one entry, checked by lint rule 17
+
+# Raised 400 -> 600 s by the user, 2026-09-11, after the first value blocked a
+# render on load alone. The speed-sweep entry measured 384.8 s, so 400 left four
+# percent of headroom -- against a machine-load swing measured at ~1.5x elsewhere
+# in this notebook, and written into why.md as the very reason rule 17's lower
+# tier only warns. The same entry then came back at 421 s doing identical work
+# for identical numbers.
+#
+# 600 s is that 385 s measurement times the documented swing. It still binds on
+# anything that genuinely grows: the chapter's other entries run 251-315 s.
+ENTRY_CEILING = 600.0  # s for one entry, checked by lint rule 17
 
 # Granted by the user, 2026-09-11, for probing THIS chapter. Sized from what the
 # probes here have actually taken rather than chosen: one n=60 solve runs

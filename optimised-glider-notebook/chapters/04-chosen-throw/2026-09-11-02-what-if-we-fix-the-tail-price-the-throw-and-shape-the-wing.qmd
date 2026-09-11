@@ -1,0 +1,64 @@
+---
+title: "What if we fix the tail, price the throw, and optimise the wing instead?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+# Tail held at conservative proportions, release speed priced against elevation,
+# and the wing given taper and a station to move to. Each arm is re-flown through
+# the marched model, which is what says whether any of it is real.
+plain = wing_study(free_wing=False)
+shaped = wing_study(free_wing=True)
+
+assert abs(shaped["gap"]) < 0.02        # collocated and marched now agree
+assert abs(plain["gap"]) < 0.02         # and not only for the shaped wing
+assert shaped["marched"] > plain["marched"]          # shaping the wing pays
+assert shaped["launch_angle"] < 1.0     # priced, the best throw is flat
+```
+
+::: {.hero}
+[`{python} f"{shaped['marched']:.2f}"` s]{.hero-value}
+[time aloft, and the marched model agrees to `{python} f"{abs(shaped['gap']):.1%}"`]{.hero-label}
+:::
+
+**Answer.** The disagreement disappears. Priced against elevation the best throw
+is flat, a flat launch never excites the pitch mode, and the two models close to
+[`{python} f"{abs(shaped['gap']):.1%}"`]{.key} where they stood 194% apart
+(@tbl-wing). Shaping the wing buys
+`{python} f"{shaped['marched'] - plain['marched']:.2f}"` s and wants more: taper
+sits on its bound at `{python} f"{shaped['taper']:.2f}"`. Ballast goes the other
+way from expected, to `{python} f"{shaped['ballast'] * 1e3:.1f}"` g.
+
+::: {.callout-warning}
+## The throw model is doing the work
+Invented for this entry, it flipped the optimum and closed the gap. It wants measuring.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **Speed falls `{python} f"{THROW_DROP:.0%}"`** by the steepest throw.
+2. **Tail held** at McEagle proportions.
+3. **Bounds on aspect, taper, ballast** are mine.
+4. **One start** per solve; basins exist.
+:::
+
+```{python}
+#| label: tbl-wing
+#| tbl-cap: "Aspect ratio alone against aspect ratio with taper and wing station, each optimised for a priced throw and then re-flown through the marched model. Both arms land on a flat release, which is why the two models agree."
+#| echo: false
+#| output: asis
+md_table(["", "aspect only", "+ taper, station"], [
+    ("collocated, s", f"{plain['duration']:.2f}", f"{shaped['duration']:.2f}"),
+    ("marched, s", f"{plain['marched']:.2f}", f"{shaped['marched']:.2f}"),
+    ("taper", f"{plain['taper']:.2f}", f"{shaped['taper']:.2f}"),
+    ("ballast, g", f"{plain['ballast'] * 1e3:.2f}", f"{shaped['ballast'] * 1e3:.2f}"),
+])
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(wing_study, throw_envelope, simulate)
+```

@@ -1200,3 +1200,140 @@ def throw_sweep(n=60, start=(4.5, 6.5, 0.40, 1.0), speeds=None):
                  marched_alpha_max=m["alpha_max"])
         out.append(r)
     return out
+
+
+##### The reframed problem: fixed tail, real throw, shaped wing
+#
+# Conservative tail, held rather than optimised. Across every solve above, the
+# tail variables either sat on a bound or barely moved while the static-margin
+# constraint was active every time -- they were solving for stability, not for
+# performance, and holding them costs nothing the optimiser was using.
+FIXED_TAIL = dict(tail_arm_chords=3.6, h_tail_ratio=0.22, h_tail_incidence=-2.0)
+
+# A throw envelope, replacing two independent bounds. Speed and elevation are not
+# free of one another: an arm that delivers 12 m/s flat delivers appreciably less
+# thrown steeply. Linear in elevation is the crudest shape that captures it.
+#
+# THIS IS THE ASSUMPTION THE ANSWER RESTS ON, and it is a guess. It flips the
+# optimum from a 60 deg zoom to a flat throw, and in doing so closes a 194% gap
+# between this model and a marched one. Something that decisive should be
+# measured -- two filmed throws at different elevations would do it.
+THROW_FLAT, THROW_DROP = 12.0, 0.30   # m/s flat, fraction lost by ANGLE_MAX
+
+
+def throw_envelope(angle_deg):
+    """Release speed available at a given release elevation, m/s."""
+    return THROW_FLAT * (1 - THROW_DROP * angle_deg / THROW_BOUNDS["angle"][1])
+
+
+def wing_study(n=60, free_wing=True, verbose=False):
+    """
+    Optimise the WING against a realistic throw, with the tail held.
+
+    Restated rather than folded into throw_flight(): the free variables differ
+    almost entirely -- taper and wing station in, three tail variables out, and
+    release speed no longer independent but a function of elevation. Threading
+    that through the other function would have taken four more flags and left
+    neither problem legible.
+
+    WHY THE MODEL BECOMES TRUSTWORTHY HERE. Every earlier solve in this chapter
+    disagreed with a marched integration by 89-194%, because it threw steeply,
+    zoomed, and then oscillated in a pitch mode the node spacing cannot resolve.
+    Priced against elevation, the best throw is flat; a flat launch never excites
+    that mode; and collocated and marched agree to rounding. The fix was not
+    numerical -- it was asking the optimiser a question whose answer happens to
+    lie where the model is valid.
+
+    Args:
+        n: collocation nodes.
+        free_wing: whether taper and wing station join aspect ratio.
+        verbose: pass the solver's log through.
+
+    Returns:
+        dict of the design, the throw and both durations, plus "gap".
+    """
+    airplane0, layout0 = glider(**FIXED_TAIL)
+    seed = simulate(airplane0, layout0, ballast=3e-3, launch_angle=20.0)
+    tt = onp.linspace(0, seed["duration"], n)
+    keep = seed["t"] <= seed["duration"] + 1e-9
+    rs = lambda v: onp.interp(tt, seed["t"][keep], onp.asarray(v)[keep])
+    a_seed, v_seed = onp.radians(rs(seed["alpha"])), rs(seed["speed"])
+
+    opti = asb.Opti()
+    aspect = opti.variable(init_guess=6.0, lower_bound=2.0, upper_bound=12.0)
+    taper = (opti.variable(init_guess=1.0, lower_bound=0.35, upper_bound=1.0)
+             if free_wing else 1.0)
+    station = (opti.variable(init_guess=1.5, lower_bound=0.5, upper_bound=3.0)
+               if free_wing else 1.5)
+    ballast = opti.variable(init_guess=3e-3, lower_bound=0.3e-3, upper_bound=8e-3)
+    angle = opti.variable(init_guess=onp.radians(20.0), lower_bound=0.0,
+                          upper_bound=onp.radians(THROW_BOUNDS["angle"][1]))
+    speed = throw_envelope(angle * 180 / onp.pi)
+
+    airplane, layout = glider(aspect_ratio=aspect, taper=taper,
+                              nose_chords=station, **FIXED_TAIL)
+    total = structural_mass(layout)["total"] + asb.MassProperties(mass=ballast,
+                                                                 x_cg=0.0)
+    ref = [total.x_cg, 0, airplane.xyz_ref[2]]
+    T = opti.variable(init_guess=seed["duration"], log_transform=True)
+    t = np.linspace(0, T, n)
+    lim = onp.radians(THETA_LIMIT)
+    dyn = asb.DynamicsRigidBody2DBody(
+        mass_props=total,
+        x_e=opti.variable(init_guess=rs(seed["x"])),
+        z_e=opti.variable(init_guess=-rs(seed["altitude"])),
+        u_b=opti.variable(init_guess=v_seed * onp.cos(a_seed)),
+        w_b=opti.variable(init_guess=v_seed * onp.sin(a_seed)),
+        theta=opti.variable(init_guess=onp.radians(rs(seed["theta"])),
+                            lower_bound=-lim, upper_bound=lim),
+        q=opti.variable(init_guess=onp.radians(rs(seed["q"]))))
+
+    t0 = time.perf_counter()
+    op = dyn.op_point
+    op.atmosphere = ATMOSPHERE
+    aero = asb.AeroBuildup(airplane=airplane, xyz_ref=ref, op_point=op).run()
+    d = asb.AeroBuildup(
+        airplane=airplane, xyz_ref=ref,
+        op_point=asb.OperatingPoint(atmosphere=ATMOSPHERE, velocity=SM_SPEED,
+                                    alpha=ALPHA_LINEAR),
+    ).run_with_stability_derivatives(alpha=True, beta=False, p=False, q=False,
+                                     r=False)
+    aero_cost["calls"] += 2
+    aero_cost["seconds"] += time.perf_counter() - t0
+    static_margin = -d["Cma"] / d["CLa"]
+
+    dyn.add_force(*aero["F_b"], axes="body")
+    dyn.add_moment(My=aero["M_b"][1], axes="body")
+    dyn.add_gravity_force(g=G)
+    dyn.constrain_derivatives(opti, t)
+    alpha = np.arctan2(dyn.w_b, dyn.u_b)
+    opti.subject_to([
+        dyn.x_e[0] == 0, dyn.z_e[0] == -H_RELEASE, dyn.u_b[0] == speed,
+        dyn.w_b[0] == 0.0, dyn.theta[0] == angle, dyn.q[0] == 0.0,
+        dyn.u_b > 0.5, alpha < onp.radians(CLEAN_ALPHA),
+        alpha > -onp.radians(CLEAN_ALPHA), static_margin > SM_FLOOR,
+        dyn.altitude > GROUND, dyn.z_e[-1] == -GROUND,
+    ])
+    opti.maximize(T)
+    sol = opti.solve(verbose=verbose, max_iter=400,
+                     options={"ipopt.hessian_approximation": "limited-memory"})
+
+    val = lambda x: x if isinstance(x, float) else float(sol(x))
+    out = dict(duration=float(sol(T)), aspect_ratio=val(aspect),
+               taper=val(taper), station=val(station),
+               ballast=float(sol(ballast)),
+               launch_angle=float(onp.degrees(sol(angle))),
+               speed=float(sol(speed)),
+               static_margin=float(np.sum(sol(static_margin))),
+               alpha_max=float(onp.max(onp.degrees(sol(alpha)))),
+               free_wing=free_wing, status=sol.stats()["return_status"])
+
+    # The check that matters: re-fly it through the marched model.
+    marched = simulate(*glider(aspect_ratio=out["aspect_ratio"],
+                               taper=out["taper"], nose_chords=out["station"],
+                               **FIXED_TAIL),
+                       ballast=out["ballast"], launch_angle=out["launch_angle"],
+                       v_launch=out["speed"])
+    out.update(marched=marched["duration"],
+               gap=out["duration"] / marched["duration"] - 1)
+    return out

@@ -52,6 +52,14 @@ import lint
 # produce.
 MODEL_FILES = ("_model.py", "_analysis.py", "_model.qmd", "_budget.py")
 
+# Of what _budget.py holds, only this can change an answer: a solve budget that
+# binds truncates a solve. ENTRY_CEILING is read by the linter alone and
+# PROBE_BUDGET_CHAPTER by the scratch watchdog alone, so neither can move a
+# rendered number -- and treating the whole file as model-affecting would make
+# raising a lint threshold cost a full chapter re-render, which is how a
+# correctness rule turns into a reason to avoid the tooling.
+BUDGET_RESULT_SYMBOLS = {"SOLVE_BUDGET"}
+
 
 def _run(fn, argv):
     """Call another checker's main(), capturing what it printed."""
@@ -176,7 +184,10 @@ def _freeze_targets(root, chapters, force_all):
                 consts.add(name)
                 continue
             funcs |= result[0]
-            consts |= result[1]
+            # In _budget.py, only the solve budget can move a number; the rest is
+            # tooling. Everywhere else, any changed constant takes the chapter.
+            consts |= (result[1] & BUDGET_RESULT_SYMBOLS if name == "_budget.py"
+                       else result[1])
         if consts:
             whole.append(c)
             why.append(f"{c}: {', '.join(sorted(consts)[:3])} — read anywhere")

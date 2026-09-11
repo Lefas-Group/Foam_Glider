@@ -35,13 +35,17 @@ recording the answer as one notebook entry that passes the lint contract.
   question ──────────▶│ router          (1 cheap call)  │  a HINT, not a decision
                       └────────────────┬───────────────┘
                                        ▼
+              ┌──────────▶┌────────────────────────────┐
+              │           │ probe_loop  (agentic loop)  │  NO interrupt inside
+              │           └───────┬────────────────┬───┘  declares route + inputs
+              │      consult      │                │ done
+              │           ┌───────▼────────────┐   │
+              └───────────┤ consult (interrupt)│   │      open-ended guidance
+                          └────────────────────┘   │      max 3 per run
+                                                   ▼
                       ┌────────────────────────────────┐
-                      │ probe_loop      (agentic loop)  │  NO interrupt inside
-                      └────────────────┬───────────────┘   declares route + inputs
-                                       ▼
-                      ┌────────────────────────────────┐
-                      │ gate            (interrupt ONLY)│  nothing before the call
-                      └────────────────┬───────────────┘
+                      │ gate            (interrupt ONLY)│  ALWAYS fires: proposal
+                      └────────────────┬───────────────┘  nothing before the call
                             fork/new   │   entry
                       ┌────────────────▼───────────────┐
                       │ create_chapter  (scaffold)      │  skipped for a plain entry
@@ -80,12 +84,23 @@ class S(TypedDict):
     chapter: str | None
     route: Literal["entry", "new_chapter", "new_notebook"]
     inputs: list[Input]
-    messages: list[dict]           # provider-native; APPENDED to, never rebuilt
+    contents: list[Content]        # provider-native; APPENDED to, never rebuilt
     entry_path: Path | None
+    proposal: Proposal | None      # shown at the gate, before anything is written
     violations: list[str]
     attempts: int                  # write→lint retry counter, cap 3
+    consults: int                  # consult-node visits, cap 3
     cost: dict                     # accumulated token usage
     solve_seconds: float           # accumulated across probes — vs ENTRY_CEILING
+```
+
+```python
+class Proposal(TypedDict):
+    title: str                     # the question, verbatim
+    figures: list[str]             # captions only — nothing else
+    render_cost_s: float           # from aero_report(), never guessed
+    route: Literal["entry", "new_chapter"]
+    chapter: str
 ```
 
 ```python
@@ -97,9 +112,16 @@ class Input(TypedDict):
     why: str                       # ≤ 10 words — lint rule 8 budget
 ```
 
-**`messages` is append-only.** On a lint-fail retry, `write` appends a user turn
-carrying the violations; it does not reconstruct the list. Rebuilding would
-invalidate the cached conversation prefix on every retry.
+**`contents` is append-only, and the whole `Content` object goes back.** On a
+lint-fail retry, `write` appends a turn carrying the violations; it does not
+reconstruct the list. Two reasons, both load-bearing:
+
+1. Rebuilding invalidates the cached prefix on every retry (§9).
+2. Model turns carry **thought signatures** — opaque blobs that must be returned
+   byte-identically or the next request 400s (§8).
+
+Appending raw `Content` objects satisfies both by construction. Any code that
+extracts text and reassembles a turn breaks both at once.
 
 ---
 
@@ -108,26 +130,45 @@ invalidate the cached conversation prefix on every retry.
 | Node | Type | Contract |
 |---|---|---|
 | `router` | 1 cheap call, structured output | Nearest existing chapter, from `index.qmd` titles only. A **hint** that seeds the probe preamble — not binding |
-| `probe_loop` | agentic loop | Explores via `probe`. Terminates on `declare_route` + `declare_inputs`. Max 25 turns |
-| `gate` | `interrupt()` only | Fires on any `kind == "specified"`, a fork / new-chapter decision, or a requested budget raise |
+| `probe_loop` | agentic loop | Explores via `probe`. Terminates on `declare_route` + `declare_inputs` + `propose`. Max 25 turns |
+| `consult` | `interrupt()` only | Open-ended guidance. Answer appends to `messages`; returns to `probe_loop`. Max 3 per run |
+| `gate` | `interrupt()` only | **Always fires.** Carries the proposal; also any Specified input, fork decision, or budget raise |
 | `create_chapter` | pure code, conditional | Runs the scaffold script. Skipped when `route == "entry"` |
 | `write` | agentic loop | Creates the `.qmd`, may edit `_analysis.py` / `_model.py`. Has `lint` as a tool |
 | `lint` | pure code | `lint.py` + `check.py`. Unconditional edge. No model |
 | `verify` | 1 call, fresh context | Prose vs rendered output. Sees the render, **not** the conversation |
 | `commit` | pure code | git add + commit |
 
-**`gate` is a bare node** — exactly one `interrupt()` call, nothing before it (§11).
+**`gate` and `consult` are bare nodes** — exactly one `interrupt()` call each,
+nothing before it (§11).
+
+**The gate is unconditional.** Every entry stops for approval before anything is
+written to the notebook, carrying the title, the figure captions, and the render
+cost — *nothing else*. The cost comes from `aero_report()`, which prints the
+solves the probe just ran; it is never guessed. Specified inputs are asked in the
+same message: the run is stopping anyway, so they cost no extra round trip. A
+proposal covering more than one question splits into one entry each.
+
+**`consult` is for guidance, not decisions.** Open-ended questions the model
+wants a human view on — "is this worth pursuing?", "does this result smell
+wrong?", "should I compare against the other configuration?" — which are neither
+Specified inputs nor a route decision. It exists because a single terminal gate
+makes a run fail completely rather than get corrected cheaply.
+
+A consult reply may itself turn out to be a Specified input, in which case it is
+recorded with `owner: user` and the reason. If answering it needs computation, it
+is a question in its own right: answer it in-loop, then return to the original.
 
 **The route is an output of probing, not a precondition.** Whether a question
+
 needs a new chapter depends on whether the existing model can answer it — learned
 by reading `_model.py` and trying — and on whether the old answer stays valid
 under its own stated assumptions. A pre-probe router has neither fact. It
 therefore only nominates the nearest chapter; `probe_loop` decides.
 
-**Fork decisions go through the gate.** The criterion is *whether you want to
-keep both answers*, which changes what is being built rather than how accurately
-it was modelled — Specified by the §12 test. The gate already exists, so this
-costs nothing.
+**Fork decisions ride the gate.** The criterion is *whether you want to keep both
+answers*, which changes what is being built rather than how accurately it was
+modelled — Specified by the §12 test.
 
 **Lint is both a tool and an edge, deliberately.** The tool lets `write` fix
 violations inside one node without a checkpoint per cycle, and pairs with
@@ -150,13 +191,29 @@ Frozen, sorted list — prefix position 0, never varies per request.
 | Tool | Notes |
 |---|---|
 | `read_text_file` | `head` / `tail` for slicing — use instead of whole-file reads |
+| `read_media_file` | Base64 + MIME. **`verify` depends on this** (§6) |
 | `list_directory` | Sibling-entry discovery |
 | `search_files` | Pattern search within `chapters/` |
 | `edit_file` | `edits: [{oldText, newText}]`, `dryRun` → git-style diff. **Default path for modification** |
 | `write_file` | Full overwrite. **Creation only** — new entries |
 
-Expose only these five. You are the MCP client; the remaining tools stay out of
+Expose only these six. You are the MCP client; the remaining seven stay out of
 the prefix.
+
+Session via the official `mcp` SDK (`StdioServerParameters` → `stdio_client` →
+`ClientSession`), then convert each tool's JSON Schema to a
+`types.FunctionDeclaration`. The server enforces the directory boundary (§6) in
+its own process, which is why that boundary is trustworthy.
+
+**Merge and sort once:**
+
+```python
+TOOLS = sorted(mcp_decls + native_decls, key=lambda d: d.name)
+```
+
+MCP servers do not guarantee stable tool ordering across restarts, and tools sit
+at prefix position 0 — an unsorted merge silently invalidates the cache on every
+server restart (§9).
 
 ### Native handlers
 
@@ -171,7 +228,9 @@ the prefix.
 | `read_reference` | `(name: Enum) -> str` | 7 reference docs + vendored book chapters |
 | `list_chapters` | `() -> str` | Chapter names + `index.qmd` titles. Cheap; informs `declare_route` |
 | `declare_route` | `(route, chapter, rationale) -> str` | Binding route decision; may override the router's hint |
-| `declare_inputs` | `(items: list[Input]) -> str` | Terminates `probe_loop`; routes to `gate` |
+| `declare_inputs` | `(items: list[Input]) -> str` | Declares every input not yet fixed |
+| `propose` | `(p: Proposal) -> str` | Terminates `probe_loop`; routes to `gate` |
+| `consult` | `(question: str, why: str) -> str` | Suspends `probe_loop`, routes to the `consult` node. Guidance only — not Specified inputs, not route decisions |
 | `create_chapter` | `(name: str) -> str` | Wraps the scaffold script. Emits `index.qmd`, `_model.py`, `_analysis.py` from the template — the agent edits them afterwards via MCP |
 | `bash` | `(command: str) -> str` | Allowlisted escape hatch, §7 |
 
@@ -180,7 +239,14 @@ the prefix.
 
 `declare_route` takes `route ∈ {entry, new_chapter}` plus a one-line rationale
 naming what is held constant and what differs. `new_notebook` is not offered —
-it is human-run (§17). A `new_chapter` route forces the gate.
+it is human-run (§17).
+
+`consult` does **not** call `interrupt()` itself — it cannot, because
+`probe_loop` is a `while` loop (§11 constraint 2). It sets a flag that ends the
+current `agent_loop` turn and routes to the `consult` node, which holds the one
+`interrupt()`. The reply appends to `messages` and control returns to
+`probe_loop`, which resumes from the accumulated history. Capped at
+`S["consults"] < 3` so it cannot ping-pong.
 
 All native handlers truncate their own output — tracebacks keep the tail,
 listings keep the head. Cap 8 kB.
@@ -213,6 +279,24 @@ Both read paths that reach outside a single entry stay inside `chapters/`:
 rule 10 (link a sibling entry) and rule 2 (no repeated code across entries) both
 read sibling `.qmd` files; "read that chapter's `index.qmd`" is chapter-level.
 
+### Figures — the one unresolved access question
+
+`verify` must read rendered figures as images, not just printed text. The failure
+it exists to catch — prose written from the conversation rather than the output —
+is mostly a *figure* failure: a caption claiming a crossover at 6 m/s when the
+curve crosses at 8 is invisible to a text-only check.
+
+`read_media_file` supplies the mechanism. The open question is **where the bytes
+live**: `_freeze/chapters/<ch>/<entry>/execute-results/html.json` sits at the
+notebook root, *outside* `chapters/`. If figures are embedded base64 in that
+JSON, the allowlist must add read access to `_freeze/` (write access stays out —
+Quarto writes it as a subprocess and never needs MCP). If they are written to a
+`*_files/` directory beside the entry, the current allowlist already covers it.
+
+`freezediff.py`'s `figures(root, repo, ref, chapters)` already locates them —
+read it before finalising this. Until resolved, `verify` is text-only and rule 7
+(caption ≤ 50 words) is enforced while *caption accuracy* is not.
+
 ---
 
 ## 7. Bash allowlist
@@ -243,52 +327,71 @@ and gives an audit log. Threat model is a local single-user notebook.
 
 ## 8. The agent loop
 
-Used by `probe_loop` and `write`.
+Used by `probe_loop` and `write`. `google-genai`, `generate_content` (§16).
 
 ```python
-def agent_loop(messages, system, max_turns=25):
+def agent_loop(contents, cfg, max_turns=25):
     for _ in range(max_turns):
-        resp = client.messages.create(
-            model="claude-opus-5",
-            max_tokens=16000,
-            system=system,                    # cache_control on last block
-            tools=TOOLS,
-            messages=messages,
-            output_config={"effort": "medium"},
+        resp = client.models.generate_content(
+            model=MODEL, contents=contents, config=cfg,
         )
-        if resp.stop_reason == "refusal":
-            raise RuntimeError(resp.stop_details)
+        turn = resp.candidates[0].content
+        contents.append(turn)                      # WHOLE Content — signatures included
 
-        messages.append({"role": "assistant", "content": resp.content})
-        if resp.stop_reason != "tool_use":
-            return resp, messages
+        calls = [p.function_call for p in turn.parts if p.function_call]
+        if not calls:
+            return resp, contents
 
-        results = []
-        for b in resp.content:
-            if b.type != "tool_use":
-                continue
+        parts = []
+        for c in calls:
             try:
-                results.append({"type": "tool_result", "tool_use_id": b.id,
-                                "content": HANDLERS[b.name](**b.input)})
+                out = HANDLERS[c.name](**dict(c.args))
             except Exception as e:
-                results.append({"type": "tool_result", "tool_use_id": b.id,
-                                "content": f"{type(e).__name__}: {e}",
-                                "is_error": True})
-        messages.append({"role": "user", "content": results})
+                out = {"error": f"{type(e).__name__}: {e}"}
+            parts.append(types.Part.from_function_response(name=c.name, response=out))
+
+        contents.append(types.Content(role="user", parts=parts))
 
     raise RuntimeError("max turns exceeded")
 ```
 
 Invariants:
 
-1. Append `resp.content`, **not** `.text` — carries `tool_use` and thinking
-   blocks. Opus 5 thinks by default; blocks must return unmodified.
-2. All `tool_result` blocks in **one** user message. Splitting degrades parallel
-   tool calling silently.
-3. Always return a result, `is_error: true` on failure. A missing `tool_use_id`
-   is a 400.
-4. `max_tokens` caps thinking **plus** text.
-5. No `try/except` wrapping anything that can raise `interrupt` (§11).
+1. **Append `resp.candidates[0].content` whole.** Model turns carry
+   **thought signatures** — encrypted blobs holding the model's reasoning state.
+   The first `function_call` part of each step must carry its signature back
+   *exactly as received*, or the request fails with
+   `"Function call … is missing a thought_signature"`. Gemini 3 validates this
+   strictly; 2.5 did not. In parallel calls only the first part carries one.
+   Reconstructing a turn from extracted text drops it.
+2. All function responses in **one** turn. Splitting them degrades parallel
+   calling.
+3. Always return a response part, including on failure — an unanswered
+   `function_call` is an error on the next request.
+4. No `try/except` wrapping anything that can raise `interrupt` (§11).
+
+**Verified 2026-09-11** on `gemini-3.8-flash` and `gemini-3.1-pro-preview`, with
+a negative control:
+
+```
+A  append Content whole   -> 200 OK
+B  rebuild turn from name+args -> 400 INVALID_ARGUMENT
+   "Function call is missing a thought_signature in functionCall parts."
+```
+
+The failure is immediate and loud, not silent — a signature bug cannot reach
+production undetected. Signatures also survived on an old SDK (1.47.0), since
+they ride as opaque part data.
+
+**This is why the system is native rather than abstracted (§16).** Signature
+round-tripping has been a recurring defect in framework code — dropped in
+normalisation because a common message shape has nowhere to put an opaque
+provider blob. Appending raw `Content` sidesteps it entirely.
+
+`verify` constructs fresh history and therefore holds no signatures. If it is
+ever given tools, its synthetic turns need the documented dummy value
+`"skip_thought_signature_validator"`. As specified it makes one toolless call,
+so this does not arise.
 
 ---
 
@@ -296,46 +399,112 @@ Invariants:
 
 ### The mechanism
 
-The API is stateless — every request re-sends the whole conversation, so a
-20-turn probe loop transmits the system prompt and tool schemas twenty times.
-Caching lets the provider skip re-processing the front of that payload. Three
-facts define it:
+`generate_content` is stateless — every request re-sends the whole conversation,
+so a 20-turn probe loop transmits the system instruction and tool schemas twenty
+times. Caching lets the model skip re-processing the front of that payload.
+Three facts define it:
 
-1. **The request renders in a fixed order:** `tools` → `system` → `messages`.
-2. **The cache key is the exact bytes from position 0 to a marker**, placed with
-   `cache_control` on a content block: "everything before this is cacheable".
+1. **The request renders in a fixed order:** `tools` → `system_instruction` →
+   `contents`.
+2. **The cache key is the leading span of that payload.**
 3. **It is a prefix match.** A single changed byte at position *N* invalidates
    *N* → end; 0 → *N*−1 still hits.
 
 The design rule follows mechanically: **stable content must physically precede
 volatile content**, because anything volatile poisons everything downstream.
 
-At ~5k tokens of tools + system over 20 turns: 100k tokens at 1× uncached,
-versus 5k at 1.25× (write) + 19 × 5k at 0.1× (read) ≈ 15.75k equivalent. Roughly
-6× on the fixed portion — and the probe loop is where the turns are.
+### Two mechanisms, and which to use
+
+| | Implicit | Explicit |
+|---|---|---|
+| Setup | None — on by default, 2.5 and newer | `client.caches.create(...)`, reference the handle |
+| Saving | 75% off matched prefix, **best effort** | Guaranteed, with a storage charge for the TTL |
+| Available on | Both APIs | `generate_content` only — **not** the Interactions API |
+
+**Use explicit.** This system's prefix is frozen by construction — sorted tool
+list, byte-identical system instruction — which is the ideal explicit-cache case:
+create one cached content at run start holding tools + system instruction, hold
+the handle for the run, let the TTL expire after. That converts a best-effort
+discount into a guaranteed one, and it is the reason §16 stays on
+`generate_content`.
+
+Implicit caching remains as a free fallback if the prefix falls under the
+minimum or the handle expires mid-run.
+
+### The 4,096-token floor — MEASURED, and it binds
+
+Gemini 3.x requires **4,096 tokens** before anything caches — 8× Opus 5's 512.
+Below the floor it silently does not cache; no error.
+
+Measured against `gemini-3.8-flash`, 2026-09-11:
+
+| | tokens |
+|---|---|
+| 19 tool declarations (6 MCP + 13 native) | **1,444** |
+| System instruction | **14.6 tokens/line** (calibrated on `SKILL.md`: 458 lines → 6,683) |
+
+Which puts the prefix here:
+
+| System instruction | Prefix | |
+|---|---|---|
+| 100 lines | ~2,900 | short 1,193 |
+| **150 lines** (the original target) | **~3,633** | **short 463** |
+| **200 lines** | **~4,362** | **clears** |
+| 250 lines | ~5,092 | clears |
+
+**So the distillation target is ~200 lines, not ~150.** This inverts the usual
+instinct: compressing the system instruction below ~200 lines *costs* money,
+because it drops the prefix under the floor and every turn of a 25-turn probe
+loop then pays full price. There is a floor on useful compression, and it is
+about 2,650 tokens of system instruction.
+
+Spend the extra ~50 lines on content that earns its place — the `why.md`
+rationale behind each lint rule is the obvious candidate, since arguing with a
+rule is a known failure mode and the text is already written.
+
+### Explicit caching — validated
+
+Confirmed working with **both** `system_instruction` and `tools` in one cached
+object:
+
+```
+cache created : 8,127 tokens (SKILL.md + 19 tools, ttl=600s)
+call 1        : prompt=8,136  cached=8,127  ->  9 tokens billed fresh
+call 2        : prompt=8,136  cached=8,127  ->  9 tokens billed fresh
+```
+
+```python
+cache = client.caches.create(model=MODEL, config=types.CreateCachedContentConfig(
+    system_instruction=SYSTEM, tools=TOOLSET, ttl="3600s"))
+# ... generate_content(config=types.GenerateContentConfig(cached_content=cache.name))
+client.caches.delete(name=cache.name)
+```
+
+Create at run start, hold the handle, delete at the end. Set the TTL to cover a
+run — note the gate may hold for days, so the cache will expire across it and
+must be recreated on resume; implicit caching covers the gap.
 
 ### The layout
 
 | Segment | Contents | Cached |
 |---|---|---|
-| `tools` | 17 tools, frozen and **sorted**, identical every call | yes |
-| `system` | Triage table, 17 rules as one-liners, entry format + budgets, scope section. ~150 lines | yes — `cache_control` on last block |
-| `messages` | Question, date, chapter state, everything volatile | no |
+| `tools` | 17 declarations, frozen and **sorted**, identical every call | yes |
+| `system_instruction` | Triage table, 17 rules **with their `why.md` rationale**, entry format + budgets, scope section. **~200 lines** — see the floor above | yes |
+| `contents` | Question, date, chapter state, everything volatile | no |
 
-**Never in `system`:** dates, notebook paths, chapter names, session IDs,
-unsorted `json.dumps`, conditional sections. The skill's `SKILL.md` opens with
-``Now: !`date "+%Y-%m-%d %H:%M"` `` — harmless under Claude Code, but in the
-system segment it changes the cache key every minute and re-processes tools *and*
-system on every call. One line, and caching is off. Move it to the user turn.
+**Never in `system_instruction`:** dates, notebook paths, chapter names, session
+IDs, unsorted `json.dumps`, conditional sections. The skill's `SKILL.md` opens
+with ``Now: !`date "+%Y-%m-%d %H:%M"` `` — harmless under Claude Code, but here it
+changes the cache key every minute and re-processes tools *and* system on every
+call. One line, and caching is off.
 
-A reordered tool list has the same effect from position 0, which is why the list
-is frozen and sorted. Appending to `messages` (§3) extends a cached prefix;
-rebuilding it changes bytes mid-prefix and discards the cache.
+A reordered tool list has the same effect from position 0 — hence sorting after
+merging MCP and native declarations (§5). Appending to `contents` (§3) extends a
+cached prefix; rebuilding it discards the cache.
 
-Minimum cacheable prefix on Opus 5 is 512 tokens; below that it silently does not
-cache. Verify with one number — `usage.cache_read_input_tokens`. Zero across
-repeated calls means a silent invalidator, and the fix is to diff the rendered
-prefix between two requests.
+Verify with one number: **`usage_metadata.cached_content_token_count`**. Zero
+across repeated calls means either a silent invalidator or a prefix under the
+floor — check the token count first, then diff the rendered prefix.
 
 Reference corpus stays behind `read_reference` — description in context, body on
 demand. Past ~15 docs, switch to the tool-search server tool with
@@ -399,10 +568,15 @@ loaded machine; wall time does not (the same solve measured 533.9 s against a
 
 **Hard constraints — violating these breaks resume:**
 
-1. **`interrupt()` appears only in `gate`.** On resume a node restarts from the
-   top, not from the interrupt line.
+1. **`interrupt()` appears only in `gate` and `consult`** — bare nodes holding
+   one call each and nothing else. On resume a node restarts from the top, not
+   from the interrupt line.
 2. **`probe_loop` and `write` contain no `interrupt()`.** `while` + `interrupt`
-   in one node replays prior iterations exponentially on each resume.
+   in one node replays prior iterations exponentially on each resume. This is
+   why `consult` is a separate node rather than a tool that blocks in place.
+   Re-entering `probe_loop` afterwards is safe: `messages` is checkpointed state
+   (§3), so the loop resumes from accumulated history rather than replaying, and
+   `@task` memoisation covers any probe already run.
 3. **One `interrupt()` per node.** Matching within a node is strictly
    index-based; conditional or loop-driven interrupts misalign resume values.
 4. **Never `try/except` around `interrupt()`** — it is an exception; catching it
@@ -432,8 +606,14 @@ answers nothing. Lint rule 4 catches the artifact.
 Unattended runs set `owner: assumed`, keeping "did a person decide this?"
 visible.
 
-One gate node, three triggers: a Specified input, a `new_chapter` route (§4), or
-a requested budget raise (§10).
+**The gate always fires** — it carries the proposal (§4). Specified inputs, a
+`new_chapter` route, and a requested budget raise (§10) ride the same stop, which
+is why asking them costs nothing extra.
+
+`consult` is the separate channel for everything that is *not* a binding
+decision. Keeping them apart matters: if guidance questions were routed through
+the gate, the gate's payload would stop being "here is what I propose to write"
+and start being a conversation.
 
 ---
 
@@ -508,10 +688,12 @@ An inline `{python}` expression counts as one word. Order: hero → `**Answer.**
 | Metric | Source | Use |
 |---|---|---|
 | **First-pass lint violations / entry** | `lint.py` before any retry | The eval. Compare models, prompts, effort levels |
-| Input/output/cache tokens per entry | `usage` per call | Cost per entry; freeze records no timing |
-| Cache read ratio | `usage.cache_read_input_tokens` | Zero ⇒ silent prefix invalidator |
+| Input/output/cached tokens per entry | `usage` per call | Cost per entry; freeze records no timing |
+| Cached-token ratio | `usage.total_cached_tokens` | Zero ⇒ silent invalidator, **or** a prefix under the 4,096 floor (§9) |
 | Turns per probe loop | loop counter | Probe efficiency |
-| Gate firings and their latency | checkpoint timestamps | How often a Specified input was genuinely missing |
+| Gate latency | checkpoint timestamps | How long approval actually takes |
+| Consults per run, and their text | `S["consults"]`, run log | Where the prompt or references are underspecified — a recurring consult is a missing reference doc |
+| Proposals rejected at the gate | gate resume values | Wasted probe cost; the signal that routing or scope is off |
 
 First-pass violation count is a real metric over a real artifact — and the
 target for any later prompt optimisation.
@@ -520,38 +702,65 @@ target for any later prompt optimisation.
 
 ## 16. Model configuration
 
-```python
-model       = "claude-opus-5"
-max_tokens  = 16000          # caps thinking + text
-effort      = "medium"       # sweep low/medium/high against §15
-```
-
-Thinking is on by default on Opus 5. Do not disable it — with thinking off the
-model can emit tool calls as plain text (the call silently never runs) and leak
-`<thinking>` tags. Lower `effort` instead.
-
-**Provider swap** costs one interface:
+**Primary model: Gemini 3.x, via the native `google-genai` SDK ≥ 2.23.**
+Candidates as of 2026-09-11: `gemini-3.1-pro-preview` (deepest reasoning) and
+`gemini-3.8-flash` (newest Flash). Both verified for signatures and caching.
+Pin the ID explicitly — the 3.x line moves fast.
 
 ```python
-def complete(system, messages, tools, *, effort="medium") -> Response: ...
+cfg = types.GenerateContentConfig(
+    system_instruction=SYSTEM,          # only when not using the cache handle
+    tools=TOOLS,                        # sorted, frozen
+    thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.HIGH),
+    cached_content=CACHE_HANDLE,        # explicit cache from run start (§9)
+)
 ```
 
-Both halves are provider-agnostic — MCP filesystem serves any MCP-capable
-client, and no Claude-specific tool definitions are used.
+**SDK version matters.** `thinking_level` needs ≥ 2.x — on 1.47 `ThinkingConfig`
+exposes only `include_thoughts` and `thinking_budget`, and the attribute is
+simply absent. Pin the version; don't let a stale system install shadow it.
 
-**Implement `complete()` with LiteLLM initially.** It supports block-level
-`cache_control` in exactly the form §9 uses, exposes
-`cache_creation_input_tokens` for verification, and **translates `cache_control`
-to Gemini's native format automatically** — which is most of the work of the §15
-bake-off. (Only Anthropic's *top-level* `cache_control` shortcut is unsupported;
-this system does not use it.)
+**Measured thinking levels** (both models): `LOW`, `MEDIUM`, `HIGH` accepted;
+**`MINIMAL` returns a 400** despite being in the enum. Sweep LOW/MEDIUM/HIGH
+against §15's first-pass violation count — it is the effort-sweep equivalent and
+the main cost lever. `thinking_level` and the legacy `thinking_budget` are
+mutually exclusive; sending both returns a 400.
 
-**The known risk is parameter lag, not caching.** Opus 5-specific parameters —
-adaptive thinking, `output_config.effort`, thinking-block round-tripping (§8) —
-are newer than the abstraction and reach the API via passthrough. LiteLLM's own
-caching documentation lists minimum cacheable prefixes that are stale for current
-models, which is evidence the lag is real. If one of these breaks, swap this one
-function to the native SDK; the interface is what makes that cheap.
+### Why `generate_content` and not the Interactions API
+
+The Interactions API is GA and is where new Gemini capabilities land; it manages
+conversation history server-side via `previous_interaction_id`. Two reasons this
+system stays on `generate_content` anyway:
+
+1. **Explicit caching is unavailable on Interactions** (§9), and this system's
+   frozen prefix is precisely the case explicit caching exists for.
+2. **History ownership would be split.** LangGraph already checkpoints
+   `contents` (§3), which is what makes the gate resumable after days. Server-side
+   history adds a second source of truth whose retention this system does not
+   control.
+
+The counter-argument is real and worth revisiting: server-side history means
+Google round-trips the thought signatures, removing §8's sharpest failure mode.
+If signature handling proves troublesome in practice, the Interactions API is the
+principled retreat — at the cost of explicit caching and single-source history.
+
+### Provider swap
+
+One interface:
+
+```python
+def complete(contents, cfg) -> Response: ...
+```
+
+The other half is already portable — MCP filesystem serves any MCP-capable
+client, and tool schemas are plain JSON Schema from Pydantic (§5).
+
+**Do not route this through an abstraction layer** (LiteLLM, LangChain chat
+models). At one provider it buys nothing, and it carries two specific risks here:
+thought-signature round-tripping, which has been a recurring defect in framework
+code (§8), and explicit-cache lifecycle, which a chat-completions shape models
+poorly. Adding Claude later for a §15 bake-off means a second implementation of
+`complete()` — roughly 50 lines — not a rewrite.
 
 Ignore LLM *gateways* (Bifrost, Portkey, TrueFoundry, OpenRouter) — proxy servers
 for team key management, budgets and RBAC. Wrong category and wrong scale.
@@ -586,8 +795,28 @@ for team key management, budgets and RBAC. Wrong category and wrong scale.
    Claude Code working directory.
 5. How `ENTRY_CEILING` is read per chapter (`index.qmd` parse vs import) so
    layer 4 in §10 can enforce it between probes.
-6. **LiteLLM passthrough for Opus 5 parameters** (§16) — adaptive thinking,
-   `output_config.effort`, and thinking blocks surviving a round trip unmodified.
-   Test with one call and check `usage.cache_read_input_tokens` on the second.
+6. ~~Thought signatures survive the loop~~ — **DONE 2026-09-11.** Confirmed on
+   both candidate models, with a negative control. See §8.
 7. Whether the chapter scaffold script can be invoked headlessly by
    `create_chapter` without the Claude Code harness.
+8. **Where rendered figure bytes live** (§6) — embedded base64 in
+   `_freeze/**/execute-results/html.json`, or files in a `*_files/` directory.
+   Determines whether the MCP allowlist needs read access to `_freeze/`. Read
+   `freezediff.py`'s `figures()`. `verify` is text-only until this is settled.
+9. Whether `read_media_file` output round-trips as inline image data through
+   `complete()` — `verify` depends on it (§6).
+10. ~~Measure the frozen prefix against the cache floor~~ — **DONE.** Prefix at
+    150 lines falls 463 tokens short; target is ~200 lines. Explicit caching
+    validated end to end. See §9.
+11. ~~Exact model ID~~ — **DONE.** `gemini-3.1-pro-preview` /
+    `gemini-3.8-flash`. Re-check periodically; the line moves.
+12. ~~`role` for function-response turns~~ — **DONE.** `"user"` is correct
+    (§8's loop ran green).
+13. Re-measure the prefix once the system instruction is actually written — the
+    200-line figure is extrapolated from 14.6 tokens/line, and prose density
+    varies. The check is one `generate_content` call reading
+    `prompt_token_count`; `count_tokens` **cannot** be used, as it rejects
+    `tools` on the Gemini API.
+14. Pick between `gemini-3.1-pro-preview` and `gemini-3.8-flash` using §15's
+    first-pass violation count. Pro spent 284 thinking tokens against Flash's 46
+    on the same trivial call — a real behavioural difference worth pricing.
