@@ -24,6 +24,7 @@ Asked of the user, 2026-09-09:
 2. Launch speed and angle free, speed capped `{python} f"{THROW_BOUNDS['speed'][1]:.0f}"` m/s.
 3. Solve budget `{python} f"{solve_budget():.0f}"` s, in `_budget.py`.
 4. Entry ceiling `{python} f"{ENTRY_CEILING:.0f}"` s, raised likewise.
+5. Probe budget `{python} f"{PROBE_BUDGET_CHAPTER:.0f}"` s, granted for this chapter.
 :::
 
 ::: {.callout-note}

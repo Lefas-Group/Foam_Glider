@@ -20,7 +20,8 @@ recording the answer as one notebook entry that passes the lint contract.
 | `chapters/**` — entries, `_model.py`, `_analysis.py`, `index.qmd` | **Writable** — design tier |
 | `_notebook.py`, `_quarto.yml` | Not exposed; drift is a preflight failure |
 | `_scratch/**` | Reached only through the `probe` handler |
-| New notebook / chapter scaffolding | Human-run script |
+| New chapter | **Agent-triggered** via `create_chapter`, which runs the scaffold script; the template itself stays out of reach |
+| New notebook | Human-run script — wants a fresh session |
 | Lint rule 11 | Moves from lint gate → preflight assertion |
 | Raising `SOLVE_BUDGET` / `ENTRY_CEILING` | Human decision via the gate |
 | Suspected-bad lint rules | Written to the run log, never to `why.md` |
@@ -31,15 +32,19 @@ recording the answer as one notebook entry that passes the lint contract.
 
 ```
                       ┌────────────────────────────────┐
-  question ──────────▶│ router          (1 model call)  │
+  question ──────────▶│ router          (1 cheap call)  │  a HINT, not a decision
                       └────────────────┬───────────────┘
                                        ▼
                       ┌────────────────────────────────┐
                       │ probe_loop      (agentic loop)  │  NO interrupt inside
-                      └────────────────┬───────────────┘
+                      └────────────────┬───────────────┘   declares route + inputs
                                        ▼
                       ┌────────────────────────────────┐
                       │ gate            (interrupt ONLY)│  nothing before the call
+                      └────────────────┬───────────────┘
+                            fork/new   │   entry
+                      ┌────────────────▼───────────────┐
+                      │ create_chapter  (scaffold)      │  skipped for a plain entry
                       └────────────────┬───────────────┘
                                        ▼
                       ┌────────────────────────────────┐
@@ -102,15 +107,27 @@ invalidate the cached conversation prefix on every retry.
 
 | Node | Type | Contract |
 |---|---|---|
-| `router` | 1 call, structured output | `{route, chapter}`. Reads chapter `index.qmd` titles only, never bodies |
-| `probe_loop` | agentic loop | Explores via `probe`. Terminates on `declare_inputs`. Max 25 turns |
-| `gate` | `interrupt()` only | Fires on any `kind == "specified"`, or a requested budget raise |
+| `router` | 1 cheap call, structured output | Nearest existing chapter, from `index.qmd` titles only. A **hint** that seeds the probe preamble — not binding |
+| `probe_loop` | agentic loop | Explores via `probe`. Terminates on `declare_route` + `declare_inputs`. Max 25 turns |
+| `gate` | `interrupt()` only | Fires on any `kind == "specified"`, a fork / new-chapter decision, or a requested budget raise |
+| `create_chapter` | pure code, conditional | Runs the scaffold script. Skipped when `route == "entry"` |
 | `write` | agentic loop | Creates the `.qmd`, may edit `_analysis.py` / `_model.py`. Has `lint` as a tool |
 | `lint` | pure code | `lint.py` + `check.py`. Unconditional edge. No model |
 | `verify` | 1 call, fresh context | Prose vs rendered output. Sees the render, **not** the conversation |
 | `commit` | pure code | git add + commit |
 
 **`gate` is a bare node** — exactly one `interrupt()` call, nothing before it (§11).
+
+**The route is an output of probing, not a precondition.** Whether a question
+needs a new chapter depends on whether the existing model can answer it — learned
+by reading `_model.py` and trying — and on whether the old answer stays valid
+under its own stated assumptions. A pre-probe router has neither fact. It
+therefore only nominates the nearest chapter; `probe_loop` decides.
+
+**Fork decisions go through the gate.** The criterion is *whether you want to
+keep both answers*, which changes what is being built rather than how accurately
+it was modelled — Specified by the §12 test. The gate already exists, so this
+costs nothing.
 
 **Lint is both a tool and an edge, deliberately.** The tool lets `write` fix
 violations inside one node without a checkpoint per cycle, and pairs with
@@ -152,11 +169,18 @@ the prefix.
 | `api_search` | `(query: str) -> str` | AeroSandbox introspection |
 | `api_signature` | `(path: str) -> str` | Signature + docstring |
 | `read_reference` | `(name: Enum) -> str` | 7 reference docs + vendored book chapters |
+| `list_chapters` | `() -> str` | Chapter names + `index.qmd` titles. Cheap; informs `declare_route` |
+| `declare_route` | `(route, chapter, rationale) -> str` | Binding route decision; may override the router's hint |
 | `declare_inputs` | `(items: list[Input]) -> str` | Terminates `probe_loop`; routes to `gate` |
+| `create_chapter` | `(name: str) -> str` | Wraps the scaffold script. Emits `index.qmd`, `_model.py`, `_analysis.py` from the template — the agent edits them afterwards via MCP |
 | `bash` | `(command: str) -> str` | Allowlisted escape hatch, §7 |
 
 `declare_inputs` rejects `kind == "derivable"`:
 `"'{name}' is derivable — compute it, don't declare it."`
+
+`declare_route` takes `route ∈ {entry, new_chapter}` plus a one-line rationale
+naming what is held constant and what differs. `new_notebook` is not offered —
+it is human-run (§17). A `new_chapter` route forces the gate.
 
 All native handlers truncate their own output — tracebacks keep the tail,
 listings keep the head. Cap 8 kB.
@@ -270,21 +294,48 @@ Invariants:
 
 ## 9. Prompt layout and caching
 
-Render order is `tools` → `system` → `messages`; prefix match, byte-exact.
+### The mechanism
+
+The API is stateless — every request re-sends the whole conversation, so a
+20-turn probe loop transmits the system prompt and tool schemas twenty times.
+Caching lets the provider skip re-processing the front of that payload. Three
+facts define it:
+
+1. **The request renders in a fixed order:** `tools` → `system` → `messages`.
+2. **The cache key is the exact bytes from position 0 to a marker**, placed with
+   `cache_control` on a content block: "everything before this is cacheable".
+3. **It is a prefix match.** A single changed byte at position *N* invalidates
+   *N* → end; 0 → *N*−1 still hits.
+
+The design rule follows mechanically: **stable content must physically precede
+volatile content**, because anything volatile poisons everything downstream.
+
+At ~5k tokens of tools + system over 20 turns: 100k tokens at 1× uncached,
+versus 5k at 1.25× (write) + 19 × 5k at 0.1× (read) ≈ 15.75k equivalent. Roughly
+6× on the fixed portion — and the probe loop is where the turns are.
+
+### The layout
 
 | Segment | Contents | Cached |
 |---|---|---|
-| `tools` | 14 tools, frozen and sorted, identical every call | yes |
+| `tools` | 17 tools, frozen and **sorted**, identical every call | yes |
 | `system` | Triage table, 17 rules as one-liners, entry format + budgets, scope section. ~150 lines | yes — `cache_control` on last block |
 | `messages` | Question, date, chapter state, everything volatile | no |
 
 **Never in `system`:** dates, notebook paths, chapter names, session IDs,
-unsorted `json.dumps`. The skill's `!`date`` / `!`find`` header lines are cheap
-under Claude Code and poison a frozen prefix — they move to the user turn.
+unsorted `json.dumps`, conditional sections. The skill's `SKILL.md` opens with
+``Now: !`date "+%Y-%m-%d %H:%M"` `` — harmless under Claude Code, but in the
+system segment it changes the cache key every minute and re-processes tools *and*
+system on every call. One line, and caching is off. Move it to the user turn.
 
-Minimum cacheable prefix on Opus 5 is 512 tokens. Verify with
-`usage.cache_read_input_tokens`; zero across repeated calls means a silent
-invalidator.
+A reordered tool list has the same effect from position 0, which is why the list
+is frozen and sorted. Appending to `messages` (§3) extends a cached prefix;
+rebuilding it changes bytes mid-prefix and discards the cache.
+
+Minimum cacheable prefix on Opus 5 is 512 tokens; below that it silently does not
+cache. Verify with one number — `usage.cache_read_input_tokens`. Zero across
+repeated calls means a silent invalidator, and the fix is to diff the rendered
+prefix between two requests.
 
 Reference corpus stays behind `read_reference` — description in context, body on
 demand. Past ~15 docs, switch to the tool-search server tool with
@@ -379,8 +430,10 @@ Never sweep a Specified input instead of asking: it triples the output and still
 answers nothing. Lint rule 4 catches the artifact.
 
 Unattended runs set `owner: assumed`, keeping "did a person decide this?"
-visible. `gate` also fires on a requested budget raise — one gate node, two
-triggers.
+visible.
+
+One gate node, three triggers: a Specified input, a `new_chapter` route (§4), or
+a requested budget raise (§10).
 
 ---
 
@@ -477,7 +530,7 @@ Thinking is on by default on Opus 5. Do not disable it — with thinking off the
 model can emit tool calls as plain text (the call silently never runs) and leak
 `<thinking>` tags. Lower `effort` instead.
 
-**Provider swap** costs one interface, written in-house:
+**Provider swap** costs one interface:
 
 ```python
 def complete(system, messages, tools, *, effort="medium") -> Response: ...
@@ -486,22 +539,32 @@ def complete(system, messages, tools, *, effort="medium") -> Response: ...
 Both halves are provider-agnostic — MCP filesystem serves any MCP-capable
 client, and no Claude-specific tool definitions are used.
 
-**Do not use a provider-abstraction library** (LiteLLM, LangChain chat models,
-or similar) for the model call. They normalise to a common request shape, and
-this system's token strategy depends on three provider-native details surviving
-byte-exactly: `cache_control` breakpoint placement (§9), thinking blocks
-round-tripped unmodified (§8), and `output_config.effort`. Such libraries earn
-their place at many providers, a team gateway, or cross-provider fallback — none
-of which apply here. At two candidate providers the adapter above is ~50 lines
-you own and can reason about.
+**Implement `complete()` with LiteLLM initially.** It supports block-level
+`cache_control` in exactly the form §9 uses, exposes
+`cache_creation_input_tokens` for verification, and **translates `cache_control`
+to Gemini's native format automatically** — which is most of the work of the §15
+bake-off. (Only Anthropic's *top-level* `cache_control` shortcut is unsupported;
+this system does not use it.)
+
+**The known risk is parameter lag, not caching.** Opus 5-specific parameters —
+adaptive thinking, `output_config.effort`, thinking-block round-tripping (§8) —
+are newer than the abstraction and reach the API via passthrough. LiteLLM's own
+caching documentation lists minimum cacheable prefixes that are stale for current
+models, which is evidence the lag is real. If one of these breaks, swap this one
+function to the native SDK; the interface is what makes that cheap.
+
+Ignore LLM *gateways* (Bifrost, Portkey, TrueFoundry, OpenRouter) — proxy servers
+for team key management, budgets and RBAC. Wrong category and wrong scale.
 
 ---
 
 ## 17. Human-operated, outside the agent
 
-- `make new-notebook` — scaffolds `_quarto.yml`, `_notebook.py`, `_scratch/`
-- `make new-chapter`
-- Editing the system prompt, `lint.py`, `check.py`, `references/`
+- `make new-notebook` — scaffolds `_quarto.yml`, `_notebook.py`, `_scratch/`.
+  Stays human-run: a new notebook wants a fresh session, which is a process
+  decision, not the agent's
+- Editing the system prompt, `lint.py`, `check.py`, `references/`, and the
+  chapter template that `create_chapter` instantiates
 - Raising `SOLVE_BUDGET` / `ENTRY_CEILING` (recorded in `index.qmd`)
 - Deciding rule changes from the friction log
 
@@ -523,3 +586,8 @@ you own and can reason about.
    Claude Code working directory.
 5. How `ENTRY_CEILING` is read per chapter (`index.qmd` parse vs import) so
    layer 4 in §10 can enforce it between probes.
+6. **LiteLLM passthrough for Opus 5 parameters** (§16) — adaptive thinking,
+   `output_config.effort`, and thinking blocks surviving a round trip unmodified.
+   Test with one call and check `usage.cache_read_input_tokens` on the second.
+7. Whether the chapter scaffold script can be invoked headlessly by
+   `create_chapter` without the Claude Code harness.

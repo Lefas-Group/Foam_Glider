@@ -24,3 +24,14 @@
 # =============================================================================
 SOLVE_BUDGET = 600.0   # s for any one solve; entries need ~210 s at n=60
 ENTRY_CEILING = 400.0  # s for one entry, checked by lint rule 17
+
+# Granted by the user, 2026-09-11, for probing THIS chapter. Sized from what the
+# probes here have actually taken rather than chosen: one n=60 solve runs
+# 204-212 s, the four-arm speed sweep 385 s, and the three-point grid-convergence
+# study about 580 s. 900 s covers the largest of those with room for the ~1.5x
+# swing machine load has produced, and still stops a runaway.
+#
+# The notebook default is 300 s and is deliberately tight. Hitting it is supposed
+# to force a choice -- cheaper probe, or ask -- so this override exists because it
+# was asked for and agreed, not because a probe was inconvenient.
+PROBE_BUDGET_CHAPTER = 900.0

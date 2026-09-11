@@ -616,6 +616,20 @@ def _budget_rules(root, chapters):
                             f"`## Specified` callout — add {want}, so the cost "
                             f"this chapter may spend is a recorded decision"))
 
+            # A raised PROBE budget is the same kind of decision, and a more
+            # tempting one to take quietly: the notebook default is deliberately
+            # tight so that hitting it forces a choice, and raising it without
+            # saying so turns a stop back into a speed bump.
+            found_p, _ = _bound(
+                (chapter / "_budget.py").read_text()
+                if (chapter / "_budget.py").exists() else "",
+                "PROBE_BUDGET_CHAPTER")
+            if found_p and "PROBE_BUDGET_CHAPTER" not in spec:
+                problems.append(
+                    (index, "this chapter raises the probe budget but does not "
+                            "say so in `## Specified` — the default is tight on "
+                            "purpose, so a grant of more belongs on the record"))
+
         if budget is None:
             continue                    # chapter opted out, deliberately
 

@@ -45,7 +45,12 @@ import sys
 import freezediff
 import lint
 
-MODEL_FILES = ("_model.py", "_analysis.py", "_model.qmd")
+# _budget.py is here because it sets the solve budget, and a budget that binds
+# changes the answer -- so editing it can move a frozen number exactly as editing
+# the model can. It was omitted at first, which would have let a budget change
+# leave every page in the chapter serving values the current limits do not
+# produce.
+MODEL_FILES = ("_model.py", "_analysis.py", "_model.qmd", "_budget.py")
 
 
 def _run(fn, argv):
