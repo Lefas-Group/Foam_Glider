@@ -1,0 +1,72 @@
+---
+title: "How do the error and the design change if we sweep launch speed rather than optimising over it?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+# One solve per fixed launch speed, each re-flown through the marched model.
+# Holding the speed is the point: optimised, it goes to its bound every time and
+# reports the brief back instead of the aerodynamics.
+sweep = throw_sweep()
+
+gentlest, hardest = sweep[0], sweep[-1]
+ars = [r["aspect_ratio"] for r in sweep]
+interior = [r for r in sweep if r["launch_angle"] < THROW_BOUNDS["angle"][1] - 1e-6]
+
+assert gentlest["gap"] > 0.5            # the error survives the gentlest throw
+assert max(ars) - min(ars) < 0.3        # and the design barely moves across it
+assert hardest["marched"] > gentlest["marched"]   # throwing harder does help
+assert all(r["status"] == "Solve_Succeeded" for r in sweep)
+```
+
+::: {.hero-pair}
+::: {.hero-ref}
+[`{python} f"{gentlest['gap']:.0%}"`]{.hero-value}
+[high at the gentlest throw]{.hero-label}
+:::
+::: {}
+[`{python} f"{gentlest['marched']:.1f}"`–`{python} f"{hardest['marched']:.1f}"` s]{.hero-value}
+[what the throw actually buys]{.hero-label}
+:::
+:::
+
+**Answer.** Neither moves much. The gentlest throw still reads
+`{python} f"{gentlest['gap']:.0%}"` high, so the disagreement was never the speed
+bound's doing, and aspect ratio holds within
+`{python} f"{max(ars) - min(ars):.2f}"` of `{python} f"{min(ars):.2f}"` across a
+doubling of speed. What sweeping buys is the marched column (@tbl-sweep) —
+[`{python} f"{gentlest['marched']:.2f}"` to
+`{python} f"{hardest['marched']:.2f}"` s]{.key}, each an independent integration,
+and a release angle that is a real answer below
+`{python} f"{interior[-1]['speed']:.0f}"` m/s.
+
+::: {.callout-warning}
+## The throw was not the problem
+Holding it removes two active bounds and leaves the disagreement where it was.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **Four speeds**, from the brief to the cap.
+2. **One start** for every arm, so only speed differs.
+3. **Angle still free**, and still bounded.
+4. **One start per solve**; basins exist.
+:::
+
+```{python}
+#| label: tbl-sweep
+#| tbl-cap: "Time aloft against release speed, each design optimised at that speed and then re-flown through the marched model. The marched column is an independent integration; the last column is how far above it the collocated solve claimed to be."
+#| echo: false
+#| output: asis
+md_table(["launch, m/s", "marched, s", "collocated high by"],
+         [(f"{r['speed']:.0f}", f"{r['marched']:.2f}", f"{r['gap']:+.0%}")
+          for r in sweep])
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(throw_sweep, throw_flight, simulate)
+```

@@ -881,7 +881,7 @@ THETA_LIMIT = 90.0  # deg either side of level: the no-loop constraint
 
 
 def throw_flight(n=30, seed_ballast=3e-3, seed_angle=20.0, start=None,
-                 free_design=True, q_limit=None, verbose=False):
+                 free_design=True, q_limit=None, speed=None, verbose=False):
     """
     Maximise time aloft over the design AND the throw, on a rigid body.
 
@@ -919,6 +919,8 @@ def throw_flight(n=30, seed_ballast=3e-3, seed_angle=20.0, start=None,
             only way to see past one basin -- see throw_multistart().
         free_design: whether the geometry is optimised or held at `start`.
         q_limit: deg/s cap on pitch rate, or None to leave it unbounded.
+        speed: m/s, the release speed held fixed. None optimises it, which
+            always lands on the upper bound -- see the note at the variable.
         verbose: pass the solver's log through.
 
     Returns:
@@ -947,9 +949,15 @@ def throw_flight(n=30, seed_ballast=3e-3, seed_angle=20.0, start=None,
                                  upper_bound=hi) if free_design else start[i])
     ballast = (opti.variable(init_guess=seed_ballast, lower_bound=0.3e-3,
                              upper_bound=8e-3) if free_design else seed_ballast)
-    v_launch = opti.variable(init_guess=V_LAUNCH,
-                             lower_bound=THROW_BOUNDS["speed"][0],
-                             upper_bound=THROW_BOUNDS["speed"][1])
+    # Held when `speed` is given, which is how the sweep works. Optimised, this
+    # variable goes straight to its upper bound every time -- time aloft has no
+    # reason to refuse a harder throw -- so the bound becomes the answer and the
+    # aerodynamics say nothing. Fixing it asks the better question: given a throw
+    # you can actually produce, what is the best aircraft for it?
+    v_launch = (opti.variable(init_guess=V_LAUNCH,
+                              lower_bound=THROW_BOUNDS["speed"][0],
+                              upper_bound=THROW_BOUNDS["speed"][1])
+                if speed is None else speed)
     a_launch = opti.variable(init_guess=onp.radians(seed_angle),
                              lower_bound=onp.radians(THROW_BOUNDS["angle"][0]),
                              upper_bound=onp.radians(THROW_BOUNDS["angle"][1]))
@@ -1148,3 +1156,47 @@ def short_period(design, ballast, velocity=SM_SPEED):
     omega_n = onp.sqrt(max(m_q * z_alpha / velocity - m_alpha, 1e-12))
     return dict(zeta=-(m_q + z_alpha / velocity) / (2 * omega_n),
                 omega_n=float(omega_n), period=float(2 * onp.pi / omega_n))
+
+
+def throw_sweep(n=60, start=(4.5, 6.5, 0.40, 1.0), speeds=None):
+    """
+    Optimise the design at each of several fixed launch speeds, and march each.
+
+    The question the free-speed solve cannot answer. Optimised, release speed
+    goes to its upper bound every time -- nothing about time aloft argues for a
+    gentler throw -- so the answer is the bound and the aerodynamics are silent.
+    Held, each solve has to earn its duration from the airframe, and the result
+    is a curve against something the thrower actually controls.
+
+    THE MARCHED COLUMN IS THE TRUSTWORTHY ONE. Each point is re-flown through
+    simulate(), an independent integration of the same physics, so the durations
+    it reports stand on their own however optimistic the collocated ones are --
+    and they are optimistic everywhere, by 89% at the gentlest throw.
+
+    Speeds are derived from the sweep bound rather than listed, so widening
+    THROW_BOUNDS moves them and the study cannot quietly measure a stale range.
+
+    Args:
+        n: collocation nodes, passed through.
+        start: geometry every solve begins from, so the arms differ only in speed.
+        speeds: m/s, or None for four spanning the brief to the cap.
+
+    Returns:
+        list of dicts, one per speed, each the solve's own result plus
+        "marched" (s), "gap" (collocated over marched) and "marched_alpha_max".
+    """
+    if speeds is None:
+        speeds = onp.linspace(V_LAUNCH - 2.0, THROW_BOUNDS["speed"][1], 4)
+
+    out = []
+    for speed in speeds:
+        r = throw_flight(n=n, start=start, speed=float(speed))
+        design = {k: r[k] for k in ("aspect_ratio", "tail_arm_chords",
+                                    "h_tail_ratio", "h_tail_incidence")}
+        m = simulate(*glider(**design), ballast=r["ballast"],
+                     launch_angle=r["launch_angle"], v_launch=float(speed))
+        r.update(speed=float(speed), marched=m["duration"],
+                 gap=r["duration"] / m["duration"] - 1,
+                 marched_alpha_max=m["alpha_max"])
+        out.append(r)
+    return out
