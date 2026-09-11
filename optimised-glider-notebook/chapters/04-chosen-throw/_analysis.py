@@ -1226,7 +1226,7 @@ def throw_envelope(angle_deg):
     return THROW_FLAT * (1 - THROW_DROP * angle_deg / THROW_BOUNDS["angle"][1])
 
 
-def wing_study(n=60, free_wing=True, verbose=False):
+def wing_study(n=60, free_wing=True, sag_limit=None, verbose=False):
     """
     Optimise the WING against a realistic throw, with the tail held.
 
@@ -1247,6 +1247,8 @@ def wing_study(n=60, free_wing=True, verbose=False):
     Args:
         n: collocation nodes.
         free_wing: whether taper and wing station join aspect ratio.
+        sag_limit: tip deflection cap, as a fraction of root chord. None leaves
+            the boom free to be any length, which is how it reached 800 mm.
         verbose: pass the solver's log through.
 
     Returns:
@@ -1314,12 +1316,21 @@ def wing_study(n=60, free_wing=True, verbose=False):
         alpha > -onp.radians(CLEAN_ALPHA), static_margin > SM_FLOOR,
         dyn.altitude > GROUND, dyn.z_e[-1] == -GROUND,
     ])
+    # The boom has to hold its own shape. Without this the solve buys stability
+    # with tail arm, which is measured in CHORDS -- so a fat chord throws the
+    # tail most of a metre back and nothing objects.
+    sag = boom_sag(layout, total.mass)
+    if sag_limit is not None:
+        opti.subject_to(sag < sag_limit * layout["c_root"])
     opti.maximize(T)
     sol = opti.solve(verbose=verbose, max_iter=400,
                      options={"ipopt.hessian_approximation": "limited-memory"})
 
     val = lambda x: x if isinstance(x, float) else float(sol(x))
     out = dict(duration=float(sol(T)), aspect_ratio=val(aspect),
+               sag=float(sol(sag)), sag_limit=sag_limit,
+               chord=float(sol(layout["c_root"])),
+               boom=float(sol(FIXED_TAIL["tail_arm_chords"] * layout["c_root"])),
                taper=val(taper), station=val(station),
                ballast=float(sol(ballast)),
                launch_angle=float(onp.degrees(sol(angle))),
@@ -1365,3 +1376,53 @@ def optimised_flight(n=60):
                       v_launch=solved["speed"])
     return dict(design=design, airplane=airplane, layout=layout, flight=flight,
                 solved=solved)
+
+
+##### Boom bending
+#
+# Foam stiffness. EPS at this density is quoted between 5 and 15 MPa depending on
+# supplier, bead size and moisture, and this is a food tray -- so 10 MPa is the
+# middle of a wide range and NOT a measurement. It sets where the constraint
+# below bites, which makes it the most load-bearing assumption in the chapter: a
+# clamped strip and a coin would replace it in ten minutes.
+FOAM_E = 10e6      # Pa
+SAG_LIMIT = 0.02   # tip deflection, as a fraction of root chord
+
+
+def boom_sag(layout, mass, tail_load_fraction=0.15):
+    """
+    Tail-boom tip deflection: its own weight, plus the tail's load.
+
+    Nothing else in this chapter prices boom length. Mass is charged through
+    areal density but is trivially small, and a solve happily carried 8 g of
+    ballast, so mass will never bite. Drag is charged but disappears into a
+    section that is already two thirds of the total. Bending is the cost that is
+    actually there and was actually missing -- and it is the one that scales, so
+    it needs no weighting to matter.
+
+    SELF WEIGHT GOES AS L^4, tail load as L^3, both against a section that does
+    not grow with the arm. A boom 4.4x longer therefore sags roughly 470x more
+    under its own weight, which is why this reads as a hard wall rather than a
+    penalty to be traded against duration.
+
+    Checked against a real aeroplane: the McEagle baseline comes out at 2.1% of
+    chord, against the 2% rule of thumb for trim-critical structure. A design
+    somebody built and flew landing on the textbook number is the reason to
+    believe the rest.
+
+    Args:
+        layout: from glider().
+        mass: kg, all-up, for the tail load.
+        tail_load_fraction: share of weight the tail carries in trimmed flight.
+
+    Returns:
+        tip deflection, m.
+    """
+    chord = layout["c_root"]
+    arm = FIXED_TAIL["tail_arm_chords"] * chord
+    depth, width = 0.05 * layout["span"], FUSE_PLIES * FOAM_T
+    second_moment = width * depth ** 3 / 12
+    weight_per_length = (FOAM_AREAL / FOAM_T) * width * depth * G
+    return (weight_per_length * arm ** 4 / (8 * FOAM_E * second_moment)
+            + (tail_load_fraction * mass * G) * arm ** 3
+            / (3 * FOAM_E * second_moment))

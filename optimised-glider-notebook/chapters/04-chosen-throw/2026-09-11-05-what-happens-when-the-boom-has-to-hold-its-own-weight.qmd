@@ -1,0 +1,83 @@
+---
+title: "What happens when the boom has to hold its own weight?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+# The same wing study, once with the boom free to be any length and once with its
+# tip deflection capped. Each answer is re-flown through the marched model.
+free = wing_study()
+stiff = wing_study(sag_limit=SAG_LIMIT)
+
+def marched(r):
+    airplane, layout = glider(aspect_ratio=r["aspect_ratio"], taper=r["taper"],
+                              nose_chords=r["station"], **FIXED_TAIL)
+    return simulate(airplane, layout, ballast=r["ballast"],
+                    launch_angle=r["launch_angle"], v_launch=r["speed"])
+
+m_free, m_stiff = marched(free), marched(stiff)
+
+# The baseline these plans started from, as a check on the sag model itself.
+base_layout = glider(**FIXED_TAIL)[1]
+base_sag = boom_sag(base_layout, structural_mass(base_layout)["total"].mass + 3e-3)
+
+assert free["sag"] > free["chord"]            # the free boom sags past its chord
+assert base_sag / base_layout["c_root"] < 0.03   # a real aeroplane passes
+assert stiff["aspect_ratio"] > 4 * free["aspect_ratio"]   # the shape inverts
+assert m_stiff["duration"] < m_free["duration"]           # and it costs
+```
+
+::: {.hero-pair}
+::: {.hero-ref}
+[`{python} f"{free['sag'] * 1e3:.0f}"` mm]{.hero-value}
+[the free boom's droop, unloaded on the bench]{.hero-label}
+:::
+::: {}
+[`{python} f"{m_stiff['duration']:.2f}"` s]{.hero-value}
+[once it has to hold its shape]{.hero-label}
+:::
+:::
+
+**Answer.** It was buying time with a boom that cannot exist — free, the tip
+deflects `{python} f"{free['sag'] / free['chord']:.0%}"` of its own chord and
+folds on the bench. Capped, aspect ratio leaves the floor it sat on all chapter,
+`{python} f"{free['aspect_ratio']:.2f}"` to
+[`{python} f"{stiff['aspect_ratio']:.2f}"`]{.key}, the boom shortens to
+`{python} f"{stiff['boom'] * 1e3:.0f}"` mm, and the flight costs
+`{python} f"{m_free['duration'] - m_stiff['duration']:.2f}"` s (@tbl-sag).
+Deflection scales as length⁴.
+
+::: {.callout-warning}
+## The answer now rests on a stiffness I guessed
+EPS is quoted 5–15 MPa. A clamped strip and a coin would settle it.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **Foam modulus `{python} f"{FOAM_E / 1e6:.0f}"` MPa**, mid-range and unmeasured.
+2. **Tail carries 15%** of weight in trim.
+3. **Cantilever, rigid root**; no taper in the boom.
+4. **Cap `{python} f"{SAG_LIMIT:.0%}"` of chord**, the usual rule of thumb.
+:::
+
+```{python}
+#| label: tbl-sag
+#| tbl-cap: "The wing study with the boom free and with its tip deflection capped, each re-flown through the marched model. The last row is the McEagle baseline these plans began from, as a check on the deflection model rather than a result."
+#| echo: false
+#| output: asis
+md_table(["", "boom free", "sag capped"], [
+    ("marched, s", f"{m_free['duration']:.2f}", f"{m_stiff['duration']:.2f}"),
+    ("aspect ratio", f"{free['aspect_ratio']:.2f}", f"{stiff['aspect_ratio']:.2f}"),
+    ("boom, mm", f"{free['boom'] * 1e3:.0f}", f"{stiff['boom'] * 1e3:.0f}"),
+    ("sag, % chord", f"{free['sag'] / free['chord']:.0%}",
+     f"{stiff['sag'] / stiff['chord']:.0%}"),
+])
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(wing_study, boom_sag, simulate)
+```

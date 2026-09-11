@@ -1,0 +1,25 @@
+---
+title: "How high does the zoom climb take it after release?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+total_h = launch_height()
+zoom_h = total_h - H_RELEASE
+```
+
+::: {.hero}
+[`{python} f"{zoom_h:.2f}"`]{.hero-value}
+[m zoom height]{.hero-label}
+:::
+
+**Answer.** The zoom climb recovers `{python} f"{zoom_h:.2f}"` m of altitude from the `{python} f"{V_LAUNCH:.1f}"` m/s launch speed, taking the glider to a total peak height of `{python} f"{total_h:.2f}"` m above the ground (given the `{python} f"{H_RELEASE:.1f}"` m release height).
+
+The model assumes a fixed `{python} f"{ZOOM_EFF * 100:.0f}"`% energy recovery efficiency for the ballistic zoom. Chapters using `flight-path` integration replace this assumption by actually simulating the launch transient.
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```

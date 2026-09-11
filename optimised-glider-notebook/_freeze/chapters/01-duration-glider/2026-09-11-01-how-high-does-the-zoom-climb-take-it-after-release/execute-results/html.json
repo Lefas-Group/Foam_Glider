@@ -1,0 +1,12 @@
+{
+  "hash": "c93a6b24a758d88a0c2e2acc01f3df27",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: \"How high does the zoom climb take it after release?\"\n---\n\n\n::: {#666e190f .cell execution_count=2}\n``` {.python .cell-code}\ntotal_h = launch_height()\nzoom_h = total_h - H_RELEASE\n```\n:::\n\n\n::: {.hero}\n[1\\.79]{.hero-value}\n[m zoom height]{.hero-label}\n:::\n\n**Answer.** The zoom climb recovers 1\\.79 m of altitude from the 8\\.0 m/s launch speed, taking the glider to a total peak height of 3\\.29 m above the ground (given the 1\\.5 m release height).\n\nThe model assumes a fixed 55% energy recovery efficiency for the ballistic zoom. Chapters using `flight-path` integration replace this assumption by actually simulating the launch transient.\n\n[Executed in 0.1 s]{.runtime}\n\n\n",
+    "supporting": [
+      "2026-09-11-01-how-high-does-the-zoom-climb-take-it-after-release_files"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}

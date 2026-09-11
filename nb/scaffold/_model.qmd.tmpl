@@ -1,0 +1,27 @@
+```{python}
+#| include: false
+# The chapter lives in two files next to this one -- _model.py (the vehicle)
+# and _analysis.py (how the chapter measures it). exec rather than import,
+# because every chapter names its model `_model` and real imports would collide
+# in sys.modules. Paths are relative to the notebook root -- _quarto.yml sets
+# `execute-dir: project`, so that is always the cwd.
+import pathlib
+
+# _budget.py comes last and is OPTIONAL: it carries this chapter's solve limits,
+# and a chapter without one runs on the notebook defaults. It is a separate file
+# so that forking a chapter -- which copies _model.py and _analysis.py -- cannot
+# carry the parent's budget across.
+for _p in ["_notebook.py",
+           "chapters/__CHAPTER__/_model.py",
+           "chapters/__CHAPTER__/_analysis.py",
+           "chapters/__CHAPTER__/_budget.py"]:
+    if pathlib.Path(_p).exists():
+        exec(compile(pathlib.Path(_p).read_text(), _p, "exec"))
+
+# The chapter this page belongs to, taken from the paths above rather than
+# retyped -- superseded_by() resolves its forward link inside this directory.
+# Then start the entry's clock and zero the solve counter, both read by footer().
+_CHAPTER = str(pathlib.Path(_p).parent)
+_T0 = time.perf_counter()
+aero_cost.update(calls=0, seconds=0.0)
+```

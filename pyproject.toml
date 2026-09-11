@@ -15,7 +15,17 @@ dependencies = [
 # Tooling, not notebook runtime -- the library-explorer MCP server that the
 # design-notebook skill uses to look up AeroSandbox APIs. Kept out of the main
 # dependencies so `uv sync` for the notebook alone stays lean.
+# The `nb` agent (nb/). Kept in its own group so `uv sync` for the notebook
+# alone stays lean -- rendering a notebook needs none of this.
 [dependency-groups]
+nb = [
+    # >=2.23: thinking_level lands here. On 1.x ThinkingConfig exposes only
+    # include_thoughts/thinking_budget and the attribute is simply absent.
+    "google-genai>=2.23",
+    "pydantic>=2.11",
+    # MCP filesystem server client. Pinned <2 to match the existing group.
+    "mcp>=1.2,<2",
+]
 # Pinned to 1.x: the vendored server uses mcp.server.fastmcp.FastMCP,
 # which 2.x renamed to MCPServer.
 mcp = ["mcp>=1.2,<2"]

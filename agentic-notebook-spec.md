@@ -166,7 +166,7 @@ probe loop, which has the context to make it.
 One frozen, sorted list, shared by both phases. Prefix position 0; never varies
 per request.
 
-### From the MCP filesystem server (6 of 13 exposed)
+### From the MCP filesystem server (6 of 14 exposed)
 
 | Tool | Notes |
 |---|---|
@@ -177,7 +177,25 @@ per request.
 | `edit_file` | `edits: [{oldText, newText}]`, `dryRun` → git-style diff. **Default path for modification** |
 | `write_file` | Full overwrite. **Creation only** — new entries |
 
-You are the MCP client; the remaining seven stay out of the prefix. Session via
+You are the MCP client; the remaining eight stay out of the prefix.
+**Verified:** a `../../pyproject.toml` escape is refused with `Access denied -
+path outside allowed directories`. The boundary holds in a *different process*,
+which is the whole reason to prefer it to hand-rolled path confinement — a bug in
+this code cannot widen it.
+
+The handler resolves notebook-relative paths to absolute before calling, so the
+model writes `04-chosen-throw/entry.qmd` rather than an absolute prefix it could
+not have got wrong anyway.
+
+**This is the only remaining use of MCP.** The AeroSandbox introspection server
+went over stdio because Claude Code had no other way in; vendored, its
+`@mcp.tool()` decorators, `FastMCP` construction and stdio `main()` are stripped
+and the five functions are imported directly. It builds its index from the
+INSTALLED package on first call, so there is no stored index to go stale — which
+is why preflight does **not** assert an `INDEX_BUILT_AGAINST` version, as §13
+originally specified.
+
+Session via
 the official `mcp` SDK (`StdioServerParameters` → `stdio_client` →
 `ClientSession`), then convert each tool's JSON Schema to a
 `types.FunctionDeclaration`. The server enforces the directory boundary (§6) in
@@ -256,7 +274,7 @@ Generated, never hand-maintained — `commit` rebuilds it. It serves rule 10
 
 | Tier | Contents | Cost |
 |---|---|---|
-| **Always — inside the explicit cache** | System instruction, tools, manifest, **every** chapter's `index.qmd`, **every** `_analysis.py` signature list | ~3,850 tokens beyond system + tools |
+| **Always — inside the explicit cache** | System instruction, tools, manifest, **every** chapter's `index.qmd`, **every** `_model.py` name, **every** `_analysis.py` signature | ~10,100 tokens with system |
 | **On demand — `read_text_file`** | Full entry bodies, when linking a sibling or checking a suspected contradiction | ~625 tokens each |
 
 **Cache every chapter, not just the target.** Measured: all four `index.qmd` ≈
@@ -269,6 +287,31 @@ was for a separate routing call.
 `index.qmd` is mandatory context, not optional: it states what defines each
 chapter and the assumptions that live at chapter level, which entry prose must
 **not** repeat.
+
+### `_model.py`'s names are load-bearing, and were missed
+
+The first end-to-end run failed because of this. `index.qmd` describes a chapter
+in prose; it does not say that `ZOOM_EFF` and `launch_height()` live in *this*
+chapter and not that one. Without those names the model cannot route a question,
+and the observed behaviour was twenty turns of `search_files`, `git log`, and
+probes used to walk the filesystem — never landing on the right chapter at all.
+
+So the prefix carries each `_model.py`'s **functions with signatures AND its
+module-level constants**. The constants matter as much as the functions: a
+question about the zoom climb is routed by seeing `ZOOM_EFF = 0.55` in three
+chapters and choosing among them, which is a judgement, rather than by guessing,
+which is not. Adding them moved the first tool call from a blind directory
+listing to a correctly-targeted probe.
+
+Two smaller corrections from the same run:
+
+- **`probe` must refuse an unknown chapter.** `_probe_base` falls back to the
+  first chapter alphabetically when `NB_CHAPTER` is unset and says so only on
+  stderr — swallowed into tool output, that is how a probe comes to answer
+  confidently about the wrong aircraft. It happened on turn 21 of the first run.
+- **`git log` / `git show` come off the bash allowlist.** Eight consecutive turns
+  went on git archaeology. `check.py` shells to git itself for the one workflow
+  that needs history, so the agent never has to.
 
 Measured against the real notebook (25 entries, 4 chapters): all `index.qmd` ≈
 1,900 tokens; one chapter's entries ≈ 5,600; every entry ≈ 16,000. Against a 1M
@@ -300,23 +343,28 @@ what `footer()`, `show_source()` and `md_table()` do, which `api_search` and
 `read_reference` provide. This is why no read-only filesystem tier is required,
 and why no custom path-confinement code exists in this system.
 
-### Figures — the one unresolved access question
+### Figures — RESOLVED by reading `freezediff.py`
 
 `verify` must read rendered figures as images, not just printed text. The failure
 it exists to catch — prose written from the conversation rather than the output —
 is mostly a *figure* failure: a caption claiming a crossover at 6 m/s when the
 curve crosses at 8 is invisible to a text-only check.
 
-`read_media_file` supplies the mechanism. The open question is **where the bytes
-live**: `_freeze/chapters/<ch>/<entry>/execute-results/html.json` sits at the
-notebook root, *outside* `chapters/`. If figures are embedded base64 in that
-JSON, the allowlist must add read access to `_freeze/` (write access stays out —
-Quarto writes it as a subprocess and never needs MCP). If they are written to a
-`*_files/` directory beside the entry, the current allowlist already covers it.
+They are **real PNG files on disk**, not base64 inside the JSON:
 
-`freezediff.py`'s `figures(root, repo, ref, chapters)` already locates them —
-read it before finalising. Until resolved, `verify` is text-only, and rule 7
-(caption ≤ 50 words) is enforced while *caption accuracy* is not.
+```
+_freeze/chapters/<chapter>/<entry-stem>/figure-html/<name>.png
+```
+
+`freezediff.figures()` globs exactly that and compares each against
+`git show <ref>:<path>` by SHA-256. The `execute-results/html.json` beside it
+holds the rendered *markdown*, which references the PNG by relative path.
+
+That sits outside `chapters/`, so it is served by a **native `read_figure()`**
+rather than by widening the MCP allowlist. The filesystem server has no
+read-only tier, and adding `_freeze/` would grant write access to the one
+directory whose integrity `freezediff` depends on. Content the agent may read
+but not write is a tool, not a file.
 
 ---
 
@@ -468,14 +516,23 @@ Measured against `gemini-3.8-flash`, 2026-09-11:
 Tools plus a 150-line system instruction alone is ~3,633 — **463 short**. The
 §5a whole-notebook context clears it with room to spare:
 
+**Built and measured, not estimated:**
+
 | | tokens |
 |---|---|
-| Tool declarations | ~1,444 |
-| System instruction @150 lines | ~2,190 |
-| Chapter manifest | ~750 |
-| All four `index.qmd` | ~1,900 |
-| All four `_analysis.py` signature lists | ~1,200 |
-| **Prefix** | **~7,500** — clears by ~3,400 |
+| 19 tool declarations, as built | **3,505** |
+| System instruction + manifest + all chapter context | **10,133** |
+| **Prefix** | **13,640** — clears the floor by 9,544 |
+
+Both halves came in well above the estimate: the declarations because real tool
+descriptions are prose rather than a line each, and the context because
+`_model.py`'s names had to be added (§5a). The floor stopped being a constraint
+the moment whole-notebook context went in, and caching is worth roughly twice
+what the estimate implied — 40 turns against a 13.6k prefix is ~545k tokens
+uncached.
+
+Confirmed live: **12,165 of 12,408 prompt tokens served from cache on turn 1,
+and the same 12,165 on every turn after it.**
 
 The useful principle survives: **compressing the prefix below ~4,100 tokens
 costs money**, because every turn then pays full price. If it ever lands short,
@@ -502,7 +559,7 @@ cache = client.caches.create(model=MODEL, config=types.CreateCachedContentConfig
 
 | Segment | Contents | Cached |
 |---|---|---|
-| `tools` | 18 declarations (6 MCP + 12 native), frozen and **sorted** | yes |
+| `tools` | 19 declarations (6 MCP + 13 native), frozen and **sorted** | yes |
 | `system_instruction` | Triage table, 17 rules as one-liners, entry format + budgets, scope section. ~150 lines | yes |
 | *(same cached object)* | Manifest, all `index.qmd`, all `_analysis.py` signatures (§5a) | yes |
 | `contents` | Question, date, everything else volatile | no |
@@ -527,7 +584,7 @@ than swap.
 
 ---
 
-## 10. Budget enforcement — four layers
+## 10. Budget enforcement — five layers
 
 A signal cannot stop a CasADi solve; it lands when the C call returns (measured:
 1.15 s against a 0.3 s limit). Killing a subprocess *can*, at the cost of
@@ -539,12 +596,18 @@ in-process state.
 | 2 | `budget()` | hand-written Python loops only | No |
 | 3 | `subprocess.run(timeout=)` | one `probe` call | Yes, hard kill; partial stdout preserved |
 | 4 | `ENTRY_CEILING` vs accumulated probe time | whole entry | Checked between probes |
+| 5 | `PROBE_BUDGET` watchdog in `_notebook.py` | one probe | Yes — `os._exit(9)` at 300 s, or `PROBE_BUDGET_CHAPTER` |
 
 Layer 1 is load-bearing, and is why **`probe` takes a question, not code** — a
 budget the model can skip by writing `import aerosandbox` directly is not a
 budget:
 
 ```python
+# NB_CHAPTER is how `_probe_base` picks the chapter; unset, it falls back to the
+# first alphabetically and says so only on stderr. The handler refuses an unknown
+# chapter rather than let that fallback answer about the wrong aircraft. Note the
+# comment claims nothing about api(): `_probe_base` prints NOTHING on import, and
+# the claim that it does is stale in the skill's own probe.py and entry.qmd.
 PREAMBLE = "from _probe_base import *  # noqa: F403 — chapter loaded, budgets armed\n"
 
 def run_probe(question: str) -> str:
@@ -557,6 +620,18 @@ def run_probe(question: str) -> str:
         out = (e.stdout or b"").decode() + f"\n[killed at {PROBE_WALL_CLOCK}s]"
     return out[-8000:]
 ```
+
+**`ENTRY_CEILING` lives in `chapters/<N>/_budget.py`**, a bare module-level
+float, alongside `SOLVE_BUDGET` and `PROBE_BUDGET_CHAPTER`. It is a separate file
+so that forking a chapter — which copies `_model.py` and `_analysis.py` — cannot
+carry the parent's budget across. Only one of four chapters declares one, and
+`_notebook.py`'s `DEFAULT_ENTRY_CEILING` is documented but read by no code, so
+absence means unbounded and rule 17 stays the real check.
+
+**Layer 5 was missed entirely.** `_notebook.py` runs its own watchdog thread that
+`os._exit(9)`s a probe. Our subprocess timeout is therefore set *above* it, so
+the watchdog fires first: it knows why it killed the probe and says so, where a
+subprocess timeout knows only that time ran out.
 
 Layer 4 accumulates across tool calls in the runner, not in a handler. The total
 becomes the proposal's `render_cost_s` — already measured, so the gate can quote
@@ -694,14 +769,27 @@ failure.
  8  each Specified / Assumed item ≤ 10 words
  9  one prose section — no second `**Heading.**` or `##`
 10  a sibling entry is linked, never named in bare prose
-11  → PREFLIGHT (see above)
+11  → PREFLIGHT — `_notebook.py` AND `_scratch/_probe_base.py` byte-match
 12  the freeze is not older than the model that froze it
 13  every `_analysis.py` function the entry calls is passed to `footer(…)`
 14  one visual per entry — a table counts as a figure
 15  a table is at most 3×4 or 4×3, excluding the header
 16  a budgeted chapter does not override SOLVE_BUDGET at a call site
 17  a frozen entry stays under its chapter's ENTRY_CEILING
+18  the solve budget in force is declared in the chapter's index
 ```
+
+**There are 18, not 17.** Rule 18 was missed in the original reading, and rule 11
+covers `_probe_base.py` as well as `_notebook.py` — added after an improvement to
+it sat in one notebook while the scaffold that creates the next still held the
+old text, drift invisible precisely because nothing compared them.
+
+**There are no rule numbers in lint's output.** `lint.check()` returns
+`(Path | None, str)` tuples carrying prose only, and `"(warning)"` is a marker
+inside the string rather than a field. So "append the rule text only" means the
+message verbatim, and severity is split with `"(warning)" not in msg` — exactly
+as `check.py` does it. Measured on a deliberately bad entry: six violations, each
+message naming its own fix, no numbering needed.
 
 **Rule 2 is a one-entry fix.** `lint.py` hashes every 3-line window across
 entries and reports blocks appearing in ≥2 files. The agent satisfies it by
@@ -744,6 +832,12 @@ transcript.
 bytes changed. Deleting the freeze is not optional — freeze tracks the page, not
 its includes, so without it a fresh render is compared against a cache hit and
 the match is an artefact.
+
+**`check` renders the whole notebook.** Only freeze *deletion* is scoped by
+chapter; `check.py` then runs `quarto render <root>` regardless. On a notebook
+with a 600 s entry ceiling that is minutes, so its tool description says so and
+points at `render` on a single entry for iteration. Reach for `check` when
+proving a model change moved nothing, not while drafting.
 
 **This stays agent-facing and automated.** The agent made the refactor, so it
 knows whether a moved figure is the deliberate deletion it intended or a bug it
@@ -803,10 +897,28 @@ for any later prompt optimisation.
 
 ## 16. Model configuration
 
-**Primary model: Gemini 3.x, via the native `google-genai` SDK ≥ 2.23.**
-Candidates as of 2026-09-11: `gemini-3.1-pro-preview` (deepest reasoning) and
-`gemini-3.8-flash` (newest Flash). Both verified for signatures and caching. Pin
-the ID explicitly — the 3.x line moves fast.
+**Primary model: `gemini-3.1-pro-preview`**, via the native `google-genai` SDK
+≥ 2.23. Pin the ID explicitly — the 3.x line moves fast.
+
+**Chosen by measurement, and the margin was not close.** Same question, same
+prefix, same tools:
+
+| | turns to a proposal |
+|---|---|
+| `gemini-3.8-flash` | **never**, in 25+ turns, across three runs |
+| `gemini-3.1-pro-preview` | **2** — one probe, then propose |
+
+Flash picked the right chapter and then wandered: reading sibling entries,
+grepping, running `git log`, and using `probe` to walk the filesystem. Three
+prompt interventions (whole-notebook context, an explicit turn budget, direct
+prohibitions) improved its *first* call and did not fix the wandering. That is a
+planning failure rather than a knowledge one, and it is not a thing more prompt
+fixes.
+
+The cheap model was a false economy: it spent twenty times the turns and produced
+nothing. Start on Pro. Re-run the comparison on first-pass lint violations once
+entries are being written — that is the metric that decides it long-term, and one
+question is not an eval.
 
 ```python
 cfg = types.GenerateContentConfig(
@@ -891,10 +1003,9 @@ rather than an oversight:
    it errors rather than guessing when a match is ambiguous, or always pair it
    with `dryRun`. A near-match landing on the wrong `{python}` cell is the
    failure mode.
-2. **Where rendered figure bytes live** (§6) — embedded base64 in
-   `_freeze/**/execute-results/html.json`, or files in a `*_files/` directory.
-   Determines whether the MCP allowlist needs read access to `_freeze/`. Read
-   `freezediff.py`'s `figures()`. `verify` is text-only until this is settled.
+2. ~~Where rendered figure bytes live~~ — **DONE.** Real PNGs at
+   `_freeze/chapters/<c>/<stem>/figure-html/*.png`, served by a native
+   `read_figure()`. See §6.
 3. Whether `read_media_file` output round-trips as inline image data through
    `complete()` — `verify` depends on it.
 4. Whether `check.py`'s freeze scoping behaves correctly when invoked outside a
@@ -907,9 +1018,25 @@ rather than an oversight:
    figures are extrapolated from 14.6 tokens/line and prose density varies. The
    check is one `generate_content` call reading `prompt_token_count`;
    `count_tokens` **cannot** be used, as it rejects `tools` on the Gemini API.
-8. Pick between `gemini-3.1-pro-preview` and `gemini-3.8-flash` using §15's
-   first-pass violation count. Pro spent 284 thinking tokens against Flash's 46
-   on the same trivial call — a real behavioural difference worth pricing.
+8. ~~Pick between the two models~~ — **DONE, provisionally.** Pro proposes in 2
+   turns where Flash never proposes at all (§16). Still worth re-running on
+   first-pass violation count across several questions: one question is a signal,
+   not an eval.
+
+### Found by building it
+
+- **`_model.py`'s names must be in the prefix** (§5a). Without them the model
+  cannot route a question, and no amount of prompt fixes that.
+- **A cached content object belongs to the model that created it.** The cache key
+  must include the model ID, or switching models reuses the other one's cache and
+  fails with a 400 a long way from its cause.
+- **`probe` must refuse an unknown chapter**, rather than let `_probe_base`'s
+  alphabetical fallback answer about the wrong aircraft.
+- **Line-buffer stdout.** A run is minutes long and prints one line per turn;
+  block-buffered to a pipe, that is a silent hang, indistinguishable from a stuck
+  probe at exactly the moment you want to tell them apart.
+- **`git log` / `git show` do not belong on the bash allowlist.** Eight
+  consecutive turns went on git archaeology.
 
 **Settled by measurement, 2026-09-11:** thought signatures round-trip when the
 whole `Content` is appended (§8, with negative control); the 4,096-token cache
