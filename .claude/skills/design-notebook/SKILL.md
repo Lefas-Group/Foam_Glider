@@ -142,6 +142,13 @@ larger lumps and noticed later.
   `$NB_CHAPTER` choosing the chapter. Nothing prints until you call `api()`.
   Hand-rolling it is how a local `G` came to shadow gravity and a helper was
   called with the wrong arity, twice.
+- **A probe is hard-capped, and the cap is not yours to raise.** Exceeding it
+  kills the process. That is the point: it forces a choice between deciding the
+  answer is not worth the compute, making it cheaper (fewer nodes, a held design,
+  one arm instead of a sweep), and **asking the user for more time**. Only a
+  chapter's `_budget.py` raises it, as a recorded decision. There is no
+  environment override — there was, and it was used on every probe in the session
+  that earned this, because the kill message named it.
 - **Never pipe a live log through `tail`**, and give `grep` `--line-buffered`:
   both buffer, so a finished job looks like an empty one. And a `pgrep -f`
   pattern must not match its own waiting shell — bracket it, `pgrep -f "p[.]py"`.

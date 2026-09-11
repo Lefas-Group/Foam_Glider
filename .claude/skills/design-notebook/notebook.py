@@ -244,19 +244,51 @@ if not getattr(asb.Opti.solve, "_is_budgeted", False):
 # and a render that legitimately takes an hour must not be shot in the head --
 # entries are governed by ENTRY_CEILING and lint rule 17 instead.
 # =============================================================================
+# NOT settable from the environment, and that is the whole design. An earlier
+# version read NOTEBOOK_PROBE_BUDGET, and across the session that followed it was
+# overridden on EVERY SINGLE probe -- 1200 s, 1800 s, 3600 s -- so the limit never
+# once took effect. Two things made that inevitable and both are fixed here: the
+# override was one token at the front of a command line, and the kill message
+# helpfully named the variable to set. A guard that documents its own bypass at
+# the moment it fires is not a guard; it is a speed bump with a detour sign.
+#
+# Raising it is a decision for the user, taken in a chapter's _budget.py and
+# declared in its index.qmd under Specified, exactly as SOLVE_BUDGET is. Hitting
+# this limit is meant to STOP the work and produce a choice -- is this solve worth
+# it, can it be made cheaper, or should more time be asked for -- rather than a
+# reflex.
 PROBE_SILENCE = 120.0  # s of no output before the traceback says where it is
-PROBE_BUDGET = float(os.environ.get("NOTEBOOK_PROBE_BUDGET", 300.0))
+PROBE_BUDGET = 300.0   # s a scratch probe may run; raise only in _budget.py
 
 _IN_KERNEL = "ipykernel" in sys.modules or hasattr(builtins, "__IPYTHON__")
+
+def _probe_budget():
+    """
+    The probe budget in force: the chapter's, else this file's default.
+
+    Read at CHECK time, not at arm time, because _budget.py is exec'd after this
+    file -- so a chapter that raised the limit has not been seen yet when the
+    watchdog starts. The watchdog therefore polls rather than sleeping once.
+    """
+    value = globals().get("PROBE_BUDGET_CHAPTER")
+    return PROBE_BUDGET if value is None else value
+
 
 if not _IN_KERNEL and not globals().get("_probe_guard_armed"):
     _probe_guard_armed = True
     _probe_t0 = time.perf_counter()
 
     def _probe_too_long():
-        print(f"\n[probe killed: over {PROBE_BUDGET:.0f} s "
-              f"({time.perf_counter() - _probe_t0:.0f} s elapsed). Raise it with "
-              f"NOTEBOOK_PROBE_BUDGET=<seconds>.]", file=sys.stderr, flush=True)
+        # Deliberately does NOT say how to raise the limit. Naming the escape
+        # hatch here is what turned the previous version into a formality.
+        print(f"\n[probe killed at {time.perf_counter() - _probe_t0:.0f} s, over "
+              f"its {_probe_budget():.0f} s budget.\n"
+              f" This is a stop, not a speed bump. Choose one:\n"
+              f"   - decide the answer is not worth this much compute;\n"
+              f"   - make it cheaper -- fewer nodes, a held design, one arm "
+              f"instead of a sweep;\n"
+              f"   - ask the user for more time, and record it in the chapter's "
+              f"_budget.py.]", file=sys.stderr, flush=True)
         faulthandler.dump_traceback(file=sys.stderr)
         os._exit(9)
 
@@ -267,9 +299,18 @@ if not _IN_KERNEL and not globals().get("_probe_guard_armed"):
     # otherwise dump a traceback every couple of minutes, and the point is to
     # distinguish "working" from "hung", which one report already does.
     faulthandler.dump_traceback_later(PROBE_SILENCE, repeat=False, file=sys.stderr)
-    _probe_timer = threading.Timer(PROBE_BUDGET, _probe_too_long)
-    _probe_timer.daemon = True
-    _probe_timer.start()
+
+    def _probe_watch():
+        while True:
+            time.sleep(15.0)
+            if time.perf_counter() - _probe_t0 > _probe_budget():
+                _probe_too_long()
+
+    # Polling, so a chapter that raises the limit in _budget.py is seen even
+    # though that file is exec'd after this one. A daemon thread, so a probe that
+    # finishes early is never held open by it.
+    _probe_thread = threading.Thread(target=_probe_watch, daemon=True)
+    _probe_thread.start()
 
 
 def md_table(header, rows):

@@ -93,3 +93,28 @@ comparison showed 8.4× faster while the iteration count went 192 → 481. Solve
 counts can mislead too — a collocated solve was 599 s at 8 aero solves against
 112 s at 3070, because the graph is built once and the solver iterates inside C
 where the counter cannot see.
+
+## A guard must not document its own bypass
+
+The probe budget once read an environment variable, and its kill message ended
+"Raise it with NOTEBOOK_PROBE_BUDGET=<seconds>". Across the session that followed
+it was overridden on *every* probe — 1200 s, 1800 s, 3600 s — and never once took
+effect. Two design errors, and the second is the instructive one: the override was
+a single token at the front of a command, and **the failure path advertised it at
+the exact moment someone was motivated to use it**. The first override was
+reasoned; the rest were copy-paste.
+
+So the budget is now a constant, raised only in a chapter's `_budget.py` as a
+decision the user records. The kill message names the three legitimate responses
+and no escape hatch.
+
+Two related traps worth knowing:
+
+- **Set limits from measurements you already have.** The 300 s default was chosen
+  by intuition while the freeze already recorded entry runtimes of 251–385 s and a
+  single solve had been timed at 210 s. The same session also sized a solve budget
+  from a 70 s solve at 30 nodes and applied it to entries running 60.
+- **A probe can outlive its own output.** One finished printing its last line and
+  then sat at 80% CPU for fifteen minutes — a BLAS/OpenMP pool busy-waiting, or a
+  thread CasADi left behind. "It printed the answer" is not "it exited", so check
+  the process, not the log.
