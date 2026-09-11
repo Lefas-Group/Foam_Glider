@@ -1337,3 +1337,31 @@ def wing_study(n=60, free_wing=True, verbose=False):
     out.update(marched=marched["duration"],
                gap=out["duration"] / marched["duration"] - 1)
     return out
+
+
+def optimised_flight(n=60):
+    """
+    The shaped-wing optimum, as an aircraft and as the flight it actually flies.
+
+    One call so that two entries -- the trajectory and the three-view -- work from
+    the same solve rather than each restating the design. Restating it would let
+    a drawing and a flight path drift apart silently, which is the one way a
+    picture in this notebook could lie.
+
+    The trajectory is the MARCHED one. It is the flight this aircraft flies, and
+    at this design it agrees with the collocated solve to rounding, because a
+    flat release never excites the pitch mode.
+
+    Returns:
+        dict with "design", "airplane", "layout", "flight" (simulate's output)
+        and the solve's own result under "solved".
+    """
+    solved = wing_study(n=n, free_wing=True)
+    design = dict(aspect_ratio=solved["aspect_ratio"], taper=solved["taper"],
+                  nose_chords=solved["station"], **FIXED_TAIL)
+    airplane, layout = glider(**design)
+    flight = simulate(airplane, layout, ballast=solved["ballast"],
+                      launch_angle=solved["launch_angle"],
+                      v_launch=solved["speed"])
+    return dict(design=design, airplane=airplane, layout=layout, flight=flight,
+                solved=solved)

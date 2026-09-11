@@ -1,8 +1,8 @@
 # Design-notebook agent — system specification
 
-A standalone agentic system that produces Quarto lab-notebook entries for aircraft
-design work. Distilled from the `design-notebook` Claude Code skill; runs without
-Claude Code.
+A standalone CLI that produces Quarto lab-notebook entries for aircraft design
+work. Distilled from the `design-notebook` Claude Code skill; runs without Claude
+Code, on Gemini.
 
 ---
 
@@ -11,7 +11,7 @@ Claude Code.
 **In scope.** Answering a design question by probing a chapter's model, then
 recording the answer as one notebook entry that passes the lint contract.
 
-**Out of scope (META).** The system cannot modify itself: the system prompt,
+**Out of scope (META).** The system cannot modify itself: the system instruction,
 `lint.py`, `check.py`, `notebook.py`, `_notebook.py`, templates, references,
 `_quarto.yml`, or the introspection layer.
 
@@ -20,89 +20,73 @@ recording the answer as one notebook entry that passes the lint contract.
 | `chapters/**` — entries, `_model.py`, `_analysis.py`, `index.qmd` | **Writable** — design tier |
 | `_notebook.py`, `_quarto.yml` | Not exposed; drift is a preflight failure |
 | `_scratch/**` | Reached only through the `probe` handler |
-| New chapter | **Agent-triggered** via `create_chapter`, which runs the scaffold script; the template itself stays out of reach |
-| New notebook | Human-run script — wants a fresh session |
+| New chapter | Agent-triggered via `create_chapter`; the template stays out of reach |
+| New notebook | Human-run script |
 | Lint rule 11 | Moves from lint gate → preflight assertion |
-| Raising `SOLVE_BUDGET` / `ENTRY_CEILING` | Human decision via the gate |
+| Raising `SOLVE_BUDGET` / `ENTRY_CEILING` | Human decision at the gate |
 | Suspected-bad lint rules | Written to the run log, never to `why.md` |
 
 ---
 
-## 2. Architecture
+## 2. Architecture — two commands
 
 ```
-                      ┌────────────────────────────────┐
-  question ──────────▶│ router          (1 cheap call)  │  a HINT, not a decision
-                      └────────────────┬───────────────┘
-                                       ▼
-              ┌──────────▶┌────────────────────────────┐
-              │           │ probe_loop  (agentic loop)  │  NO interrupt inside
-              │           └───────┬────────────────┬───┘  declares route + inputs
-              │      consult      │                │ done
-              │           ┌───────▼────────────┐   │
-              └───────────┤ consult (interrupt)│   │      open-ended guidance
-                          └────────────────────┘   │      max 3 per run
-                                                   ▼
-                      ┌────────────────────────────────┐
-                      │ gate            (interrupt ONLY)│  ALWAYS fires: proposal
-                      └────────────────┬───────────────┘  nothing before the call
-                            fork/new   │   entry
-                      ┌────────────────▼───────────────┐
-                      │ create_chapter  (scaffold)      │  skipped for a plain entry
-                      └────────────────┬───────────────┘
-                                       ▼
-                      ┌────────────────────────────────┐
-                      │ write           (agentic loop)  │  lint available as a tool
-                      └────────────────┬───────────────┘
-                                       ▼
-                      ┌────────────────────────────────┐
-                      │ lint            (pure code)     │  unconditional edge
-                      └───────┬────────────────┬───────┘
-                         fail │                │ pass
-                              └──▶ write       ▼
-                                            verify (1 call, fresh context)
-                                                │
-                                                ▼
-                                             commit
+$ nb ask "would more pitch damping fix the disagreement?"
+    ├── preflight            §13
+    ├── build/reuse cache    §9
+    ├── probe loop           agentic, max 25 turns
+    │     ├── ask_specified  blocks on stdin — as often as needed
+    │     └── consult        blocks on stdin — guidance, max 3
+    ├── propose              writes proposal.json + working code
+    └── EXIT ────────────────────────────────────── the gate
+
+        ... human reads proposal.json, edits or approves, minutes or days ...
+
+$ nb write
+    ├── create_chapter       only if route == new_chapter
+    ├── write loop           agentic; lint available as a tool
+    ├── lint                 always, after the loop returns
+    │     └── fail → back into the loop, cap 3
+    ├── render + check
+    ├── verify               fresh context, reads the rendered figures
+    ├── commit               rebuilds the manifest
+    └── next queued question, if any
 ```
 
-Orchestration: **LangGraph** (graph API) with `SqliteSaver`.
-Model calls: **raw provider SDK inside nodes** — no LangChain model abstraction.
-File access: **MCP filesystem server**, scoped to `chapters/`.
+**The gate is a process boundary, not a checkpoint.** Every run stops at exactly
+one place, always, and the process exits there. That is what removes the need for
+an orchestration framework (§11).
 
-Rationale: byte-level control of the cached prefix; provider swap at one
-interface; no hand-rolled path confinement.
+| Layer | Choice |
+|---|---|
+| Orchestration | None — two commands, state on disk |
+| Model calls | Native `google-genai`, `generate_content` |
+| File access | MCP filesystem server, scoped to `chapters/` |
+
+Rationale: byte-level control of the cached prefix; provider swap behind one
+function; no hand-rolled path confinement; no framework constraints to obey.
 
 ---
 
-## 3. State
+## 3. State — on disk, not in memory
+
+Nothing persists in process. Two artefacts, both in `_scratch/run/`:
 
 ```python
-class S(TypedDict):
-    question: str                  # verbatim; becomes the entry title
-    queue: list[str]               # remaining questions from a multi-question ask
-    notebook: Path
-    chapter: str | None
-    route: Literal["entry", "new_chapter"]
-    manifest: str                  # generated chapter digest — §5
-    inputs: list[Input]
-    contents: list[Content]        # provider-native; APPENDED to, never rebuilt
-    entry_path: Path | None
-    proposal: Proposal | None      # shown at the gate, before anything is written
-    violations: list[str]
-    attempts: int                  # write→lint retry counter, cap 3
-    consults: int                  # consult-node visits, cap 3
-    cost: dict                     # accumulated token usage
-    solve_seconds: float           # accumulated across probes — vs ENTRY_CEILING
-```
-
-```python
+# proposal.json — written by `nb ask`, read by `nb write`
 class Proposal(TypedDict):
-    title: str                     # the question, verbatim
-    figures: list[str]             # captions only — nothing else
-    render_cost_s: float           # = S["solve_seconds"]; measured, never guessed
-    route: Literal["entry", "new_chapter"]
+    title: str                  # the question, verbatim; becomes the entry title
+    question: str
+    queue: list[str]            # remaining questions from a multi-question ask
     chapter: str
+    route: Literal["entry", "new_chapter"]
+    rationale: str              # what is held constant, what differs
+    figures: list[str]          # captions only — nothing else
+    render_cost_s: float        # measured (§10), never guessed
+    inputs: list[Input]
+    findings: str               # the answer, and what the probe established
+    working_code: str           # the code that produced it
+    handoff: str                # anything `nb write` needs that isn't above
 ```
 
 ```python
@@ -110,93 +94,77 @@ class Input(TypedDict):
     name: str
     kind: Literal["derivable", "specified", "unknown"]
     value: str | None
-    owner: Literal["user", "assumed"] | None
-    why: str                       # ≤ 10 words — lint rule 8 budget
+    owner: Literal["user", "agent", "assumed"]
+    why: str                    # ≤ 10 words — lint rule 8 budget
 ```
 
-**`contents` is append-only, and the whole `Content` object goes back.** On a
-lint-fail retry, `write` appends a turn carrying the violations; it does not
-reconstruct the list. Two reasons, both load-bearing:
+`transcript.jsonl` — one line per turn, appended as the loop runs. Purely for
+crash recovery and debugging; nothing reads it in the happy path.
 
-1. Rebuilding invalidates the cached prefix on every retry (§9).
-2. Model turns carry **thought signatures** — opaque blobs that must be returned
-   byte-identically or the next request 400s (§8).
-
-Appending raw `Content` objects satisfies both by construction. Any code that
-extracts text and reassembles a turn breaks both at once.
+**The two phases share no conversation state, by design.** `nb write` needs the
+finding and the code that produced it — both in `proposal.json` — and not the
+probe transcript, because the entry's code cells re-run the computation at render
+time anyway. This is what makes the process boundary clean rather than a
+truncation.
 
 ---
 
-## 4. Nodes
+## 4. The two phases
 
-| Node | Type | Contract |
-|---|---|---|
-| `router` | 1 cheap call, structured output | Splits a multi-question ask into `S["queue"]`; nominates the nearest chapter from `index.qmd` titles. Both are **hints** — not binding |
-| `probe_loop` | agentic loop | Explores via `probe`. Terminates on `declare_route` + `declare_inputs` + `propose`. Max 25 turns |
-| `consult` | `interrupt()` only | Open-ended guidance. Answer appends to `messages`; returns to `probe_loop`. Max 3 per run |
-| `gate` | `interrupt()` only | **Always fires.** Carries the proposal; also any Specified input, fork decision, or budget raise |
-| `create_chapter` | pure code, conditional | Runs the scaffold script. Skipped when `route == "entry"` |
-| `write` | agentic loop | Creates the `.qmd`, may edit `_analysis.py` / `_model.py`. Has `lint` as a tool |
-| `lint` | pure code | `lint.py` + `check.py`. Unconditional edge. No model |
-| `verify` | 1 call, fresh context | Prose vs rendered output. Sees the render, **not** the conversation |
-| `commit` | pure code | git add + commit; rebuilds the manifest, then loops to `router` if `S["queue"]` is non-empty |
+### `nb ask` — probe and propose
 
-**`gate` and `consult` are bare nodes** — exactly one `interrupt()` call each,
-nothing before it (§11).
+| Step | Contract |
+|---|---|
+| preflight | §13. Fails in ~5 ms before any tokens |
+| cache | Build or reuse the explicit cache (§9), keyed on `hash(system + tools + manifest)` |
+| probe loop | Agentic, max 25 turns. Asks for Specified inputs inline (§12). Terminates on `propose` |
+| propose | Validates and writes `proposal.json`. Prints the proposal. Exits |
 
-**The gate is unconditional.** Every entry stops for approval before anything is
-written to the notebook, carrying the title, the figure captions, and the render
-cost — *nothing else*. The cost comes from `aero_report()`, which prints the
-solves the probe just ran; it is never guessed. Specified inputs are asked in the
-same message: the run is stopping anyway, so they cost no extra round trip. A
-proposal covering more than one question splits into one entry each.
-
-**`consult` is for guidance, not decisions.** Open-ended questions the model
-wants a human view on — "is this worth pursuing?", "does this result smell
-wrong?", "should I compare against the other configuration?" — which are neither
-Specified inputs nor a route decision. It exists because a single terminal gate
-makes a run fail completely rather than get corrected cheaply.
-
-A consult reply may itself turn out to be a Specified input, in which case it is
-recorded with `owner: user` and the reason. If answering it needs computation, it
-is a question in its own right: answer it in-loop, then return to the original.
-
-**The route is an output of probing, not a precondition.** Whether a question
-
-needs a new chapter depends on whether the existing model can answer it — learned
-by reading `_model.py` and trying — and on whether the old answer stays valid
-under its own stated assumptions. A pre-probe router has neither fact. It
-therefore only nominates the nearest chapter; `probe_loop` decides.
-
-**Fork decisions ride the gate.** The criterion is *whether you want to keep both
-answers*, which changes what is being built rather than how accurately it was
-modelled — Specified by the §12 test.
+The loop decides everything the old design gave a router: which chapter, whether
+a new chapter is needed, and whether the ask is really several questions. It
+makes those calls on turn one or later with *more* information than a separate
+routing call would have — it can read `_model.py` and try.
 
 **A multi-question ask splits rather than being rejected.** The skill's rule is
 *a proposal covering more than one question splits into one entry each*. The
-router emits the split, the gate shows it — "this reads as three questions; one
-entry each, in this order" — and the remainder sits in `S["queue"]`. After
-`commit`, the graph loops to `router` with the next one. Checkpointing makes the
-queue free, and nothing the user asked for is discarded.
+first question becomes this proposal; the rest go in `queue`, and `nb write`
+picks up the next after committing. Facets of a *single* comparison (cost,
+fidelity, applicability) are one question, not three.
 
-Facets of a *single* comparison (cost, fidelity, applicability) are one question,
-not three. The router splits on distinct questions, not on clauses.
+**The route is an output of probing, not a precondition.** Whether a question
+needs a new chapter depends on whether the existing model can answer it, and on
+whether the old answer stays valid under its own stated assumptions. The fork
+criterion is *whether you want to keep both answers* — Specified by the §12 test,
+so it goes through `ask_specified` at the moment the loop realises a fork is on
+the table, not deferred to the proposal.
 
-**Lint is both a tool and an edge, deliberately.** The tool lets `write` fix
-violations inside one node without a checkpoint per cycle, and pairs with
-`edit_file`'s `dryRun`. The edge is the guarantee: without it the model can
-decline to call the tool and declare done. The edge re-running `lint.py
---no-render` after a clean tool pass costs nothing worth counting.
+### `nb write` — write, verify, commit
 
-**`verify` is the only justified second agent.** Its input differs from the
-worker's (rendered figures and printed blocks, not the transcript) and its
-question is decidable. Every other judgment stays in `probe_loop`.
+| Step | Contract |
+|---|---|
+| `create_chapter` | Only when `route == "new_chapter"`. Runs the scaffold script |
+| write loop | Agentic. Creates the `.qmd`; may edit `_analysis.py` / `_model.py` |
+| lint | **Always runs after the loop returns.** Fail → back into the loop, cap 3 |
+| render + check | `check.py`: lint, delete freeze, render, diff |
+| verify | One call, fresh context. Reads the rendered figures — not the transcript |
+| commit | git add + commit; rebuilds the manifest; then the next queued question |
+
+**Lint is both a tool and a mandatory step.** The tool lets the write loop fix
+violations in place. The step after the loop is the guarantee — without it the
+model can decline to call the tool and declare done. Re-running
+`lint.py --no-render` on a clean pass costs nothing worth counting.
+
+**`verify` is the only justified second model call with its own context.** Its
+input differs from the writer's — rendered figures and printed blocks, not the
+conversation — and its question is decidable. Every other judgment stays in the
+probe loop, which has the context to make it.
 
 ---
 
 ## 5. Tools
 
-Frozen, sorted list — prefix position 0, never varies per request.
+One frozen, sorted list, shared by both phases. Prefix position 0; never varies
+per request.
 
 ### From the MCP filesystem server (6 of 13 exposed)
 
@@ -209,10 +177,8 @@ Frozen, sorted list — prefix position 0, never varies per request.
 | `edit_file` | `edits: [{oldText, newText}]`, `dryRun` → git-style diff. **Default path for modification** |
 | `write_file` | Full overwrite. **Creation only** — new entries |
 
-Expose only these six. You are the MCP client; the remaining seven stay out of
-the prefix.
-
-Session via the official `mcp` SDK (`StdioServerParameters` → `stdio_client` →
+You are the MCP client; the remaining seven stay out of the prefix. Session via
+the official `mcp` SDK (`StdioServerParameters` → `stdio_client` →
 `ClientSession`), then convert each tool's JSON Schema to a
 `types.FunctionDeclaration`. The server enforces the directory boundary (§6) in
 its own process, which is why that boundary is trustworthy.
@@ -231,34 +197,34 @@ server restart (§9).
 
 | Tool | Signature | Notes |
 |---|---|---|
-| `probe` | `(question: str) -> str` | Preamble-injected, see §10. `@task` |
-| `lint` | `(path: str) -> str` | `lint.py --no-render`. Same code as the edge |
-| `render` | `(target: str) -> str` | `quarto render`. `@task` |
-| `check` | `(chapter: str, all: bool) -> str` | `check.py`. `@task` |
+| `probe` | `(question: str) -> str` | Preamble-injected, §10 |
+| `lint` | `(path: str) -> str` | `lint.py --no-render`. Same code as the mandatory step |
+| `render` | `(target: str) -> str` | `quarto render` |
+| `check` | `(chapter: str, all: bool) -> str` | `check.py` |
 | `api_search` | `(query: str) -> str` | AeroSandbox introspection |
 | `api_signature` | `(path: str) -> str` | Signature + docstring |
 | `read_reference` | `(name: Enum) -> str` | 7 reference docs + vendored book chapters |
-| `list_chapters` | `() -> str` | Chapter names + `index.qmd` titles. Cheap; informs `declare_route` |
-| `declare_route` | `(route, chapter, rationale) -> str` | Binding route decision; may override the router's hint |
-| `declare_inputs` | `(items: list[Input]) -> str` | Declares every input not yet fixed |
-| `propose` | `(p: Proposal) -> str` | Terminates `probe_loop`; routes to `gate` |
-| `consult` | `(question: str, why: str) -> str` | Suspends `probe_loop`, routes to the `consult` node. Guidance only — not Specified inputs, not route decisions |
-| `create_chapter` | `(name: str) -> str` | Wraps the scaffold script. Emits `index.qmd`, `_model.py`, `_analysis.py` from the template — the agent edits them afterwards via MCP |
+| `propose` | `(p: Proposal) -> str` | Terminates the probe loop. Validates, writes `proposal.json`, exits |
+| `ask_specified` | `(name, why, options?) -> str` | Blocks on stdin. Records into `inputs[]`. **As often as needed** |
+| `consult` | `(question: str, why: str) -> str` | Blocks on stdin. Free-form guidance, max 3 |
+| `create_chapter` | `(name: str) -> str` | Wraps the scaffold script; the agent then edits the result via MCP |
 | `bash` | `(command: str) -> str` | Allowlisted escape hatch, §7 |
 
-`declare_inputs` rejects `kind == "derivable"`:
-`"'{name}' is derivable — compute it, don't declare it."`
+Schemas are generated from Pydantic models — `model_json_schema()` for the
+declaration, `model_validate()` on the way back in, so a malformed `propose`
+returns a clean error the model can fix rather than a `KeyError` in the handler.
 
-`declare_route` takes `route ∈ {entry, new_chapter}` plus a one-line rationale
-naming what is held constant and what differs. `new_notebook` is not offered —
-it is human-run (§17).
+**`propose` is the single terminal tool.** Route, inputs and proposal arrive
+together. It rejects `kind == "derivable"` with `"'{name}' is derivable — compute
+it, don't declare it."`, and rejects any `specified` input whose `owner` is
+`assumed` — those must have been asked (§12).
 
-`consult` does **not** call `interrupt()` itself — it cannot, because
-`probe_loop` is a `while` loop (§11 constraint 2). It sets a flag that ends the
-current `agent_loop` turn and routes to the `consult` node, which holds the one
-`interrupt()`. The reply appends to `messages` and control returns to
-`probe_loop`, which resumes from the accumulated history. Capped at
-`S["consults"] < 3` so it cannot ping-pong.
+**`ask_specified` and `consult` need no special machinery.** The process is alive
+and you are at the terminal, so each reads stdin and returns. This is the whole
+benefit of dropping the framework: under LangGraph every one of these needed its
+own node, because a `while` loop containing an `interrupt()` replays prior
+iterations exponentially on resume — which also capped how often you could
+sensibly ask. Here the cap is only good manners.
 
 All native handlers truncate their own output — tracebacks keep the tail,
 listings keep the head. Cap 8 kB.
@@ -273,8 +239,8 @@ writing the third. Every run here starts cold. Without a substitute the agent
 re-derives what it learned last run and will essentially never notice it is
 contradicting an earlier entry.
 
-The substitute is a **generated chapter manifest**, built at run start from entry
-frontmatter and hero values:
+The substitute is a **generated chapter manifest**, built from entry frontmatter
+and hero values:
 
 ```
 04-chosen-throw  (AVL + 6-DOF rollout, tail fixed)
@@ -290,23 +256,25 @@ Generated, never hand-maintained — `commit` rebuilds it. It serves rule 10
 
 | Tier | Contents | Cost |
 |---|---|---|
-| **Always — inside the explicit cache** | System instruction, tools, chapter manifest, target chapter's `index.qmd`, `_analysis.py` signatures | ~1,550 tokens beyond system + tools |
+| **Always — inside the explicit cache** | System instruction, tools, manifest, **every** chapter's `index.qmd`, **every** `_analysis.py` signature list | ~3,850 tokens beyond system + tools |
 | **On demand — `read_text_file`** | Full entry bodies, when linking a sibling or checking a suspected contradiction | ~625 tokens each |
 
-**The manifest goes in the cached prefix, not the first user turn.**
-Counterintuitive but correct: the cache object is created per run anyway (§9), so
-run-specific content costs nothing extra — whereas in `contents` it sits *after*
-the cached prefix and is re-processed on all 25 turns of the loop.
+**Cache every chapter, not just the target.** Measured: all four `index.qmd` ≈
+1,900 tokens, all four signature lists ≈ 1,200. Cheap — and it means the prefix
+is **identical for every run in the notebook**, so one cache object serves them
+all until the manifest changes. Targeting a single chapter would require knowing
+the chapter before the cache is built, which is the only real argument there ever
+was for a separate routing call.
 
-The target chapter's `index.qmd` is mandatory context, not optional: it states
-what defines the chapter and the assumptions that live at chapter level, which
-the entry's prose must **not** repeat.
+`index.qmd` is mandatory context, not optional: it states what defines each
+chapter and the assumptions that live at chapter level, which entry prose must
+**not** repeat.
 
-Measured against the real notebook (25 entries, 4 chapters): all four
-`index.qmd` ≈ 1,900 tokens; one chapter's entries ≈ 5,600; every entry in the
-notebook ≈ 16,000. Against a 1M window these are not quantities to agonise over —
-the skill's context warnings were written for a Claude Code session that
-accumulates, and do not transfer at this scale.
+Measured against the real notebook (25 entries, 4 chapters): all `index.qmd` ≈
+1,900 tokens; one chapter's entries ≈ 5,600; every entry ≈ 16,000. Against a 1M
+window these are not quantities to agonise over — the skill's context warnings
+were written for a Claude Code session that accumulates, and do not transfer at
+this scale.
 
 ---
 
@@ -332,10 +300,6 @@ what `footer()`, `show_source()` and `md_table()` do, which `api_search` and
 `read_reference` provide. This is why no read-only filesystem tier is required,
 and why no custom path-confinement code exists in this system.
 
-Both read paths that reach outside a single entry stay inside `chapters/`:
-rule 10 (link a sibling entry) and rule 2 (no repeated code across entries) both
-read sibling `.qmd` files; "read that chapter's `index.qmd`" is chapter-level.
-
 ### Figures — the one unresolved access question
 
 `verify` must read rendered figures as images, not just printed text. The failure
@@ -351,7 +315,7 @@ Quarto writes it as a subprocess and never needs MCP). If they are written to a
 `*_files/` directory beside the entry, the current allowlist already covers it.
 
 `freezediff.py`'s `figures(root, repo, ref, chapters)` already locates them —
-read it before finalising this. Until resolved, `verify` is text-only and rule 7
+read it before finalising. Until resolved, `verify` is text-only, and rule 7
 (caption ≤ 50 words) is enforced while *caption accuracy* is not.
 
 ---
@@ -384,7 +348,7 @@ and gives an audit log. Threat model is a local single-user notebook.
 
 ## 8. The agent loop
 
-Used by `probe_loop` and `write`. `google-genai`, `generate_content` (§16).
+Used by both phases. `google-genai`, `generate_content` (§16).
 
 ```python
 def agent_loop(contents, cfg, max_turns=25):
@@ -393,7 +357,8 @@ def agent_loop(contents, cfg, max_turns=25):
             model=MODEL, contents=contents, config=cfg,
         )
         turn = resp.candidates[0].content
-        contents.append(turn)                      # WHOLE Content — signatures included
+        contents.append(turn)                    # WHOLE Content — signatures included
+        log(turn)                                # transcript.jsonl, for crash recovery
 
         calls = [p.function_call for p in turn.parts if p.function_call]
         if not calls:
@@ -403,6 +368,8 @@ def agent_loop(contents, cfg, max_turns=25):
         for c in calls:
             try:
                 out = HANDLERS[c.name](**dict(c.args))
+            except Terminal:                     # propose() — writes and exits
+                raise
             except Exception as e:
                 out = {"error": f"{type(e).__name__}: {e}"}
             parts.append(types.Part.from_function_response(name=c.name, response=out))
@@ -414,25 +381,25 @@ def agent_loop(contents, cfg, max_turns=25):
 
 Invariants:
 
-1. **Append `resp.candidates[0].content` whole.** Model turns carry
-   **thought signatures** — encrypted blobs holding the model's reasoning state.
-   The first `function_call` part of each step must carry its signature back
-   *exactly as received*, or the request fails with
-   `"Function call … is missing a thought_signature"`. Gemini 3 validates this
-   strictly; 2.5 did not. In parallel calls only the first part carries one.
-   Reconstructing a turn from extracted text drops it.
+1. **Append `resp.candidates[0].content` whole.** Model turns carry **thought
+   signatures** — encrypted blobs holding the model's reasoning state. The first
+   `function_call` part of each step must carry its signature back *exactly as
+   received*, or the request fails with `"Function call … is missing a
+   thought_signature"`. Gemini 3 validates this strictly; 2.5 did not. In parallel
+   calls only the first part carries one. Reconstructing a turn from extracted
+   text drops it.
 2. All function responses in **one** turn. Splitting them degrades parallel
    calling.
 3. Always return a response part, including on failure — an unanswered
    `function_call` is an error on the next request.
-4. No `try/except` wrapping anything that can raise `interrupt` (§11).
+4. The broad `except` must not swallow the terminal signal from `propose`.
 
 **Verified 2026-09-11** on `gemini-3.8-flash` and `gemini-3.1-pro-preview`, with
 a negative control:
 
 ```
-A  append Content whole   -> 200 OK
-B  rebuild turn from name+args -> 400 INVALID_ARGUMENT
+A  append Content whole          -> 200 OK
+B  rebuild turn from name + args -> 400 INVALID_ARGUMENT
    "Function call is missing a thought_signature in functionCall parts."
 ```
 
@@ -442,13 +409,13 @@ they ride as opaque part data.
 
 **This is why the system is native rather than abstracted (§16).** Signature
 round-tripping has been a recurring defect in framework code — dropped in
-normalisation because a common message shape has nowhere to put an opaque
+normalisation, because a common message shape has nowhere to put an opaque
 provider blob. Appending raw `Content` sidesteps it entirely.
 
 `verify` constructs fresh history and therefore holds no signatures. If it is
 ever given tools, its synthetic turns need the documented dummy value
-`"skip_thought_signature_validator"`. As specified it makes one toolless call,
-so this does not arise.
+`"skip_thought_signature_validator"`. As specified it makes one toolless call, so
+this does not arise.
 
 ---
 
@@ -457,7 +424,7 @@ so this does not arise.
 ### The mechanism
 
 `generate_content` is stateless — every request re-sends the whole conversation,
-so a 20-turn probe loop transmits the system instruction and tool schemas twenty
+so a 25-turn probe loop transmits the system instruction and tool schemas 25
 times. Caching lets the model skip re-processing the front of that payload.
 Three facts define it:
 
@@ -478,15 +445,13 @@ volatile content**, because anything volatile poisons everything downstream.
 | Saving | 75% off matched prefix, **best effort** | Guaranteed, with a storage charge for the TTL |
 | Available on | Both APIs | `generate_content` only — **not** the Interactions API |
 
-**Use explicit.** This system's prefix is frozen by construction — sorted tool
-list, byte-identical system instruction — which is the ideal explicit-cache case:
-create one cached content at run start holding tools + system instruction, hold
-the handle for the run, let the TTL expire after. That converts a best-effort
-discount into a guaranteed one, and it is the reason §16 stays on
-`generate_content`.
+**Use explicit.** The prefix is frozen by construction — sorted tool list,
+byte-identical system instruction, whole-notebook context (§5a) — which is the
+ideal explicit-cache case, and the reason §16 stays on `generate_content`.
 
-Implicit caching remains as a free fallback if the prefix falls under the
-minimum or the handle expires mid-run.
+Key the cache on `hash(system + tools + manifest)` and reuse it across commands
+and across runs; rebuild only when the manifest changes, i.e. after a commit.
+Implicit caching is the free fallback in the gap.
 
 ### The 4,096-token floor — MEASURED, and it binds
 
@@ -497,40 +462,29 @@ Measured against `gemini-3.8-flash`, 2026-09-11:
 
 | | tokens |
 |---|---|
-| 19 tool declarations, measured as a proxy for the final ~20 | **1,444** |
+| 19 tool declarations, as a proxy for the final ~17 | **1,444** |
 | System instruction | **14.6 tokens/line** (calibrated on `SKILL.md`: 458 lines → 6,683) |
 
-Which puts the prefix here:
-
-| System instruction | Prefix | |
-|---|---|---|
-| 100 lines | ~2,900 | short 1,193 |
-| **150 lines** (the original target) | **~3,633** | **short 463** |
-| **200 lines** | **~4,362** | **clears** |
-| 250 lines | ~5,092 | clears |
-
-**The §5a cached content resolves this.** Manifest, `index.qmd` and
-`_analysis.py` signatures add ~1,550 tokens to the same cached object:
+Tools plus a 150-line system instruction alone is ~3,633 — **463 short**. The
+§5a whole-notebook context clears it with room to spare:
 
 | | tokens |
 |---|---|
-| 19 tool declarations | 1,444 |
+| Tool declarations | ~1,444 |
 | System instruction @150 lines | ~2,190 |
 | Chapter manifest | ~750 |
-| Target `index.qmd` | ~500 |
-| `_analysis.py` signatures | ~300 |
-| **Prefix** | **~5,184** — clears by ~1,100 |
+| All four `index.qmd` | ~1,900 |
+| All four `_analysis.py` signature lists | ~1,200 |
+| **Prefix** | **~7,500** — clears by ~3,400 |
 
-So the system instruction can stay near 150 lines. The useful principle survives
-anyway: **compressing the prefix below ~4,100 tokens costs money**, because every
-turn of a 25-turn loop then pays full price. If the prefix ever lands short, add
-the `why.md` rationale behind each lint rule rather than padding — arguing with a
-rule is a known failure mode and the text already exists.
+The useful principle survives: **compressing the prefix below ~4,100 tokens
+costs money**, because every turn then pays full price. If it ever lands short,
+add the `why.md` rationale behind each lint rule rather than padding — arguing
+with a rule is a known failure mode and the text already exists.
 
 ### Explicit caching — validated
 
-Confirmed working with **both** `system_instruction` and `tools` in one cached
-object:
+Confirmed working with **both** `system_instruction` and `tools` in one object:
 
 ```
 cache created : 8,127 tokens (SKILL.md + 19 tools, ttl=600s)
@@ -542,20 +496,15 @@ call 2        : prompt=8,136  cached=8,127  ->  9 tokens billed fresh
 cache = client.caches.create(model=MODEL, config=types.CreateCachedContentConfig(
     system_instruction=SYSTEM, tools=TOOLSET, ttl="3600s"))
 # ... generate_content(config=types.GenerateContentConfig(cached_content=cache.name))
-client.caches.delete(name=cache.name)
 ```
-
-Create at run start, hold the handle, delete at the end. Set the TTL to cover a
-run — note the gate may hold for days, so the cache will expire across it and
-must be recreated on resume; implicit caching covers the gap.
 
 ### The layout
 
 | Segment | Contents | Cached |
 |---|---|---|
-| `tools` | 20 declarations (6 MCP + 14 native), frozen and **sorted**, identical every call | yes |
+| `tools` | 18 declarations (6 MCP + 12 native), frozen and **sorted** | yes |
 | `system_instruction` | Triage table, 17 rules as one-liners, entry format + budgets, scope section. ~150 lines | yes |
-| *(same cached object)* | Chapter manifest, target `index.qmd`, `_analysis.py` signatures (§5a) | yes |
+| *(same cached object)* | Manifest, all `index.qmd`, all `_analysis.py` signatures (§5a) | yes |
 | `contents` | Question, date, everything else volatile | no |
 
 **Never in `system_instruction`:** dates, notebook paths, chapter names, session
@@ -565,31 +514,31 @@ changes the cache key every minute and re-processes tools *and* system on every
 call. One line, and caching is off.
 
 A reordered tool list has the same effect from position 0 — hence sorting after
-merging MCP and native declarations (§5). Appending to `contents` (§3) extends a
-cached prefix; rebuilding it discards the cache.
+the merge (§5). Append to `contents`, never rebuild it: appending extends a
+cached prefix, rebuilding discards it (and drops signatures, §8).
 
 Verify with one number: **`usage_metadata.cached_content_token_count`**. Zero
 across repeated calls means either a silent invalidator or a prefix under the
 floor — check the token count first, then diff the rendered prefix.
 
 Reference corpus stays behind `read_reference` — description in context, body on
-demand. Past ~15 docs, switch to the tool-search server tool with
-`defer_loading: true` so schemas append rather than swap.
+demand. Past ~15 docs, switch to a tool-search approach so schemas append rather
+than swap.
 
 ---
 
 ## 10. Budget enforcement — four layers
 
-`TimeoutPolicy` does **not** replace solver budgets. A signal cannot stop a
-CasADi solve; it lands when the C call returns (measured: 1.15 s against a 0.3 s
-limit). Killing a subprocess *can*, at the cost of in-process state.
+A signal cannot stop a CasADi solve; it lands when the C call returns (measured:
+1.15 s against a 0.3 s limit). Killing a subprocess *can*, at the cost of
+in-process state.
 
 | Layer | Mechanism | Scope | Stops a C call? |
 |---|---|---|---|
 | 1 | `SOLVE_BUDGET` in `_notebook.py`, wrapping every `opti.solve` | one solve | Yes — at the next iteration boundary |
 | 2 | `budget()` | hand-written Python loops only | No |
 | 3 | `subprocess.run(timeout=)` | one `probe` call | Yes, hard kill; partial stdout preserved |
-| 4 | `ENTRY_CEILING` vs `S["solve_seconds"]` | whole entry | Node-level check between probes |
+| 4 | `ENTRY_CEILING` vs accumulated probe time | whole entry | Checked between probes |
 
 Layer 1 is load-bearing, and is why **`probe` takes a question, not code** — a
 budget the model can skip by writing `import aerosandbox` directly is not a
@@ -609,15 +558,12 @@ def run_probe(question: str) -> str:
     return out[-8000:]
 ```
 
-Layer 4 spans multiple tool calls, so it cannot live in a handler. `probe`,
-`render` and `check` append measured cost to `S["solve_seconds"]`; `probe_loop`
-checks the total against the chapter's `ENTRY_CEILING` after each turn and routes
-to `gate` — raising it is a human decision, recorded in `index.qmd`.
-
-`S["solve_seconds"]` doubles as the proposal's `render_cost_s` (§3). It is
-already measured, so the gate can quote what an entry will cost to render without
-parsing `aero_report()` out of probe stdout — and you can decline an expensive
-render before paying for it.
+Layer 4 accumulates across tool calls in the runner, not in a handler. The total
+becomes the proposal's `render_cost_s` — already measured, so the gate can quote
+what an entry will cost to render without parsing `aero_report()` out of stdout,
+and you can decline an expensive render before paying for it. Exceeding
+`ENTRY_CEILING` mid-probe ends the loop and says so in the proposal; raising the
+ceiling is a human decision, recorded in `index.qmd`.
 
 Prefer deterministic caps to wall-clock ones. Iterations behave identically on a
 loaded machine; wall time does not (the same solve measured 533.9 s against a
@@ -625,66 +571,100 @@ loaded machine; wall time does not (the same solve measured 533.9 s against a
 
 ---
 
-## 11. LangGraph configuration and constraints
+## 11. Why no orchestration framework
 
-| Setting | Value | Why |
-|---|---|---|
-| Checkpointer | `SqliteSaver` | Gate may stay open for days at zero compute |
-| Durability | `sync` | Gate correctness over throughput |
-| `@task` | `probe`, `render`, `check` | Results restored from checkpoint on resume, not recomputed |
-| `RetryPolicy` | `max_attempts=3`, explicit `retry_on` | **Default `retry_on` excludes `RuntimeError`, `OSError`, `ValueError`** — pass transient solver failures explicitly |
-| `TimeoutPolicy` | Outer backstop only | §10 |
-| `cache_policy` | on `probe` | Skips an identical re-probe |
-| Error handler | on `lint` | Returns `Command` routing back to `write` |
+The rule:
 
-**Hard constraints — violating these breaks resume:**
+> **An orchestration framework earns its place when the process must survive a
+> pause it did not choose.**
 
-1. **`interrupt()` appears only in `gate` and `consult`** — bare nodes holding
-   one call each and nothing else. On resume a node restarts from the top, not
-   from the interrupt line.
-2. **`probe_loop` and `write` contain no `interrupt()`.** `while` + `interrupt`
-   in one node replays prior iterations exponentially on each resume. This is
-   why `consult` is a separate node rather than a tool that blocks in place.
-   Re-entering `probe_loop` afterwards is safe: `messages` is checkpointed state
-   (§3), so the loop resumes from accumulated history rather than replaying, and
-   `@task` memoisation covers any probe already run.
-3. **One `interrupt()` per node.** Matching within a node is strictly
-   index-based; conditional or loop-driven interrupts misalign resume values.
-4. **Never `try/except` around `interrupt()`** — it is an exception; catching it
-   swallows the gate. A broad `except Exception` in tool dispatch will eat it.
-5. `interrupt()` bypasses retry policies and error handlers.
-6. Anything executing before an `interrupt()` must be idempotent.
+This system has no such pause. `nb ask` exits deliberately at a fixed point;
+`nb write` runs start to finish; `consult` blocks on stdin with the process
+alive. So LangGraph's checkpointer, `interrupt()`, and `@task` memoisation have
+nothing to do — you never resume *into* a loop, so there is nothing to restore.
+
+| Framework feature | Replacement |
+|---|---|
+| Checkpointer + `interrupt()` | Process exit + `proposal.json` |
+| `@task` memoisation | Nothing to restore |
+| `RetryPolicy` | A `for` loop with backoff |
+| `TimeoutPolicy` | `subprocess(timeout=)` — already budget layer 3 |
+| Multi-question queue | A list in `proposal.json`, driven by the CLI |
+| Time travel | git, plus `transcript.jsonl` |
+
+**What is deleted along with it** is the real win — a set of constraints that
+existed only because the framework did, and that were the subtlest thing in the
+design: `interrupt()` only in bare nodes; no `interrupt()` inside a `while` loop
+(exponential replay on resume); one `interrupt()` per node (index-based
+matching); never `try/except` around an `interrupt()`; idempotence before every
+interrupt. All accidental complexity, all gone.
+
+**Adopt a framework when** any of these becomes true, and the migration is
+mechanical because the phases are already separable functions:
+
+- The gate becomes conditional again, so pauses are unpredictable.
+- You want a daemon or server rather than a CLI.
+- Hand-written transcript-replay-and-resume grows past ~50 lines.
+- You want to re-run a bad run from the middle to debug it, and git plus the
+  transcript is not enough.
 
 ---
 
-## 12. Input triage
-
-Classified by `probe_loop`, enforced by code.
+## 12. Input triage, and the two modes
 
 | Kind | Test | Action |
 |---|---|---|
 | **Derivable** | The model or the plans already contain it | Compute it. Never ask, never assume |
-| **Specified** | A different answer changes *what we are building* | **Gate → `interrupt()`** |
+| **Specified** | A different answer changes *what we are building* | **`ask_specified`, immediately.** Never assumed, never deferred |
 | **Unknown** | A different answer changes *how accurately we modelled it* | Assume, record in `## Assumed`, state the cost |
 
 The judgment stays with the model — it has the context. The policy is a
 deterministic branch. A separate triage agent would start cold and re-read the
-model to answer what the worker already knows.
+model to answer what the probe loop already knows.
 
 Never sweep a Specified input instead of asking: it triples the output and still
-answers nothing. Lint rule 4 catches the artifact.
+answers nothing. Lint rule 4 catches the artefact.
 
-Unattended runs set `owner: assumed`, keeping "did a person decide this?"
-visible.
+### Asking is always allowed, and always required
 
-**The gate always fires** — it carries the proposal (§4). Specified inputs, a
-`new_chapter` route, and a requested budget raise (§10) ride the same stop, which
-is why asking them costs nothing extra.
+**There is no unattended mode.** A Specified input is asked, every time. The
+system is an interactive CLI; if nobody is at the terminal, the run waits.
 
-`consult` is the separate channel for everything that is *not* a binding
-decision. Keeping them apart matters: if guidance questions were routed through
-the gate, the gate's payload would stop being "here is what I propose to write"
-and start being a conversation.
+This departs from the skill in two ways, both deliberate:
+
+**Ask immediately, not at the proposal.** The skill batches Specified questions
+into the proposal message because *you are stopping anyway, so the inputs cost no
+extra round trip* — an optimisation for a chat interface where each round trip is
+expensive. Here the process is alive and you are at the terminal, so asking costs
+nothing, and asking *early* is strictly better: the rest of the probe runs
+against the real value instead of a placeholder. A static margin discovered at
+turn 3 should not be guessed for twenty more turns.
+
+**Ask as often as needed.** `ask_specified` has no cap. `consult` keeps one
+(max 3) because open-ended guidance can loop; a Specified input cannot — there
+are only so many decisions a question contains.
+
+The gate therefore carries only the proposal: *this is what I intend to write*.
+It is cheap — you are already there, you read three lines — and it still catches
+the four expensive failures: the entry answers the wrong question; the entry
+should not exist at all; wrong chapter; the render costs more than it is worth.
+
+### When the answer is "I don't know, what do you think?"
+
+From the skill, and it still applies:
+
+- **Answerable in a sentence** → answer it, record it as Specified with
+  `owner: "agent"` and the reason, continue.
+- **Needs computation** → it is a question in its own right. Probe it, answer it,
+  record it, then return to the original.
+
+`owner` is therefore three-valued: `user` (you answered), `agent` (the model
+answered a Specified question you delegated), `assumed` (an Unknown, nobody
+knows). Keeping them distinct is the whole point of the field — it preserves
+"did a person decide this?" on the page.
+
+`propose` rejects any `specified` input carrying `owner: "assumed"`. That
+combination means the discipline was skipped.
 
 ---
 
@@ -727,7 +707,7 @@ failure.
 entries and reports blocks appearing in ≥2 files. The agent satisfies it by
 changing only its own entry: promote the logic to `_analysis.py` and call it, and
 the block no longer appears twice — the earlier entry is untouched. No
-cross-entry refactor, no special machinery; the write→lint loop handles it.
+cross-entry refactor; the write→lint loop handles it.
 
 Do **not** pre-emptively write every helper to `_analysis.py` to dodge the rule.
 The tier table promotes on the *second* use deliberately, and eager promotion
@@ -741,9 +721,9 @@ because rule 13 *requires* one in every entry: a line the rules demand everywher
 can never be promoted, so flagging it puts two rules in direct contradiction.
 That happened. Axis cosmetics are excluded for the same reason.
 
-Rules 2 and 13 require `_analysis.py` to be writable. Locking it makes both
-unsatisfiable and the write→lint edge thrashes to `max_attempts`. It is inside
-`chapters/`, so the §6 allowlist covers it — do not narrow that.
+Rules 2 and 13 require `_analysis.py` to be writable. It is inside `chapters/`,
+so the §6 allowlist covers it — do not narrow that, or both become unsatisfiable
+and the write→lint loop thrashes to its cap.
 
 Rule 17 warns rather than fails until machine load cannot explain the overrun.
 
@@ -768,9 +748,9 @@ the match is an artefact.
 **This stays agent-facing and automated.** The agent made the refactor, so it
 knows whether a moved figure is the deliberate deletion it intended or a bug it
 introduced — and with `read_media_file` it can look at the figures `check.py`
-names. That is a tight correction loop, not a judgment call. The gate still sits
-downstream at proposal time, so a bad self-certification gets one more look
-before anything commits.
+names. That is a tight correction loop, not a judgment call. The gate sits
+upstream at proposal time and `verify` downstream, so a bad self-certification
+still gets caught before commit.
 
 ### Corrections across entries
 
@@ -804,18 +784,20 @@ An inline `{python}` expression counts as one word. Order: hero → `**Answer.**
 
 ## 15. Observability
 
+A SQLite table, one row per run. No platform needed at this scale; emit
+OpenTelemetry GenAI semantic conventions instead if you later want a trace UI.
+
 | Metric | Source | Use |
 |---|---|---|
-| **First-pass lint violations / entry** | `lint.py` before any retry | The eval. Compare models, prompts, effort levels |
-| Input/output/cached tokens per entry | `usage` per call | Cost per entry; freeze records no timing |
-| Cached-token ratio | `usage.total_cached_tokens` | Zero ⇒ silent invalidator, **or** a prefix under the 4,096 floor (§9) |
+| **First-pass lint violations / entry** | `lint.py` before any retry | The eval. Compare models, thinking levels, prompts |
+| Input/output/cached tokens per run | `usage_metadata` per call | Cost per entry; freeze records no timing |
+| Cached-token ratio | `cached_content_token_count` | Zero ⇒ silent invalidator, or a prefix under the floor (§9) |
 | Turns per probe loop | loop counter | Probe efficiency |
-| Gate latency | checkpoint timestamps | How long approval actually takes |
-| Consults per run, and their text | `S["consults"]`, run log | Where the prompt or references are underspecified — a recurring consult is a missing reference doc |
-| Proposals rejected at the gate | gate resume values | Wasted probe cost; the signal that routing or scope is off |
+| Consults per run, and their text | run log | A recurring consult is a missing reference doc |
+| Proposals rejected at the gate | `nb write` not run, or edited first | Wasted probe cost; the signal that routing or scope is off |
 
-First-pass violation count is a real metric over a real artifact — and the
-target for any later prompt optimisation.
+First-pass violation count is a real metric over a real artefact — and the target
+for any later prompt optimisation.
 
 ---
 
@@ -823,15 +805,14 @@ target for any later prompt optimisation.
 
 **Primary model: Gemini 3.x, via the native `google-genai` SDK ≥ 2.23.**
 Candidates as of 2026-09-11: `gemini-3.1-pro-preview` (deepest reasoning) and
-`gemini-3.8-flash` (newest Flash). Both verified for signatures and caching.
-Pin the ID explicitly — the 3.x line moves fast.
+`gemini-3.8-flash` (newest Flash). Both verified for signatures and caching. Pin
+the ID explicitly — the 3.x line moves fast.
 
 ```python
 cfg = types.GenerateContentConfig(
-    system_instruction=SYSTEM,          # only when not using the cache handle
     tools=TOOLS,                        # sorted, frozen
     thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.HIGH),
-    cached_content=CACHE_HANDLE,        # explicit cache from run start (§9)
+    cached_content=CACHE_HANDLE,        # carries system_instruction + tools (§9)
 )
 ```
 
@@ -849,37 +830,32 @@ mutually exclusive; sending both returns a 400.
 
 The Interactions API is GA and is where new Gemini capabilities land; it manages
 conversation history server-side via `previous_interaction_id`. Two reasons this
-system stays on `generate_content` anyway:
+system stays on `generate_content`:
 
 1. **Explicit caching is unavailable on Interactions** (§9), and this system's
    frozen prefix is precisely the case explicit caching exists for.
-2. **History ownership would be split.** LangGraph already checkpoints
-   `contents` (§3), which is what makes the gate resumable after days. Server-side
-   history adds a second source of truth whose retention this system does not
-   control.
+2. **The probe phase owns its history** and discards it at the gate. Server-side
+   history adds a second source of truth with retention this system does not
+   control, for a conversation it deliberately does not keep.
 
 The counter-argument is real and worth revisiting: server-side history means
 Google round-trips the thought signatures, removing §8's sharpest failure mode.
 If signature handling proves troublesome in practice, the Interactions API is the
-principled retreat — at the cost of explicit caching and single-source history.
+principled retreat — at the cost of explicit caching.
 
 ### Provider swap
 
-One interface:
-
-```python
-def complete(contents, cfg) -> Response: ...
-```
+One interface: `def complete(contents, cfg) -> Response`.
 
 The other half is already portable — MCP filesystem serves any MCP-capable
 client, and tool schemas are plain JSON Schema from Pydantic (§5).
 
 **Do not route this through an abstraction layer** (LiteLLM, LangChain chat
 models). At one provider it buys nothing, and it carries two specific risks here:
-thought-signature round-tripping, which has been a recurring defect in framework
-code (§8), and explicit-cache lifecycle, which a chat-completions shape models
-poorly. Adding Claude later for a §15 bake-off means a second implementation of
-`complete()` — roughly 50 lines — not a rewrite.
+thought-signature round-tripping, a recurring defect in framework code (§8), and
+explicit-cache lifecycle, which a chat-completions shape models poorly. Adding
+Claude later for a §15 bake-off means a second implementation of `complete()` —
+roughly 50 lines — not a rewrite.
 
 Ignore LLM *gateways* (Bifrost, Portkey, TrueFoundry, OpenRouter) — proxy servers
 for team key management, budgets and RBAC. Wrong category and wrong scale.
@@ -888,6 +864,12 @@ for team key management, budgets and RBAC. Wrong category and wrong scale.
 
 ## 17. Human-operated, outside the agent
 
+- `make new-notebook` — scaffolds `_quarto.yml`, `_notebook.py`, `_scratch/`
+- Editing the system instruction, `lint.py`, `check.py`, `references/`, and the
+  chapter template that `create_chapter` instantiates
+- Raising `SOLVE_BUDGET` / `ENTRY_CEILING` (recorded in `index.qmd`)
+- Deciding rule changes from the friction log
+
 ### Deliberate non-goals
 
 Skill features intentionally not ported. Each is here so it reads as a decision
@@ -895,18 +877,10 @@ rather than an oversight:
 
 | Not ported | Why |
 |---|---|
-| **`superseded_by()`** | Requires knowing a *later* entry obsoletes an earlier one. A run that knows only its own question cannot make that call — it is inherently retrospective. Human annotation |
+| **`superseded_by()`** | Requires knowing a *later* entry obsoletes an earlier one. A run that knows only its own question cannot make that call — inherently retrospective. Human annotation |
 | **META branch** | §1. Rules can no longer be earned from failures; the friction log replaces `why.md` growth, and acting on it is manual |
-| **New notebooks** | Below |
-| **Discussion with no artefact** | The skill can think with you and produce nothing. This system is question-in → entry-out; `consult` (§4) is the narrow substitute |
-
-- `make new-notebook` — scaffolds `_quarto.yml`, `_notebook.py`, `_scratch/`.
-  Stays human-run: a new notebook wants a fresh session, which is a process
-  decision, not the agent's
-- Editing the system prompt, `lint.py`, `check.py`, `references/`, and the
-  chapter template that `create_chapter` instantiates
-- Raising `SOLVE_BUDGET` / `ENTRY_CEILING` (recorded in `index.qmd`)
-- Deciding rule changes from the friction log
+| **New notebooks** | A new notebook wants a fresh session — a process decision, not the agent's |
+| **Discussion with no artefact** | The skill can think with you and produce nothing. This system is question-in → entry-out; `consult` is the narrow substitute |
 
 ---
 
@@ -917,37 +891,28 @@ rather than an oversight:
    it errors rather than guessing when a match is ambiguous, or always pair it
    with `dryRun`. A near-match landing on the wrong `{python}` cell is the
    failure mode.
-2. Whether `@task` composes inside Graph API nodes, or whether the pipeline
-   should use the Functional API (`@entrypoint` / `@task`) instead — four steps,
-   plain control flow, expensive memoised side effects may fit it better.
-3. Current LangGraph API names for `RetryPolicy`, `TimeoutPolicy`,
-   `cache_policy`, `set_node_defaults`.
-4. Whether `check.py`'s freeze scoping behaves correctly when invoked outside a
-   Claude Code working directory.
-5. How `ENTRY_CEILING` is read per chapter (`index.qmd` parse vs import) so
-   layer 4 in §10 can enforce it between probes.
-6. ~~Thought signatures survive the loop~~ — **DONE 2026-09-11.** Confirmed on
-   both candidate models, with a negative control. See §8.
-7. Whether the chapter scaffold script can be invoked headlessly by
-   `create_chapter` without the Claude Code harness.
-8. **Where rendered figure bytes live** (§6) — embedded base64 in
+2. **Where rendered figure bytes live** (§6) — embedded base64 in
    `_freeze/**/execute-results/html.json`, or files in a `*_files/` directory.
    Determines whether the MCP allowlist needs read access to `_freeze/`. Read
    `freezediff.py`'s `figures()`. `verify` is text-only until this is settled.
-9. Whether `read_media_file` output round-trips as inline image data through
-   `complete()` — `verify` depends on it (§6).
-10. ~~Measure the frozen prefix against the cache floor~~ — **DONE.** Prefix at
-    150 lines falls 463 tokens short; target is ~200 lines. Explicit caching
-    validated end to end. See §9.
-11. ~~Exact model ID~~ — **DONE.** `gemini-3.1-pro-preview` /
-    `gemini-3.8-flash`. Re-check periodically; the line moves.
-12. ~~`role` for function-response turns~~ — **DONE.** `"user"` is correct
-    (§8's loop ran green).
-13. Re-measure the prefix once the system instruction is actually written — the
-    200-line figure is extrapolated from 14.6 tokens/line, and prose density
-    varies. The check is one `generate_content` call reading
-    `prompt_token_count`; `count_tokens` **cannot** be used, as it rejects
-    `tools` on the Gemini API.
-14. Pick between `gemini-3.1-pro-preview` and `gemini-3.8-flash` using §15's
-    first-pass violation count. Pro spent 284 thinking tokens against Flash's 46
-    on the same trivial call — a real behavioural difference worth pricing.
+3. Whether `read_media_file` output round-trips as inline image data through
+   `complete()` — `verify` depends on it.
+4. Whether `check.py`'s freeze scoping behaves correctly when invoked outside a
+   Claude Code working directory.
+5. Whether the chapter scaffold script can be invoked headlessly by
+   `create_chapter`.
+6. How `ENTRY_CEILING` is read per chapter (`index.qmd` parse vs import) so
+   layer 4 in §10 can enforce it between probes.
+7. Re-measure the prefix once the system instruction is actually written — the
+   figures are extrapolated from 14.6 tokens/line and prose density varies. The
+   check is one `generate_content` call reading `prompt_token_count`;
+   `count_tokens` **cannot** be used, as it rejects `tools` on the Gemini API.
+8. Pick between `gemini-3.1-pro-preview` and `gemini-3.8-flash` using §15's
+   first-pass violation count. Pro spent 284 thinking tokens against Flash's 46
+   on the same trivial call — a real behavioural difference worth pricing.
+
+**Settled by measurement, 2026-09-11:** thought signatures round-trip when the
+whole `Content` is appended (§8, with negative control); the 4,096-token cache
+floor and how the prefix clears it (§9); explicit caching works with both
+`system_instruction` and `tools` (§9); `role="user"` is correct for
+function-response turns; `MINIMAL` thinking level 400s; current model IDs.

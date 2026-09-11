@@ -1,0 +1,83 @@
+---
+title: "What does the optimised flight actually look like?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+# The shaped-wing optimum, marched. One call so the flight and the aircraft
+# behind it cannot drift apart between entries.
+result = optimised_flight()
+flight = result["flight"]
+
+peak_q = float(np.max(np.abs(flight["q"])))
+apex_at = flight["t"][int(np.argmax(flight["altitude"]))] / flight["duration"]
+
+assert peak_q < 40                       # calm: earlier flights reached 122 deg/s
+assert flight["alpha_max"] < 0.75 * CLEAN_ALPHA   # never near the stall bound
+assert 0.35 < apex_at < 0.65              # apex mid-flight: one arc, not a zoom
+```
+
+::: {.hero-pair}
+::: {.hero-ref}
+[`{python} f"{flight['range']:.1f}"` m]{.hero-value}
+[flown, from a 1.5 m release]{.hero-label}
+:::
+::: {}
+[`{python} f"{peak_q:.0f}"`°/s]{.hero-value}
+[peak pitch rate, against 122 before]{.hero-label}
+:::
+:::
+
+**Answer.** One arc, and nothing else. Pitch rises to
+`{python} f"{np.max(flight['theta']):.0f}"`° and falls away without a single
+reversal in `{python} f"{len(flight['t'])}"` steps, α peaking at
+`{python} f"{flight['alpha_max']:.1f}"`° well short of the stall (@fig-flight).
+The apex sits at [`{python} f"{flight['apex']:.2f}"` m]{.key}, halfway through.
+That calm is why this chapter's two models finally agree: there is no fast pitch
+motion left for the nodes to miss.
+
+::: {.callout-warning}
+## Twenty-eight metres is a field, not a room
+Flat and fast is also where the missing lateral dynamics would bite hardest.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **Vertical plane only**; no roll or yaw.
+2. **Still air**, no gusts or thermals.
+3. **Throw priced** by the envelope, as agreed.
+:::
+
+```{python}
+#| label: fig-flight
+#| fig-cap: "Left: the flight path from release to ground, marked every half second. Right: pitch attitude and angle of attack against time, with the stall bound dashed. The path is a single arc and the attitude never reverses."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.0, 2.7))
+
+ax1.plot(flight["x"], flight["altitude"])
+marks = np.arange(0, flight["duration"], 0.5)
+idx = [int(np.argmin(np.abs(flight["t"] - m))) for m in marks]
+ax1.plot(flight["x"][idx], flight["altitude"][idx], "o", ms=3, color="C1")
+ax1.plot(0, flight["altitude"][0], "*", ms=10, color="C0")
+ax1.set_xlabel("distance, m")
+ax1.set_ylabel("altitude, m")
+
+ax2.plot(flight["t"], flight["theta"], label="pitch")
+ax2.plot(flight["t"], flight["alpha"], label="alpha")
+ax2.axhline(CLEAN_ALPHA, ls="--", lw=0.8, color="C3")
+ax2.set_xlabel("time, s")
+ax2.set_ylabel("degrees")
+ax2.legend()
+
+for ax in (ax1, ax2):
+    ax.grid()
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimised_flight, wing_study, simulate)
+```

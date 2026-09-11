@@ -1,0 +1,68 @@
+---
+title: "What does the optimised design look like?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+# Same call as the flight entry, so the drawing is of the aircraft that flew.
+result = optimised_flight()
+layout, solved = result["layout"], result["solved"]
+
+c_root = layout["c_root"]
+c_tip = c_root * solved["taper"]
+all_up = structural_mass(layout)["total"].mass + solved["ballast"]
+# Nose to tail, off the drawn geometry rather than from the ratios that set it.
+length = max(float(x.xyz_le[0]) + float(x.chord)
+             for w in result["airplane"].wings for x in w.xsecs)
+
+assert c_root > 2 * c_tip                     # strongly tapered, not rectangular
+assert solved["ballast"] / all_up > 0.25      # a third of it is lead
+assert length > 3 * layout["span"]            # and it is absurdly long: see below
+```
+
+::: {.hero-pair}
+::: {.hero-ref}
+[`{python} f"{length * 1e3:.0f}"` mm]{.hero-value}
+[long, on a `{python} f"{layout['span'] * 1e3:.0f}"` mm span]{.hero-label}
+:::
+::: {}
+[`{python} f"{all_up * 1e3:.1f}"` g]{.hero-value}
+[all up, `{python} f"{solved['ballast'] * 1e3:.1f}"` g of it lead]{.hero-label}
+:::
+:::
+
+**Answer.** A broad tapered plate on an absurd boom. The chord runs
+`{python} f"{c_root * 1e3:.0f}"` to `{python} f"{c_tip * 1e3:.0f}"` mm across a
+`{python} f"{layout['span'] * 1e3:.0f}"` mm span — but the tail arm is held in
+CHORDS, so that fat chord throws the tail
+`{python} f"{3.6 * c_root * 1e3:.0f}"` mm back and the aeroplane is
+[`{python} f"{length / layout['span']:.1f}"`× its own span]{.key} long
+(@fig-design). Nothing prices a metre of foam boom.
+
+::: {.callout-warning}
+## A ratio held is not a dimension held
+Pinning the tail arm in chords was conservative in volume and wild in millimetres.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **Tail held** at McEagle proportions.
+2. **No length limit**; the model has none.
+3. **Ballast at the nose**, position not free.
+4. **Aspect ratio and taper** stop on my bounds.
+:::
+
+```{python}
+#| label: fig-design
+#| fig-cap: "The optimised airframe to scale. A short deep tapered wing on a long nose, with the tail held at baseline proportions. Dihedral and fin are inherited, not results — the model has no lateral dynamics to value them."
+result["airplane"].draw_three_view(show=False)
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimised_flight, wing_study, structural_mass)
+```
