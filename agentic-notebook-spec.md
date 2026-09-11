@@ -80,9 +80,11 @@ interface; no hand-rolled path confinement.
 ```python
 class S(TypedDict):
     question: str                  # verbatim; becomes the entry title
+    queue: list[str]               # remaining questions from a multi-question ask
     notebook: Path
     chapter: str | None
-    route: Literal["entry", "new_chapter", "new_notebook"]
+    route: Literal["entry", "new_chapter"]
+    manifest: str                  # generated chapter digest — §5
     inputs: list[Input]
     contents: list[Content]        # provider-native; APPENDED to, never rebuilt
     entry_path: Path | None
@@ -98,7 +100,7 @@ class S(TypedDict):
 class Proposal(TypedDict):
     title: str                     # the question, verbatim
     figures: list[str]             # captions only — nothing else
-    render_cost_s: float           # from aero_report(), never guessed
+    render_cost_s: float           # = S["solve_seconds"]; measured, never guessed
     route: Literal["entry", "new_chapter"]
     chapter: str
 ```
@@ -129,7 +131,7 @@ extracts text and reassembles a turn breaks both at once.
 
 | Node | Type | Contract |
 |---|---|---|
-| `router` | 1 cheap call, structured output | Nearest existing chapter, from `index.qmd` titles only. A **hint** that seeds the probe preamble — not binding |
+| `router` | 1 cheap call, structured output | Splits a multi-question ask into `S["queue"]`; nominates the nearest chapter from `index.qmd` titles. Both are **hints** — not binding |
 | `probe_loop` | agentic loop | Explores via `probe`. Terminates on `declare_route` + `declare_inputs` + `propose`. Max 25 turns |
 | `consult` | `interrupt()` only | Open-ended guidance. Answer appends to `messages`; returns to `probe_loop`. Max 3 per run |
 | `gate` | `interrupt()` only | **Always fires.** Carries the proposal; also any Specified input, fork decision, or budget raise |
@@ -137,7 +139,7 @@ extracts text and reassembles a turn breaks both at once.
 | `write` | agentic loop | Creates the `.qmd`, may edit `_analysis.py` / `_model.py`. Has `lint` as a tool |
 | `lint` | pure code | `lint.py` + `check.py`. Unconditional edge. No model |
 | `verify` | 1 call, fresh context | Prose vs rendered output. Sees the render, **not** the conversation |
-| `commit` | pure code | git add + commit |
+| `commit` | pure code | git add + commit; rebuilds the manifest, then loops to `router` if `S["queue"]` is non-empty |
 
 **`gate` and `consult` are bare nodes** — exactly one `interrupt()` call each,
 nothing before it (§11).
@@ -170,6 +172,16 @@ therefore only nominates the nearest chapter; `probe_loop` decides.
 answers*, which changes what is being built rather than how accurately it was
 modelled — Specified by the §12 test.
 
+**A multi-question ask splits rather than being rejected.** The skill's rule is
+*a proposal covering more than one question splits into one entry each*. The
+router emits the split, the gate shows it — "this reads as three questions; one
+entry each, in this order" — and the remainder sits in `S["queue"]`. After
+`commit`, the graph loops to `router` with the next one. Checkpointing makes the
+queue free, and nothing the user asked for is discarded.
+
+Facets of a *single* comparison (cost, fidelity, applicability) are one question,
+not three. The router splits on distinct questions, not on clauses.
+
 **Lint is both a tool and an edge, deliberately.** The tool lets `write` fix
 violations inside one node without a checkpoint per cycle, and pairs with
 `edit_file`'s `dryRun`. The edge is the guarantee: without it the model can
@@ -186,7 +198,7 @@ question is decidable. Every other judgment stays in `probe_loop`.
 
 Frozen, sorted list — prefix position 0, never varies per request.
 
-### From the MCP filesystem server (5 of 13 exposed)
+### From the MCP filesystem server (6 of 13 exposed)
 
 | Tool | Notes |
 |---|---|
@@ -250,6 +262,51 @@ current `agent_loop` turn and routes to the `consult` node, which holds the one
 
 All native handlers truncate their own output — tracebacks keep the tail,
 listings keep the head. Cap 8 kB.
+
+---
+
+## 5a. What the model knows about the notebook's history
+
+**There is no memory across runs.** Under Claude Code the skill gets this free —
+three entries written in one session and the model still remembers the first when
+writing the third. Every run here starts cold. Without a substitute the agent
+re-derives what it learned last run and will essentially never notice it is
+contradicting an earlier entry.
+
+The substitute is a **generated chapter manifest**, built at run start from entry
+frontmatter and hero values:
+
+```
+04-chosen-throw  (AVL + 6-DOF rollout, tail fixed)
+  2026-09-09-01  can-we-optimise-against-a-real-flight-path      → 8.4 s
+  2026-09-10-01  would-more-pitch-damping-fix-the-disagreement   → no
+  2026-09-11-01  what-if-we-sweep-launch-speed-instead...        → 11.2 m/s
+```
+
+Generated, never hand-maintained — `commit` rebuilds it. It serves rule 10
+(linking a sibling by stem), route decisions, and correction-spotting (§13a).
+
+### Reading policy
+
+| Tier | Contents | Cost |
+|---|---|---|
+| **Always — inside the explicit cache** | System instruction, tools, chapter manifest, target chapter's `index.qmd`, `_analysis.py` signatures | ~1,550 tokens beyond system + tools |
+| **On demand — `read_text_file`** | Full entry bodies, when linking a sibling or checking a suspected contradiction | ~625 tokens each |
+
+**The manifest goes in the cached prefix, not the first user turn.**
+Counterintuitive but correct: the cache object is created per run anyway (§9), so
+run-specific content costs nothing extra — whereas in `contents` it sits *after*
+the cached prefix and is re-processed on all 25 turns of the loop.
+
+The target chapter's `index.qmd` is mandatory context, not optional: it states
+what defines the chapter and the assumptions that live at chapter level, which
+the entry's prose must **not** repeat.
+
+Measured against the real notebook (25 entries, 4 chapters): all four
+`index.qmd` ≈ 1,900 tokens; one chapter's entries ≈ 5,600; every entry in the
+notebook ≈ 16,000. Against a 1M window these are not quantities to agonise over —
+the skill's context warnings were written for a Claude Code session that
+accumulates, and do not transfer at this scale.
 
 ---
 
@@ -440,7 +497,7 @@ Measured against `gemini-3.8-flash`, 2026-09-11:
 
 | | tokens |
 |---|---|
-| 19 tool declarations (6 MCP + 13 native) | **1,444** |
+| 19 tool declarations, measured as a proxy for the final ~20 | **1,444** |
 | System instruction | **14.6 tokens/line** (calibrated on `SKILL.md`: 458 lines → 6,683) |
 
 Which puts the prefix here:
@@ -452,15 +509,23 @@ Which puts the prefix here:
 | **200 lines** | **~4,362** | **clears** |
 | 250 lines | ~5,092 | clears |
 
-**So the distillation target is ~200 lines, not ~150.** This inverts the usual
-instinct: compressing the system instruction below ~200 lines *costs* money,
-because it drops the prefix under the floor and every turn of a 25-turn probe
-loop then pays full price. There is a floor on useful compression, and it is
-about 2,650 tokens of system instruction.
+**The §5a cached content resolves this.** Manifest, `index.qmd` and
+`_analysis.py` signatures add ~1,550 tokens to the same cached object:
 
-Spend the extra ~50 lines on content that earns its place — the `why.md`
-rationale behind each lint rule is the obvious candidate, since arguing with a
-rule is a known failure mode and the text is already written.
+| | tokens |
+|---|---|
+| 19 tool declarations | 1,444 |
+| System instruction @150 lines | ~2,190 |
+| Chapter manifest | ~750 |
+| Target `index.qmd` | ~500 |
+| `_analysis.py` signatures | ~300 |
+| **Prefix** | **~5,184** — clears by ~1,100 |
+
+So the system instruction can stay near 150 lines. The useful principle survives
+anyway: **compressing the prefix below ~4,100 tokens costs money**, because every
+turn of a 25-turn loop then pays full price. If the prefix ever lands short, add
+the `why.md` rationale behind each lint rule rather than padding — arguing with a
+rule is a known failure mode and the text already exists.
 
 ### Explicit caching — validated
 
@@ -488,9 +553,10 @@ must be recreated on resume; implicit caching covers the gap.
 
 | Segment | Contents | Cached |
 |---|---|---|
-| `tools` | 17 declarations, frozen and **sorted**, identical every call | yes |
-| `system_instruction` | Triage table, 17 rules **with their `why.md` rationale**, entry format + budgets, scope section. **~200 lines** — see the floor above | yes |
-| `contents` | Question, date, chapter state, everything volatile | no |
+| `tools` | 20 declarations (6 MCP + 14 native), frozen and **sorted**, identical every call | yes |
+| `system_instruction` | Triage table, 17 rules as one-liners, entry format + budgets, scope section. ~150 lines | yes |
+| *(same cached object)* | Chapter manifest, target `index.qmd`, `_analysis.py` signatures (§5a) | yes |
+| `contents` | Question, date, everything else volatile | no |
 
 **Never in `system_instruction`:** dates, notebook paths, chapter names, session
 IDs, unsorted `json.dumps`, conditional sections. The skill's `SKILL.md` opens
@@ -547,6 +613,11 @@ Layer 4 spans multiple tool calls, so it cannot live in a handler. `probe`,
 `render` and `check` append measured cost to `S["solve_seconds"]`; `probe_loop`
 checks the total against the chapter's `ENTRY_CEILING` after each turn and routes
 to `gate` — raising it is a human decision, recorded in `index.qmd`.
+
+`S["solve_seconds"]` doubles as the proposal's `render_cost_s` (§3). It is
+already measured, so the gate can quote what an entry will cost to render without
+parsing `aero_report()` out of probe stdout — and you can decline an expensive
+render before paying for it.
 
 Prefer deterministic caps to wall-clock ones. Iterations behave identically on a
 loaded machine; wall time does not (the same solve measured 533.9 s against a
@@ -652,6 +723,24 @@ failure.
 17  a frozen entry stays under its chapter's ENTRY_CEILING
 ```
 
+**Rule 2 is a one-entry fix.** `lint.py` hashes every 3-line window across
+entries and reports blocks appearing in ≥2 files. The agent satisfies it by
+changing only its own entry: promote the logic to `_analysis.py` and call it, and
+the block no longer appears twice — the earlier entry is untouched. No
+cross-entry refactor, no special machinery; the write→lint loop handles it.
+
+Do **not** pre-emptively write every helper to `_analysis.py` to dodge the rule.
+The tier table promotes on the *second* use deliberately, and eager promotion
+turns `_analysis.py` into a junk drawer the agent then has to read. `why.md`
+records the real failure — four subtly different neutral points in one chapter,
+one taking its moment reference from the wrong station — and that is divergence,
+which lazy promotion plus the lint loop catches.
+
+**Port the `BOILERPLATE` regex verbatim.** `footer(` is on the exclusion list
+because rule 13 *requires* one in every entry: a line the rules demand everywhere
+can never be promoted, so flagging it puts two rules in direct contradiction.
+That happened. Axis cosmetics are excluded for the same reason.
+
 Rules 2 and 13 require `_analysis.py` to be writable. Locking it makes both
 unsatisfiable and the write→lint edge thrashes to `max_attempts`. It is inside
 `chapters/`, so the §6 allowlist covers it — do not narrow that.
@@ -664,6 +753,36 @@ is the part that shrinks; the verifier is not.
 
 On failure the retry appends **the rule text only** — not the diff, not the
 transcript.
+
+---
+
+## 13a. Refactoring and corrections
+
+### Proving a `_model.py` / `_analysis.py` change moved nothing
+
+`check.py` lints, deletes the freeze, renders and diffs, naming the figures whose
+bytes changed. Deleting the freeze is not optional — freeze tracks the page, not
+its includes, so without it a fresh render is compared against a cache hit and
+the match is an artefact.
+
+**This stays agent-facing and automated.** The agent made the refactor, so it
+knows whether a moved figure is the deliberate deletion it intended or a bug it
+introduced — and with `read_media_file` it can look at the figures `check.py`
+names. That is a tight correction loop, not a judgment call. The gate still sits
+downstream at proposal time, so a bad self-certification gets one more look
+before anything commits.
+
+### Corrections across entries
+
+When a later entry corrects an earlier one, the correction goes in the **later**
+entry: state the old value, the new one, and why they differ. Never edit the
+earlier entry. Two entries disagreeing, with the later one explaining the
+disagreement, is the intended end state.
+
+The manifest (§5a) carries each entry's hero value, which makes *noticing* a
+contradiction tractable — the agent can see that an earlier entry reported 8.4 s
+for something it just computed as 6.1 s, and read that entry to check. Without
+the manifest this required a full chapter read and would not reliably happen.
 
 ---
 
@@ -768,6 +887,18 @@ for team key management, budgets and RBAC. Wrong category and wrong scale.
 ---
 
 ## 17. Human-operated, outside the agent
+
+### Deliberate non-goals
+
+Skill features intentionally not ported. Each is here so it reads as a decision
+rather than an oversight:
+
+| Not ported | Why |
+|---|---|
+| **`superseded_by()`** | Requires knowing a *later* entry obsoletes an earlier one. A run that knows only its own question cannot make that call — it is inherently retrospective. Human annotation |
+| **META branch** | §1. Rules can no longer be earned from failures; the friction log replaces `why.md` growth, and acting on it is manual |
+| **New notebooks** | Below |
+| **Discussion with no artefact** | The skill can think with you and produce nothing. This system is question-in → entry-out; `consult` (§4) is the narrow substitute |
 
 - `make new-notebook` — scaffolds `_quarto.yml`, `_notebook.py`, `_scratch/`.
   Stays human-run: a new notebook wants a fresh session, which is a process
