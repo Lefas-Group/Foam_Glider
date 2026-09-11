@@ -40,6 +40,7 @@ Asked of the user, 2026-09-03:
 6. Gentle toss at `{python} f"{V_LAUNCH:.0f}"` m/s, released `{python} f"{H_RELEASE:.1f}"` m.
 7. Optimised designs constrained to 10% static margin.
 8. Dihedral and fin held fixed, never optimised.
+9. Solve budget: unbounded; these pages predate it.
 :::
 
 ::: {.callout-note}

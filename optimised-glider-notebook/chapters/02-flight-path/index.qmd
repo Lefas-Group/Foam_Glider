@@ -26,6 +26,7 @@ Asked of the user, 2026-09-04:
 1. Launch angle free, chosen to maximise time aloft.
 2. Report an unsteady result rather than constraining it away.
 3. Same aircraft as chapter 01, unchanged.
+4. Solve budget: unbounded; these pages predate it.
 :::
 
 ::: {.callout-note}

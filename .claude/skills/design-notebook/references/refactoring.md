@@ -61,3 +61,20 @@ existed in one chapter because nothing advertised the first, and one of the four
 took its moment reference from the wrong station. The same failure recurred when
 `_analysis.py` was empty and `api()` printed nothing: a near-duplicate of the
 design solve got written in a probe.
+
+## Never `str.replace` on a file you are holding in context
+
+`Edit` fails loudly when its target is not unique. `str.replace` does not — with
+no count it rewrites **every** occurrence, silently.
+
+A one-line addition meant for `throw_flight()` matched
+`out = {k: float(sol(x)) for k, x in v.items()}`, which also appears in
+`_flight_once()`, and inserted three lines there referencing names that function
+does not define. It was committed, and stayed latent only because nothing calls
+that function. What caught it was not review but the freeze scoping: the changed
+function showed up in the set of things an entry could reach, and the re-render
+that followed is what exposed the corruption.
+
+The corollary is the rule above it: **verify inertness, never predict it.** The
+same change was asserted to be incapable of moving an entry's numbers. It moved
+them — a re-render is the verification, not a formality to forecast.

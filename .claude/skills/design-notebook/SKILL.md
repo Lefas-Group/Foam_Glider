@@ -93,13 +93,14 @@ check them without rendering, and the full `check.py` once the entry is right.
  8  each Specified / Assumed item ≤ 10 words
  9  one prose section — no second `**Heading.**` or `##`
 10  a sibling entry is linked, never named in bare prose
-11  `_notebook.py` byte-matches the skill's copy
+11  `_notebook.py` and `_probe_base.py` byte-match the skill's copies
 12  the freeze is not older than the model that froze it
 13  every `_analysis.py` function the entry calls is passed to `footer(…)`
 14  one visual per entry — a table counts as a figure
 15  a table is at most 3×4 or 4×3, excluding the header
 16  a budgeted chapter does not override SOLVE_BUDGET at a call site
 17  a frozen entry stays under its chapter's ENTRY_CEILING
+18  the solve budget in force is declared in the chapter's index
 ```
 
 Why each exists, and the failure that earned it: `references/why.md`.
@@ -136,6 +137,14 @@ larger lumps and noticed later.
   *calls* is the only figure that predicts what an entry costs. 41,040 airfoil
   polar points came back in 2.2 s from 9 calls. This is what rule 5 is really
   about; a loop around a solve is where calls hide.
+- **Probe with the scaffold, in two lines**, rather than hand-rolling the exec:
+  `sys.path.insert(0, "<nb>/_scratch"); from _probe_base import *`, with
+  `$NB_CHAPTER` choosing the chapter. Nothing prints until you call `api()`.
+  Hand-rolling it is how a local `G` came to shadow gravity and a helper was
+  called with the wrong arity, twice.
+- **Never pipe a live log through `tail`**, and give `grep` `--line-buffered`:
+  both buffer, so a finished job looks like an empty one. And a `pgrep -f`
+  pattern must not match its own waiting shell — bracket it, `pgrep -f "p[.]py"`.
 - **Budgets live in the solver, and are on by default.** `_notebook.py` applies
   `SOLVE_BUDGET` to every `opti.solve` — including ad-hoc probes, which is the
   point, since a limit you can skip by forgetting is not a limit. Three ways:

@@ -104,3 +104,14 @@ and only warns below it, because wall clock is not reproducible — the same sol
 measured 533.9 s against a 145 s baseline purely from machine load, so a single
 hard threshold would fail on a loaded laptop and pass on an idle one. Past a
 user-chosen ceiling, load is no longer a plausible explanation.
+
+**18 — the solve budget in force is declared in the chapter's index.** A chapter
+was forked from another and silently inherited `SOLVE_BUDGET = None`, carried in a
+file nobody re-reads, together with a comment — "its pages are already frozen" —
+that was untrue of a chapter with no pages at all. A budget is a decision about
+what the work may cost, so it belongs in `## Specified` with every other brief;
+declared there, an inherited one is visible in the single file a fork has to
+rewrite anyway. A numeric budget must appear as an inline expression so the prose
+cannot drift from the value. Paired with `_budget.py`, which a fork does not copy,
+so forgetting leaves a chapter on the safe defaults rather than on its parent's
+exemption.

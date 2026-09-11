@@ -22,7 +22,7 @@ Asked of the user, 2026-09-09:
 
 1. Optimise against a real flight path, no loops or stall.
 2. Launch speed and angle free, speed capped `{python} f"{THROW_BOUNDS['speed'][1]:.0f}"` m/s.
-3. Solve budget `{python} f"{SOLVE_BUDGET:.0f}"` s, raised from the default.
+3. Solve budget `{python} f"{solve_budget():.0f}"` s, in `_budget.py`.
 4. Entry ceiling `{python} f"{ENTRY_CEILING:.0f}"` s, raised likewise.
 :::
 

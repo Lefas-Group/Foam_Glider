@@ -254,37 +254,18 @@ Run with `uv run quarto render notebook/_scratch/probe.qmd`. Output stays in
 
 ## `notebook/_scratch/_probe_base.py`
 
-The preamble every probe repeats, so no probe has to. Written once per notebook;
-set `CHAPTER` when working on a different one.
+Copy it from the skill: `cp <skill>/probe_base.py notebook/_scratch/_probe_base.py`.
+It is vendored like `_notebook.py`, and lint rule 11 byte-checks both — an
+improvement to either shows up as a problem in every notebook that has not taken
+it. It used to be pasted here instead, and the two copies silently diverged,
+which is the reason the rule now covers it.
 
-````python
-"""
-The preamble every scratch probe repeats. Import it; don't retype it.
+Use it from anywhere in two lines, with `$NB_CHAPTER` choosing the chapter:
 
-    from _probe_base import *      # chapter loaded, api() printed
-
-compile() with the real path is load-bearing, as in the _model.qmd shim: a bare
-exec() of file text labels every function "<string>", and then
-inspect.getsource() raises OSError, breaking show_source() and api() together.
-Probes are where a helper is about to be written, so api() must work here or the
-discovery listing is empty.
-"""
-import pathlib
-
-CHAPTER = "NN-name"
-
-_root = pathlib.Path(__file__).resolve().parent.parent
-_chapter = _root / "chapters" / CHAPTER
-for _p in [_root / "_notebook.py", _chapter / "_model.py", _chapter / "_analysis.py"]:
-    exec(compile(_p.read_text(), str(_p), "exec"))
-
-print(f"[{CHAPTER}] already available -- check here before writing a helper:")
-for _sig, _doc in api():
-    print(f"  {_sig:52s} {_doc[:44]}")
-print()
-````
-
----
+```python
+import sys; sys.path.insert(0, "notebook/_scratch")
+from _probe_base import *          # nothing prints; call api() when you want it
+```
 
 ## `notebook/_scratch/probe.py`
 
@@ -367,6 +348,24 @@ by anticipation. Nothing about rendering or discovery goes here: that is
 
 ---
 
+## `notebook/chapters/NN-name/_budget.py`
+
+**Optional, and agreed with the user the day the chapter is created.** Omit it
+and the chapter runs on `DEFAULT_SOLVE_BUDGET` / `DEFAULT_ENTRY_CEILING` from
+`_notebook.py`, which is the safe default. Write one when this chapter's solves
+genuinely need longer -- and size it from the configuration its entries will
+actually run, not a cheaper probe.
+
+Its own file so that a fork, which copies `_model.py` and `_analysis.py`, cannot
+carry the parent's budget across. Lint rule 18 requires whatever is in force to
+appear in `index.qmd`'s `## Specified` callout as
+`` `{python} f"{solve_budget():.0f}"` ``, so the value is a recorded decision.
+
+```python
+SOLVE_BUDGET = 600.0   # s for any one solve; measured at the entries' own size
+ENTRY_CEILING = 400.0  # s for one entry, checked by lint rule 17
+```
+
 ## `notebook/chapters/NN-name/_model.qmd`
 
 A shim, not the model. It execs both chapter files, model first.
@@ -389,10 +388,17 @@ there risks being expanded.
 # `execute-dir: project`, so that is always the cwd.
 import pathlib
 
+#
+# _budget.py comes last and is OPTIONAL: it carries this chapter's solve limits,
+# and a chapter without one runs on the notebook defaults. It is a separate file
+# so that forking a chapter -- which copies _model.py and _analysis.py -- cannot
+# carry the parent's budget across.
 for _p in ["_notebook.py",
            "chapters/NN-name/_model.py",
-           "chapters/NN-name/_analysis.py"]:
-    exec(compile(pathlib.Path(_p).read_text(), _p, "exec"))
+           "chapters/NN-name/_analysis.py",
+           "chapters/NN-name/_budget.py"]:
+    if pathlib.Path(_p).exists():
+        exec(compile(pathlib.Path(_p).read_text(), _p, "exec"))
 
 # The chapter this page belongs to, taken from the paths above rather than
 # retyped -- superseded_by() resolves its forward link inside this directory.

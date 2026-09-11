@@ -20,7 +20,7 @@ sibling entry is matched generically, and a chapter opts out with a `_lint-skip`
 file whose contents say why. A freshly scaffolded notebook has none of these,
 and lints correctly with nothing added.
 
-Seventeen rules, each earned by a failure that actually happened. The failure
+Eighteen rules, each earned by a failure that actually happened. The failure
 behind each one is in `references/why.md` -- read that when a rule looks
 arbitrary, or before arguing one away. SKILL.md carries the same list, so an
 entry can be written compliant rather than corrected afterwards.
@@ -35,13 +35,14 @@ entry can be written compliant rather than corrected afterwards.
      8  each Specified / Assumed item <= 10 words
      9  one prose section -- no second `**Heading.**` or `##`
     10  a sibling entry is linked, never named in bare prose
-    11  `_notebook.py` byte-matches the skill's copy
+    11  `_notebook.py` and `_probe_base.py` byte-match the skill's copies
     12  the freeze is not older than the model that froze it
     13  every `_analysis.py` function the entry calls is passed to `footer(…)`
     14  one visual per entry -- a table counts as a figure
     15  a table is at most 3x4 or 4x3, excluding the header
     16  a budgeted chapter does not override SOLVE_BUDGET at a call site
     17  a frozen entry stays under its chapter's ENTRY_CEILING
+    18  the solve budget in force is declared in the chapter's index
 
 Two details the list cannot carry. A value written as an inline expression counts
 as ONE word, so tightening prose is never at odds with computing the numbers in
@@ -379,8 +380,19 @@ def _notebook_drift(root):
     project-specific; any difference is either an un-propagated improvement or an
     accident, and both want a person to decide which.
     """
-    canonical = pathlib.Path(__file__).parent / "notebook.py"
-    local = root / "_notebook.py"
+    # Both vendored files, not just _notebook.py. _probe_base.py is vendored the
+    # same way and went unchecked, so an improvement to it sat in one notebook
+    # while the scaffold that creates the next one still held the old text --
+    # drift invisible precisely because nothing compared them.
+    problems = []
+    for canonical_name, local_name in (("notebook.py", "_notebook.py"),
+                                       ("probe_base.py", "_scratch/_probe_base.py")):
+        problems += _one_drift(pathlib.Path(__file__).parent / canonical_name,
+                               root / local_name)
+    return problems
+
+
+def _one_drift(canonical, local):
     if not canonical.exists():
         return []                       # skill is the thing that is broken
     if not local.exists():
@@ -542,8 +554,11 @@ def _limits(root, chapter):
     _, default_budget = _bound(nb_src, "DEFAULT_SOLVE_BUDGET")
     _, default_ceiling = _bound(nb_src, "DEFAULT_ENTRY_CEILING")
 
-    f = chapter / "_analysis.py"
-    src = f.read_text() if f.exists() else ""
+    # _budget.py wins where it exists, because _model.qmd execs it last. It is a
+    # separate file precisely so a fork cannot copy it; chapters written before
+    # it still bind in _analysis.py and are read there.
+    src = "".join((chapter / n).read_text() for n in ("_analysis.py", "_budget.py")
+                  if (chapter / n).exists())
     found_b, budget = _bound(src, "SOLVE_BUDGET")
     if found_b and budget is None:
         return None, None               # deliberately unbounded
@@ -573,6 +588,34 @@ def _budget_rules(root, chapters):
     for c in chapters:
         chapter = root / "chapters" / c
         budget, ceiling = _limits(root, chapter)
+
+        # 18: whatever budget is in force, the chapter says so out loud.
+        #
+        # A budget is a decision about what the work may cost, so it belongs in
+        # the chapter's Specified callout like any other brief. This exists
+        # because one chapter was forked from another and inherited "no limit"
+        # in a file nobody re-reads, carrying a comment that was false for it.
+        # Declared in index.qmd, an inherited budget is visible in the one file
+        # a fork must rewrite anyway.
+        #
+        # A number must appear as an INLINE EXPRESSION naming SOLVE_BUDGET, so
+        # the prose cannot drift from the value; an opted-out chapter only has
+        # to say so, there being no number to drift from.
+        index = chapter / "index.qmd"
+        if index.exists():
+            spec = "".join(body for title, body in callouts_of(index.read_text())
+                           if title == "Specified")
+            declared = (re.search(r"SOLVE_BUDGET|solve_budget\(", spec)
+                        if budget is not None
+                        else re.search(r"budget", spec, re.I))
+            if not declared:
+                want = ("an inline `{python} …solve_budget()…` expression"
+                        if budget is not None else "a line saying it is unbounded")
+                problems.append(
+                    (index, f"the solve budget in force ({budget}) is not in the "
+                            f"`## Specified` callout — add {want}, so the cost "
+                            f"this chapter may spend is a recorded decision"))
+
         if budget is None:
             continue                    # chapter opted out, deliberately
 

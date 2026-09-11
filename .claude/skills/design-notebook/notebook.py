@@ -12,11 +12,13 @@
 #
 # The leading underscore keeps Quarto from rendering this file, as with _scratch/.
 # =============================================================================
-import contextlib
+import builtins
+import faulthandler
 import inspect
+import os
 import pathlib
 import re
-import signal
+import sys
 import threading
 import time
 
@@ -132,9 +134,18 @@ def aero_report(reset=True):
 # Resolution is at CALL time, not import time, because _analysis.py is exec'd
 # into this same namespace after this file has already run.
 #
-# behavior_on_failure="return_last" rides along with the budget and only with
-# it: a bound that raises destroys the finding, while one that returns the best
-# iterate degrades it into something an entry can report and caveat.
+# THE BUDGET DOES NOT SET behavior_on_failure, and an earlier version's doing so
+# was the worst bug this file has had. With return_last as the default, a solve
+# that ran out of time handed back its last iterate and the entry published it as
+# an answer: one chapter's figures came out 11.22 s, then 9.50 s, then 8.92 s
+# from identical code, the last of them reporting Maximum_WallTime_Exceeded to
+# nobody. A budget that swallows its own failure is worse than no budget.
+#
+# So a truncated solve RAISES. A probe that wants the iterate in order to
+# diagnose one asks for it -- behavior_on_failure="return_last" -- and an entry,
+# which publishes, does not get that by accident. The budget must be sized above
+# what the entry's own configuration needs, measured there and not on a cheaper
+# proxy; sized properly it never binds, and the question never arises.
 #
 # THE BOUND IS COARSE, and pretending otherwise would mislead. IPOPT tests it at
 # iteration boundaries only, and an iteration here is mostly OUR function
@@ -166,8 +177,16 @@ DEFAULT_SOLVE_BUDGET = 60.0    # seconds for any one solve
 DEFAULT_ENTRY_CEILING = 200.0  # seconds for one entry, checked by lint rule 17
 
 
-class BudgetExceeded(RuntimeError):
-    """A guarded Python loop ran past its wall-clock budget."""
+def solve_budget():
+    """
+    The budget in force, for a chapter index to quote in its Specified callout.
+
+    Public because `SOLVE_BUDGET` itself may not exist: a chapter that takes the
+    notebook default never binds the name, so an index quoting it directly would
+    fail to render on exactly the chapters that thought least about the cost.
+    Returns None when the chapter is deliberately unbounded.
+    """
+    return _active_budget()
 
 
 def _active_budget():
@@ -182,45 +201,6 @@ def _active_budget():
     return DEFAULT_SOLVE_BUDGET
 
 
-@contextlib.contextmanager
-def budget(seconds=None, what="this block"):
-    """
-    Wall-clock guard for a PYTHON loop -- a hand-written rollout or sweep.
-
-    NOT a guard for a solve. A signal is only handled between bytecodes, so it
-    cannot interrupt a long call that is sitting inside C: measured, a 0.3 s
-    limit on one such call fired at 1.15 s, when the call returned. Solves are
-    bounded by max_runtime, which IPOPT enforces from the inside; this covers
-    the loops max_runtime cannot see, where an integrator with a bad step size
-    can otherwise spin indefinitely.
-
-    Prefer a deterministic step cap where the loop admits one -- a step count
-    behaves the same on a loaded machine, and wall clock does not: the same
-    solve here measured 533.9 s against a 145 s baseline purely from load.
-    This is the backstop for what a step cap did not foresee.
-
-    A no-op when the chapter took no budget, and when not on the main thread,
-    where SIGALRM is not delivered.
-    """
-    if seconds is None:
-        seconds = _active_budget()
-    if (seconds is None or not hasattr(signal, "SIGALRM")
-            or threading.current_thread() is not threading.main_thread()):
-        yield
-        return
-
-    def _fire(signum, frame):
-        raise BudgetExceeded(f"{what} exceeded its {seconds:.0f} s budget")
-
-    previous = signal.signal(signal.SIGALRM, _fire)
-    signal.setitimer(signal.ITIMER_REAL, seconds)
-    try:
-        yield
-    finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-        signal.signal(signal.SIGALRM, previous)
-
-
 # Guarded because this file is exec'd once per page, and wrapping a wrapper
 # would stack a fresh closure on every entry in the notebook.
 if not getattr(asb.Opti.solve, "_is_budgeted", False):
@@ -230,7 +210,6 @@ if not getattr(asb.Opti.solve, "_is_budgeted", False):
         seconds = _active_budget()
         if seconds is not None:
             kwargs.setdefault("max_runtime", seconds)   # -> ipopt.max_cpu_time
-            kwargs.setdefault("behavior_on_failure", "return_last")
             # Merged, never assigned: a caller passing its own solver options
             # must not lose them to the budget.
             options = dict(kwargs.get("options") or {})
@@ -240,6 +219,57 @@ if not getattr(asb.Opti.solve, "_is_budgeted", False):
 
     _budgeted_solve._is_budgeted = True
     asb.Opti.solve = _budgeted_solve
+
+
+# =============================================================================
+# What a PROBE is allowed to cost.
+#
+# The budget above bounds opti.solve() and nothing else, so a script can still
+# spend minutes in graph construction, marched rollouts and multistarts. One
+# probe ran ten minutes before an external timeout killed it, and the session
+# that motivated this spent more wall clock in scratch than in every render
+# combined.
+#
+# ARMED HERE RATHER THAN IN THE PROBE SCAFFOLD, because the scaffold only
+# reaches probes that import it -- and not one probe in that session did. They
+# were all ad-hoc heredocs. What every one of them DID do is exec this file, to
+# reach the model at all, so this is the only place a limit catches them.
+#
+# A watchdog THREAD, not a signal: a signal is handled between bytecodes and so
+# cannot interrupt a long call sitting inside C. Measured, a 0.3 s SIGALRM
+# against one such call fired at 1.15 s, on return; a threading.Timer fired at
+# 0.61 s from inside the same call.
+#
+# Never armed under a kernel. Quarto's jupyter engine runs every entry in one,
+# and a render that legitimately takes an hour must not be shot in the head --
+# entries are governed by ENTRY_CEILING and lint rule 17 instead.
+# =============================================================================
+PROBE_SILENCE = 120.0  # s of no output before the traceback says where it is
+PROBE_BUDGET = float(os.environ.get("NOTEBOOK_PROBE_BUDGET", 300.0))
+
+_IN_KERNEL = "ipykernel" in sys.modules or hasattr(builtins, "__IPYTHON__")
+
+if not _IN_KERNEL and not globals().get("_probe_guard_armed"):
+    _probe_guard_armed = True
+    _probe_t0 = time.perf_counter()
+
+    def _probe_too_long():
+        print(f"\n[probe killed: over {PROBE_BUDGET:.0f} s "
+              f"({time.perf_counter() - _probe_t0:.0f} s elapsed). Raise it with "
+              f"NOTEBOOK_PROBE_BUDGET=<seconds>.]", file=sys.stderr, flush=True)
+        faulthandler.dump_traceback(file=sys.stderr)
+        os._exit(9)
+
+    # faulthandler says WHERE it is stuck, from its own thread, so it reports
+    # from inside a C call too. The timer says ENOUGH.
+    #
+    # Once, not repeating: a solve that legitimately runs for minutes would
+    # otherwise dump a traceback every couple of minutes, and the point is to
+    # distinguish "working" from "hung", which one report already does.
+    faulthandler.dump_traceback_later(PROBE_SILENCE, repeat=False, file=sys.stderr)
+    _probe_timer = threading.Timer(PROBE_BUDGET, _probe_too_long)
+    _probe_timer.daemon = True
+    _probe_timer.start()
 
 
 def md_table(header, rows):

@@ -321,3 +321,40 @@ change. (`CL_function`/`CD_function` are deprecated constructor kwargs and are
 It is called per bounding cross-section, twice per section and again per mirrored
 side, and `alpha_generalized` spans −90…270°, so a table must either cover that
 range or clamp. See `references/surrogates.md` before building one.
+
+## Before collocating dynamics, check the timescale you are asking it to carry
+
+One stability-derivative call, and it decides whether a node count is worth
+attempting at all:
+
+```python
+d = AeroBuildup(...).run_with_stability_derivatives(alpha=True, q=True, ...)
+# short-period approximation; the decay constant is 1 / (zeta * omega_n)
+```
+
+Compare that decay constant against the node spacing. Measured on a 300 mm
+glider: the pitch mode decays with a 0.038 s constant while 60 nodes over an
+11 s flight sit 0.187 s apart — the grid was **five times coarser than the mode
+it had to represent**, and no constraint could fix that.
+
+Getting there cost three refuted hypotheses at roughly twenty minutes of solving
+each. Discretisation was dismissed because a *fixed* design reproduced the
+marched flight exactly at every spacing; marginal stability was dismissed because
+a stricter static margin made the disagreement worse; the stall bound was
+dismissed because tightening it from 15° to 9° changed the answer by 0.01 s.
+What actually mattered was a timescale nobody had measured.
+
+Two things fall out of the same calculation, both worth knowing:
+
+- **The decay rate does not depend on static margin.** `2·zeta·omega_n =
+  −(M_q + Z_alpha/V)` contains no `M_alpha`, so scaling `Cm_alpha` fifty-fold
+  moves `zeta*omega_n` not at all — verified, it stayed at 26.18 throughout.
+  Reducing stability cannot slow the mode down.
+- **Small aircraft have fast modes, and you cannot design around it.**
+  `omega_n ~ sqrt(q̄·S·c̄·SM / Iyy)`. Slowing this glider's mode enough to resolve
+  it at 60 nodes would need 279 g of nose ballast on an 11 g aeroplane.
+
+So the options are to resolve the mode (~480 nodes here), to suppress its
+amplitude (a pitch-rate bound worked: the gap fell from 194% to 93%), or to
+march the trajectory instead. Constraining the airframe does not help: every
+design tried was already near critically damped, the worst-behaved at zeta 0.97.

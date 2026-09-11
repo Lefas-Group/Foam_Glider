@@ -375,19 +375,9 @@ def design_geometry(opt, span=0.30):
 # fuselage hangs below the CG.
 GROUND = 0.05  # m
 
-##### Solve budget
-# Raised from the notebook defaults by agreement, and recorded in index.qmd as
-# Specified. A collocated rigid body over six states, seven free scalars and
-# thirty nodes takes about seventy seconds to converge, so the 60 s default
-# would truncate every solve and return a half-optimised design as though it
-# were an answer. The entry ceiling has to carry four of those, because the
-# problem is multi-modal and one start reports a basin rather than an optimum.
-#
-# These are the numbers that make the budget bind on nothing here; they are not
-# a licence for the chapter to get slower. See DEFAULT_SOLVE_BUDGET in
-# _notebook.py for what an unraised chapter gets.
-SOLVE_BUDGET = 180.0
-ENTRY_CEILING = 400.0
+# The solve budget lives in _budget.py, not here -- a fork copies this file and
+# would carry the budget with it, which is exactly how this chapter inherited
+# its parent's "no limit" along with a comment that was false for it.
 
 # What "flies sensibly" means, as numbers. Past ~15 deg the plate is stalling and
 # no section model here is fitted; past 180 deg of pitch it has gone over the top.
@@ -784,7 +774,6 @@ def _flight_once(n, sm_floor, s0, verbose):
     sol = opti.solve(verbose=verbose, max_iter=500)
 
     out = {k: float(sol(x)) for k, x in v.items()}
-    out["free_design"] = free_design
     out.update(
         duration=float(sol(T)), ballast=float(sol(ballast)),
         static_margin=float(np.sum(sol(static_margin))),
@@ -892,7 +881,7 @@ THETA_LIMIT = 90.0  # deg either side of level: the no-loop constraint
 
 
 def throw_flight(n=30, seed_ballast=3e-3, seed_angle=20.0, start=None,
-                 free_design=True, verbose=False):
+                 free_design=True, q_limit=None, verbose=False):
     """
     Maximise time aloft over the design AND the throw, on a rigid body.
 
@@ -929,6 +918,7 @@ def throw_flight(n=30, seed_ballast=3e-3, seed_angle=20.0, start=None,
         start: geometry the design variables begin from. Varying it is the
             only way to see past one basin -- see throw_multistart().
         free_design: whether the geometry is optimised or held at `start`.
+        q_limit: deg/s cap on pitch rate, or None to leave it unbounded.
         verbose: pass the solver's log through.
 
     Returns:
@@ -980,7 +970,13 @@ def throw_flight(n=30, seed_ballast=3e-3, seed_angle=20.0, start=None,
         w_b=opti.variable(init_guess=v_seed * onp.sin(a_seed)),
         theta=opti.variable(init_guess=onp.radians(resample(seed["theta"])),
                             lower_bound=-lim, upper_bound=lim),
-        q=opti.variable(init_guess=onp.radians(resample(seed["q"]))),
+        # Pitch rate: theta's own derivative, so bounding it is the one state
+        # limit that also restricts how far the attitude can travel BETWEEN
+        # nodes rather than merely at them.
+        q=opti.variable(init_guess=onp.radians(resample(seed["q"])),
+                        **({} if q_limit is None else
+                           dict(lower_bound=-onp.radians(q_limit),
+                                upper_bound=onp.radians(q_limit)))),
     )
 
     t0 = time.perf_counter()
@@ -1026,6 +1022,8 @@ def throw_flight(n=30, seed_ballast=3e-3, seed_angle=20.0, start=None,
 
     out = {k: float(sol(x)) for k, x in v.items()}
     out["free_design"] = free_design
+    out["q_limit"] = q_limit
+    out["q_max"] = float(onp.max(onp.abs(onp.degrees(sol(dyn.q)))))
     theta_deg = onp.degrees(sol(dyn.theta))
     out.update(
         duration=float(sol(T)), ballast=float(sol(ballast)),
@@ -1098,3 +1096,55 @@ def throw_multistart(n=30, starts=None, verbose=False):
     best.update(attempts=[round(d, 3) for d in durations],
                 n_converged=len(runs), spread=durations[-1] - durations[0])
     return best
+
+
+def short_period(design, ballast, velocity=SM_SPEED):
+    """
+    The airframe's short-period pitch mode: damping ratio and frequency.
+
+    Written to answer whether the design was under-damped, and it was not --
+    every design tried here comes back near critically damped, the worst-behaved
+    most of all. A small glider with a large tail relative to its pitch inertia
+    has an enormous Cmq, so damping was never the thing to constrain.
+
+    THE FREQUENCY IS WHY THIS IS KEPT. The short period sets the fastest
+    timescale a collocated flight has to resolve, and comparing 2*pi/omega_n
+    against the node spacing says immediately whether a node count is hopeless.
+    That ratio is the diagnostic this chapter needed from the start and did not
+    have: a mode sampled about once per cycle cannot be represented at all,
+    whatever the solver reports.
+
+    Standard short-period approximation with the phugoid dropped and Cm_alphadot
+    neglected, since AeroBuildup does not supply it. Approximate, but the
+    quantity wanted is a timescale rather than a precise eigenvalue.
+
+    Args:
+        design: {name: value} for glider(), as returned by throw_flight().
+        ballast: kg.
+        velocity: m/s, the reference condition the derivatives are taken at.
+
+    Returns:
+        dict with "zeta", "omega_n" (rad/s) and "period" (s).
+    """
+    airplane, layout = glider(**design)
+    total = structural_mass(layout)["total"] + asb.MassProperties(mass=ballast,
+                                                                 x_cg=0.0)
+    ref = [total.x_cg, 0, airplane.xyz_ref[2]]
+    d = asb.AeroBuildup(
+        airplane=airplane, xyz_ref=ref,
+        op_point=asb.OperatingPoint(atmosphere=ATMOSPHERE, velocity=velocity,
+                                    alpha=ALPHA_LINEAR),
+    ).run_with_stability_derivatives(alpha=True, beta=False, p=False, q=True,
+                                     r=False)
+    aero_cost["calls"] += 1
+
+    qbar = 0.5 * ATMOSPHERE.density() * velocity ** 2
+    s_ref, mac = airplane.s_ref, airplane.c_ref
+    iyy, mass = float(total.Iyy), float(total.mass)
+    z_alpha = -qbar * s_ref * float(onp.sum(d["CLa"])) / mass
+    m_alpha = qbar * s_ref * mac * float(onp.sum(d["Cma"])) / iyy
+    m_q = qbar * s_ref * mac ** 2 * float(onp.sum(d["Cmq"])) / (2 * velocity * iyy)
+
+    omega_n = onp.sqrt(max(m_q * z_alpha / velocity - m_alpha, 1e-12))
+    return dict(zeta=-(m_q + z_alpha / velocity) / (2 * omega_n),
+                omega_n=float(omega_n), period=float(2 * onp.pi / omega_n))

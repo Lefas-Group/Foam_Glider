@@ -59,3 +59,19 @@ Notebooks share nothing at runtime: each has its own `_quarto.yml`, `_freeze/`,
 own notebook. Put a second notebook in a sibling directory of the first, so both
 use the one copy of this skill, its linter and its `notebook.py`. Start it in a
 fresh session where possible — conversation history is the larger pollution.
+
+## The budget does not come with the fork, and must not
+
+A fork copies `_model.py` and `_analysis.py`. It does **not** copy `_budget.py`,
+which is the point: the new chapter starts on the notebook's default limits — the
+safe state — and going unbudgeted becomes the deliberate act of creating a file.
+
+So after copying: **agree the chapter's budget with the user and write it down**,
+in `_budget.py` and as a `## Specified` line in `index.qmd`. Rule 18 checks the
+second; nothing but you checks the first.
+
+Size it from the configuration the chapter's entries will actually run. One
+chapter's budget was taken from a 70 s solve at 30 nodes while its entries solved
+at 60 nodes needing 210 s, so every entry solve was truncated — and, because the
+budget then defaulted to returning its last iterate, published. The same code gave
+11.22 s, 9.50 s and 8.92 s on three runs before anyone noticed.

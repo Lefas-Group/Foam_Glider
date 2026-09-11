@@ -1,0 +1,65 @@
+---
+title: "Would more pitch damping fix the disagreement?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+# The design that disagrees, then the airframe's own pitch mode measured at the
+# same reference condition the static margin uses. The last line is the point:
+# the mode's period against the spacing of the nodes meant to resolve it.
+NODES = 60
+flown = throw_flight(n=NODES, start=(4.5, 6.5, 0.40, 1.0))
+DESIGN = ("aspect_ratio", "tail_arm_chords", "h_tail_ratio", "h_tail_incidence")
+marched = simulate(*glider(**{k: flown[k] for k in DESIGN}),
+                   ballast=flown["ballast"], launch_angle=flown["launch_angle"],
+                   v_launch=flown["v_launch"])
+
+mode = short_period({k: flown[k] for k in DESIGN}, flown["ballast"])
+spacing = flown["duration"] / NODES
+per_cycle = mode["period"] / spacing
+gap = flown["duration"] / marched["duration"] - 1
+
+assert mode["zeta"] > 0.9    # already near critically damped, so damping is not it
+assert per_cycle < 2         # and the mode is sampled about once per cycle
+assert gap > 0.5             # which is what the disagreement is made of
+```
+
+::: {.hero-pair}
+::: {.hero-ref}
+[`{python} f"{mode['zeta']:.2f}"`]{.hero-value}
+[damping ratio, already]{.hero-label}
+:::
+::: {}
+[`{python} f"{per_cycle:.2f}"`]{.hero-value}
+[nodes per pitch cycle]{.hero-label}
+:::
+:::
+
+**Answer.** No — the airframe is near critically damped already, so a damping
+floor binds on nothing. The calculation gives the missing diagnostic instead:
+the pitch mode's period is `{python} f"{mode['period']:.3f}"` s and the nodes
+sit `{python} f"{spacing:.3f}"` s apart, so the collocation samples it
+[`{python} f"{per_cycle:.2f}"` times a cycle]{.key} and cannot represent it.
+Ten would be a floor —
+`{python} f"{10 * flown['duration'] / mode['period']:.0f}"` nodes here.
+
+::: {.callout-warning}
+## Well damped is not well resolved
+A mode can be strongly damped and still be invisible to the grid meant to carry it.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **Short-period approximation**, phugoid dropped.
+2. **Cm_alphadot neglected**; AeroBuildup does not supply it.
+3. **Derivatives at one reference speed**, as the static margin.
+4. **One start**; the surface has several basins.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+footer(throw_flight, short_period, simulate)
+```
