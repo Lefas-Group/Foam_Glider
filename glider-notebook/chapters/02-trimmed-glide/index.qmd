@@ -1,0 +1,37 @@
+---
+title: "Trimmed glide"
+---
+
+{{< include _model.qmd >}}
+
+AeroBuildup optimization of a symmetric foam glider for minimum sink rate, modeling the foam as flat plates with fixed thickness and density.
+
+::: {.callout-tip}
+## Specified
+
+1. **Optimisation objective: minimum sink rate** — Determines the cost function.
+2. **Design variables: chords, stations, ballast** — Defines the design space.
+3. **Static margin: 10%** — Sets stability requirement.
+4. Solve budget `{python} f"{solve_budget():.0f}"` s, the notebook default.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **Tail geometry: 100x30mm**, sensible fixed size.
+2. **Tail incidence: Optimized**, required to trim symmetric foil.
+:::
+
+## The model
+
+```{python}
+#| echo: false
+#| output: asis
+import pathlib
+for _f in ("_model.py", "_analysis.py"):
+    _src = pathlib.Path(f"chapters/02-trimmed-glide/{_f}").read_text()
+    print(f'::: {{.callout-note collapse="true"}}')
+    print(f"## `{_f}`\n")
+    print(f"```python\n{_src}\n```")
+    print(":::\n")
+```
