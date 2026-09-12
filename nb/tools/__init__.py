@@ -10,11 +10,19 @@ Both phases share the list so they share the cache. `propose` is reachable from
 the write phase and simply has nothing to do there; the alternative is two
 prefixes and two cache objects to save a few hundred tokens that are cached
 anyway.
+
+**`create_chapter` is deliberately NOT here.** Chapter creation is
+proposal-driven: `write.py` scaffolds from the approved `chapter_title` and
+`chapter_defines` BEFORE the model's first turn. Leaving it in the tool list gave
+the agent a tool that could only ever return `rejected: already exists`, and made
+ownership ambiguous on the one path that is structurally irreversible -- an entry
+is a `git revert`, a chapter is something later entries build on. The handler
+still exists; only `write.py` calls it.
 """
 
 from google.genai import types
 
-from . import api, figures, interact, probe, refs, scaffold, shell, verifiers
+from . import api, figures, interact, probe, refs, shell, verifiers
 from ..schema import Proposal
 
 
@@ -105,16 +113,6 @@ def native_declarations():
               "not a route decision. Use sparingly.",
               {"question": S, "why": S}, ["question", "why"]),
 
-        _decl("create_chapter",
-              "Scaffold a new chapter. Only after ask_specified has confirmed a "
-              "fork is wanted: the criterion is whether BOTH answers are worth "
-              "keeping, which is the user's call.",
-              {"name": dict(S, description="NN-kebab-case, next number in sequence"),
-               "title": S,
-               "defines": dict(S, description="What defines this chapter: the aero "
-                                              "method, the section, what is left out")},
-              ["name", "title"]),
-
         _decl("bash",
               "Run an allowlisted command: uv run quarto, uv run python, "
               "git show/status/diff/log. The escape hatch, not the default path.",
@@ -152,8 +150,6 @@ def build(session, fs):
         "ask_specified": lambda name, why, options="": interact.ask_specified(
             session, name, why, options),
         "consult": lambda question, why: interact.consult(session, question, why),
-        "create_chapter": lambda name, title, defines="": scaffold.create_chapter(
-            nb, name, title, defines),
         "bash": lambda command: shell.bash(nb, command),
         "propose": lambda **kw: interact.propose(session, **kw),
     })

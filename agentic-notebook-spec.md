@@ -274,7 +274,6 @@ server restart (§9).
 | `propose` | `(p: Proposal) -> str` | Terminates the probe loop. Validates, writes `proposal.json`, exits |
 | `ask_specified` | `(name, why, options?) -> str` | Blocks on stdin. Records into `inputs[]`. **As often as needed** |
 | `consult` | `(question: str, why: str) -> str` | Blocks on stdin. Free-form guidance, max 3 |
-| `create_chapter` | `(name: str) -> str` | Wraps the scaffold script; the agent then edits the result via MCP |
 | `bash` | `(command: str) -> str` | Allowlisted escape hatch, §7 |
 
 Schemas are generated from Pydantic models — `model_json_schema()` for the
@@ -285,6 +284,15 @@ returns a clean error the model can fix rather than a `KeyError` in the handler.
 together. It rejects `kind == "derivable"` with `"'{name}' is derivable — compute
 it, don't declare it."`, and rejects any `specified` input whose `owner` is
 `assumed` — those must have been asked (§12).
+
+**`create_chapter` is deliberately not a tool.** Chapter creation is
+proposal-driven: `write.py` scaffolds from the approved `chapter_title` and
+`chapter_defines` *before* the model's first turn. Leaving it in the tool list
+gave the agent a tool that could only ever return `rejected: already exists`, and
+made ownership ambiguous on the one path that is structurally irreversible — an
+entry is a `git revert`, a chapter is something later entries build on. The agent
+fills the scaffolded `_model.py` and `index.qmd` through the file tools it
+already has.
 
 **`ask_specified` and `consult` need no special machinery.** The process is alive
 and you are at the terminal, so each reads stdin and returns. This is the whole
@@ -559,9 +567,40 @@ volatile content**, because anything volatile poisons everything downstream.
 byte-identical system instruction, whole-notebook context (§5a) — which is the
 ideal explicit-cache case, and the reason §16 stays on `generate_content`.
 
-Key the cache on `hash(system + tools + manifest)` and reuse it across commands
-and across runs; rebuild only when the manifest changes, i.e. after a commit.
-Implicit caching is the free fallback in the gap.
+Key the cache on `hash(model + system + tools + manifest)` and reuse it across
+commands and across runs; rebuild only when the manifest changes, i.e. after a
+commit. Implicit caching is the free fallback in the gap.
+
+### Storage is metered, so a superseded cache must be released
+
+An explicit cache bills for as long as it is *held*, not for what it serves:
+
+| `gemini-3.1-pro-preview`, ≤200k | per 1M tokens |
+|---|---|
+| Input, fresh | $2.00 |
+| Input, cached | **$0.20** — 10% of fresh |
+| **Cache storage** | **$4.50 per hour held** |
+
+On a 13,927-token prefix that is $0.0251 saved per turn against $0.0627 an hour
+to hold — so the cache pays for itself at **~2.5 turns/hour**, which an
+`ask` + `write` cycle (5–6 turns) clears easily.
+
+**But the cache is superseded the moment a commit lands**, because the manifest
+is part of the key. A run uses its cache for two or three minutes and the orphan
+then bills the remaining fifty-seven — about **40% of the gross saving**, thrown
+away silently, and accumulating one orphan per entry.
+
+So `build()` releases whatever the stored record names before creating its
+replacement, and `write.py` releases after a commit that ends the run (when a
+queued question follows, the next `build()` does it instead). `python -m nb.cache
+<notebook> [--purge]` lists what is held and what it costs, for orphans left by a
+crashed run.
+
+Measured: two builds in succession leave **one** cache alive, and a release
+leaves none.
+
+Implicit caching has no storage meter — there is nothing held — which is the
+argument for it if this ever became fiddly.
 
 ### The 4,096-token floor — MEASURED, and it binds
 
@@ -582,9 +621,9 @@ Tools plus a 150-line system instruction alone is ~3,633 — **463 short**. The
 
 | | tokens |
 |---|---|
-| 19 tool declarations, as built | **3,505** |
-| System instruction + manifest + all chapter context | **10,133** |
-| **Prefix** | **13,640** — clears the floor by 9,544 |
+| 18 tool declarations, as built | **3,623** |
+| System instruction + manifest + all chapter context | **10,302** |
+| **Prefix** | **13,927** — clears the floor by 9,831 |
 
 Both halves came in well above the estimate: the declarations because real tool
 descriptions are prose rather than a line each, and the context because
@@ -621,7 +660,7 @@ cache = client.caches.create(model=MODEL, config=types.CreateCachedContentConfig
 
 | Segment | Contents | Cached |
 |---|---|---|
-| `tools` | 19 declarations (6 MCP + 13 native), frozen and **sorted** | yes |
+| `tools` | 18 declarations (6 MCP + 12 native), frozen and **sorted** | yes |
 | `system_instruction` | Triage table, **18** rules as one-liners, the entry skeleton, budgets, scope. 206 lines as written | yes |
 | *(same cached object)* | Manifest, all `index.qmd`, all `_analysis.py` signatures (§5a) | yes |
 | `contents` | Question, date, everything else volatile | no |
@@ -1115,6 +1154,12 @@ rather than an oversight:
 Three entries in, every run had been clean first pass and figure-less, so six
 paths had never executed. Driving each one deliberately found two real defects:
 
+- **`create_chapter` should never have been a tool.** `write.py` scaffolds from
+  the proposal before the model's first turn, so the tool could only ever return
+  `rejected: already exists` — a wasted turn and ambiguous ownership on the one
+  irreversible path. Removed from the declarations; the handler stays for
+  `write.py`. (Removing it saved fewer tokens than `chapter_title` /
+  `chapter_defines` added, so the prefix went 13,640 → 13,927. Both are cached.)
 - **A scaffolded chapter failed lint the moment it was created.** The `index.qmd`
   template never declared the solve budget, so rule 18 fired on a brand-new
   chapter — the agent would have had to repair the scaffold before using it. The

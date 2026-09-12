@@ -20,7 +20,7 @@ from ..session import Session
 from ..preflight import check as preflight
 from ..tools import verifiers
 from ..tools.scaffold import create_chapter
-from .. import metrics
+from .. import cache, metrics
 from . import verify as verify_phase
 from .common import setup, report
 
@@ -236,6 +236,13 @@ def main(notebook_path, verbose=True):
     run_metrics.close("committed")
 
     # --- advance the queue -------------------------------------------------
+    # The commit moved the manifest, so the cache just used can never be reused:
+    # its key is stale by construction. Releasing it here stops it billing out
+    # the rest of its hour. When a queued question follows, `build()` releases it
+    # as part of creating the next one instead.
+    if not proposal.queue:
+        cache.release(notebook)
+
     if proposal.queue:
         nxt, rest = proposal.queue[0], proposal.queue[1:]
         print(f"\n  {len(proposal.queue)} question(s) queued. Next:\n    {nxt}\n")
