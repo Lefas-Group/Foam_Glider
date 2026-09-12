@@ -8,6 +8,14 @@ Gemini. Design and rationale: `../agentic-notebook-spec.md`.
 
 Requires `GEMINI_API_KEY`, and `quarto`, `git`, `npx` on `PATH`.
 
+**Run everything from the repo root.** `python -m nb` finds the package because
+Python puts the current directory on `sys.path` — there is no installed entry
+point, so from anywhere else it is `ModuleNotFoundError: No module named 'nb'`.
+From outside the project it fails twice: `uv run` finds no `pyproject.toml`
+walking up, and falls back to a system interpreter without the dependencies. The
+notebook argument is a path, so `optimised-glider-notebook` resolves relative to
+that same root.
+
 ---
 
 ## Use
