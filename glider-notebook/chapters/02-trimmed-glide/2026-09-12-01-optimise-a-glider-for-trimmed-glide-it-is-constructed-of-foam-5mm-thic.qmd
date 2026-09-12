@@ -1,0 +1,106 @@
+---
+title: "optimise a glider for trimmed glide. It is constructed of foam 5mm thick density 174.4g/m^2, with a fixed 300mm span and a sensibly sized, fixed tail"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+import aerosandbox as asb
+import aerosandbox.numpy as np
+
+opti = asb.Opti()
+
+span = 0.300
+foam_areal_density = 0.1744
+
+tail_span = 0.100
+tail_chord = 0.030
+tail_area = tail_span * tail_chord
+
+wing_root_chord = opti.variable(init_guess=0.05, lower_bound=0.01, upper_bound=0.15)
+wing_tip_chord = opti.variable(init_guess=0.03, lower_bound=0.01, upper_bound=0.15)
+wing_station = opti.variable(init_guess=0.1, lower_bound=0.0, upper_bound=0.3)
+tail_station = opti.variable(init_guess=0.3, lower_bound=0.1, upper_bound=0.6)
+ballast_mass = opti.variable(init_guess=0.005, lower_bound=0.0, upper_bound=0.05)
+tail_incidence = opti.variable(init_guess=-2.0, lower_bound=-10.0, upper_bound=10.0)
+
+nose_station = 0.0
+alpha = opti.variable(init_guess=5.0, lower_bound=-5.0, upper_bound=15.0)
+velocity = opti.variable(init_guess=5.0, lower_bound=1.0, upper_bound=20.0)
+
+wing = asb.Wing(
+    name="Wing", symmetric=True,
+    xsecs=[
+        asb.WingXSec(xyz_le=[wing_station, 0, 0], chord=wing_root_chord, airfoil=asb.Airfoil("naca0000")),
+        asb.WingXSec(xyz_le=[wing_station, span / 2, 0], chord=wing_tip_chord, airfoil=asb.Airfoil("naca0000"))
+    ]
+)
+tail = asb.Wing(
+    name="Tail", symmetric=True,
+    xsecs=[
+        asb.WingXSec(xyz_le=[tail_station, 0, 0], chord=tail_chord, twist=tail_incidence, airfoil=asb.Airfoil("naca0000")),
+        asb.WingXSec(xyz_le=[tail_station, tail_span / 2, 0], chord=tail_chord, twist=tail_incidence, airfoil=asb.Airfoil("naca0000"))
+    ]
+)
+
+wing_area = (wing_root_chord + wing_tip_chord) / 2 * span
+wing_mass = wing_area * foam_areal_density
+tail_mass = tail_area * foam_areal_density
+
+wing_cg_x = wing_station + 0.5 * wing_root_chord 
+tail_cg_x = tail_station + 0.5 * tail_chord
+
+total_mass = wing_mass + tail_mass + ballast_mass
+cg_x = (wing_mass * wing_cg_x + tail_mass * tail_cg_x + ballast_mass * nose_station) / total_mass
+
+airplane = asb.Airplane(name="Glider", wings=[wing, tail], xyz_ref=[cg_x, 0, 0])
+
+op0 = asb.OperatingPoint(velocity=velocity, alpha=alpha)
+op1 = asb.OperatingPoint(velocity=velocity, alpha=alpha + 1.0)
+aero0 = asb.AeroBuildup(airplane=airplane, op_point=op0).run()
+aero1 = asb.AeroBuildup(airplane=airplane, op_point=op1).run()
+
+q = op0.dynamic_pressure()
+S = airplane.s_ref
+
+CL0 = aero0["L"] / (q * S)
+CL1 = aero1["L"] / (q * S)
+dCm = aero1["Cm"] - aero0["Cm"]
+dCL = CL1 - CL0
+sm = - dCm / dCL
+
+opti.subject_to([
+    aero0["L"] == total_mass * 9.81,
+    aero0["Cm"] == 0,
+    sm == 0.10,
+    tail_station >= wing_station + wing_root_chord + 0.05
+])
+
+sink_rate = velocity * aero0["D"] / aero0["L"]
+opti.minimize(sink_rate)
+
+sol = opti.solve(verbose=False)
+
+sink_rate_val = sol.value(sink_rate)
+v_val = sol.value(velocity)
+tip_val = sol.value(wing_tip_chord) * 1000
+root_val = sol.value(wing_root_chord) * 1000
+station_val = sol.value(wing_station)
+ballast_val = sol.value(ballast_mass) * 1000
+incidence_val = sol.value(tail_incidence)
+```
+
+::: {.hero}
+[`{python} f"{sink_rate_val:.2f}"` m/s]{.hero-value}
+[minimum sink rate]{.hero-label}
+:::
+
+**Answer.** The optimizer finds a lifting-tail configuration that achieves a sink rate of `{python} f"{sink_rate_val:.2f}"` m/s at a flight speed of `{python} f"{v_val:.1f}"` m/s. To minimize structural weight, the wing tip chord hits its lower bound of `{python} f"{tip_val:.0f}"` mm, while the root chord expands to `{python} f"{root_val:.0f}"` mm. The wing is positioned far back (`{python} f"{station_val:.2f}"` m) to maximize the nose ballast moment arm, requiring only `{python} f"{ballast_val:.1f}"` g of ballast. The tail trims at `{python} f"{incidence_val:+.1f}"`° incidence to balance the wing's lift acting ahead of the center of gravity.
+
+
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```
