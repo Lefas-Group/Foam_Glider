@@ -34,7 +34,7 @@ recording the answer as one notebook entry that passes the lint contract.
 $ nb ask "would more pitch damping fix the disagreement?"
     ├── preflight            §13
     ├── build/reuse cache    §9
-    ├── probe loop           agentic, max 25 turns
+    ├── probe loop           agentic, max 40 turns
     │     ├── ask_specified  blocks on stdin — as often as needed
     │     └── consult        blocks on stdin — guidance, max 3
     ├── propose              writes proposal.json + working code
@@ -80,6 +80,8 @@ class Proposal(TypedDict):
     queue: list[str]            # remaining questions from a multi-question ask
     chapter: str
     route: Literal["entry", "new_chapter"]
+    chapter_title: str          # new_chapter only: "Boom structure", not the question
+    chapter_defines: str        # new_chapter only: method, section, what is left out
     rationale: str              # what is held constant, what differs
     figures: list[str]          # captions only — nothing else
     render_cost_s: float        # measured (§10), never guessed
@@ -117,7 +119,7 @@ truncation.
 |---|---|
 | preflight | §13. Fails in ~5 ms before any tokens |
 | cache | Build or reuse the explicit cache (§9), keyed on `hash(system + tools + manifest)` |
-| probe loop | Agentic, max 25 turns. Asks for Specified inputs inline (§12). Terminates on `propose` |
+| probe loop | Agentic, max 40 turns. Asks for Specified inputs inline (§12). Terminates on `propose`. A well-run ask uses five or six |
 | propose | Validates and writes `proposal.json`. Prints the proposal. Exits |
 
 The loop decides everything the old design gave a router: which chapter, whether
@@ -158,7 +160,7 @@ the table, not deferred to the proposal.
 
 | Step | Contract |
 |---|---|
-| `create_chapter` | Only when `route == "new_chapter"`. Runs the scaffold script |
+| `create_chapter` | Only when `route == "new_chapter"`. Scaffolds from `chapter_title` / `chapter_defines`, which `propose` requires on that route |
 | write loop | Agentic. Creates the `.qmd`; may edit `_analysis.py` / `_model.py` |
 | lint | **Always runs after the loop returns.** Fail → back into the loop, cap 3 |
 | render + check | `check.py`: lint, delete freeze, render, diff |
@@ -268,6 +270,7 @@ server restart (§9).
 | `api_search` | `(query: str) -> str` | AeroSandbox introspection |
 | `api_signature` | `(path: str) -> str` | Signature + docstring |
 | `read_reference` | `(name: Enum) -> str` | 7 reference docs + vendored book chapters |
+| `read_figure` | `(chapter, stem, name?) -> bytes` | A rendered figure as an inline image part, not base64 (§6) |
 | `propose` | `(p: Proposal) -> str` | Terminates the probe loop. Validates, writes `proposal.json`, exits |
 | `ask_specified` | `(name, why, options?) -> str` | Blocks on stdin. Records into `inputs[]`. **As often as needed** |
 | `consult` | `(question: str, why: str) -> str` | Blocks on stdin. Free-form guidance, max 3 |
@@ -417,8 +420,11 @@ but not write is a tool, not a file.
 ## 7. Bash allowlist
 
 ```python
+# No `git log` / `git show`: the first run spent eight consecutive turns on git
+# archaeology trying to answer a question about the zoom climb. `check.py` shells
+# to git itself for the one workflow that needs history, so the agent never has to.
 ALLOWED  = [("uv","run","quarto"), ("uv","run","python"),
-            ("git","show"), ("git","status"), ("git","diff")]
+            ("git","status"), ("git","diff")]
 FORBIDDEN = set("&|;`$><\n")
 
 def run_bash(command: str) -> str:
@@ -466,7 +472,17 @@ def agent_loop(contents, cfg, max_turns=25):
                 raise
             except Exception as e:
                 out = {"error": f"{type(e).__name__}: {e}"}
-            parts.append(types.Part.from_function_response(name=c.name, response=out))
+            if isinstance(out, dict) and "_image" in out:
+                # An image must be an inline part. Through a function_response it
+                # is a base64 string the model cannot see, at ~18x the tokens.
+                # Both parts share this turn, which the API accepts (verified).
+                parts.append(types.Part.from_function_response(
+                    name=c.name, response={"figure": out["name"]}))
+                parts.append(types.Part.from_bytes(
+                    data=out["_image"], mime_type=out["mime_type"]))
+            else:
+                parts.append(types.Part.from_function_response(
+                    name=c.name, response=out))
 
         contents.append(types.Content(role="user", parts=parts))
 
@@ -606,7 +622,7 @@ cache = client.caches.create(model=MODEL, config=types.CreateCachedContentConfig
 | Segment | Contents | Cached |
 |---|---|---|
 | `tools` | 19 declarations (6 MCP + 13 native), frozen and **sorted** | yes |
-| `system_instruction` | Triage table, 17 rules as one-liners, entry format + budgets, scope section. ~150 lines | yes |
+| `system_instruction` | Triage table, **18** rules as one-liners, the entry skeleton, budgets, scope. 206 lines as written | yes |
 | *(same cached object)* | Manifest, all `index.qmd`, all `_analysis.py` signatures (§5a) | yes |
 | `contents` | Question, date, everything else volatile | no |
 
@@ -794,10 +810,18 @@ combination means the discipline was skipped.
 ### Preflight — before any tokens
 
 ```python
-assert sha256(nb/"_notebook.py") == sha256(SKILL/"notebook.py")   # was rule 11
-assert aerosandbox.__version__ == INDEX_BUILT_AGAINST
-assert (nb/"_quarto.yml").exists()
+# Rule 11, run through the vendored linter rather than reimplemented, so the two
+# cannot disagree about what byte-identical means. Covers _notebook.py AND
+# _scratch/_probe_base.py.
+lint._notebook_drift(root)          # -> [] or the drift
+(nb/"_quarto.yml").exists()
+shutil.which("quarto"), shutil.which("git")
+os.environ["GEMINI_API_KEY"]
 ```
+
+**No AeroSandbox version assert.** An earlier draft had one. `library_explorer`
+builds its index from the *installed* package on first call, so there is no
+stored index that can go stale — nothing to pin it against.
 
 Meta-invariants the agent can never fix. A mid-run dead end becomes a 5 ms
 failure.
@@ -1085,6 +1109,38 @@ rather than an oversight:
    turns where Flash never proposes at all (§16). Still worth re-running on
    first-pass violation count across several questions: one question is a signal,
    not an eval.
+
+### Found by TESTING the paths a live run had never reached
+
+Three entries in, every run had been clean first pass and figure-less, so six
+paths had never executed. Driving each one deliberately found two real defects:
+
+- **A scaffolded chapter failed lint the moment it was created.** The `index.qmd`
+  template never declared the solve budget, so rule 18 fired on a brand-new
+  chapter — the agent would have had to repair the scaffold before using it. The
+  template now carries `Solve budget `{python} f"{solve_budget():.0f}"` s`, and a
+  fresh chapter lints clean.
+- **A new chapter would have been named after a question.** `write.py` passed the
+  *entry* title to `create_chapter`, so a chapter would be titled "How does the
+  zoom height vary with launch speed…" rather than "Flight path". `Proposal` now
+  carries `chapter_title` and `chapter_defines`, both **required** on
+  `route='new_chapter'` — `chapter_defines` is what `index.qmd` states once and
+  entry prose must never repeat.
+
+The four that worked as built, now proven rather than assumed:
+
+| path | evidence |
+|---|---|
+| `read_figure` through the real loop | Model read the axis labels, the trend and the legend text off a PNG |
+| **verify against a live figure, and the verify retry** | An entry passing all 18 lint rules but claiming its curve *falls* when it rises: caught, fed back, repaired, clean on pass 2 |
+| lint retry | Three planted violations — hand-typed numbers and a second heading — all repaired in one round |
+| `consult` cap, `ask_specified` delegation | Cap holds at 3; "you decide" returns the delegation branch; answers land in `session.asked` |
+| `ENTRY_CEILING` trip | Fires at 650 s against chapter 04's 600 s; silent on a chapter that declares none |
+| `route='new_chapter'` | Scaffolds "Boom structure", writes the defining assumptions into `index.qmd`, lints clean |
+
+The verify-with-figure case is the one worth keeping: **no lint rule can reach
+it.** Rule 1 forces the numbers in prose to be computed; nothing forces a
+sentence about a *shape* to match the shape.
 
 ### Found by building stage 2
 

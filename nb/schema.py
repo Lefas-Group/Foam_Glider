@@ -84,6 +84,19 @@ class Proposal(BaseModel):
             "Further distinct questions in the same ask, one entry each. Facets "
             "of a SINGLE comparison (cost, fidelity, applicability) are one "
             "question, not three."))
+    chapter_title: str = Field(
+        default="",
+        description=(
+            "Only for route='new_chapter'. The CHAPTER's name, two or three "
+            "words in the style of 'Flight path' or 'Chosen throw' — not the "
+            "entry's question."))
+    chapter_defines: str = Field(
+        default="",
+        description=(
+            "Only for route='new_chapter'. What defines this chapter: the aero "
+            "method, the section, what is left out. It goes in index.qmd and is "
+            "the one place those assumptions are stated — entry prose must not "
+            "repeat them."))
     handoff: str = Field(
         default="",
         description=(
@@ -91,6 +104,20 @@ class Proposal(BaseModel):
             "was not asked about, and would make a good next question. This is "
             "the skill's 'interesting things go in chat, never into the "
             "notebook' — it is read by a person and never copied into the entry."))
+
+    @model_validator(mode="after")
+    def _new_chapter_is_described(self):
+        if self.route == "new_chapter" and not self.chapter_title.strip():
+            raise ValueError(
+                "route='new_chapter' needs chapter_title: the chapter's own "
+                "name ('Flight path'), not the entry's question. Without it the "
+                "chapter would be titled after one question it happens to hold.")
+        if self.route == "new_chapter" and not self.chapter_defines.strip():
+            raise ValueError(
+                "route='new_chapter' needs chapter_defines: the aero method, the "
+                "section, what is left out. index.qmd is the one place those "
+                "assumptions are stated.")
+        return self
 
     @field_validator("figures")
     @classmethod

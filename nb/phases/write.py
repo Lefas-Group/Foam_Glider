@@ -115,7 +115,11 @@ def main(notebook_path, verbose=True):
     print(f"  entry     {proposal.title}")
 
     if proposal.route == "new_chapter":
-        msg = create_chapter(notebook, proposal.chapter, proposal.title)
+        # chapter_title, not proposal.title: the chapter is named for what it
+        # holds ("Flight path"), not for whichever question happened to create it.
+        msg = create_chapter(notebook, proposal.chapter,
+                             proposal.chapter_title or proposal.title,
+                             proposal.chapter_defines)
         print(f"  chapter   {msg.splitlines()[0]}")
         if msg.startswith("rejected"):
             return 1
