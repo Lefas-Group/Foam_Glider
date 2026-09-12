@@ -1,0 +1,12 @@
+{
+  "hash": "167e05df3b47dd7eb1d81a7b243c4361",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: \"What is the wing area?\"\n---\n\n\n::: {#11f956a8 .cell execution_count=2}\n``` {.python .cell-code}\n_plane, _layout = glider()\nwing_area = _plane.wings[0].area()\n```\n:::\n\n\n::: {.hero}\n[152]{.hero-value}\n[cm²]{.hero-label}\n:::\n\n**Answer.** The baseline glider has a wing area of 0\\.0152 m² (152 cm²).\n\n[Executed in 0.1 s]{.runtime}\n\n\n",
+    "supporting": [
+      "2026-09-12-02-what-is-the-wing-area_files"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}

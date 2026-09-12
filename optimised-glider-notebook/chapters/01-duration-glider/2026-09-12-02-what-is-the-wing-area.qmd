@@ -1,0 +1,23 @@
+---
+title: "What is the wing area?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+_plane, _layout = glider()
+wing_area = _plane.wings[0].area()
+```
+
+::: {.hero}
+[`{python} f"{wing_area * 10000:.0f}"`]{.hero-value}
+[cm²]{.hero-label}
+:::
+
+**Answer.** The baseline glider has a wing area of `{python} f"{wing_area:.4f}"` m² (`{python} f"{wing_area * 10000:.0f}"` cm²).
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```
