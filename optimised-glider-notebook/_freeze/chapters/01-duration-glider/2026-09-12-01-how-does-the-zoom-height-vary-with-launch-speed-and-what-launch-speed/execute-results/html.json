@@ -1,0 +1,12 @@
+{
+  "hash": "2331acffde9333a72822565e14d7e10c",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: \"How does the zoom height vary with launch speed, and what launch speed would double it?\"\n---\n\n\n::: {#33c85e7e .cell execution_count=2}\n``` {.python .cell-code}\nimport numpy as np\n\nv_baseline = V_LAUNCH\nzoom_baseline = launch_height(v_baseline) - H_RELEASE\n\nv_target = v_baseline * np.sqrt(2)\nzoom_target = launch_height(v_target) - H_RELEASE\n```\n:::\n\n\n::: {.hero}\n[11\\.3]{.hero-value}\n[m/s to double the zoom height]{.hero-label}\n:::\n\n**Answer.** Zoom height varies with the square of the launch speed. To double the baseline zoom of [1\\.79]{.key} m to [3\\.59]{.key} m, the baseline [8]{.key} m/s launch speed must increase by a factor of $\\sqrt{2}$.\n\n[Executed in 0.0 s]{.runtime}\n\n\n",
+    "supporting": [
+      "2026-09-12-01-how-does-the-zoom-height-vary-with-launch-speed-and-what-launch-speed_files"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}
