@@ -43,6 +43,7 @@ THINKING_LEVEL = "HIGH"
 MAX_TURNS = 40          # per agent loop
 MAX_CONSULTS = 3        # open-ended guidance can loop; a Specified input cannot
 MAX_LINT_ATTEMPTS = 3   # write -> lint -> write
+MAX_VERIFY_ATTEMPTS = 2  # write -> render -> verify -> write
 CACHE_TTL = "3600s"
 
 # Every handler truncates its own output. Tracebacks keep the tail, listings the

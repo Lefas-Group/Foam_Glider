@@ -32,10 +32,13 @@ def list_figures(notebook, chapter, stem=""):
 
 def read_figure(notebook, chapter, stem, name=""):
     """
-    One figure as base64 PNG, for passing back as inline image data.
+    One figure, as raw bytes for the loop to turn into an inline image part.
 
-    Returns a dict rather than a string so the caller can build an image Part;
-    the loop turns anything non-string into a function_response payload as-is.
+    NOT base64 in the function response. That was the first shape this took, and
+    it was worse than having no tool at all: the model received a 91,060-character
+    string rather than an image, so vision never engaged, and ~23k tokens of noise
+    entered the context per figure. Measured against the same PNG, the inline part
+    costs 1,298 -- and the model reads the axis labels off it.
     """
     paths = figure_paths(notebook, chapter, stem)
     if name:
@@ -44,6 +47,4 @@ def read_figure(notebook, chapter, stem, name=""):
         return {"error": f"no figure {name or '*'} under {chapter}/{stem}. "
                          f"Available: {list_figures(notebook, chapter, stem)}"}
     p = paths[0]
-    return {"name": p.name,
-            "mime_type": "image/png",
-            "data": base64.b64encode(p.read_bytes()).decode()}
+    return {"_image": p.read_bytes(), "mime_type": "image/png", "name": p.name}

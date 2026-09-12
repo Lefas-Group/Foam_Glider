@@ -8,16 +8,20 @@ can simply decline to call the tool and declare itself done.
 
 import datetime
 import json
+import pathlib
 import subprocess
 import sys
 
-from ..config import MAX_LINT_ATTEMPTS, MAX_TURNS, Notebook
+from ..config import (MAX_LINT_ATTEMPTS, MAX_TURNS, MAX_VERIFY_ATTEMPTS,
+                      Notebook)
 from ..loop import run
 from ..schema import Proposal
 from ..session import Session
 from ..preflight import check as preflight
 from ..tools import verifiers
 from ..tools.scaffold import create_chapter
+from .. import metrics
+from . import verify as verify_phase
 from .common import setup, report
 
 BRIEF = """\
@@ -56,6 +60,44 @@ def _stem(notebook, chapter, title, today):
     return f"{today}-{n:02d}-{slug}"
 
 
+def _commit(notebook, chapter, stem, entry_path, title):
+    """
+    Commit exactly what this run produced, by path.
+
+    Never `git add -A`. The working tree carries untracked Quarto output --
+    `chapters/**/*.html`, `site_libs/` -- from any `quarto preview` or render
+    that happened to be running, and a blanket add sweeps it into history.
+    """
+    repo = notebook.root.parent
+    rel = lambda p: str(pathlib.Path(p).relative_to(repo))
+
+    paths = [rel(entry_path)]
+    freeze = notebook.freeze / chapter / stem
+    if freeze.exists():
+        paths.append(rel(freeze))
+    # Shared machinery the run may have touched -- rule 2 promotion lands here.
+    for name in ("_analysis.py", "_model.py", "_budget.py"):
+        f = notebook.chapters_dir / chapter / name
+        if f.exists():
+            changed = subprocess.run(
+                ["git", "status", "--porcelain", "--", rel(f)],
+                cwd=repo, capture_output=True, text=True).stdout.strip()
+            if changed:
+                paths.append(rel(f))
+
+    add = subprocess.run(["git", "add", "--"] + paths, cwd=repo,
+                         capture_output=True, text=True)
+    if add.returncode != 0:
+        return None, f"git add failed: {add.stderr.strip()[:200]}"
+    out = subprocess.run(["git", "commit", "-m", title], cwd=repo,
+                         capture_output=True, text=True)
+    if out.returncode != 0:
+        return None, f"git commit failed: {(out.stdout + out.stderr).strip()[:200]}"
+    sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=repo,
+                         capture_output=True, text=True).stdout.strip()
+    return sha, ", ".join(paths)
+
+
 def main(notebook_path, verbose=True):
     bad = preflight(notebook_path)
     if bad:
@@ -80,7 +122,13 @@ def main(notebook_path, verbose=True):
 
     today = datetime.date.today().isoformat()
     stem = _stem(notebook, proposal.chapter, proposal.title, today)
-    session = Session(notebook, proposal.question, proposal.chapter)
+    # title, not question: on a split ask the model keeps the whole original
+    # in `question` and puts this entry's own question in `title`, so a row
+    # keyed on `question` would label every entry of a multi-part ask the same.
+    run_metrics = metrics.Run(notebook, "write", proposal.title)
+    run_metrics.set(chapter=proposal.chapter, entry_stem=stem)
+    session = Session(notebook, proposal.question, proposal.chapter,
+                      metrics=run_metrics)
 
     fs, handlers, make_config = setup(session)
     try:
@@ -90,6 +138,7 @@ def main(notebook_path, verbose=True):
         contents = [{"role": "user", "parts": [{"text": brief}]}]
 
         def on_turn(n, resp, turn):
+            run_metrics.turn(resp)
             if verbose:
                 calls = [p.function_call.name for p in (turn.parts or [])
                          if p.function_call]
@@ -97,15 +146,20 @@ def main(notebook_path, verbose=True):
                       (f"  ->  {', '.join(calls)}" if calls else "  ->  (done)"))
 
         first_pass = None
-        for attempt in range(MAX_LINT_ATTEMPTS):
+
+        def loop_once():
             run(contents, make_config(), handlers,
                 transcript=notebook.transcript_path, max_turns=MAX_TURNS,
                 on_turn=on_turn)
 
+        # --- lint, which is mandatory whatever the loop believes ------------
+        for attempt in range(MAX_LINT_ATTEMPTS):
+            loop_once()
             clean, problems = verifiers.is_clean(notebook, proposal.chapter)
             if first_pass is None:
                 # The eval metric: violations before any correction round.
                 first_pass = len(problems)
+                run_metrics.set(first_pass_violations=first_pass)
             print(f"  lint      {'clean' if clean else f'{len(problems)} blocking'}"
                   f" (attempt {attempt + 1})")
             if clean:
@@ -116,17 +170,73 @@ def main(notebook_path, verbose=True):
         else:
             print(f"  lint      still failing after {MAX_LINT_ATTEMPTS} attempts. "
                   f"Nothing committed; the entry is on disk to fix by hand.")
+            run_metrics.close("lint_failed")
+            return 1
+
+        # --- verify: does the prose match what actually rendered? -----------
+        entry_path = notebook.chapters_dir / proposal.chapter / f"{stem}.qmd"
+        findings = []
+        for attempt in range(MAX_VERIFY_ATTEMPTS):
+            result, note = verify_phase.check(
+                notebook, proposal.chapter, stem, entry_path=entry_path)
+            if note:
+                # NOT a skip-and-commit. Both cases this covers -- the render
+                # failed, or there is no freeze to read -- mean the entry could
+                # not be checked against its own output, and one of them means
+                # the page does not build at all. Committing either would put
+                # exactly the thing verify exists to catch into history.
+                print(f"  verify    could not run — {note}")
+                run_metrics.close("verify_failed")
+                return 1
+            findings = result.findings
+            print(f"  verify    {'ok' if result.ok else f'{len(findings)} finding(s)'}"
+                  f" (attempt {attempt + 1})")
+            for f in findings:
+                print(f"              {f}")
+            if result.ok:
+                break
+            if attempt == MAX_VERIFY_ATTEMPTS - 1:
+                break
+            contents.append({"role": "user", "parts": [{"text":
+                "The rendered page contradicts its own prose. A fresh reader "
+                "compared the two and found:\n\n"
+                + "\n".join(f"  {f}" for f in findings)
+                + "\n\nFix the prose to match what the output actually shows — "
+                  "not the other way round — then stop."}]})
+            loop_once()
+            clean, problems = verifiers.is_clean(notebook, proposal.chapter)
+            if not clean:
+                print(f"  lint      {len(problems)} blocking after the verify fix; "
+                      f"stopping. The entry is on disk.")
+                run_metrics.close("lint_failed")
+                return 1
+
+        run_metrics.set(verify_findings=len(findings))
+        if findings:
+            print(f"\n  Not committed: {len(findings)} verify finding(s) unresolved "
+                  f"after {MAX_VERIFY_ATTEMPTS} attempts. The entry is on disk.")
+            run_metrics.close("verify_failed")
             return 1
     finally:
         fs.stop()
 
+    # --- commit ------------------------------------------------------------
+    sha, detail = _commit(notebook, proposal.chapter, stem, entry_path,
+                          proposal.title)
+    if sha is None:
+        print(f"  commit    FAILED — {detail}")
+        run_metrics.close("commit_failed")
+        return 1
+    print(f"  commit    {sha}  ({detail})")
     print(f"  first-pass violations: {first_pass}")
-    print("\n  Not committed. Review, then render and commit:")
-    print(f"    uv run python nb/vendor/check.py {notebook.root.name} {proposal.chapter}")
+    run_metrics.close("committed")
+
+    # --- advance the queue -------------------------------------------------
     if proposal.queue:
-        print(f"\n  {len(proposal.queue)} question(s) still queued:")
-        for q in proposal.queue:
-            print(f"    nb ask {notebook.root.name} \"{q}\"")
+        nxt, rest = proposal.queue[0], proposal.queue[1:]
+        print(f"\n  {len(proposal.queue)} question(s) queued. Next:\n    {nxt}\n")
+        from .ask import main as ask
+        return ask(notebook_path, nxt, carry_queue=rest, verbose=verbose)
     return 0
 
 

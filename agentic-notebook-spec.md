@@ -127,9 +127,25 @@ routing call would have — it can read `_model.py` and try.
 
 **A multi-question ask splits rather than being rejected.** The skill's rule is
 *a proposal covering more than one question splits into one entry each*. The
-first question becomes this proposal; the rest go in `queue`, and `nb write`
-picks up the next after committing. Facets of a *single* comparison (cost,
-fidelity, applicability) are one question, not three.
+first question becomes this proposal; the rest go in `queue`, and after committing
+`nb write` calls `ask` again with the next one, leaving a fresh `proposal.json` at
+the gate. The gate still fires between every entry — auto-advance removes
+retyping, not review.
+
+The carried remainder is merged into the saved proposal **by `propose`**, not by
+asking the model to copy it forward: the queue is bookkeeping, and a model asked
+to copy a list forward will sometimes improve it instead.
+
+Verified both ways. *"How does zoom height vary with launch speed, and what speed
+doubles it?"* was correctly judged **one** question — facets of a single
+comparison (cost, fidelity, applicability) are one question, not three. *"What is
+the wing area? And separately, what fraction of mass is the fuselage?"* split into
+one proposal plus one queued question, which then ran on its own after the commit.
+
+**The cache rebuilds after a commit, by design.** The manifest is part of the
+prefix, and a new entry changes it — so the key changes and the next phase creates
+a new cache object (13,848 → 13,887 tokens, observed). That is the manifest doing
+its job, not a cost to engineer away.
 
 **The route is an output of probing, not a precondition.** Whether a question
 needs a new chapter depends on whether the existing model can answer it, and on
@@ -146,8 +162,8 @@ the table, not deferred to the proposal.
 | write loop | Agentic. Creates the `.qmd`; may edit `_analysis.py` / `_model.py` |
 | lint | **Always runs after the loop returns.** Fail → back into the loop, cap 3 |
 | render + check | `check.py`: lint, delete freeze, render, diff |
-| verify | One call, fresh context. Reads the rendered figures — not the transcript |
-| commit | git add + commit; rebuilds the manifest; then the next queued question |
+| verify | Renders, then one toolless call on the rendered page + figures — not the transcript. Findings re-enter the loop, capped |
+| commit | git add of named paths + commit; then the next queued question |
 
 **Lint is both a tool and a mandatory step.** The tool lets the write loop fix
 violations in place. The step after the loop is the guarantee — without it the
@@ -158,6 +174,36 @@ model can decline to call the tool and declare done. Re-running
 input differs from the writer's — rendered figures and printed blocks, not the
 conversation — and its question is decidable. Every other judgment stays in the
 probe loop, which has the context to make it.
+
+**Built, and it catches what it was built for.** Renders deterministically first
+(the write loop is not required to have rendered, and verifying against a stale
+freeze is worse than not verifying), reads `result.markdown` from the freeze with
+every inline expression already evaluated, attaches each figure as an inline
+image part, and makes one toolless call returning `VerifyResult{ok, findings}`.
+Toolless means no thought signatures are in play, so the
+`skip_thought_signature_validator` case never arises.
+
+Tested against a real entry with a figure, by doctoring the rendered markdown:
+
+| case | result |
+|---|---|
+| untouched | **ok** — no false positive |
+| hero number changed 3.0 s → 9.7 s | caught: *"the figure plots … approximately 3.0 s"* |
+| prose inverted the curve's direction | caught: *"the figure shows time aloft increasing"* |
+| caption swapped for another plot's | caught: *"the figure actually plots time aloft"* |
+
+That third case is the one no lint rule can reach: rule 1 forces the *numbers* in
+prose to be computed, but nothing forces a sentence about a **shape** to match
+the shape. Findings feed back into the write loop exactly as lint failures do,
+capped at `MAX_VERIFY_ATTEMPTS`.
+
+**Commit adds specific paths, never `-A`.** The working tree routinely carries
+untracked Quarto output — `chapters/**/*.html`, `*_files/`, `site_libs/` — from
+any render or preview that happens to be running. This is not hypothetical: a
+blanket `git add` in this repo swept 17 `.html` files into history, and they then
+had to be deleted again. `_commit` names the entry, its freeze directory, and any
+of `_analysis.py` / `_model.py` / `_budget.py` that `git status --porcelain`
+reports as actually changed.
 
 ---
 
@@ -878,8 +924,19 @@ An inline `{python}` expression counts as one word. Order: hero → `**Answer.**
 
 ## 15. Observability
 
-A SQLite table, one row per run. No platform needed at this scale; emit
-OpenTelemetry GenAI semantic conventions instead if you later want a trace UI.
+**Built:** `nb/metrics.py`, a SQLite table at `<notebook>/_scratch/nb-metrics.db`
+— gitignored, per notebook, surviving runs as `_scratch/run/` deliberately does
+not. One row per *phase*-run, not per entry, so an ask that never proposed is
+still recorded with `outcome='max_turns'`. `python -m nb.metrics <notebook>`
+prints the recent rows plus the aggregate that matters:
+
+```
+  first-pass lint violations, by model:
+    gemini-3.1-pro-preview   1 entries   0.00 violations   3.0 turns
+```
+
+No platform needed at this scale; emit OpenTelemetry GenAI semantic conventions
+instead if you later want a trace UI.
 
 | Metric | Source | Use |
 |---|---|---|
@@ -889,6 +946,8 @@ OpenTelemetry GenAI semantic conventions instead if you later want a trace UI.
 | Turns per probe loop | loop counter | Probe efficiency |
 | Consults per run, and their text | run log | A recurring consult is a missing reference doc |
 | Proposals rejected at the gate | `nb write` not run, or edited first | Wasted probe cost; the signal that routing or scope is off |
+| **Verify findings per entry** | `verify_findings` column | Prose contradicting the render. Distinct from lint: rule 1 forces numbers in prose to be *computed*, but nothing forces a sentence about a SHAPE to match the shape |
+| Outcome | `proposed` / `committed` / `max_turns` / `lint_failed` / `verify_failed` / `commit_failed` | Where runs die |
 
 First-pass violation count is a real metric over a real artefact — and the target
 for any later prompt optimisation.
@@ -1006,8 +1065,12 @@ rather than an oversight:
 2. ~~Where rendered figure bytes live~~ — **DONE.** Real PNGs at
    `_freeze/chapters/<c>/<stem>/figure-html/*.png`, served by a native
    `read_figure()`. See §6.
-3. Whether `read_media_file` output round-trips as inline image data through
-   `complete()` — `verify` depends on it.
+3. ~~Whether figures round-trip as inline image data~~ — **DONE.** A
+   `function_response` part and an inline image part are accepted in ONE user
+   turn. Measured on a real 68 KB PNG: **1,298 prompt tokens, and the model reads
+   the axis labels off it.** The same figure as base64 inside a function response
+   was ~23k tokens of string the model could not see — so `read_figure` returns
+   bytes and `loop.py` emits the image part.
 4. Whether `check.py`'s freeze scoping behaves correctly when invoked outside a
    Claude Code working directory.
 5. Whether the chapter scaffold script can be invoked headlessly by
@@ -1023,7 +1086,22 @@ rather than an oversight:
    first-pass violation count across several questions: one question is a signal,
    not an eval.
 
-### Found by building it
+### Found by building stage 2
+
+- **An entry that will not render must not be committed.** The first cut of the
+  verify step treated "could not verify" as a skip and committed anyway — so a
+  page that failed to build would have entered history, which is precisely the
+  class of failure verify exists to prevent. Any note from `verify.check()` is now
+  a hard stop. Tested with a deliberate `NameError` in a cell.
+- **Figures must arrive as inline image parts.** Base64 inside a
+  `function_response` is a string the model cannot see, at ~18× the tokens.
+- **A cache object belongs to the model that created it**, so the cache key
+  carries the model ID — otherwise switching model 400s a long way from its cause.
+- **Record the entry's own question, not the ask's.** On a split ask the model
+  keeps the whole original in `question` and this entry's question in `title`, so
+  metrics keyed on `question` label every entry of a multi-part ask identically.
+
+### Found by building stage 1
 
 - **`_model.py`'s names must be in the prefix** (§5a). Without them the model
   cannot route a question, and no amount of prompt fixes that.

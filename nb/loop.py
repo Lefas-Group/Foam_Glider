@@ -78,9 +78,20 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
                 # Every call gets an answer, including a failed one: an
                 # unanswered function_call is an error on the next request.
                 out = {"error": f"{type(e).__name__}: {e}"}
-            parts.append(types.Part.from_function_response(
-                name=c.name,
-                response=out if isinstance(out, dict) else {"result": out}))
+            if isinstance(out, dict) and "_image" in out:
+                # An image has to arrive as an inline part; put through a
+                # function_response it is just a base64 string the model cannot
+                # see and pays ~18x the tokens for. Both parts share this turn,
+                # which the API accepts (verified).
+                parts.append(types.Part.from_function_response(
+                    name=c.name,
+                    response={"figure": out["name"], "note": "attached below"}))
+                parts.append(types.Part.from_bytes(
+                    data=out["_image"], mime_type=out["mime_type"]))
+            else:
+                parts.append(types.Part.from_function_response(
+                    name=c.name,
+                    response=out if isinstance(out, dict) else {"result": out}))
 
         # All responses in ONE turn. Splitting them degrades parallel calling.
         contents.append(types.Content(role="user", parts=parts))

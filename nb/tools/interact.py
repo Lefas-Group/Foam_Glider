@@ -96,6 +96,14 @@ def propose(session, **fields):
     # Measured, not guessed: aero_report() prints the solves the probe just ran.
     proposal.render_cost_s = round(session.solve_seconds, 1)
 
+    # Questions owed from an earlier ask, appended without disturbing any the
+    # model added itself. Done here rather than in the prompt because it is
+    # bookkeeping, and a model asked to copy a list forward will sometimes
+    # improve it instead.
+    for q in session.carry_queue:
+        if q not in proposal.queue:
+            proposal.queue.append(q)
+
     session.notebook.run.mkdir(parents=True, exist_ok=True)
     session.notebook.proposal_path.write_text(
         json.dumps(proposal.model_dump(), indent=2) + "\n")

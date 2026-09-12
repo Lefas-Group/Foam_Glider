@@ -13,6 +13,7 @@ from ..loop import Terminal, run
 from ..session import Session
 from ..tools.interact import render_proposal
 from ..preflight import check as preflight
+from .. import metrics
 from .common import setup, report
 
 BRIEF = """\
@@ -69,7 +70,7 @@ If a probe errors, read the traceback and fix the probe. Do not go looking
 through the notebook for why -- the traceback already says.
 """
 
-def main(notebook_path, question, verbose=True):
+def main(notebook_path, question, carry_queue=None, verbose=True):
     bad = preflight(notebook_path)
     if bad:
         for b in bad:
@@ -78,7 +79,9 @@ def main(notebook_path, question, verbose=True):
 
     from ..config import Notebook
     notebook = Notebook(notebook_path)
-    session = Session(notebook, question)
+    run_metrics = metrics.Run(notebook, "ask", question)
+    session = Session(notebook, question, carry_queue=carry_queue,
+                      metrics=run_metrics)
 
     print(f"  notebook  {notebook.root.name}")
     fs, handlers, make_config = setup(session)
@@ -88,6 +91,7 @@ def main(notebook_path, question, verbose=True):
     contents = [{"role": "user", "parts": [{"text": BRIEF.format(question=question, max_turns=MAX_TURNS)}]}]
 
     def on_turn(n, resp, turn):
+        run_metrics.turn(resp)
         if verbose:
             calls = [p.function_call.name for p in (turn.parts or []) if p.function_call]
             print(report(resp, f"turn {n + 1}") +
@@ -99,11 +103,27 @@ def main(notebook_path, question, verbose=True):
                 transcript=notebook.transcript_path, max_turns=MAX_TURNS,
                 on_turn=on_turn)
         except Terminal as t:
+            run_metrics.set(chapter=t.payload.chapter,
+                            solves=session.solves,
+                            solve_seconds=round(session.solve_seconds, 1))
+            run_metrics.close("proposed")
             print(render_proposal(t.payload, notebook))
             return 0
+        except RuntimeError as e:
+            run_metrics.close("max_turns")
+            print(f"\n  {e}. Nothing was written.")
+            return 1
+        except SystemExit:
+            # Raised when a prompt hits EOF or is interrupted. Record it before
+            # it propagates: "where runs die" is half the point of the table, and
+            # a run that stopped at an unanswered question is the most
+            # interesting death there is.
+            run_metrics.close("no_answer")
+            raise
     finally:
         fs.stop()
 
+    run_metrics.close("no_proposal")
     print("\n  The loop ended without a proposal. Nothing was written.")
     return 1
 

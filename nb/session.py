@@ -10,10 +10,16 @@ from .config import MAX_CONSULTS
 
 
 class Session:
-    def __init__(self, notebook, question, chapter=None):
+    def __init__(self, notebook, question, chapter=None, carry_queue=None,
+                 metrics=None):
         self.notebook = notebook
         self.question = question
         self.chapter = chapter
+        # Questions still owed from a multi-question ask. Merged into the
+        # proposal by `propose` rather than by asking the model to copy them
+        # forward: the queue is bookkeeping, not judgement.
+        self.carry_queue = list(carry_queue or [])
+        self.metrics = metrics
         self.asked = {}          # name -> value, from ask_specified
         self.consults = 0
         self.solves = 0
