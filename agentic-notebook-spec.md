@@ -21,16 +21,18 @@ recording the answer as one notebook entry that passes the lint contract.
 | `_notebook.py`, `_quarto.yml` | Not exposed; drift is a preflight failure |
 | `_scratch/**` | Reached only through the `probe` handler |
 | New chapter | Agent-triggered via `create_chapter`; the template stays out of reach |
-| New notebook | Human-run script |
+| New notebook | `nb new` — a human command, never an agent route |
 | Lint rule 11 | Moves from lint gate → preflight assertion |
 | Raising `SOLVE_BUDGET` / `ENTRY_CEILING` | Human decision at the gate |
 | Suspected-bad lint rules | Written to the run log, never to `why.md` |
 
 ---
 
-## 2. Architecture — two commands
+## 2. Architecture — two commands, plus one you run once
 
 ```
+$ nb new <notebook> [title]        once per aircraft; scaffolds, then proves it
+
 $ nb ask "would more pitch damping fix the disagreement?"
     ├── preflight            §13
     ├── build/reuse cache    §9
@@ -1098,7 +1100,25 @@ for team key management, budgets and RBAC. Wrong category and wrong scale.
 
 ## 17. Human-operated, outside the agent
 
-- `make new-notebook` — scaffolds `_quarto.yml`, `_notebook.py`, `_scratch/`
+- **`nb new <notebook> [title]`** — scaffolds `_quarto.yml`, `styles.css`,
+  `.gitignore`, `_scratch/`, the two vendored files and a first chapter, then
+  **lints and preflights before it returns**.
+
+  It is a command rather than a documented procedure because of one failure
+  mode: `_notebook.py` and `_scratch/_probe_base.py` are vendored into every
+  notebook (Quarto execs them at render time, so a notebook must render without
+  `nb` installed) and rule 11 requires them byte-identical to `vendor/`. Copied
+  by hand, a stray edit is silent until the first lint run — several minutes into
+  the first `ask`. Copied by `shutil.copy`, they cannot drift.
+
+  It stays human-run: a second notebook is a second aircraft, which
+  `references/forking.md` treats as a decision. There is no `new_notebook` route,
+  and `create_chapter` is not a tool either — adding a *chapter* goes through the
+  gate as `route: "new_chapter"`.
+
+  Verified: scaffolds → lints clean → preflights ok → renders; refuses a
+  non-empty directory and a non-`NN-kebab-case` chapter; and tampering with the
+  vendored copy is caught by preflight, naming the line.
 - Editing the system instruction, `lint.py`, `check.py`, `references/`, and the
   chapter template that `create_chapter` instantiates
 - Raising `SOLVE_BUDGET` / `ENTRY_CEILING` (recorded in `index.qmd`)
@@ -1113,7 +1133,7 @@ rather than an oversight:
 |---|---|
 | **`superseded_by()`** | Requires knowing a *later* entry obsoletes an earlier one. A run that knows only its own question cannot make that call — inherently retrospective. Human annotation |
 | **META branch** | §1. Rules can no longer be earned from failures; the friction log replaces `why.md` growth, and acting on it is manual |
-| **New notebooks** | A new notebook wants a fresh session — a process decision, not the agent's |
+| **New notebooks** | `nb new` is a human command. A second notebook is a second aircraft — a decision, not a convenience |
 | **Discussion with no artefact** | The skill can think with you and produce nothing. This system is question-in → entry-out; `consult` is the narrow substitute |
 
 ---

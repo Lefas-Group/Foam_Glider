@@ -1,4 +1,5 @@
 """
+    nb new   <notebook> [title]          scaffold a notebook, then prove it
     nb ask   <notebook> "<question>"     probe, then propose and stop
     nb write <notebook>                  write the approved proposal
 
@@ -27,6 +28,13 @@ def main(argv):
         print(USAGE)
         return 0
     cmd, rest = argv[0], argv[1:]
+
+    if cmd == "new":
+        if not rest:
+            print(USAGE)
+            return 2
+        from .phases.new import main as new
+        return new(rest[0], " ".join(rest[1:]) or None)
 
     if cmd == "ask":
         if len(rest) < 2:

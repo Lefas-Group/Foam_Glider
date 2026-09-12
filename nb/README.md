@@ -13,6 +13,7 @@ Requires `GEMINI_API_KEY`, and `quarto`, `git`, `npx` on `PATH`.
 ## Use
 
 ```bash
+uv run --group nb python -m nb new <notebook> [title]   # once per aircraft
 uv run --group nb python -m nb ask <notebook> "why is the tail so big?"
 ```
 
@@ -47,49 +48,42 @@ uv run --group nb python nb/vendor/lint.py <notebook>          # the 18 rules
 
 ## Making a new notebook
 
-There is no one-shot command; a notebook is a deliberate act. Seven steps, and
-only two of them are fussy.
-
 ```bash
-NB=my-new-notebook            # a sibling directory of the existing notebooks
-mkdir -p $NB/chapters $NB/_scratch
-
-# The two files rule 11 checks. They must be BYTE-IDENTICAL to these copies --
-# they are vendored into every notebook because Quarto execs them at render time,
-# so a notebook must render without nb installed.
-cp nb/vendor/notebook.py   $NB/_notebook.py
-cp nb/vendor/probe_base.py $NB/_scratch/_probe_base.py
-
-printf '/.quarto/\n**/*.quarto_ipynb\n' > $NB/.gitignore
+uv run --group nb python -m nb new my-new-notebook "My New Glider"
 ```
 
-Then take `_quarto.yml`, `styles.css`, `_scratch/probe.qmd` and
-`_scratch/probe.py` from **`vendor/templates/new-notebook.md`**, which holds each
-file's contents with the reasoning beside it. The one setting that matters is
-`execute-dir: project` — every cell runs with the notebook root as cwd, which is
-why chapter paths are written `chapters/NN-name/_model.py` everywhere.
+Creates the directory as a sibling of the existing notebooks, scaffolds
+`_quarto.yml`, `styles.css`, `.gitignore`, `_scratch/`, the two vendored files
+and a first chapter — then **lints and preflights before it returns**, so a
+broken notebook fails here rather than several minutes into your first `ask`.
 
-Finally, the first chapter:
-
-```bash
-uv run --group nb python -c "
-from nb.config import Notebook
-from nb.tools.scaffold import create_chapter
-print(create_chapter(Notebook('$NB'), '01-first-chapter', 'First chapter',
-                     'The aero method, the section, what is left out.'))"
-
-uv run --group nb python nb/vendor/lint.py $NB      # expect: 0 problems
-uv run --group nb python -m nb.preflight   $NB      # expect: preflight ok
+```
+  created   /…/my-new-notebook
+  vendored  _notebook.py, _scratch/_probe_base.py  (rule 11)
+  chapter   chapters/01-first-chapter/
+  lint      clean
+  preflight ok
 ```
 
-Fill the scaffolded `_model.py` with the vehicle and say in `index.qmd` what
-defines the chapter. Then `nb ask` it.
+Then fill `chapters/01-first-chapter/_model.py` with the vehicle, say in its
+`index.qmd` what defines the chapter, and `nb ask` it.
 
-**Adding a chapter to an existing notebook is not a manual step** — propose
-`route: "new_chapter"` and `nb write` scaffolds it from `chapter_title` and
-`chapter_defines`. A chapter is a structural commitment later entries build on,
-so it goes through the gate; `create_chapter` is deliberately not a tool the
-model can call.
+Options: a second positional argument is the site title (defaults to the
+directory name); `chapter=` and `chapter_title=` override the first chapter.
+It refuses a non-empty directory and a chapter name that is not `NN-kebab-case`.
+
+**Why this is a command and not a documented procedure.** `_notebook.py` and
+`_scratch/_probe_base.py` are *vendored* into every notebook — Quarto execs them
+at render time, so a notebook has to render without `nb` installed — and lint
+rule 11 requires them byte-identical to `vendor/`. Copied by hand, a stray edit
+or a truncated paste is silent until the first lint run.
+
+**Adding a chapter is not this.** Propose `route: "new_chapter"` and `nb write`
+scaffolds it from `chapter_title` and `chapter_defines`. A chapter is a
+structural commitment later entries build on, so it goes through the gate;
+`create_chapter` is deliberately not a tool the model can call. A new *notebook*
+is a second aircraft, which is why it is a command you run rather than a route
+the agent can take.
 
 ---
 
@@ -111,12 +105,14 @@ model can call.
     session.py     what one run accumulates
     text.py        output truncation
 
+    phases/new.py     scaffold a notebook, then lint and preflight it
     phases/ask.py     preflight -> cache -> probe loop -> propose -> exit
     phases/write.py   scaffold? -> write loop -> lint -> render -> verify -> commit
     phases/verify.py  one toolless call on the rendered page + its figures
 
     tools/         one handler per tool. mcp_fs.py is the only MCP left
-    scaffold/      chapter templates
+    scaffold/      templates: _quarto.yml, styles.css, probe.{py,qmd},
+                   and the chapter files
     vendor/        copied from the skill; canonical from here on
 
 ### Why two commands
