@@ -663,7 +663,7 @@ cache = client.caches.create(model=MODEL, config=types.CreateCachedContentConfig
 | Segment | Contents | Cached |
 |---|---|---|
 | `tools` | 18 declarations (6 MCP + 12 native), frozen and **sorted** | yes |
-| `system_instruction` | Triage table, **18** rules as one-liners, the entry skeleton, budgets, scope. 206 lines as written | yes |
+| `system_instruction` | Triage table, **19** rules as one-liners, the entry skeleton, budgets, scope. 206 lines as written | yes |
 | *(same cached object)* | Manifest, all `index.qmd`, all `_analysis.py` signatures (§5a) | yes |
 | `contents` | Question, date, everything else volatile | no |
 
@@ -888,9 +888,10 @@ failure.
 16  a budgeted chapter does not override SOLVE_BUDGET at a call site
 17  a frozen entry stays under its chapter's ENTRY_CEILING
 18  the solve budget in force is declared in the chapter's index
+19  a chapter with an entry defines its vehicle in `_model.py`
 ```
 
-**There are 18, not 17.** Rule 18 was missed in the original reading, and rule 11
+**There are 19.** Rule 18 was missed in the original reading, and rule 11
 covers `_probe_base.py` as well as `_notebook.py` — added after an improvement to
 it sat in one notebook while the scaffold that creates the next still held the
 old text, drift invisible precisely because nothing compared them.
@@ -1197,7 +1198,7 @@ The four that worked as built, now proven rather than assumed:
 | path | evidence |
 |---|---|
 | `read_figure` through the real loop | Model read the axis labels, the trend and the legend text off a PNG |
-| **verify against a live figure, and the verify retry** | An entry passing all 18 lint rules but claiming its curve *falls* when it rises: caught, fed back, repaired, clean on pass 2 |
+| **verify against a live figure, and the verify retry** | An entry passing all 19 lint rules but claiming its curve *falls* when it rises: caught, fed back, repaired, clean on pass 2 |
 | lint retry | Three planted violations — hand-typed numbers and a second heading — all repaired in one round |
 | `consult` cap, `ask_specified` delegation | Cap holds at 3; "you decide" returns the delegation branch; answers land in `session.asked` |
 | `ENTRY_CEILING` trip | Fires at 650 s against chapter 04's 600 s; silent on a chapter that declares none |
@@ -1242,3 +1243,59 @@ whole `Content` is appended (§8, with negative control); the 4,096-token cache
 floor and how the prefix clears it (§9); explicit caching works with both
 `system_instruction` and `tools` (§9); `role="user"` is correct for
 function-response turns; `MINIMAL` thinking level 400s; current model IDs.
+
+### Found by building a notebook from nothing (2026-09-12)
+
+The first use of `nb new` on an empty directory — one entry, $0.80, zero
+first-pass lint violations — exposed four defects. None was a model failure: the
+agent behaved correctly given what it was told and what lint could see.
+
+- **A scaffold chapter must be claimable, not just creatable.** `nb new` has to
+  create one, because `_quarto.yml`'s `auto: "chapters"` dies on an empty
+  `chapters/`. Its `_model.py` is empty, so the first `ask` correctly refused to
+  build on it and routed `new_chapter` — leaving a dead `01` beside a real `02`.
+  The first real chapter now takes the scaffold over and keeps its number.
+  Claimability is marked by the placeholder still being in `index.qmd`, not by
+  the empty `_model.py` alone: a chapter that has just been described has one of
+  those too, and would otherwise be clobbered by the next chapter created.
+
+- **An instruction printed to the terminal is not an instruction.**
+  `create_chapter`'s return value was the only machine-readable string saying
+  where the vehicle goes, and `write.py` printed it instead of appending it to
+  `contents`. The model never saw it, the system instruction never mentioned
+  `_model.py`, the prefix rendered it as `(empty)` — indistinguishable from
+  deliberately empty — and the proposal handed the vehicle over as
+  `working_code`, "ready to adapt". Every signal pointed into the entry cell.
+
+- **Rule 19, because rule 2 structurally cannot fire on a chapter's first
+  entry.** It keys 3-line blocks to a *set* of entry filenames and fires at two,
+  so a sixty-line inline vehicle in a new chapter lints perfectly clean. Rule 19
+  asserts the thing rule 2 only implies: a chapter with an entry defines its
+  vehicle in `_model.py`. A chapter with no entries is exempt, which is what
+  keeps a fresh scaffold clean.
+
+- **The code owns the chapter number; the model owns the slug.** The number was
+  `len(existing) + 1` — a count, not a max, so one deleted chapter collides it —
+  and the model supplied it, so a wrong guess aborted `nb write` outright, after
+  the ask had been paid for, with no retry. A wrong number is now renumbered.
+
+- **Nothing ever rendered the project, so there was no site.** A run renders one
+  entry, because that is all verify reads. `_site/` therefore held one page and
+  no `index.html`. `nb view` does a project render, and `write` calls it **after
+  the commit** — never before, so an unrelated broken page cannot hold hostage an
+  entry that has already passed lint, render and verify on its own terms.
+
+- **A project render does not fail on a missing freeze — it re-executes it.**
+  That is hundreds of seconds of aero solves, and `aircraft-notebook` was in
+  exactly that state. So `view` names the unfrozen entries and refuses, and
+  rebuilding them takes `--force`. Rendering cheaply is not the same as
+  rendering correctly: the converse case is a chapter index, which execs
+  `_model.py` and prints its source while Quarto's freeze tracks only the page,
+  so it renders a stale model forever. `write` drops that one index's freeze
+  when git says `_model.py` or `_analysis.py` actually moved — the `check.py`
+  idea, scoped from a whole chapter down to a single cheap page.
+
+- **`_site/` belongs in the notebook's `.gitignore`.** It was not there, and the
+  first project render put 22 build artefacts into history, including a 180 KB
+  icon font. `_freeze/chapters/` stays tracked — that is the whole point of
+  committing a freeze — but `_freeze/site_libs/` is Quarto's, not ours.

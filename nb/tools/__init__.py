@@ -52,7 +52,7 @@ def native_declarations():
               ["question", "chapter"]),
 
         _decl("lint",
-              "Run the 18-rule lint contract over a chapter without rendering. "
+              "Run the 19-rule lint contract over a chapter without rendering. "
               "Returns the violations verbatim; each message names its own fix.",
               {"chapter": S}, ["chapter"]),
 

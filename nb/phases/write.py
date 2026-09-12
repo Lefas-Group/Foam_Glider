@@ -9,6 +9,7 @@ can simply decline to call the tool and declare itself done.
 import datetime
 import json
 import pathlib
+import shutil
 import subprocess
 import sys
 
@@ -22,6 +23,7 @@ from ..tools import verifiers
 from ..tools.scaffold import create_chapter
 from .. import cache, metrics
 from . import verify as verify_phase
+from .view import site
 from .common import setup, report
 
 BRIEF = """\
@@ -45,6 +47,12 @@ in the entry: an entry answers the question asked and stops.
    (rule 2), promote them to `{chapter}/_analysis.py` and call from there --
    change only YOUR entry, never the earlier one -- then pass the promoted
    function to `footer(...)` (rule 13).
+5. The vehicle lives in `{chapter}/_model.py`, never in the entry cell (rule
+   19). If that file is still the bare scaffold, fill it: the aircraft, its
+   operating conditions, its derived quantities. A parametric vehicle is a
+   FUNCTION there taking the design variables and returning the `Airplane`;
+   the entry calls it. `_model.qmd` already execs it, so those names are in
+   scope in your cell -- do not import or redefine them.
 
 Today is {today}, so the entry stem is already dated for you. Stop when lint is
 clean; rendering and committing are handled after you finish.
@@ -58,6 +66,40 @@ def _stem(notebook, chapter, title, today):
     existing = [p.name for p in notebook.entries(chapter)]
     n = sum(1 for e in existing if e.startswith(today)) + 1
     return f"{today}-{n:02d}-{slug}"
+
+
+def _touched(notebook, chapter, *names):
+    """Which of `names` in this chapter git sees as changed."""
+    repo = notebook.root.parent
+    out = []
+    for name in names:
+        f = notebook.chapters_dir / chapter / name
+        if not f.exists():
+            continue
+        rel = str(f.relative_to(repo))
+        if subprocess.run(["git", "status", "--porcelain", "--", rel], cwd=repo,
+                          capture_output=True, text=True).stdout.strip():
+            out.append(rel)
+    return out
+
+
+def _refresh_index_freeze(notebook, chapter):
+    """
+    Drop the chapter index's freeze when what it renders has moved.
+
+    Quarto's freeze tracks the PAGE, not its includes -- so a chapter index,
+    which execs `_model.py` and prints its source, goes on showing the version
+    it was frozen against forever. Rule 19 makes that live: `_model.py` now
+    changes on every new-chapter run.
+
+    Scoped to the one index, and only when git says an input actually changed.
+    `check.py` solves the same problem by deleting a whole chapter's freeze and
+    re-solving it, which is right when proving a refactor moved nothing and far
+    too expensive here.
+    """
+    if not _touched(notebook, chapter, "_model.py", "_analysis.py"):
+        return
+    shutil.rmtree(notebook.freeze / chapter / "index", ignore_errors=True)
 
 
 def _commit(notebook, chapter, stem, entry_path, title):
@@ -114,14 +156,17 @@ def main(notebook_path, verbose=True):
     print(f"  notebook  {notebook.root.name}")
     print(f"  entry     {proposal.title}")
 
+    chapter_msg = None
     if proposal.route == "new_chapter":
         # chapter_title, not proposal.title: the chapter is named for what it
         # holds ("Flight path"), not for whichever question happened to create it.
-        msg = create_chapter(notebook, proposal.chapter,
-                             proposal.chapter_title or proposal.title,
-                             proposal.chapter_defines)
-        print(f"  chapter   {msg.splitlines()[0]}")
-        if msg.startswith("rejected"):
+        # The returned name is authoritative: create_chapter owns the number, and
+        # may have claimed an empty scaffold chapter instead of adding a sibling.
+        proposal.chapter, chapter_msg = create_chapter(
+            notebook, proposal.chapter,
+            proposal.chapter_title or proposal.title, proposal.chapter_defines)
+        print(f"  chapter   {chapter_msg.splitlines()[0]}")
+        if chapter_msg.startswith("rejected"):
             return 1
 
     today = datetime.date.today().isoformat()
@@ -140,6 +185,11 @@ def main(notebook_path, verbose=True):
             proposal=json.dumps(proposal.model_dump(), indent=2),
             chapter=proposal.chapter, stem=stem, today=today)
         contents = [{"role": "user", "parts": [{"text": brief}]}]
+        # The scaffolder's own message -- which is the only place that says where
+        # the vehicle goes. It used to be printed to the terminal and nowhere
+        # else, so the model never saw it and wrote the vehicle into the entry.
+        if chapter_msg:
+            contents.append({"role": "user", "parts": [{"text": chapter_msg}]})
 
         def on_turn(n, resp, turn):
             run_metrics.turn(resp)
@@ -179,6 +229,7 @@ def main(notebook_path, verbose=True):
 
         # --- verify: does the prose match what actually rendered? -----------
         entry_path = notebook.chapters_dir / proposal.chapter / f"{stem}.qmd"
+        _refresh_index_freeze(notebook, proposal.chapter)
         findings = []
         for attempt in range(MAX_VERIFY_ATTEMPTS):
             result, note = verify_phase.check(
@@ -234,6 +285,11 @@ def main(notebook_path, verbose=True):
     print(f"  commit    {sha}  ({detail})")
     print(f"  first-pass violations: {first_pass}")
     run_metrics.close("committed")
+
+    # After the commit, never before: a project render touches every page in the
+    # notebook, and an unrelated broken one must not be able to block an entry
+    # that has already passed lint, render and verify on its own terms.
+    site(notebook)
 
     # --- advance the queue -------------------------------------------------
     # The commit moved the manifest, so the cache just used can never be reused:

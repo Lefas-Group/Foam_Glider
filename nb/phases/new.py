@@ -23,7 +23,14 @@ from ..config import SCAFFOLD, VENDOR, Notebook
 from ..tools.scaffold import NAME as CHAPTER_NAME
 from ..tools.scaffold import create_chapter
 
-GITIGNORE = "/.quarto/\n**/*.quarto_ipynb\n"
+# `_freeze/chapters/` is deliberately NOT here -- committing it is what lets a
+# fresh clone render without re-solving. Everything else Quarto writes is a build
+# artefact: the first notebook to get a project render put 22 of them into
+# history, including a 180 KB icon font.
+GITIGNORE = ("/.quarto/\n"
+             "**/*.quarto_ipynb\n"
+             "/_site/\n"
+             "/_freeze/site_libs/\n")
 
 # Rule 11: vendored, and checked byte-for-byte. The tuple order is
 # (canonical in vendor/, destination in the new notebook).
@@ -47,6 +54,10 @@ def main(path, title=None, subject=None, chapter="01-first-chapter",
     if not CHAPTER_NAME.match(chapter):
         print(f"  {chapter!r} is not NN-kebab-case, e.g. '01-first-chapter'")
         return 1
+    # The first chapter of a new notebook is 01 by construction. Normalise here
+    # rather than let create_chapter renumber later -- the name is substituted
+    # into _quarto.yml and the probe scaffold below, before it is created.
+    chapter = "01-" + chapter[3:]
 
     title = title or root.name.replace("-", " ").title()
     subject = subject or "the aircraft"
@@ -66,9 +77,11 @@ def main(path, title=None, subject=None, chapter="01-first-chapter",
             _render((SCAFFOLD / tmpl).read_text(), title, subject, chapter))
 
     notebook = Notebook(root)
-    msg = create_chapter(notebook, chapter, chapter_title,
-                         "<one sentence, then a bullet list: the aero method, "
-                         "the section, what is left out>")
+    # claim=False: there is nothing to claim in a notebook this command just
+    # made, and the chapter name here is the caller's, not a model's guess.
+    # No `defines`: the placeholder create_chapter substitutes instead is also
+    # the marker that says this chapter is still claimable.
+    chapter, msg = create_chapter(notebook, chapter, chapter_title, claim=False)
     if msg.startswith("rejected"):
         print(f"  {msg}")
         return 1

@@ -43,6 +43,7 @@ entry can be written compliant rather than corrected afterwards.
     16  a budgeted chapter does not override SOLVE_BUDGET at a call site
     17  a frozen entry stays under its chapter's ENTRY_CEILING
     18  the solve budget in force is declared in the chapter's index
+    19  a chapter with an entry defines its vehicle in `_model.py`
 
 Two details the list cannot carry. A value written as an inline expression counts
 as ONE word, so tightening prose is never at odds with computing the numbers in
@@ -408,6 +409,47 @@ def _one_drift(canonical, local):
                     f"every notebook gets it")]
 
 
+def _empty_model(root, chapters, entries):
+    """
+    Rule 19. A chapter that has an entry has a vehicle in `_model.py`.
+
+    The chapter index renders `_model.py` in full, so it is where a reader looks
+    for the aircraft. An entry that defines the vehicle in its own cell puts it
+    somewhere the chapter cannot show it and the next entry cannot reuse it --
+    and nothing else catches that. Rule 2 keys repeated blocks to a SET of entry
+    filenames and fires at two, so on a chapter's first entry it is structurally
+    incapable of firing: a sixty-line inline vehicle lints perfectly clean, and
+    did.
+
+    A chapter with no entries is exempt, which is what keeps a freshly
+    scaffolded chapter clean until something is written into it.
+    """
+    out = []
+    for c in chapters:
+        if not any(e.parent.name == c for e in entries):
+            continue
+        f = root / "chapters" / c / "_model.py"
+        if not f.exists():
+            out.append((f, "missing — the chapter's vehicle lives here"))
+            continue
+        try:
+            tree = ast.parse(f.read_text())
+        except SyntaxError:
+            continue        # the render will say so, and say it better
+        if any(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef,
+                              ast.ClassDef))
+               and not n.name.startswith("_")
+               or isinstance(n, ast.Assign)
+               and any(isinstance(t, ast.Name) and not t.id.startswith("_")
+                       for t in n.targets)
+               for n in tree.body):
+            continue
+        out.append((f, "defines nothing — the vehicle belongs here, not in the "
+                       "entry cell. A parametric vehicle is a function taking "
+                       "the design variables and returning the Airplane"))
+    return out
+
+
 def tables_in(md):
     """
     Every markdown pipe table in `md`, as (body_rows, columns).
@@ -694,6 +736,7 @@ def check(root, chapters):
     aero = {c: aero_calls_of(root / "chapters" / c) for c in chapters}
 
     problems += _notebook_drift(root)
+    problems += _empty_model(root, chapters, entries)
     problems += _stale_freeze(root, chapters)
     problems += _budget_rules(root, chapters)
     problems += _visuals_and_tables(root, chapters, entries)

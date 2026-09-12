@@ -2,8 +2,10 @@
     nb new   <notebook> [title]          scaffold a notebook, then prove it
     nb ask   <notebook> "<question>"     probe, then propose and stop
     nb write <notebook>                  write the approved proposal
+    nb view  <notebook> [--force]        render the whole site
 
-Two commands, because the gate between them is a process boundary: `ask` exits
+`ask` and `write` are two commands because the gate between them is a process
+boundary, not a checkpoint: `ask` exits
 where a human decides, and `write` picks up from `proposal.json`. The two share
 no conversation state -- the entry's own code cells recompute the answer at
 render time, so the write phase needs the finding and the working code, not the
@@ -49,6 +51,13 @@ def main(argv):
             return 2
         from .phases.write import main as write
         return write(rest[0])
+
+    if cmd == "view":
+        if not rest:
+            print(USAGE)
+            return 2
+        from .phases.view import main as view
+        return view(rest)
 
     print(f"unknown command {cmd!r}\n\n{USAGE}")
     return 2

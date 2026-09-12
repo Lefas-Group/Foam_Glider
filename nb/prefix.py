@@ -83,7 +83,12 @@ def chapter_context(notebook):
             out.append("")
             out += funcs
         if not funcs and not consts:
-            out.append("    (empty)")
+            # Not just "(empty)": a scaffolded `_model.py` and a deliberately
+            # empty one summarise identically, and the first time that happened
+            # the model read `(empty)` as a statement of fact and wrote the whole
+            # vehicle inline instead. Rule 19 now enforces this, but the prefix
+            # is where the model finds out before it costs a lint round.
+            out.append("    (empty — scaffolded; the vehicle belongs here)")
         out.append("")
 
         sigs = signatures(d / "_analysis.py")

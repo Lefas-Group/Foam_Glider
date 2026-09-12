@@ -6,7 +6,7 @@ project:
   execute-dir: project
 
 website:
-  title: "Optimised Glider II Notebook"
+  title: "Foam Glider Notebook"
   description: "A chronological record of questions asked about the aircraft."
   # Next/Previous links in each page footer, so entries read straight through.
   page-navigation: true
@@ -16,9 +16,11 @@ website:
       # Subdirectories become sections. Entry filenames start with their date,
       # so alphabetical order is chronological order.
       #
-      # KEEP THIS COMMENTED OUT until the first chapter directory exists --
-      # `auto` on an empty chapters/ dies with
-      # "TypeError: Cannot convert undefined or null to object".
+      # `auto` REQUIRES a non-empty chapters/ -- on an empty one it dies with
+      # "TypeError: Cannot convert undefined or null to object". That is why
+      # `nb new` always scaffolds a first chapter, and why the first entry that
+      # needs a new chapter CLAIMS that scaffold rather than adding a sibling
+      # beside it (Notebook.claimable_stub).
       - auto: "chapters"
 
 format:

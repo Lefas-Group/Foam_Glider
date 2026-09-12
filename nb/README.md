@@ -1,6 +1,6 @@
 # `nb` — the design-notebook agent
 
-Turns a design question into a Quarto lab-notebook entry that passes an 18-rule
+Turns a design question into a Quarto lab-notebook entry that passes a 19-rule
 lint contract, renders, and is checked against its own output before it commits.
 
 Distilled from the `design-notebook` Claude Code skill, and runs without it, on
@@ -36,20 +36,26 @@ uv run --group nb python -m nb write <notebook>
 ```
 
 Writes the entry, fixes it against lint, renders it, verifies the prose against
-what actually rendered, commits, and picks up the next queued question if the ask
-contained more than one.
+what actually rendered, commits, rebuilds the site, and picks up the next queued
+question if the ask contained more than one.
+
+`write` builds the site only when every entry already has a freeze. Otherwise it
+names the ones that do not and stops, because a project render does not fail on a
+missing freeze -- it silently re-executes it, and that is hundreds of seconds of
+aero solves. `nb view <notebook> --force` rebuilds them deliberately.
 
 Nothing reaches the notebook before you have seen the proposal.
 
 ### Other commands
 
 ```bash
+uv run --group nb python -m nb view      <notebook> [--force]  # build the site
 uv run --group nb python -m nb.metrics   <notebook>            # cost + the eval
 uv run --group nb python -m nb.cache     <notebook> [--purge]  # held caches
 uv run --group nb python -m nb.prefix    <notebook> --measure  # cached prefix size
 uv run --group nb python -m nb.manifest  <notebook>            # what the model sees
 uv run --group nb python -m nb.preflight <notebook>            # before any tokens
-uv run --group nb python nb/vendor/lint.py <notebook>          # the 18 rules
+uv run --group nb python nb/vendor/lint.py <notebook>          # the 19 rules
 ```
 
 ---
@@ -76,6 +82,12 @@ broken notebook fails here rather than several minutes into your first `ask`.
 Then fill `chapters/01-first-chapter/_model.py` with the vehicle, say in its
 `index.qmd` what defines the chapter, and `nb ask` it.
 
+You can also just `nb ask` straight away. The first chapter is a **claimable
+stub**: an `ask` that routes `new_chapter` takes the empty scaffold over and
+renames it, rather than leaving a dead `01` beside a real `02`. The scaffold has
+to exist at all because `_quarto.yml`'s `auto: "chapters"` crashes on an empty
+`chapters/`.
+
 Options: a second positional argument is the site title (defaults to the
 directory name); `chapter=` and `chapter_title=` override the first chapter.
 It refuses a non-empty directory and a chapter name that is not `NN-kebab-case`.
@@ -89,7 +101,9 @@ or a truncated paste is silent until the first lint run.
 **Adding a chapter is not this.** Propose `route: "new_chapter"` and `nb write`
 scaffolds it from `chapter_title` and `chapter_defines`. A chapter is a
 structural commitment later entries build on, so it goes through the gate;
-`create_chapter` is deliberately not a tool the model can call. A new *notebook*
+`create_chapter` is deliberately not a tool the model can call. The model
+supplies the slug; the code supplies the number, so a wrong guess renumbers
+rather than aborting a run the ask has already been paid for. A new *notebook*
 is a second aircraft, which is why it is a command you run rather than a route
 the agent can take.
 
@@ -97,7 +111,7 @@ the agent can take.
 
 ## Structure
 
-    __main__.py    the CLI: ask | write
+    __main__.py    the CLI: new | ask | write | view
     config.py      model, paths, caps. Importing it puts vendor/ on sys.path
     schema.py      Proposal and Input. Pydantic generates the tool schemas AND
                    validates on the way back in, so a malformed propose is an
@@ -114,6 +128,7 @@ the agent can take.
     text.py        output truncation
 
     phases/new.py     scaffold a notebook, then lint and preflight it
+    phases/view.py    project render, guarded against re-solving a lost freeze
     phases/ask.py     preflight -> cache -> probe loop -> propose -> exit
     phases/write.py   scaffold? -> write loop -> lint -> render -> verify -> commit
     phases/verify.py  one toolless call on the rendered page + its figures
@@ -136,7 +151,7 @@ at render time anyway.
 
 | | sees | catches |
 |---|---|---|
-| **lint** | the source | all 18 rules — budgets, hand-typed numbers, structure |
+| **lint** | the source | all 19 rules — budgets, hand-typed numbers, structure |
 | **render** | — | code that does not run |
 | **verify** | the *rendered* page and its figures, **not** the conversation | prose that contradicts the output |
 
