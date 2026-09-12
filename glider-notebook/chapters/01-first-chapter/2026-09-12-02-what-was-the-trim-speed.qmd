@@ -1,0 +1,23 @@
+---
+title: "what was the trim speed?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+sol, V_var = optimize_glider()
+trim_speed = sol(V_var)
+```
+
+::: {.hero}
+[`{python} f"{trim_speed:.2f}"` m/s]{.hero-value}
+[trim speed]{.hero-label}
+:::
+
+**Answer.** The optimized glider trims at `{python} f"{trim_speed:.2f}"` m/s to achieve its minimum sink rate.
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_glider)
+```
