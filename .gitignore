@@ -17,6 +17,22 @@ aircraft-notebook/.quarto/
 optimised-glider-notebook/_site/
 optimised-glider-notebook/.quarto/
 
+# Rendered pages and their assets. These land NEXT TO the source rather than in
+# _site/ when a page is rendered on its own, so the _site/ rules above miss them
+# -- which is how seventeen of them once reached history via `git add -A`.
+#
+# The contrast with _freeze/ is the point: _freeze/ holds the frozen RESULT of
+# each entry and is committed deliberately, because regenerating it means
+# re-running solves that take 300-500 s. These are presentation output, rebuilt
+# from _freeze/ plus source in seconds. Same tree, opposite economics.
+#
+# site_libs/ is anchored to a notebook root on purpose: a bare `site_libs/`
+# would also match _freeze/site_libs/, which lives inside the tree that is
+# deliberately kept.
+*/chapters/**/*.html
+*/chapters/**/*_files/
+/*/site_libs/
+
 # Draft/probe work, never committed. Each notebook has its own; the leading
 # underscore is what keeps Quarto from rendering it as part of the project.
 _scratch/
