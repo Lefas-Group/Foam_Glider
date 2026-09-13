@@ -1,0 +1,23 @@
+---
+title: "how do the optimised values compare with their bounds?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+result_dict = optimize_glider()
+sol = result_dict["sol"]
+vars_dict = result_dict["vars"]
+bounds_dict = result_dict["bounds"]
+
+taper_val = sol.value(vars_dict["taper"])
+taper_lb = bounds_dict["taper"][0]
+```
+
+**Answer.** Only the taper ratio hits a bound, resting exactly on its lower limit of `{python} f"{taper_lb:.2f}"` (`{python} f"{taper_val:.4f}"`). All other variables optimize strictly to the interior of their ranges: root chord `{python} f"{sol.value(vars_dict['c_root']):.3f}"` (`{python} f"{bounds_dict['c_root'][0]:.2f}"` to `{python} f"{bounds_dict['c_root'][1]:.2f}"`), CG `{python} f"{sol.value(vars_dict['cg_x']):.3f}"` (`{python} f"{bounds_dict['cg_x'][0]:.2f}"` to `{python} f"{bounds_dict['cg_x'][1]:.2f}"`), alpha `{python} f"{sol.value(vars_dict['alpha']):.2f}"` (`{python} f"{bounds_dict['alpha'][0]:.2f}"` to `{python} f"{bounds_dict['alpha'][1]:.2f}"`), velocity `{python} f"{sol.value(vars_dict['V']):.2f}"` (`{python} f"{bounds_dict['V'][0]:.2f}"` to `{python} f"{bounds_dict['V'][1]:.2f}"`), and flight path angle `{python} f"{sol.value(vars_dict['gamma']):.2f}"` (`{python} f"{bounds_dict['gamma'][0]:.2f}"` to `{python} f"{bounds_dict['gamma'][1]:.2f}"`).
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_glider)
+```
