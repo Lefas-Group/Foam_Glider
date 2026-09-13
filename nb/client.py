@@ -15,7 +15,9 @@ chat-completions shape models poorly.
 from google import genai
 from google.genai import types
 
-from .config import INCLUDE_THOUGHTS, MODEL, THINKING_LEVEL
+# Aliased: `config` is already a function in this module.
+from . import config as settings
+from .config import MODEL, THINKING_LEVEL
 
 _client = None
 
@@ -46,9 +48,12 @@ def client():
 def thinking():
     # MINIMAL is in the enum but 400s on both candidate models; LOW/MEDIUM/HIGH
     # are the usable range.
+    # Read through the module, not a from-import: `--thoughts` sets
+    # config.INCLUDE_THOUGHTS at startup, and a name bound at import time would
+    # never see the change.
     return types.ThinkingConfig(
         thinking_level=getattr(types.ThinkingLevel, THINKING_LEVEL),
-        include_thoughts=INCLUDE_THOUGHTS)
+        include_thoughts=settings.INCLUDE_THOUGHTS)
 
 
 def config(tools=None, system_instruction=None, response_schema=None,

@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS runs (
     solves                 INTEGER,
     solve_seconds          REAL,
     first_pass_violations  INTEGER,  -- write only; the eval
+    lint_calls             INTEGER,  -- times the model asked lint before stopping
     verify_findings        INTEGER,  -- write only
     outcome                TEXT,
     duration_s             REAL
@@ -38,10 +39,23 @@ CREATE TABLE IF NOT EXISTS runs (
 """
 
 
+# Columns added after a database already existed. `CREATE TABLE IF NOT EXISTS`
+# does nothing to a table that is already there, so without this an older
+# notebook's db is missing the column and every INSERT fails with `no such
+# column`. Additive only -- old rows read NULL, which is the truth: nobody
+# counted.
+ADDED = (("lint_calls", "INTEGER"),)
+
+
 def _db(notebook):
     notebook.scratch.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(notebook.scratch / "nb-metrics.db")
     con.execute(SCHEMA)
+    for col, typ in ADDED:
+        try:
+            con.execute(f"ALTER TABLE runs ADD COLUMN {col} {typ}")
+        except sqlite3.OperationalError:
+            pass                      # already there
     return con
 
 
@@ -56,7 +70,8 @@ class Run:
             ts=self.t0, phase=phase, model=MODEL, thinking_level=THINKING_LEVEL,
             question=question, chapter="", entry_stem="", turns=0,
             prompt_tokens=0, cached_tokens=0, output_tokens=0, solves=0,
-            solve_seconds=0.0, first_pass_violations=None, verify_findings=None,
+            solve_seconds=0.0, first_pass_violations=None, lint_calls=0,
+            verify_findings=None,
             outcome="incomplete", duration_s=0.0)
 
     def turn(self, resp):
@@ -66,6 +81,16 @@ class Run:
         self.row["prompt_tokens"] += prompt
         self.row["cached_tokens"] += cached
         self.row["output_tokens"] += out
+        # How hard the model worked to satisfy lint, which
+        # `first_pass_violations` cannot see: that samples AFTER the loop
+        # returns, so a run that spent eight turns in lint/edit still reported
+        # zero. Counted here rather than in each phase's `on_turn` so there is
+        # one implementation and no indentation to get wrong -- the first
+        # attempt at this patched `write.py` and silently missed `ask.py`.
+        parts = (resp.candidates[0].content.parts or []) if resp.candidates else []
+        self.row["lint_calls"] += sum(
+            1 for p in parts
+            if p.function_call and p.function_call.name == "lint")
 
     def set(self, **kw):
         self.row.update(kw)
@@ -86,26 +111,30 @@ def summary(notebook):
     con = _db(notebook)
     rows = con.execute(
         "SELECT phase, model, outcome, turns, prompt_tokens, cached_tokens, "
-        "first_pass_violations, solve_seconds, duration_s, question "
+        "first_pass_violations, lint_calls, solve_seconds, duration_s, question "
         "FROM runs ORDER BY ts DESC LIMIT 25").fetchall()
     if not rows:
         return "no runs recorded yet"
     out = [f"  {'phase':6s} {'model':22s} {'outcome':11s} {'turns':>5s} "
-           f"{'cached%':>7s} {'viol':>4s} {'solve_s':>7s} {'wall_s':>6s}  question"]
-    for (ph, m, oc, t, pt, ct, fv, ss, du, q) in rows:
+           f"{'cached%':>7s} {'viol':>4s} {'lint':>4s} {'solve_s':>7s} "
+           f"{'wall_s':>6s}  question"]
+    for (ph, m, oc, t, pt, ct, fv, lc, ss, du, q) in rows:
         pct = f"{100 * ct / pt:.0f}%" if pt else "-"
         out.append(f"  {ph:6s} {m:22s} {oc:11s} {t:>5d} {pct:>7s} "
-                   f"{'-' if fv is None else fv:>4} {ss:>7.1f} {du:>6.0f}  {q[:40]}")
+                   f"{'-' if fv is None else fv:>4} "
+                   f"{'-' if lc is None else lc:>4} "
+                   f"{ss:>7.1f} {du:>6.0f}  {q[:40]}")
     # The eval, in one line.
     agg = con.execute(
-        "SELECT model, COUNT(*), AVG(first_pass_violations), AVG(turns) "
+        "SELECT model, COUNT(*), AVG(first_pass_violations), AVG(turns), "
+        "AVG(COALESCE(lint_calls, 0)) "
         "FROM runs WHERE phase='write' AND first_pass_violations IS NOT NULL "
         "GROUP BY model").fetchall()
     if agg:
         out.append("\n  first-pass lint violations, by model:")
-        for m, n, v, t in agg:
+        for m, n, v, t, lc in agg:
             out.append(f"    {m:22s} {n:>3d} entries   {v:.2f} violations   "
-                       f"{t:.1f} turns")
+                       f"{t:.1f} turns   {lc:.1f} lint calls")
     con.close()
     return "\n".join(out)
 

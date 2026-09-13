@@ -81,7 +81,7 @@ find things whose name gives no clue.
 - Call `aero_report()` at the end of a probe. It prints what the solves cost, and
   that number becomes the proposal's render cost.
 
-# The 19 rules lint checks
+# The 23 rules lint checks
 
 Know these before drafting, not after. Finding one from a lint run means the
 prose is already written.
@@ -106,6 +106,10 @@ prose is already written.
 17  a frozen entry stays under its chapter's ENTRY_CEILING
 18  the solve budget in force is declared in the chapter's index
 19  a chapter with an entry defines its vehicle in `_model.py`
+20  (warning) an entry-local function reaching the vehicle belongs in _analysis.py
+21  (warning) an `_analysis.py` function nothing calls is dead
+22  (warning) an `_analysis.py` function called only internally is private (`_name`)
+23  every `solve()` passes `verbose` explicitly — IPOPT prints otherwise
 ```
 
 `read_reference("why")` has the failure behind each one. Read it when a rule
@@ -113,6 +117,9 @@ looks arbitrary, or before arguing one away.
 
 Rule 2 is a one-entry fix: promote the shared logic to `_analysis.py` and call it
 from your entry. The earlier entry is not touched.
+
+Rules 20 to 22 are warnings: they describe a chapter's accumulated state rather
+than the entry in front of you, and they do not block a commit.
 
 Rule 19 is about where the aircraft lives. `_model.py` is the vehicle,
 `_analysis.py` is how the chapter measures it, and the entry is one question put

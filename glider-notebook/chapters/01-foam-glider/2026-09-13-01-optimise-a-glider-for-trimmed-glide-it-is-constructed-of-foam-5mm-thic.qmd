@@ -5,48 +5,15 @@ title: "optimise a glider for trimmed glide. It is constructed of foam 5mm thick
 {{< include _model.qmd >}}
 
 ```{python}
-opti = asb.Opti()
-c_root = opti.variable(init_guess=0.08, lower_bound=0.01, upper_bound=0.15)
-taper = opti.variable(init_guess=0.5, lower_bound=0.1, upper_bound=1.0)
-alpha = opti.variable(init_guess=5, lower_bound=-5, upper_bound=15)
-V = opti.variable(init_guess=3, lower_bound=1, upper_bound=20)
-gamma = opti.variable(init_guess=-5, lower_bound=-45, upper_bound=45)
-cg_x = opti.variable(init_guess=0.03, lower_bound=-0.05, upper_bound=0.15)
-
-airplane = make_glider(c_root, taper, cg_x)
-
-aero = asb.AeroBuildup(
-    airplane=airplane,
-    op_point=asb.OperatingPoint(
-        velocity=V,
-        alpha=alpha
-    )
-).run()
-
-mass = (airplane.wings[0].area() + airplane.wings[1].area() + airplane.wings[2].area()) * 0.1744
-weight = mass * 9.81
-
-L = aero["L"]
-D = aero["D"]
-Cm = aero["Cm"]
-
-opti.subject_to([
-    L == weight * np.cosd(gamma),
-    D == weight * np.sind(-gamma),
-    Cm == 0
-])
-
-sink_rate = V * np.sind(-gamma)
-opti.minimize(sink_rate)
-sol = opti.solve()
-
-sol_sink = sol.value(sink_rate)
-sol_taper = sol.value(taper)
-sol_c_root = sol.value(c_root) * 1000
-sol_cg_x = sol.value(cg_x) * 1000
-sol_V = sol.value(V)
-sol_gamma = sol.value(gamma)
-sol_ld = sol.value(L/D)
+res = optimize_glider()
+sol = res["sol"]
+sol_sink = sol.value(res["sink_rate"])
+sol_taper = sol.value(res["vars"]["taper"])
+sol_c_root = sol.value(res["vars"]["c_root"]) * 1000
+sol_cg_x = sol.value(res["vars"]["cg_x"]) * 1000
+sol_V = sol.value(res["vars"]["V"])
+sol_gamma = sol.value(res["vars"]["gamma"])
+sol_ld = sol.value(res["L"] / res["D"])
 ```
 
 ::: {.hero}
@@ -71,5 +38,5 @@ Asked of the user, 2026-09-13:
 ```{python}
 #| echo: false
 #| output: asis
-footer()
+footer(optimize_glider)
 ```

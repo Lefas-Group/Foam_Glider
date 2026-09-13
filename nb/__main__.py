@@ -4,6 +4,10 @@
     nb write <notebook> [--allow-refactor]   resume from an approved proposal
     nb view  <notebook> [--force]            render the whole site
 
+`--thoughts` on ask or write prints the model's reasoning to stderr. Off by
+default: the summaries arrive inside the model turn and are re-sent on every
+later turn, so leaving them on means the model reads its own back.
+
 `ask` runs a question through to a commit. It stops for two things, both of them
 decisions about structure or spend rather than approvals of output: a NEW
 CHAPTER, which later entries build on, and a refused edit to a chapter's
@@ -38,6 +42,13 @@ def main(argv):
         print(USAGE)
         return 0
     cmd, rest = argv[0], argv[1:]
+
+    # Set BEFORE any phase imports, so `client.thinking()` sees it. It reads
+    # through the module for exactly this reason.
+    if "--thoughts" in rest:
+        from . import config
+        config.INCLUDE_THOUGHTS = True
+        rest = [a for a in rest if a != "--thoughts"]
 
     if cmd == "new":
         if not rest:

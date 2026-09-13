@@ -57,6 +57,11 @@ in the entry: an entry answers the question asked and stops.
    the entry calls it. `_model.qmd` already execs it, so those names are in
    scope in your cell -- do not import or redefine them.
 
+6. A helper that solves takes `verbose=False` and passes it to `opti.solve()`
+   (rule 23). IPOPT prints a sixty-line convergence table otherwise, and an
+   entry that publishes one has buried its answer under the working. Keep it a
+   PARAMETER rather than hard-coding False, so a probe can still turn it on.
+
 Today is {today}, so the entry stem is already dated for you. Stop when lint is
 clean; rendering and committing are handled after you finish.
 """

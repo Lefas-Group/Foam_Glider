@@ -47,6 +47,7 @@ entry can be written compliant rather than corrected afterwards.
     20  an entry-local function that reaches the vehicle belongs in `_analysis.py`
     21  an `_analysis.py` function nothing calls is dead
     22  an `_analysis.py` function called only internally is private (`_name`)
+    23  every `solve()` passes `verbose` explicitly
 
 Two details the list cannot carry. A value written as an inline expression counts
 as ONE word, so tightening prose is never at odds with computing the numbers in
@@ -79,10 +80,17 @@ RESULT_NUMBER = re.compile(r"\d+\.\d{2,}")
 # deleting a table moved a footer cell up against two lines of plot styling and
 # completed a three-line block.
 #
+# `from ` is here for the same reason, found the same way. `import ` was already
+# exempt but `from _analysis import optimize_glider` was not -- so an entry that
+# promoted a helper EXACTLY as rule 2 demands was then flagged for the call site
+# promotion creates. Measured: eight turns of lint/edit thrash on one entry,
+# with the model reasoning "wait, but in my previous attempt, lint did pass".
+# A rule must not punish its own remedy.
+#
 # Axis cosmetics are here for the older reason: every figure hides the same
 # spines and sets the same labels, and that says nothing about shared machinery.
 BOILERPLATE = re.compile(
-    r"^(plt\.|ax\d?\.|fig, ax|fig\.|import |show_source\(|footer\(|"
+    r"^(plt\.|ax\d?\.|fig, ax|fig\.|import |from |show_source\(|footer\(|"
     r"for s(ide)? in|\)|\]|\}|else:|try:|finally:)"
 )
 BLOCK = 3  # consecutive code lines that count as a repeated block
@@ -410,6 +418,60 @@ def _one_drift(canonical, local):
     return [(local, f"differs from {canonical} (first at line {n}) — copy the "
                     f"skill's version down, or promote the local change up so "
                     f"every notebook gets it")]
+
+
+def _loud_solves(root, chapters, entries):
+    """
+    Rule 23. A `solve()` says whether it prints.
+
+    IPOPT writes a sixty-line convergence table on every call, and an entry that
+    publishes one has buried its answer under the working -- which the scope
+    rules already forbid in prose and nothing enforced in code. Measured: two
+    consecutive entries did it, both with the table ahead of the hero value.
+
+    The notebooks had already solved this by CONVENTION and nothing held them to
+    it. The mature chapters thread a parameter -- `def optimise(..., verbose=
+    False)` then `opti.solve(verbose=verbose)` -- across seventeen call sites,
+    and only the chapter written after that convention stopped being copied says
+    a bare `opti.solve()`.
+
+    So the rule is that the choice is MADE, not which way it goes.
+    `verbose=verbose` stays legal, and deliberately: it is what lets a probe turn
+    the table back on while diagnosing, where it is genuinely wanted. Requiring
+    `False` would take that away to fix a problem entries have and probes do not.
+
+    Scoped like rule 5, over the shared modules as well as the entry cells: the
+    solve is usually two files from the page. In the entry that earned this, the
+    cell called `optimize_glider()` and the `solve` was in `_analysis.py`, so an
+    entry-only rule would have found nothing at all.
+    """
+    out = []
+    for c in chapters:
+        chapter = root / "chapters" / c
+        pages = [(chapter / n, None) for n in ("_model.py", "_analysis.py")]
+        pages += [(e, "cells") for e in entries if e.parent.name == c]
+        for f, kind in pages:
+            if not f.exists():
+                continue
+            src = entry_cells(f.read_text()) if kind else f.read_text()
+            try:
+                tree = ast.parse(src)
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if not (isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Attribute)
+                        and node.func.attr == "solve"):
+                    continue
+                if any(k.arg == "verbose" for k in node.keywords):
+                    continue
+                where = f"line {node.lineno}: " if not kind else ""
+                out.append((f, f"{where}solve() does not say whether it prints "
+                               f"— IPOPT writes a convergence table by default "
+                               f"and an entry must not publish one. Take a "
+                               f"`verbose=False` parameter and pass it through, "
+                               f"so a probe can still turn it on"))
+    return out
 
 
 def _empty_model(root, chapters, entries):
@@ -843,6 +905,7 @@ def check(root, chapters):
     problems += _notebook_drift(root)
     problems += _empty_model(root, chapters, entries)
     problems += _shared_hygiene(root, chapters, entries)
+    problems += _loud_solves(root, chapters, entries)
     problems += _stale_freeze(root, chapters)
     problems += _budget_rules(root, chapters)
     problems += _visuals_and_tables(root, chapters, entries)

@@ -1,6 +1,6 @@
 # `nb` — the design-notebook agent
 
-Turns a design question into a Quarto lab-notebook entry that passes a 22-rule
+Turns a design question into a Quarto lab-notebook entry that passes a 23-rule
 lint contract, renders, and is checked against its own output before it commits.
 
 Distilled from the `design-notebook` Claude Code skill, and runs without it, on
@@ -87,7 +87,7 @@ uv run --group nb python -m nb.cache     <notebook> [--purge]  # held caches
 uv run --group nb python -m nb.prefix    <notebook> --measure  # cached prefix size
 uv run --group nb python -m nb.manifest  <notebook>            # what the model sees
 uv run --group nb python -m nb.preflight <notebook>            # before any tokens
-uv run --group nb python nb/vendor/lint.py <notebook>          # the 22 rules
+uv run --group nb python nb/vendor/lint.py <notebook>          # the 23 rules
 ```
 
 ---
@@ -185,7 +185,7 @@ at render time anyway.
 
 | | sees | catches |
 |---|---|---|
-| **lint** | the source | all 22 rules — budgets, hand-typed numbers, structure |
+| **lint** | the source | all 23 rules — budgets, hand-typed numbers, structure |
 | **render** | — | code that does not run |
 | **verify** | the *rendered* page and its figures, **not** the conversation | prose that contradicts the output |
 
@@ -203,9 +203,16 @@ the way it always did. Separate them when you want one or the other:
 stop, the commit line, and the finished entry with its real numbers. The things
 you act on.
 
-**stderr is the telemetry** — one line per turn with tokens and tool, the model's
-own reasoning, lint, verify, render, probe budgets. The things you read when you
-want to know *why*.
+**stderr is the telemetry** — one line per turn with tokens and tool, lint,
+verify, render, probe budgets. The things you read when you want to know *why*.
+
+`--thoughts` adds the model's own reasoning to that stream. **Off by default**,
+and not only for tidiness: thought summaries arrive *inside* the model turn,
+which `loop.py` appends whole, so leaving them on means every later turn
+re-sends them and the model reads its own summaries back. Measured, those
+summaries confabulate on short turns — one decided `lint` meant fabric lint.
+A run is reproducible from `proposal.json`, so re-running with the flag when
+something looks wrong is cheap.
 
 ```bash
 ASK="uv run --group nb python -m nb ask"
@@ -214,6 +221,7 @@ $ASK <notebook> "…" 2>/dev/null   # conversation only — questions and the en
 $ASK <notebook> "…" 2>run.log     # same, telemetry kept for afterwards
 $ASK <notebook> "…" 2>&1 | less   # both, interleaved and scrollable
 $ASK <notebook> "…" >entry.md     # telemetry on screen, the entry into a file
+$ASK <notebook> "…" --thoughts    # add the model's reasoning to stderr
 ```
 
 **Careful with `>/dev/null`.** The questions live on stdout, so discarding it
