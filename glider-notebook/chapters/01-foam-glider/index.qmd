@@ -4,19 +4,35 @@ title: "Foam glider"
 
 {{< include _model.qmd >}}
 
-A 300mm span glider constructed from 5mm foam sheets, optimizing planform and trim state with `AeroBuildup`. Assumes negligible fuselage mass/drag and uses NACA4405/0005 airfoils to represent the 5mm foam.
+A 300 mm span glider cut from a single 5 mm foam sheet, sized for minimum sink
+rate in trimmed glide with `AeroBuildup`.
+
+- **Planform is the design space.** Root chord, taper and wing station are free;
+  the span is not.
+- **Trimmed, not just balanced.** Lift carries the weight and `Cm` is zero at
+  the solved CG, so every answer is a flyable state.
+- **Left out:** the fuselage, the launch, the transient — steady glide only.
+- **Held fixed:** the tail, the sections, and the sheet it is all cut from.
 
 ::: {.callout-tip}
 ## Specified
 
-1. **<quantity>: <value>** — <why, if it fits>.
-2. Solve budget `{python} f"{solve_budget():.0f}"` s, the notebook default.
+Asked of the user, 2026-09-13:
+
+1. **Span 300 mm**, fixed tip to tip.
+2. **Foam 5 mm, 174.4 g/m²** sheet throughout.
+3. **Objective: minimum sink rate** in trimmed glide.
+4. Solve budget `{python} f"{solve_budget():.0f}"` s, the notebook default.
 :::
 
 ::: {.callout-note}
 ## Assumed
 
-1. **<quantity>: <value>**, <the one-clause reason>.
+No owner yet — each is a candidate for its own entry:
+
+1. **Tail: H 100×30 mm, V 50×30 mm**, fixed.
+2. **Sections NACA4405 and NACA0005**, standing in for foam.
+3. **Fuselage neglected**, both its mass and its drag.
 :::
 
 ## The model

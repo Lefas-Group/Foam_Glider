@@ -111,6 +111,9 @@ def main(notebook_path, question, carry_queue=None, verbose=True):
                             solves=session.solves,
                             solve_seconds=round(session.solve_seconds, 1))
             run_metrics.close("proposed")
+            if session.probe_pool:
+                say(f"  budget    {session.probe_spent:.0f} s of "
+                    f"{session.probe_pool:.0f} s probe pool used")
             # A new chapter is the one stop that survives on this side of the
             # run: it is a structural commitment later entries build on, far
             # harder to undo than an entry, and it is decided BEFORE any of the

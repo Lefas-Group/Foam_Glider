@@ -81,7 +81,7 @@ find things whose name gives no clue.
 - Call `aero_report()` at the end of a probe. It prints what the solves cost, and
   that number becomes the proposal's render cost.
 
-# The 23 rules lint checks
+# The 24 rules lint checks
 
 Know these before drafting, not after. Finding one from a lint run means the
 prose is already written.
@@ -110,6 +110,7 @@ prose is already written.
 21  (warning) an `_analysis.py` function nothing calls is dead
 22  (warning) an `_analysis.py` function called only internally is private (`_name`)
 23  every `solve()` passes `verbose` explicitly — IPOPT prints otherwise
+24  a chapter with an entry has no unfilled index placeholder
 ```
 
 `read_reference("why")` has the failure behind each one. Read it when a rule

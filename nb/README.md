@@ -1,6 +1,6 @@
 # `nb` — the design-notebook agent
 
-Turns a design question into a Quarto lab-notebook entry that passes a 23-rule
+Turns a design question into a Quarto lab-notebook entry that passes a 24-rule
 lint contract, renders, and is checked against its own output before it commits.
 
 Distilled from the `design-notebook` Claude Code skill, and runs without it, on
@@ -87,7 +87,7 @@ uv run --group nb python -m nb.cache     <notebook> [--purge]  # held caches
 uv run --group nb python -m nb.prefix    <notebook> --measure  # cached prefix size
 uv run --group nb python -m nb.manifest  <notebook>            # what the model sees
 uv run --group nb python -m nb.preflight <notebook>            # before any tokens
-uv run --group nb python nb/vendor/lint.py <notebook>          # the 23 rules
+uv run --group nb python nb/vendor/lint.py <notebook>          # the 24 rules
 ```
 
 ---
@@ -185,7 +185,7 @@ at render time anyway.
 
 | | sees | catches |
 |---|---|---|
-| **lint** | the source | all 23 rules — budgets, hand-typed numbers, structure |
+| **lint** | the source | all 24 rules — budgets, hand-typed numbers, structure |
 | **render** | — | code that does not run |
 | **verify** | the *rendered* page and its figures, **not** the conversation | prose that contradicts the output |
 

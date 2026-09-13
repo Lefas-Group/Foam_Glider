@@ -76,9 +76,15 @@ def chapter_context(notebook):
         out.append(f"\n## chapters/{chapter}\n")
         index = d / "index.qmd"
         if index.exists():
+            # Up to `## The model` only. That heading opens a `pathlib` loop
+            # that prints `_model.py` and `_analysis.py` into the RENDERED page
+            # -- near-identical in every chapter, worth nothing for routing, and
+            # measured at 620 tokens of this prefix on every turn. The file
+            # serves a reader and the model; only the reader wants the listing.
+            defining = index.read_text().split("## The model")[0]
             out.append("### index.qmd — what defines this chapter\n")
             out.append("```")
-            out.append(index.read_text().strip())
+            out.append(defining.strip())
             out.append("```\n")
 
         funcs, consts = module_summary(d / "_model.py")

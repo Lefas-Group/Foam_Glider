@@ -1,0 +1,31 @@
+---
+title: "how long does the optimised design fly for, compared with the previous deign?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+opt_sink, opt_gamma, opt_v = get_optimized_flight_path()
+
+h = 2.0
+flight_time = h / opt_sink
+distance = opt_v * np.cosd(opt_gamma) * flight_time
+```
+
+::: {.hero}
+[`{python} f"{flight_time:.2f}"`]{.hero-value}
+[s flight time]{.hero-label}
+:::
+
+**Answer.** From a launch height of `{python} f"{h:.0f}"` m, the optimised glider flies for `{python} f"{flight_time:.2f}"` s and covers `{python} f"{distance:.2f}"` m horizontally. The comparison to the previous design is omitted because the unoptimised initial guess does not achieve trimmed flight.
+
+::: {.callout-note}
+## Assumed
+1. **Launch height: `{python} f"{h:.0f}"` m**, needs starting altitude.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_glider, get_optimized_flight_path)
+```

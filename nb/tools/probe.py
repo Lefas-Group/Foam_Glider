@@ -17,6 +17,7 @@ import textwrap
 import time
 
 from .. import budgets
+from ..log import say
 from ..text import tail
 
 PREAMBLE = (
@@ -54,6 +55,8 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
     if session is not None:
         granted, left = session.take_probe_budget(budget_s)
         if granted is not None and left is not None and left <= 0:
+            say(f"  budget    probe pool EXHAUSTED — "
+                f"{session.probe_pool:.0f} s spent; forcing a proposal")
             return ("probe pool exhausted -- this run has spent all the probe "
                     "wall clock it was given. Propose now with what you have, "
                     "and say in `rationale` what you did not get to.")
@@ -76,13 +79,21 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
         out = got + f"\n[killed at {timeout:.0f}s -- outlived the chapter watchdog]"
 
     if session is not None:
-        session.record_probe(time.perf_counter() - started)
+        used = time.perf_counter() - started
+        session.record_probe(used)
         left = session.probe_left
         if left is not None:
+            # To the MODEL, so the next `budget_s` is informed rather than
+            # guessed. Reported after the probe ran, because "used" is the half
+            # that tells it whether its own estimate was any good.
             out += (f"\n[probe budget: {granted:.0f} s granted, "
-                    f"{time.perf_counter() - started:.0f} s used; "
-                    f"{left:.0f} s of the run's pool left. Budget the next probe "
-                    f"with `budget_s`.]")
+                    f"{used:.0f} s used; {left:.0f} s of the run's pool left. "
+                    f"Budget the next probe with `budget_s`.]")
+            # And to the TERMINAL. The turn line above says a probe ran; it
+            # cannot say what it cost, because `on_turn` fires before the
+            # handler does. This is the only place that knows all three numbers.
+            say(f"  budget    probe {granted:.0f} s granted · {used:.0f} s used"
+                f" · {left:.0f} s of {session.probe_pool:.0f} s pool left")
         solves, seconds = budgets.aero_cost(out)
         session.record_cost(solves, seconds)
         ceiling = budgets.entry_ceiling(notebook, chapter)

@@ -62,6 +62,11 @@ in the entry: an entry answers the question asked and stops.
    entry that publishes one has buried its answer under the working. Keep it a
    PARAMETER rather than hard-coding False, so a probe can still turn it on.
 
+7. Anything true of EVERY entry in `{chapter}` belongs in its index.qmd, not in
+   your entry -- the section, the objective, the fixed dimensions, what is left
+   out. Your entry keeps what THIS question produced. If the index still holds
+   template placeholders, fill them (rule 24).
+
 Today is {today}, so the entry stem is already dated for you. Stop when lint is
 clean; rendering and committing are handled after you finish.
 """
@@ -162,18 +167,26 @@ def _commit_with_lock_retry(repo, title, paths, attempts=3):
     return out
 
 
-def _commit(notebook, chapter, stem, entry_path, title):
+def _commit(notebook, chapter, stem, entry_path, title, extra_paths=()):
     """
     Commit exactly what this run produced, by path.
 
     Never `git add -A`. The working tree carries untracked Quarto output --
     `chapters/**/*.html`, `site_libs/` -- from any `quarto preview` or render
     that happened to be running, and a blanket add sweeps it into history.
+
+    `extra_paths` exists for an accepted refactor. `check` deletes and
+    re-renders EVERY page that reaches the changed function, so the siblings'
+    frozen output on disk no longer matches what is committed -- and committing
+    only this entry's freeze would leave the repository in the exact state the
+    freeze exists to prevent, a committed freeze that does not correspond to the
+    committed code.
     """
     repo = notebook.root.parent
     rel = lambda p: str(pathlib.Path(p).relative_to(repo))
 
     paths = [rel(entry_path)]
+    paths += [rel(p) for p in extra_paths if pathlib.Path(p).exists()]
     freeze = notebook.freeze / chapter / stem
     if freeze.exists():
         paths.append(rel(freeze))
@@ -208,7 +221,8 @@ def _commit(notebook, chapter, stem, entry_path, title):
     return sha, ", ".join(paths)
 
 
-def main(notebook_path, verbose=True, allow_refactor=False):
+def main(notebook_path, verbose=True, allow_refactor=False,
+         accept_refactor=False):
     bad = preflight(notebook_path)
     if bad:
         for b in bad:
@@ -251,7 +265,11 @@ def main(notebook_path, verbose=True, allow_refactor=False):
     run_metrics.set(chapter=proposal.chapter, entry_stem=stem)
     session = Session(notebook, proposal.question, proposal.chapter,
                       metrics=run_metrics)
+    # Accepting implies allowing: you cannot accept a diff you were never
+    # permitted to produce.
+    allow_refactor = allow_refactor or accept_refactor
     session.allow_refactor = allow_refactor
+    accepted = []
     # Snapshot the shared modules BEFORE the loop. Adding an `_analysis.py`
     # helper is safe -- rule 2 promotion leaves siblings untouched -- but
     # changing the body of one a sibling already calls is a refactor, and the
@@ -378,14 +396,26 @@ def main(notebook_path, verbose=True, allow_refactor=False):
             # `check` reports its own exit code in the first line; non-zero
             # means the diff was not empty, which IS the finding.
             if not str(out).startswith("check exit=0"):
-                tell(f"\n  {'─' * 70}\n  REFACTOR CHANGED THE ANSWERS — not "
-                     f"committed\n  {'─' * 70}\n{out}\n"
-                     f"  The entry and the changed machinery are on disk. Either "
-                     f"the change is wrong, or the entries it moved need\n"
-                     f"  superseding rather than silently updating.\n")
-                run_metrics.close("refactor_moved_answers")
-                return 1
-            say("  check     clean — the refactor moved nothing")
+                # The diff prints EITHER WAY. Accepting is meant to be loud:
+                # `refactoring.md` holds that a refactor which moves anything
+                # wants superseding rather than silent updating, and accepting
+                # overrides that judgement, so the evidence goes on the record
+                # rather than being swallowed by a flag.
+                tell(f"\n  {'─' * 70}\n  REFACTOR CHANGED THE ANSWERS"
+                     f"{' — ACCEPTED' if accept_refactor else ' — not committed'}"
+                     f"\n  {'─' * 70}\n{out}\n")
+                if not accept_refactor:
+                    tell(f"  The entry and the changed machinery are on disk. "
+                         f"Either the change is wrong, or the entries it moved\n"
+                         f"  need superseding rather than silently updating. If "
+                         f"the diff is presentation only and you have read it:\n"
+                         f"    python -m nb write {notebook.root.name} "
+                         f"--accept-refactor\n")
+                    run_metrics.close("refactor_moved_answers")
+                    return 1
+                accepted = moved
+            else:
+                say("  check     clean — the refactor moved nothing")
     except Refactor as r:
         # The agent tried to change the vehicle, was refused, and said why.
         # Ending here is the point: re-proving a chapter is minutes of solves,
@@ -402,15 +432,28 @@ def main(notebook_path, verbose=True, allow_refactor=False):
         fs.stop()
 
     # --- commit ------------------------------------------------------------
+    # An accepted refactor re-rendered every page reaching the changed function,
+    # so the whole chapter's freeze goes in -- siblings and the chapter index --
+    # or the committed freeze stops matching the committed code.
+    title = proposal.title
+    extra = ()
+    if accepted:
+        extra = (notebook.freeze / proposal.chapter,)
+        title += ("\n\nAccepted refactor: " + ", ".join(accepted) +
+                  f". {_siblings} sibling entr"
+                  f"{'y' if _siblings == 1 else 'ies'} re-proved and re-frozen.")
     sha, detail = _commit(notebook, proposal.chapter, stem, entry_path,
-                          proposal.title)
+                          title, extra_paths=extra)
     if sha is None:
         say(f"  commit    FAILED — {detail}")
         run_metrics.close("commit_failed")
         return 1
     tell(f"  commit    {sha}  ({detail})")
     say(f"  first-pass violations: {first_pass}")
-    run_metrics.close("committed")
+    if session.probe_pool:
+        say(f"  budget    {session.probe_spent:.0f} s of "
+            f"{session.probe_pool:.0f} s probe pool used")
+    run_metrics.close("committed_refactor" if accepted else "committed")
 
     # The entry itself, with real numbers. Conversation, not telemetry: it is
     # the thing to read, and with no gate before it this is where a reader --

@@ -1,7 +1,7 @@
 import aerosandbox as asb
 import aerosandbox.numpy as np
 
-def optimize_glider():
+def optimize_glider(verbose=False):
     opti = asb.Opti()
     c_root = opti.variable(init_guess=0.08, lower_bound=0.01, upper_bound=0.15)
     taper = opti.variable(init_guess=0.5, lower_bound=0.1, upper_bound=1.0)
@@ -35,7 +35,7 @@ def optimize_glider():
 
     sink_rate = V * np.sind(-gamma)
     opti.minimize(sink_rate)
-    sol = opti.solve()
+    sol = opti.solve(verbose=verbose)
     
     return {
         "sol": sol,
@@ -59,3 +59,11 @@ def optimize_glider():
             "cg_x": (-0.05, 0.15),
         }
     }
+
+def get_optimized_flight_path():
+    res = optimize_glider()
+    sol = res['sol']
+    opt_sink = sol.value(res['sink_rate'])
+    opt_gamma = sol.value(res['vars']['gamma'])
+    opt_v = sol.value(res['vars']['V'])
+    return opt_sink, opt_gamma, opt_v

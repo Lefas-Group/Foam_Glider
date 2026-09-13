@@ -48,6 +48,7 @@ entry can be written compliant rather than corrected afterwards.
     21  an `_analysis.py` function nothing calls is dead
     22  an `_analysis.py` function called only internally is private (`_name`)
     23  every `solve()` passes `verbose` explicitly
+    24  a chapter with an entry has no unfilled index placeholder
 
 Two details the list cannot carry. A value written as an inline expression counts
 as ONE word, so tightening prose is never at odds with computing the numbers in
@@ -418,6 +419,48 @@ def _one_drift(canonical, local):
     return [(local, f"differs from {canonical} (first at line {n}) — copy the "
                     f"skill's version down, or promote the local change up so "
                     f"every notebook gets it")]
+
+
+# `<quantity>`, `<value>`, `<why, if it fits>` -- and the chapter-defines
+# placeholder that also marks a stub as claimable. Angle-bracketed lowercase
+# prose is not something a real index writes, and nothing in the eight real
+# indexes matches it.
+PLACEHOLDER = re.compile(r"<[a-z][^>\n]{2,60}>")
+
+
+def _unfinished_index(root, chapters, entries):
+    """
+    Rule 24. A chapter that has an entry has an index someone finished.
+
+    The scaffold ships `1. **<quantity>: <value>** — <why, if it fits>.` inside
+    both callouts, and `create_chapter` substitutes only the prose line, so a
+    chapter gets described and its callouts stay as template text -- which then
+    renders into the published site verbatim. Nothing caught it: rule 8 counts
+    those words and passes at eight, and rule 1 sees no digits.
+
+    Exempt while the chapter has no entries, exactly like rule 19: a freshly
+    scaffolded chapter is unfinished on purpose, and becomes a defect only once
+    something has been written into it.
+
+    This also catches a chapter that acquired entries while still carrying the
+    `claimable_stub` placeholder -- the same failure one tier up.
+    """
+    out = []
+    for c in chapters:
+        if not any(e.parent.name == c for e in entries):
+            continue
+        index = root / "chapters" / c / "index.qmd"
+        try:
+            hits = PLACEHOLDER.findall(index.read_text())
+        except OSError:
+            continue
+        if hits:
+            out.append((index, f"still carries scaffold placeholders "
+                               f"({', '.join(sorted(set(hits))[:3])}) — fill the "
+                               f"Specified and Assumed callouts with what is "
+                               f"true of EVERY entry in this chapter, or delete "
+                               f"the lines"))
+    return out
 
 
 def _loud_solves(root, chapters, entries):
@@ -906,6 +949,7 @@ def check(root, chapters):
     problems += _empty_model(root, chapters, entries)
     problems += _shared_hygiene(root, chapters, entries)
     problems += _loud_solves(root, chapters, entries)
+    problems += _unfinished_index(root, chapters, entries)
     problems += _stale_freeze(root, chapters)
     problems += _budget_rules(root, chapters)
     problems += _visuals_and_tables(root, chapters, entries)

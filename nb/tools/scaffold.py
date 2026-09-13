@@ -165,6 +165,14 @@ def create_chapter(notebook, name, title, defines="", claim=True,
             f"_model.py holds a function taking the design variables and "
             f"returning the Airplane; the entry calls it. Do not restate the "
             f"geometry in the entry cell.\n\n"
-            f"State in index.qmd what defines this chapter -- the aero method, "
-            f"the section, what is left out. Those chapter-level assumptions "
-            f"belong there and must NOT be repeated in entry prose.")
+            f"Then FILL chapters/{name}/index.qmd -- not only the sentence at "
+            f"the top, but both callouts, which ship as template placeholders "
+            f"and are a lint failure if left (rule 24).\n\n"
+            f"The test for what goes there: IS IT TRUE OF EVERY ENTRY THIS "
+            f"CHAPTER WILL HAVE? The section, the objective, the fixed "
+            f"dimensions, what is left out -- those are the chapter's, and they "
+            f"go in index.qmd, dated, and must NOT be repeated in entry prose. "
+            f"A number this one question produced is the entry's, and stays "
+            f"there. An index left empty makes every later entry restate the "
+            f"same commitments or silently inherit them from an entry that can "
+            f"be superseded.")

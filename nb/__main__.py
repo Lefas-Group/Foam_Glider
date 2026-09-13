@@ -2,6 +2,7 @@
     nb new   <notebook> [title]              scaffold a notebook, then prove it
     nb ask   <notebook> "<question>"         probe, write, render, commit
     nb write <notebook> [--allow-refactor]   resume from an approved proposal
+             [--accept-refactor]             …and commit a diff you have read
     nb view  <notebook> [--force]            render the whole site
 
 `--thoughts` on ask or write prints the model's reasoning to stderr. Off by
@@ -69,7 +70,9 @@ def main(argv):
             print(USAGE)
             return 2
         from .phases.write import main as write
-        return write(rest[0], allow_refactor="--allow-refactor" in rest)
+        return write(rest[0],
+                     allow_refactor="--allow-refactor" in rest,
+                     accept_refactor="--accept-refactor" in rest)
 
     if cmd == "view":
         if not rest:
