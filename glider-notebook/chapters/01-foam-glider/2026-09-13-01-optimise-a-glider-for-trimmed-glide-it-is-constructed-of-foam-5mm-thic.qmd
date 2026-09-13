@@ -1,0 +1,75 @@
+---
+title: "optimise a glider for trimmed glide. It is constructed of foam 5mm thick density 174.4g/m^2, with a fixed 300mm span and a sensibly sized, fixed tail"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+opti = asb.Opti()
+c_root = opti.variable(init_guess=0.08, lower_bound=0.01, upper_bound=0.15)
+taper = opti.variable(init_guess=0.5, lower_bound=0.1, upper_bound=1.0)
+alpha = opti.variable(init_guess=5, lower_bound=-5, upper_bound=15)
+V = opti.variable(init_guess=3, lower_bound=1, upper_bound=20)
+gamma = opti.variable(init_guess=-5, lower_bound=-45, upper_bound=45)
+cg_x = opti.variable(init_guess=0.03, lower_bound=-0.05, upper_bound=0.15)
+
+airplane = make_glider(c_root, taper, cg_x)
+
+aero = asb.AeroBuildup(
+    airplane=airplane,
+    op_point=asb.OperatingPoint(
+        velocity=V,
+        alpha=alpha
+    )
+).run()
+
+mass = (airplane.wings[0].area() + airplane.wings[1].area() + airplane.wings[2].area()) * 0.1744
+weight = mass * 9.81
+
+L = aero["L"]
+D = aero["D"]
+Cm = aero["Cm"]
+
+opti.subject_to([
+    L == weight * np.cosd(gamma),
+    D == weight * np.sind(-gamma),
+    Cm == 0
+])
+
+sink_rate = V * np.sind(-gamma)
+opti.minimize(sink_rate)
+sol = opti.solve()
+
+sol_sink = sol.value(sink_rate)
+sol_taper = sol.value(taper)
+sol_c_root = sol.value(c_root) * 1000
+sol_cg_x = sol.value(cg_x) * 1000
+sol_V = sol.value(V)
+sol_gamma = sol.value(gamma)
+sol_ld = sol.value(L/D)
+```
+
+::: {.hero}
+[`{python} f"{sol_sink:.2f}"` m/s]{.hero-value}
+[Minimum sink rate]{.hero-label}
+:::
+
+**Answer.** The optimum configuration features a highly tapered planform, hitting the lower taper bound of `{python} f"{sol_taper:.1f}"` to yield a root chord of `{python} f"{sol_c_root:.0f}"` mm. Trim is achieved with the CG at `{python} f"{sol_cg_x:.0f}"` mm, gliding at `{python} f"{sol_V:.1f}"` m/s on a flight path angle of `{python} f"{sol_gamma:.1f}"`&deg; (L/D of `{python} f"{sol_ld:.1f}"`).
+
+::: {.callout-tip}
+## Specified
+Asked of the user, 2026-09-13:
+
+1. **Objective: Minimize sink rate** — distance vs flight time.
+:::
+
+::: {.callout-note}
+## Assumed
+1. **Tail: H-tail 100x30mm, V-tail 50x30mm**, decoupling from wing.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```
