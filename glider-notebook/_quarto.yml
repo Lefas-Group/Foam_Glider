@@ -1,0 +1,50 @@
+project:
+  type: website
+  output-dir: _site
+  # Run every cell from the notebook/ root so relative paths mean the same
+  # thing regardless of which page is being rendered.
+  execute-dir: project
+
+website:
+  title: "Optimised Glider II Notebook"
+  description: "A chronological record of questions asked about the aircraft."
+  # Next/Previous links in each page footer, so entries read straight through.
+  page-navigation: true
+  sidebar:
+    style: docked
+    contents:
+      # Subdirectories become sections. Entry filenames start with their date,
+      # so alphabetical order is chronological order.
+      #
+      # `auto` REQUIRES a non-empty chapters/ -- on an empty one it dies with
+      # "TypeError: Cannot convert undefined or null to object". That is why
+      # `nb new` always scaffolds a first chapter, and why the first entry that
+      # needs a new chapter CLAIMS that scaffold rather than adding a sibling
+      # beside it (Notebook.claimable_stub).
+      - auto: "chapters"
+
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    # Scales matplotlib output down to the content column so pages never scroll
+    # sideways.
+    css: styles.css
+    # Code is folded away everywhere by default -- the prose and figures are the
+    # content; the code is there when you want to check it.
+    code-fold: true
+    code-summary: "Show code"
+    code-copy: true
+    code-overflow: wrap
+    fig-width: 8
+    fig-height: 4.5
+    fig-dpi: 150
+
+execute:
+  # Entries are written once, debugged, then left alone -- so freeze genuinely
+  # freezes them. Commit _freeze/ so a fresh clone renders without re-solving.
+  # NOTE: freeze tracks page files, not their includes -- so editing a
+  # chapter's _model.py does NOT invalidate its entries. Delete
+  # _freeze/chapters/01-first-chapter/ and render. There is no --no-freeze flag.
+  freeze: auto
+  warning: false

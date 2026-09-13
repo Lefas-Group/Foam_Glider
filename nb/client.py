@@ -42,7 +42,15 @@ def config(tools=None, cached_content=None, system_instruction=None,
     object already carries the system instruction and the tool declarations, and
     passing either alongside it is an error.
     """
-    kw = {"thinking_config": thinking()}
+    # AFC is on by default, so every call takes the SDK's function-calling path,
+    # logs a warning once per process, and deep-copies the config each turn. It
+    # then breaks immediately, because the map it builds comes from CALLABLES in
+    # `tools` and we pass only declarations -- so it costs nothing today, by
+    # accident. Disabling it says so on purpose, and stops the SDK ever executing
+    # a handler behind the loop's back if a callable is passed here by mistake.
+    kw = {"thinking_config": thinking(),
+          "automatic_function_calling":
+              types.AutomaticFunctionCallingConfig(disable=True)}
     if cached_content:
         kw["cached_content"] = cached_content
     else:
