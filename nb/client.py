@@ -22,7 +22,23 @@ _client = None
 def client():
     global _client
     if _client is None:
-        _client = genai.Client()
+        # The SDK's default is NEVER retry -- `retry_args(None)` returns
+        # `stop_after_attempt(1)`. So a single 429 or 503 killed a run outright,
+        # discarding up to 960 s of solves and everything the conversation had
+        # established. Six attempts is ~31 s of patience (1+2+4+8+16, jittered)
+        # against a loss measured in minutes.
+        #
+        # Retrying belongs HERE, below the seam, not in the loop: tenacity wraps
+        # `_request_once` with the request already serialised, so the bytes on
+        # the wire are identical on every attempt -- thought signatures included.
+        # A retry built one layer up would rebuild the request, which is the
+        # thing `loop.py` exists to never do.
+        #
+        # Retriable by default: 408, 429, 500, 502, 503, 504, and httpx
+        # transient errors. A 400 -- a missing signature, a bad schema -- is not
+        # retried, which is right: it would fail identically five times.
+        _client = genai.Client(http_options=types.HttpOptions(
+            retry_options=types.HttpRetryOptions(attempts=6)))
     return _client
 
 

@@ -127,8 +127,9 @@ when a refactor happened; stop on a dirty diff.**
 **6. Keep `proposal.json` as an internal handoff: one command, two
 conversations.** The write phase starts a fresh conversation from the proposal,
 inside the same process, without stopping.
-*Why:* the two surviving stops resume via `nb write`, which needs something
-durable on disk — otherwise they need 4h's unproven conversation persistence.
+*Why:* the two surviving stops resume via `nb write`, and `proposal.json` is the
+**only** thing that crosses that boundary — there is no conversation persistence
+and none is planned, so without it the stops cannot resume at all.
 **The cost argument is weak and was overstated in an earlier draft:** at the
 measured 95% hit rate, split is ~$0.404 and merged ~$0.429 — about 6%, 2.5p an
 entry. Keep it for the resume, not the money.
@@ -149,10 +150,11 @@ human framing of `render_cost_s`.
 already a file. A graph buys resuming *mid-node*, which we never want — resuming
 mid-probe re-runs the probe. The conditional is a Python `if`; a conditional edge
 is the same `if` plus a serialisation format, a checkpointer and a node boundary.
-And the one thing a graph would give — conversation persistence — it does not
-solve, because thought signatures are opaque provider bytes with nowhere to live
-in a normalised message shape. **Revisit if** a run needs three or more stops,
-stops in any order, or a resume without a process boundary.
+The one thing a graph would give — conversation persistence — it does not solve
+anyway, because thought signatures are opaque provider bytes with nowhere to live
+in a normalised message shape; and having dropped the revise path, we no longer
+want it. **Revisit if** a run needs three or more stops, stops in any order, or a
+resume without a process boundary.
 
 **Counter-argument to keep in view:** four instances at ~8 min/entry is ~30
 unreviewed entries an hour. That argues for batch review, not for blocking each
@@ -388,24 +390,6 @@ identical code. The four budgets sit *above* all of that, as allocation.
 
 ---
 
-## Stage 4h — the revise path
-
-`nb revise <notebook> "<feedback>"` reloads the conversation, appends the
-feedback, and continues to a new proposal.
-
-**1. `loop.py`: `dump(contents)` / `load()` with base64'd thought signatures.**
-**2. `phases/revise.py` (new); `__main__.py`: `revise` subcommand.**
-
-*Why:* a coordinator negotiates rather than accepts, and re-running `ask` per round
-costs $0.46 and thirteen probes. **A convenience, not a prerequisite** — with no
-gate to reject at, a follow-up is just the next `nb ask`; this only saves
-re-probing.
-
-**Prove signature round-tripping first**, with the existing negative control, so a
-silent loss shows up as the 400 it should be.
-
----
-
 ## Verification
 
 **The two-instance collision test comes first.** Every claim in 4c and 4d is
@@ -435,8 +419,6 @@ order, then keep it as the regression test.
   ~67%; watch `cached_tokens` for a silent regression.
 - **4g** — a run given a deliberately small token budget proposes rather than dying;
   declared vs actual render cost is recorded and the error is visible.
-- **4h** — a conversation dumped and reloaded in a fresh process continues without a
-  400; the negative control still 400s.
 
 ---
 
@@ -453,11 +435,10 @@ order, then keep it as the regression test.
 7. **4f, caching** — measured; deletes code rather than adding it. Any time.
 8. **4g, budgets** — needs 4a's split to report spend without drowning the
    conversation.
-9. **4h, revise** — needs signature persistence proven first.
 
 Step 3 is worth doing for its own sake. Steps 2, 4 and 5 are the minimum for
 parallel chapters. Step 6 is what stops the coordinator deciding the design
-itself. 7–9 make it economical and conversational.
+itself. 7 and 8 make it economical.
 
 ---
 
