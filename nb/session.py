@@ -6,12 +6,12 @@ boundary. This exists so the handlers that ask the human, and the handlers that
 spend solve seconds, can agree on what has happened so far.
 """
 
-from .config import MAX_CONSULTS
+from .config import MAX_CONSULTS, PROBE_POOL
 
 
 class Session:
     def __init__(self, notebook, question, chapter=None, carry_queue=None,
-                 metrics=None):
+                 metrics=None, probe_pool=PROBE_POOL):
         self.notebook = notebook
         self.question = question
         self.chapter = chapter
@@ -24,10 +24,36 @@ class Session:
         self.consults = 0
         self.solves = 0
         self.solve_seconds = 0.0
+        # Probe wall clock: a pool the agent spends from, not a per-probe cap.
+        self.probe_pool = probe_pool
+        self.probe_spent = 0.0
 
     def record_cost(self, solves, seconds):
         self.solves += solves
         self.solve_seconds += seconds
+
+    def take_probe_budget(self, asked):
+        """
+        Grant `asked` seconds of probe wall clock, or whatever is left.
+
+        Clamped rather than refused, for the same reason a wrong chapter number
+        is renumbered rather than rejected: the agent cannot know what is left
+        before it asks, and failing a run over a guess is the expensive way to
+        say no.
+        """
+        if not self.probe_pool:
+            return None, None
+        left = max(0.0, self.probe_pool - self.probe_spent)
+        return min(float(asked), left) if asked else left, left
+
+    def record_probe(self, seconds):
+        self.probe_spent += seconds
+
+    @property
+    def probe_left(self):
+        if not self.probe_pool:
+            return None
+        return max(0.0, self.probe_pool - self.probe_spent)
 
     def record_answer(self, name, value):
         self.asked[name] = value

@@ -1,6 +1,6 @@
 # `nb` — the design-notebook agent
 
-Turns a design question into a Quarto lab-notebook entry that passes a 19-rule
+Turns a design question into a Quarto lab-notebook entry that passes a 22-rule
 lint contract, renders, and is checked against its own output before it commits.
 
 Distilled from the `design-notebook` Claude Code skill, and runs without it, on
@@ -25,19 +25,50 @@ uv run --group nb python -m nb new <notebook> [title]   # once per aircraft
 uv run --group nb python -m nb ask <notebook> "why is the tail so big?"
 ```
 
-Probes the chapter's model. Stops and asks you about anything **Specified** — an
-input where a different answer changes *what is being built*. Writes
-`<notebook>/_scratch/run/proposal.json` and **exits**.
+**One command per entry.** It probes the chapter's model, writes the entry, fixes
+it against lint, renders it, verifies the prose against what actually rendered,
+commits, prints the entry with its real numbers, rebuilds the site, and picks up
+the next queued question if the ask contained more than one.
 
-Read the proposal. Edit it if you like. Then:
+It stops to ask you about anything **Specified** — an input where a different
+answer changes *what is being built* — and otherwise runs through.
+
+**Each phase gets a pool of probe wall clock**, 900 s by default, and the agent
+divides it: every `probe` call states a `budget_s`, drawn from the pool, and the
+result says how much is left. Asking for more than remains grants what remains.
+When the pool is gone, the next probe is refused and it proposes with what it has.
+
+That is the first bound on a run's compute that actually exists — each probe was
+capped at 300 s, but nothing capped how *many* probes a run could take. It also
+makes the agent forecast: a probe that asks for 400 s and finishes in 20 tells
+you it does not understand what it is doing. Enforcement is coarse to about 15 s,
+the watchdog's poll interval, so budgets under ~20 s buy nothing.
+
+### The two stops
+
+A run halts, writes `proposal.json` and exits for exactly two things. Both are
+decisions about **structure or spend**, made before the work they authorise is
+paid for — not approvals of finished output:
+
+| | why it stops |
+|---|---|
+| **a new chapter** | later entries build on it, and it is far harder to undo than an entry |
+| **an edit to `_model.py` in a chapter that has entries** | every sibling would have to be re-solved to prove its answers did not move |
+
+Resume either with:
 
 ```bash
-uv run --group nb python -m nb write <notebook>
+uv run --group nb python -m nb write <notebook> [--allow-refactor]
 ```
 
-Writes the entry, fixes it against lint, renders it, verifies the prose against
-what actually rendered, commits, rebuilds the site, and picks up the next queued
-question if the ask contained more than one.
+### Why there is no gate on the finished entry
+
+By then lint, render and verify have all passed, and what is left to reject is
+either something `ask_specified` should have caught during probing, or something
+the notebook already has an answer for: *"that is a correction — say so in YOUR
+entry… Never edit the earlier entry."* `superseded_by()` exists because the
+record is append-only. Rejecting also refunds nothing — the run is already paid
+for — and `git revert` on one entry and its freeze is cheap.
 
 `write` builds the site only when every entry already has a freeze. Otherwise it
 names the ones that do not and stops, because a project render does not fail on a
@@ -50,12 +81,13 @@ Nothing reaches the notebook before you have seen the proposal.
 
 ```bash
 uv run --group nb python -m nb view      <notebook> [--force]  # build the site
+uv run --group nb python -m nb.inputs    <notebook>            # specified + assumed
 uv run --group nb python -m nb.metrics   <notebook>            # cost + the eval
 uv run --group nb python -m nb.cache     <notebook> [--purge]  # held caches
 uv run --group nb python -m nb.prefix    <notebook> --measure  # cached prefix size
 uv run --group nb python -m nb.manifest  <notebook>            # what the model sees
 uv run --group nb python -m nb.preflight <notebook>            # before any tokens
-uv run --group nb python nb/vendor/lint.py <notebook>          # the 19 rules
+uv run --group nb python nb/vendor/lint.py <notebook>          # the 22 rules
 ```
 
 ---
@@ -118,10 +150,11 @@ the agent can take.
                    error the model can read
     client.py      complete(contents, cfg) — the ONE provider seam
     loop.py        the agent loop
-    cache.py       the explicit cache: create, reuse, release
+    log.py         say() -> stderr (telemetry), tell() -> stdout (conversation)
     prefix.py      assembles what gets cached
     manifest.py    one line per entry: stem, title, hero value
     preflight.py   invariants the agent cannot fix, checked before any tokens
+    inputs.py      every Specified and Assumed item, across the notebook
     budgets.py     reads _budget.py; parses aero_report()
     metrics.py     one SQLite row per phase-run
     session.py     what one run accumulates
@@ -129,11 +162,12 @@ the agent can take.
 
     phases/new.py     scaffold a notebook, then lint and preflight it
     phases/view.py    project render, guarded against re-solving a lost freeze
-    phases/ask.py     preflight -> cache -> probe loop -> propose -> exit
+    phases/ask.py     preflight -> probe loop -> propose -> write (or stop)
     phases/write.py   scaffold? -> write loop -> lint -> render -> verify -> commit
     phases/verify.py  one toolless call on the rendered page + its figures
 
     tools/         one handler per tool. mcp_fs.py is the only MCP left
+                   guards.py refuses _model.py writes in a chapter with entries
     scaffold/      templates: _quarto.yml, styles.css, probe.{py,qmd},
                    and the chapter files
     vendor/        copied from the skill; canonical from here on
@@ -151,7 +185,7 @@ at render time anyway.
 
 | | sees | catches |
 |---|---|---|
-| **lint** | the source | all 19 rules — budgets, hand-typed numbers, structure |
+| **lint** | the source | all 22 rules — budgets, hand-typed numbers, structure |
 | **render** | — | code that does not run |
 | **verify** | the *rendered* page and its figures, **not** the conversation | prose that contradicts the output |
 
@@ -164,8 +198,8 @@ rule. Verify reads the PNG and catches it.
 
     <notebook>/_scratch/run/proposal.json    the handoff; the only thing that
                                              crosses the process boundary
-    <notebook>/_scratch/run/transcript.jsonl one line per turn, for debugging
-    <notebook>/_scratch/run/cache.json       the held cache handle
+    <notebook>/_scratch/run/transcript.jsonl one line per turn, with thoughts
+    <notebook>/_scratch/run/status.log       the telemetry stream, mirrored
     <notebook>/_scratch/nb-metrics.db        one row per phase-run
 
 All under `_scratch/`, which is gitignored. Nothing a run leaves behind is ever
@@ -186,11 +220,18 @@ system instruction silently invalidates the lot. Check
 something is varying. The cache key includes the model ID, because a cache object
 belongs to the model that created it.
 
-**An explicit cache bills for as long as it is *held*** — $4.50/1M/hour on Pro
-against $0.0251 saved per turn, so it pays for itself at ~2.5 turns/hour. A
-commit supersedes the cache (the manifest is in the key), so `build()` releases
-the old one before creating the next, and `write` releases after a run that ends.
-Use `python -m nb.cache <nb>` to see what is held.
+**Do not add an explicit cache back.** There was one; it cost about twice what it
+saved. Passing `cached_content` does not add to implicit caching, it *replaces*
+it — measured over six turns, 23.9% hit at $0.4121 with an explicit cache against
+67.0% at $0.2082 without, and the cached count pinned at exactly the cache size
+on every turn while the conversation grew. Implicit caching stores nothing and
+bills no storage. Watch `cached_tokens` in metrics: it is best-effort, so a
+silent drop in the ratio is the only symptom you would get.
+
+**Do not prune the conversation either.** Editing anything breaks the byte-prefix
+match from that point on, so a prune costs one cold turn to save a 90% discount
+on every later one — break-even is nine more turns, and runs are 14–15 total.
+The lever is `TRUNCATE`, which caps what enters in the first place.
 
 **Images must be inline parts, not base64 in a function response.** The same PNG
 costs 1,298 tokens as an image part the model can read, or ~23k tokens as a

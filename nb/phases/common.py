@@ -1,13 +1,33 @@
-"""Setup shared by both phases: prefix, tools, cache, and a config factory."""
+"""
+Setup shared by both phases: prefix, tools, and a config factory.
 
-from .. import cache as cache_mod
-from .. import prefix as prefix_mod
+There was an explicit cache here, holding the prefix as a `cachedContents`
+object. It is gone, because measurement said it was costing roughly twice what
+it saved. Passing `cached_content` does not ADD to Gemini's implicit caching --
+it replaces it, and the conversation, which is the part that grows, is then
+billed at full rate on every turn. Six turns of the same conversation, same
+10.4k prefix:
+
+    explicit cache   23.9% hit   $0.4121   cached pinned at the cache size
+    implicit only    67.0% hit   $0.2082   cached tracks the conversation
+
+Implicit caching needs nothing declared, stores nothing, and bills no storage.
+It also removes a cross-run hazard that mattered under parallel instances: the
+explicit key included the manifest, so one run committing invalidated every
+sibling's cache outright, where implicit caching merely shortens the matched
+prefix from that point.
+
+What it does NOT do is guarantee a hit. `metrics` keeps `cached_tokens` per run
+for exactly that reason -- a silent drop in the ratio is the only symptom.
+"""
+
 from ..client import config, usage
+from .. import prefix as prefix_mod
 from ..tools import build as build_tools
 from ..tools.mcp_fs import FileSystem
 
 
-def setup(session, verbose=True):
+def setup(session, verbose=True, phase=None):
     """
     (filesystem, tools, make_config).
 
@@ -16,14 +36,9 @@ def setup(session, verbose=True):
     notebook = session.notebook
     text = prefix_mod.build(notebook)
     fs = FileSystem(notebook.chapters_dir).start()
-    tools, handlers = build_tools(session, fs)
-    handle = cache_mod.build(notebook, text, tools, verbose=verbose)
+    tools, handlers = build_tools(session, fs, phase=phase)
 
     def make_config():
-        # The cache object already carries system_instruction AND tools; passing
-        # either alongside it is an error, so the two paths are exclusive.
-        if handle:
-            return config(cached_content=handle)
         return config(tools=tools, system_instruction=text)
 
     return fs, handlers, make_config

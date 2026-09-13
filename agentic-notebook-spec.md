@@ -1299,3 +1299,146 @@ agent behaved correctly given what it was told and what lint could see.
   first project render put 22 build artefacts into history, including a 180 KB
   icon font. `_freeze/chapters/` stays tracked — that is the whole point of
   committing a freeze — but `_freeze/site_libs/` is Quarto's, not ours.
+
+### Found by running it (2026-09-12/13)
+
+- **The SDK never retries unless you ask.** `_api_client.retry_args(None)` returns
+  `stop_after_attempt(1)`, and `genai.Client()` with no `http_options` takes that
+  path — so one 429 or 503 killed a run outright, discarding up to 960 s of solves
+  and every Specified answer the human had typed. `client.py` now passes
+  `HttpRetryOptions(attempts=6)`: ~31 s of patience against a loss measured in
+  minutes. The `attempts: default 5` in the docstring is the default *inside* the
+  options object, not the default *for* it.
+
+  Retrying belongs below the provider seam. Tenacity wraps `_request_once` with
+  the request already serialised, so every attempt puts identical bytes on the
+  wire — thought signatures included. A retry built one layer up would rebuild the
+  request from `contents`, which is the one operation `loop.py` exists never to do,
+  and it would live on the rarely-exercised failure path.
+
+- **AFC was on by default and doing nothing.** Every `generate_content` took the
+  SDK's automatic-function-calling path, logged a warning once per process, and
+  deep-copied the config each turn — then broke immediately at
+  `if not function_map: break`, because the map is built from CALLABLES in `tools`
+  and we pass declarations. It cost nothing by accident; `client.py` now passes
+  `AutomaticFunctionCallingConfig(disable=True)` so it costs nothing on purpose,
+  and the SDK can never execute a handler behind the loop's back.
+
+  Its advice — use `Chat.send_message` — is wrong here. `Chat` manages conversation
+  history, and managing `contents` ourselves is what thought signatures require.
+  The same reasoning rules out LangGraph's `create_react_agent`, which produces
+  exactly the 400 this system has a negative control for: see
+  langchain-ai/langchain-google #1364, and the same failure open against
+  LangChain4j, LangChain JS and the Vercel AI SDK.
+
+- **The claimable stub is only claimed on `route: new_chapter`.** OPEN DEFECT.
+  A run routed `entry` into the untouched scaffold instead, filled it correctly --
+  rule 19 got the parametric `build_glider(c_root, c_tip, x_wing, ballast_mass)`
+  it asks for, and `optimize_glider()` landed in `_analysis.py` -- but the
+  directory is still `01-first-chapter`, and entry stems and freeze paths bake
+  that name in, so it is now permanent.
+
+  The fix is small: `schema.py`'s `_new_chapter_is_described` should require
+  `chapter_title` and `chapter_defines` whenever the target chapter is a
+  claimable stub, not only on `route == "new_chapter"`, and `write.py` should
+  claim it on either route. Filling the stub in place is the right behaviour;
+  keeping the placeholder name is not.
+
+---
+
+# Stage 4, as built (2026-09-13)
+
+Where this section conflicts with anything above, this section is what the code
+does. `agentic-notebook-multi-instance.md` carries the reasoning and the
+measurements; this is the summary of what changed.
+
+**The explicit cache is gone.** `nb/cache.py` is deleted, with its key
+derivation, floor check, three release points, TTL backstop and `--purge` CLI.
+Measured over six turns of one conversation: explicit 23.9% hit at $0.4121
+against implicit-only 67.0% at $0.2082, with the explicit `cached_content_token_count`
+pinned at exactly the cache size on every turn while the conversation grew.
+Passing `cached_content` does not add to implicit caching -- it replaces it.
+§9's explicit-cache machinery is therefore history, not design. Prefix ORDER
+still matters and matters more: implicit caching matches a byte prefix.
+
+**The gate on finished entries is gone.** `nb ask` runs a question through to a
+commit. Two stops survive, both decisions about structure or spend taken before
+the work they authorise is paid for: a `new_chapter` route, and a refused edit to
+a chapter's `_model.py`. Nothing approves output any more, because by then lint,
+render and verify have passed, and the notebook's own answer to a wrong entry is
+the next entry correcting it -- which is what `superseded_by()` and the manifest's
+correction prompt already existed for.
+
+**`_model.py` is write-protected in a chapter that has entries.** `tools/guards.py`
+refuses the write and tells the agent why; `request_refactor` is how it declares
+the refusal was wrong, and that ends the run for approval. `nb write
+--allow-refactor` resumes. After such a run, `check` runs automatically and a
+non-empty diff stops the commit -- the refactor changed answers, which is the
+finding.
+
+**The proposal survives as an internal handoff.** It is no longer approved, but
+it is still what the two stops resume from, and still what makes the write phase
+cheap: one command, two conversations, measured ~6% cheaper than carrying the
+probe history forward.
+
+**Two streams.** `log.say()` to stderr (turn lines, lint, thought summaries),
+`log.tell()` to stdout (the questions, the proposal, the commit, the rendered
+entry). Both mirrored to `_scratch/run/status.log`. Deliberately prose, not
+JSONL: a coordinating agent reads prose natively and JSON costs ~30 tokens a turn
+line against ~18.
+
+**The entry is printed when it commits**, with its inline expressions resolved --
+the only place the real numbers exist, and until now nothing ever showed them to
+a human before the commit.
+
+**Identifiers are allocated atomically.** Chapter numbers reserve a marker
+directory under `_scratch/.alloc/` and re-check while holding it; the claimable
+stub is taken by `os.rename`. Verified against 40 concurrent allocations. A
+`number=` hint walks forward on collision instead of failing, so a wrong guess
+costs nothing.
+
+**Commits are pathspec-limited.** `git commit -m <title> -- <paths>` instead of
+committing the whole index. Verified: without it, one run's commit swept another
+run's staged entry into history under the wrong message.
+
+**Rules 20, 21 and 22**, all warnings. 20: an entry-local function that reaches
+the vehicle belongs in `_analysis.py` -- a warning because its false-positive
+rate is unmeasured. 21 and 22: dead and internal-only `_analysis.py` functions --
+warnings because they describe a chapter's accumulated state rather than the
+entry being written, and an established chapter carries 31 of them.
+
+**A pool of probe wall clock, divided by the agent.** `MAX_TURNS` was the only
+cap on a run, and each probe was capped at `PROBE_BUDGET` (300 s) -- but nothing
+capped how MANY probes a run could take, so ten legitimate ones was fifty
+minutes. `PROBE_POOL` (900 s, per phase) is the first real bound. Every `probe`
+call states a `budget_s` drawn from it; asking for more than remains grants what
+remains, the result reports the balance, and an exhausted pool refuses the next
+probe and tells the model to propose with what it has -- never a hard exit.
+
+The enforcement was already there: `_notebook.py`'s watchdog now reads
+`$NB_PROBE_BUDGET` ahead of `PROBE_BUDGET_CHAPTER` and the default, so the kill
+inside the probe honours exactly what the run granted. Same channel as
+`$NB_CHAPTER`, for the reason that file already gives -- switching it edits no
+file. Unset, behaviour is identical to before, which is what makes it safe in a
+file every rendered page execs.
+
+It polls every 15 s, so enforcement is coarse to about that: a 5 s grant kills at
+15 s, measured. Fine for the purpose -- the win is a cheap probe costing 15 s
+instead of the flat 300 s it was allowed, not second-level precision.
+
+A money cap was built first and removed. The time layer is the one that was
+wanted, and a cost cap duplicated a bound the pool and `MAX_TURNS` already impose
+more directly.
+
+**Triage is validated at ask time, not only at propose.** `ask_specified` takes a
+`kind` and constructs an `Input`, so `_discipline` runs immediately: a `derivable`
+the model has just admitted it could compute is refused, and rule 8's ten-word
+budget on `why` is enforced then rather than after a whole proposal is assembled
+around it.
+
+**`python -m nb.inputs <notebook>`** reads every Specified and Assumed item out
+of the rendered entries -- the design state of the aircraft, which previously
+existed only as callouts one page at a time. `optimised-glider-notebook` reports
+36 specified and 77 assumed across four chapters. It is the multi-instance plan's
+register, minus the ability to answer back, and it costs nothing because it is a
+read over what the entries already say.

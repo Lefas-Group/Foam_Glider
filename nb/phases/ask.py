@@ -15,6 +15,7 @@ from ..tools.interact import render_proposal
 from ..preflight import check as preflight
 from .. import metrics
 from .common import setup, report
+from ..log import open_log, say, tell
 
 BRIEF = """\
 You are in the ASK phase.
@@ -74,17 +75,19 @@ def main(notebook_path, question, carry_queue=None, verbose=True):
     bad = preflight(notebook_path)
     if bad:
         for b in bad:
-            print(f"  {b}")
+            say(f"  {b}")
         return 1
 
     from ..config import Notebook
     notebook = Notebook(notebook_path)
+    open_log(notebook)
     run_metrics = metrics.Run(notebook, "ask", question)
     session = Session(notebook, question, carry_queue=carry_queue,
                       metrics=run_metrics)
 
-    print(f"  notebook  {notebook.root.name}")
-    fs, handlers, make_config = setup(session)
+    say(f"  notebook  {notebook.root.name}")
+    fs, handlers, make_config = setup(session, phase="ask")
+    gate = None
     notebook.run.mkdir(parents=True, exist_ok=True)
     notebook.transcript_path.write_text("")
 
@@ -94,7 +97,7 @@ def main(notebook_path, question, carry_queue=None, verbose=True):
         run_metrics.turn(resp)
         if verbose:
             calls = [p.function_call.name for p in (turn.parts or []) if p.function_call]
-            print(report(resp, f"turn {n + 1}") +
+            say(report(resp, f"turn {n + 1}") +
                   (f"  ->  {', '.join(calls)}" if calls else "  ->  (done)"))
 
     try:
@@ -103,15 +106,25 @@ def main(notebook_path, question, carry_queue=None, verbose=True):
                 transcript=notebook.transcript_path, max_turns=MAX_TURNS,
                 on_turn=on_turn)
         except Terminal as t:
-            run_metrics.set(chapter=t.payload.chapter,
+            proposal = t.payload
+            run_metrics.set(chapter=proposal.chapter,
                             solves=session.solves,
                             solve_seconds=round(session.solve_seconds, 1))
             run_metrics.close("proposed")
-            print(render_proposal(t.payload, notebook))
-            return 0
+            # A new chapter is the one stop that survives on this side of the
+            # run: it is a structural commitment later entries build on, far
+            # harder to undo than an entry, and it is decided BEFORE any of the
+            # work it authorises is paid for. Everything else goes straight on
+            # to writing -- there is nothing left to approve once lint, render
+            # and verify have passed, and an entry that turns out wrong is
+            # corrected by the next entry, never by deletion.
+            if proposal.route == "new_chapter":
+                tell(render_proposal(proposal, notebook))
+                return 0
+            gate = proposal
         except RuntimeError as e:
             run_metrics.close("max_turns")
-            print(f"\n  {e}. Nothing was written.")
+            say(f"\n  {e}. Nothing was written.")
             return 1
         except SystemExit:
             # Raised when a prompt hits EOF or is interrupted. Record it before
@@ -123,9 +136,19 @@ def main(notebook_path, question, carry_queue=None, verbose=True):
     finally:
         fs.stop()
 
-    run_metrics.close("no_proposal")
-    print("\n  The loop ended without a proposal. Nothing was written.")
-    return 1
+    if gate is None:
+        run_metrics.close("no_proposal")
+        say("\n  The loop ended without a proposal. Nothing was written.")
+        return 1
+
+    # One command, two conversations. The write phase starts fresh from the
+    # proposal inside this same process: it costs ~6% less than carrying the
+    # whole probe history forward (measured $0.404 split against $0.429 merged),
+    # and it is what the two surviving stops resume from, since nothing persists
+    # a conversation across a process boundary.
+    say("")
+    from .write import main as write
+    return write(notebook_path, verbose=verbose)
 
 
 if __name__ == "__main__":

@@ -22,6 +22,7 @@ import sys
 from ..config import SCAFFOLD, VENDOR, Notebook
 from ..tools.scaffold import NAME as CHAPTER_NAME
 from ..tools.scaffold import create_chapter
+from ..log import say, tell
 
 # `_freeze/chapters/` is deliberately NOT here -- committing it is what lets a
 # fresh clone render without re-solving. Everything else Quarto writes is a build
@@ -49,10 +50,10 @@ def main(path, title=None, subject=None, chapter="01-first-chapter",
          chapter_title="First chapter", verbose=True):
     root = pathlib.Path(path).resolve()
     if root.exists() and any(root.iterdir()):
-        print(f"  {root} exists and is not empty")
+        say(f"  {root} exists and is not empty")
         return 1
     if not CHAPTER_NAME.match(chapter):
-        print(f"  {chapter!r} is not NN-kebab-case, e.g. '01-first-chapter'")
+        say(f"  {chapter!r} is not NN-kebab-case, e.g. '01-first-chapter'")
         return 1
     # The first chapter of a new notebook is 01 by construction. Normalise here
     # rather than let create_chapter renumber later -- the name is substituted
@@ -83,30 +84,30 @@ def main(path, title=None, subject=None, chapter="01-first-chapter",
     # the marker that says this chapter is still claimable.
     chapter, msg = create_chapter(notebook, chapter, chapter_title, claim=False)
     if msg.startswith("rejected"):
-        print(f"  {msg}")
+        say(f"  {msg}")
         return 1
 
     if verbose:
-        print(f"  created   {root}")
-        print(f"  vendored  {', '.join(d for _, d in VENDORED)}  (rule 11)")
-        print(f"  chapter   chapters/{chapter}/")
+        say(f"  created   {root}")
+        say(f"  vendored  {', '.join(d for _, d in VENDORED)}  (rule 11)")
+        say(f"  chapter   chapters/{chapter}/")
 
     # Prove it rather than claim it. A notebook that does not lint is a notebook
     # whose first `nb ask` fails at preflight, several minutes later.
     import lint
     problems = [m for _, m in lint.check(root, [chapter]) if "(warning)" not in m]
-    print(f"  lint      {'clean' if not problems else f'{len(problems)} problem(s)'}")
+    say(f"  lint      {'clean' if not problems else f'{len(problems)} problem(s)'}")
     for m in problems:
-        print(f"              {m}")
+        say(f"              {m}")
 
     from ..preflight import check as preflight
     bad = [b for b in preflight(root) if "GEMINI_API_KEY" not in b]
-    print(f"  preflight {'ok' if not bad else 'FAILED'}")
+    say(f"  preflight {'ok' if not bad else 'FAILED'}")
     for b in bad:
-        print(f"              {b}")
+        say(f"              {b}")
 
     if not problems and not bad:
-        print(f"\n  Fill chapters/{chapter}/_model.py with the vehicle, and say in"
+        say(f"\n  Fill chapters/{chapter}/_model.py with the vehicle, and say in"
               f"\n  its index.qmd what defines the chapter. Then:"
               f"\n\n    uv run --group nb python -m nb ask {root.name} \"<question>\"\n")
     return 1 if (problems or bad) else 0

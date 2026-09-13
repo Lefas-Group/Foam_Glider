@@ -44,6 +44,9 @@ entry can be written compliant rather than corrected afterwards.
     17  a frozen entry stays under its chapter's ENTRY_CEILING
     18  the solve budget in force is declared in the chapter's index
     19  a chapter with an entry defines its vehicle in `_model.py`
+    20  an entry-local function that reaches the vehicle belongs in `_analysis.py`
+    21  an `_analysis.py` function nothing calls is dead
+    22  an `_analysis.py` function called only internally is private (`_name`)
 
 Two details the list cannot carry. A value written as an inline expression counts
 as ONE word, so tightening prose is never at odds with computing the numbers in
@@ -450,6 +453,108 @@ def _empty_model(root, chapters, entries):
     return out
 
 
+def entry_cells(text):
+    """An entry's `{python}` cells, concatenated, with `#|` options stripped."""
+    return "\n".join(
+        re.sub(r"^\s*#\|.*$", "", cell, flags=re.M)
+        for cell in re.findall(r"```\{python\}(.*?)```", text, re.S))
+
+
+def _shared_hygiene(root, chapters, entries):
+    """
+    Rules 20, 21 and 22 -- where a chapter's helpers live, and which are API.
+
+    `_analysis.py` exists to force CONSISTENCY between entries: one
+    implementation, so entries cannot drift apart. Measured, that is working --
+    of twelve helpers that exist in more than one chapter (forks copy the file),
+    eleven are byte-identical, and the one difference is the fork's declared
+    purpose. The failure it prevents is on record: four subtly different neutral
+    points in one chapter, one of them taking its moment reference from the
+    wrong station.
+
+    It also saves tokens, but only on REUSE: a signature sits in the cached
+    prefix forever, against one avoided read of a sibling entry. So the rules
+    pull in both directions on purpose -- 20 promotes what must not diverge, 21
+    removes what nothing calls, 22 keeps what is merely internal out of the
+    prefix and out of `api()`.
+
+    ALL THREE ARE WARNINGS, and 21 and 22 for a different reason than 20. They
+    describe the chapter's accumulated state, not the entry being written: an
+    established chapter carries 27 of them, and blocking on those would make
+    every run in it start by refactoring `_analysis.py` -- work nobody asked
+    for, on code the run did not touch, which is itself the refactor that needs
+    proving. They are for a human doing a cleanup pass, or for the run that
+    happens to be editing that function anyway. Rule 20 is a warning for the
+    narrower reason that its false-positive rate is not yet measured.
+    """
+    out = []
+    for c in chapters:
+        chapter = root / "chapters" / c
+        mine = [e for e in entries if e.parent.name == c]
+        defs = _defs_of(chapter)
+        shared = {n: called for n, (f, called) in defs.items()
+                  if f == "_analysis.py"}
+        model_names = {n for n, (f, _) in defs.items() if f == "_model.py"}
+        expensive = aero_calls_of(chapter)
+        f_analysis = chapter / "_analysis.py"
+
+        # Who calls what, from the entries.
+        called_by_entries = {n: sum(1 for e in mine
+                                    if re.search(rf"\b{re.escape(n)}\s*\(", e.read_text()))
+                             for n in shared}
+        # Every definition in the chapter, not just `_analysis.py`: a helper
+        # called only from `_model.py` is still called.
+        called_internally = {
+            n: any(n in called for m, (_, called) in defs.items() if m != n)
+            for n in shared}
+
+        # Rule 20. An entry-local function that reaches the vehicle is chapter
+        # machinery: it is a measurement of the aircraft, and two entries
+        # measuring the same thing differently is the failure `_analysis.py`
+        # exists to prevent. A function that only formats an already-computed
+        # value diverges harmlessly and stays where it is. WARNING while the
+        # false-positive rate is unknown -- a genuinely one-off measurement
+        # trips it, and forcing that into the prefix forever is its own cost.
+        for e in mine:
+            try:
+                tree = ast.parse(entry_cells(e.read_text()))
+            except SyntaxError:
+                continue
+            for node in tree.body:
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                reached = {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+                hits = reached & (model_names | set(shared) | expensive)
+                if hits:
+                    out.append((e, f"(warning) `{node.name}()` is defined in the "
+                                   f"entry but reaches the vehicle "
+                                   f"({', '.join(sorted(hits)[:3])}) — a "
+                                   f"measurement of the aircraft belongs in "
+                                   f"_analysis.py, where a sibling cannot "
+                                   f"reimplement it differently"))
+
+        if not f_analysis.exists():
+            continue
+
+        for n in sorted(shared):
+            # Rule 21. Nothing reaches it: not an entry, not another helper.
+            # Dead here is worse than dead elsewhere -- someone calls the stale
+            # one and the chapter has two answers again.
+            if not called_by_entries[n] and not called_internally[n]:
+                out.append((f_analysis, f"(warning) `{n}()` is called by no "
+                                        f"entry and no other helper — delete "
+                                        f"it, or call it"))
+            # Rule 22. Internal-only, but public: it costs a line of the cached
+            # prefix and a line of `api()` on every run, and an entry that does
+            # not call it does not need to know it exists.
+            elif not called_by_entries[n] and not n.startswith("_"):
+                out.append((f_analysis, f"(warning) `{n}()` is only called by "
+                                        f"other _analysis.py functions — rename "
+                                        f"it `_{n}` so it stays out of the "
+                                        f"prefix and out of api()"))
+    return out
+
+
 def tables_in(md):
     """
     Every markdown pipe table in `md`, as (body_rows, columns).
@@ -737,6 +842,7 @@ def check(root, chapters):
 
     problems += _notebook_drift(root)
     problems += _empty_model(root, chapters, entries)
+    problems += _shared_hygiene(root, chapters, entries)
     problems += _stale_freeze(root, chapters)
     problems += _budget_rules(root, chapters)
     problems += _visuals_and_tables(root, chapters, entries)

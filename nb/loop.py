@@ -19,6 +19,18 @@ import json
 
 from .client import complete
 from .config import MAX_TURNS
+from .log import thought
+
+
+class Refactor(Exception):
+    """
+    Declared in `tools/interact.py`; defined here so `loop` can let it through.
+
+    Lives beside `Terminal` because it is the same kind of thing -- a handler
+    that ends the run rather than returning to it -- and the loop's catch-all
+    would otherwise turn it into a tool error the model would try to work
+    around.
+    """
 
 
 class Terminal(Exception):
@@ -34,6 +46,7 @@ def _log(path, turn, extra=None):
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     rec = {"parts": [
+        {"thought": p.text} if getattr(p, "thought", None) else
         {"text": p.text} if p.text else
         {"function_call": {"name": p.function_call.name,
                            "args": dict(p.function_call.args)}}
@@ -59,6 +72,11 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
         turn = resp.candidates[0].content
         contents.append(turn)          # WHOLE -- signatures included
         _log(transcript, turn)
+        # Thought SUMMARIES, if the model returned any. Telemetry, never
+        # conversation: they explain a turn, they are not a result.
+        for part in (turn.parts or []):
+            if getattr(part, "thought", None) and part.text:
+                thought(part.text)
         if on_turn:
             on_turn(n, resp, turn)
 
@@ -72,6 +90,8 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
                 out = handlers[c.name](**dict(c.args))
             except Terminal:
                 raise                  # must not be swallowed by the catch below
+            except Refactor:
+                raise                  # a declared stop, not a tool failure
             except KeyError:
                 out = {"error": f"no such tool: {c.name}"}
             except Exception as e:

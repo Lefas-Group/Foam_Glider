@@ -1,5 +1,15 @@
 # `nb` stage 4 — concrete changes
 
+> **Status, 2026-09-13.** 4a, 4b, 4d, 4f and 4h are **built**. 4c is built except
+> `--no-commit`, which is an ownership feature waiting for a coordinator that
+> vetoes. 4e and 4g are **partly built**: everything in them that works with a
+> human in the coordinator's seat is done — the spend budget, `_discipline` at
+> ask time, and the register as a read (`python -m nb.inputs`). What stays
+> deferred is what genuinely needs a coordinator to exist: routing assumptions to
+> one, the four-valued `owner`, the probe pool and the render budget.
+>
+> `agentic-notebook-spec.md` carries the as-built summary.
+
 Companion to `agentic-notebook-spec.md`, which describes the system as built.
 This is a change list in build order: every item names the file it touches and
 the reason it is worth doing.
@@ -45,7 +55,7 @@ the brief is out of scope here. Nothing below is worth building without it.
 
 ---
 
-## Stage 4a — two streams
+## Stage 4a — two streams  **DONE**
 
 **1. `nb/log.py` (new): `say()` → stderr, `tell()` → stdout.** Telemetry, turn
 lines and lint output on stderr; the Specified box, the rendered entry and the
@@ -76,6 +86,16 @@ declarations. It cost nothing by accident; now it does so deliberately. Its advi
 (`Chat.send_message`) is wrong for us — managing `contents` ourselves is what
 signatures require.
 
+**6. ~~No retry on 429/503~~ — done.** `client.py` passes
+`HttpRetryOptions(attempts=6)`.
+*Why:* the SDK's default is **never retry** — `retry_args(None)` returns
+`stop_after_attempt(1)` — so a single rate-limit killed a run outright, discarding
+up to 960 s of solves. Six attempts is ~31 s of patience (1+2+4+8+16, jittered).
+It belongs below the seam: tenacity wraps `_request_once` with the request already
+serialised, so the bytes are identical on every attempt, signatures included. A
+retry one layer up would rebuild the request, which is what `loop.py` exists never
+to do. 400s are not retried, correctly — they would fail identically five times.
+
 **Rejected: a JSONL event protocol on stdout.** The coordinator is a language
 model and prose is its native format; JSON is *more* tokens (~30 vs ~18 per turn
 line) with a schema to maintain in two places. Anything that must be exact is a
@@ -87,7 +107,7 @@ a line, or `_scratch/run/.waiting`. Build it when a coordinator exists to test i
 
 ---
 
-## Stage 4b — remove the gate, keep two conditional stops
+## Stage 4b — remove the gate, keep two conditional stops  **DONE**
 
 Asked what is left to reject once lint, render and verify have passed: very
 little. *Wrong question* and *bad assumption* are real but belong to
@@ -165,7 +185,7 @@ instance mid-run. `metrics.Run` already has an `outcome` column — record
 
 ---
 
-## Stage 4c — make each instance safe on its own, then decide ownership
+## Stage 4c — make each instance safe on its own, then decide ownership  **DONE (1, 2, 4)**
 
 An earlier draft justified this with `index.lock`, *"a certainty, not a race"*.
 That is wrong, and the real danger is worse. Both were tested.
@@ -217,7 +237,7 @@ of a run to prevent a failure the pathspec already prevents).
 
 ---
 
-## Stage 4d — allocate identifiers atomically
+## Stage 4d — allocate identifiers atomically  **DONE (1, 2, 4, 5, 6)**
 
 Three identifiers are derived by reading the filesystem, and all three race in the
 gap between reading and creating. The fix is **local atomicity**, not coordination:
@@ -239,7 +259,10 @@ directory is atomic: the winner takes it, the loser's rename raises and it falls
 through to allocating a fresh number. Rename first, rewrite the templated files
 after — `_model.qmd` bakes the chapter path in.
 
-**3. `phases/write.py: _stem` allocates by atomic file creation.** Open the
+**3. `phases/write.py: _stem` allocates by atomic file creation.** NOT BUILT --
+`nb` does not create the entry file, the agent does, so reserving it would leave
+a placeholder `.qmd` behind on a failed run. Only bites under entry-parallel,
+which is out of scope below. Open the
 candidate `.qmd` with `"x"`; on collision, increment `NN`.
 *Why:* `_stem` counts same-day entries, so two parallel entries in one chapter on
 one day both get `01` and the second overwrites the first. Only bites under
@@ -295,7 +318,17 @@ the PNGs byte-identical, or the filters need recalibrating.
 
 ---
 
-## Stage 4e — input triage under a coordinator
+## Stage 4e — input triage under a coordinator  **PARTLY DONE**
+
+> Items 3 (`_discipline` at ask time) and the register are **built** -- both
+> work with a human in the coordinator's seat. `ask_specified` now takes a
+> `kind` and runs the same validator `propose` does, so a `derivable` is
+> refused at the moment of asking and rule 8's ten words are enforced then
+> rather than twenty turns later. `python -m nb.inputs <notebook>` reads every
+> Specified and Assumed item out of the rendered entries -- the register, minus
+> the ability to answer back. The ROUTING and the four-valued `owner` stay
+> deferred: they need a coordinator to route to, and the cross-instance
+> consistency argument needs instances to be inconsistent with.
 
 Today only Specified inputs are asked; Unknowns are assumed silently and reviewed
 by nobody. In the last run *"Tail geometry: 100×30 mm, sensible fixed size"* was
@@ -354,7 +387,7 @@ wrongly-scoped entry is visible rather than silently inherited.
 
 ---
 
-## Stage 4f — delete the explicit cache
+## Stage 4f — delete the explicit cache  **DONE**
 
 Measured, and the answer is the opposite of what this stage was written expecting.
 
@@ -407,7 +440,22 @@ serving stack, not the API contract.
 
 ---
 
-## Stage 4g — budgets as allocation
+## Stage 4g — budgets as allocation  **PARTLY DONE**
+
+> The PROBE POOL is **built**: 900 s per phase, divided by the agent through a
+> `budget_s` on every probe, clamped to what remains, and refused when spent.
+> `_notebook.py`'s watchdog reads `$NB_PROBE_BUDGET` ahead of the chapter's own
+> limit, so the enforcement already in the probe honours exactly what was
+> granted. Item 2 turned out to be already in place.
+>
+> Two corrections to this stage as written. A money cap was built first and
+> removed: the time layer is what was wanted, and money duplicated a bound that
+> `MAX_TURNS` and the pool already impose more directly. And the probe pool was
+> deferred here as needing `aero_cost` — it does not. The watchdog measures WALL
+> CLOCK, so the pool works regardless of whether a chapter counts its solves.
+> Only the RENDER budget needs `aero_cost`, and that counter is incremented by
+> hand per chapter with nothing prompting it, so every chapter `nb` has created
+> reports 0.0. That is what the render budget is really waiting on.
 
 `MAX_TURNS = 40` is the only cap, and turn count correlates badly with cost — a
 turn is 22 output tokens or 1,700. Under a coordinator these become allocation.
@@ -450,7 +498,7 @@ identical code. The four budgets sit *above* all of that, as allocation.
 
 ---
 
-## Stage 4h — where helpers live
+## Stage 4h — where helpers live  **DONE**
 
 *Depends on nothing and needs no coordinator. Four lint rules; the contract goes
 19 → 22, with rule 2 amended.*

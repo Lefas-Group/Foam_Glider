@@ -32,10 +32,17 @@ def module_summary(path):
     read every `_model.py`, which is what happened before this was added: twenty
     turns of grepping and filesystem probing, and still the wrong chapter.
     """
-    if not path.exists() or not path.read_text().strip():
+    # OSError as well as SyntaxError: under parallel runs the chapter directory
+    # may be renamed out from under this read -- claiming a stub is a rename --
+    # and an inspection losing its target means "not this one", not a crash.
+    try:
+        text = path.read_text()
+    except OSError:
+        return [], []
+    if not text.strip():
         return [], []
     try:
-        tree = ast.parse(path.read_text())
+        tree = ast.parse(text)
     except SyntaxError:
         return [], []
     funcs, consts = [], []
@@ -128,19 +135,23 @@ def measure(notebook):
     """
     Billed prompt tokens for the frozen prefix.
 
-    A real call, because count_tokens rejects `tools` on the Gemini API. Below
-    4,096 nothing caches and no error is raised, so this is not optional.
+    A real call, because count_tokens rejects `tools` on the Gemini API.
+
+    The 4,096-token floor it used to check belonged to the EXPLICIT cache, which
+    is gone. Implicit caching has the same floor on Gemini 3.x, so the number is
+    still the one to beat -- but nothing now depends on clearing it, and falling
+    under it costs a worse hit rate rather than no cache at all.
     """
+    FLOOR = 4096
     from .session import Session
     from .tools import build as build_tools
     from .tools.mcp_fs import FileSystem
     from .client import config, complete
-    from .cache import FLOOR
 
     text = build(notebook)
     fs = FileSystem(notebook.chapters_dir).start()
     try:
-        tools, _ = build_tools(Session(notebook, "measure"), fs)
+        tools, _ = build_tools(Session(notebook, "measure"), fs, phase="ask")
         base = complete("x", config(max_output_tokens=1)).usage_metadata.prompt_token_count
         full = complete("x", config(tools=tools, system_instruction=text,
                                     max_output_tokens=1)

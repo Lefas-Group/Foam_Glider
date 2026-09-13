@@ -264,12 +264,31 @@ _IN_KERNEL = "ipykernel" in sys.modules or hasattr(builtins, "__IPYTHON__")
 
 def _probe_budget():
     """
-    The probe budget in force: the chapter's, else this file's default.
+    The probe budget in force: this probe's, else the chapter's, else default.
 
     Read at CHECK time, not at arm time, because _budget.py is exec'd after this
     file -- so a chapter that raised the limit has not been seen yet when the
     watchdog starts. The watchdog therefore polls rather than sleeping once.
+
+    $NB_PROBE_BUDGET wins when set, and is how a run divides a POOL of probe
+    wall clock between its own probes: a listing probe asks for ten seconds, a
+    multistart for four hundred, out of one total that bounds the run. Before
+    it, every probe got the same 300 s -- pointless rope for the cheap one,
+    a kill for the expensive one, and no bound at all on how MANY probes a run
+    could take. Same channel as $NB_CHAPTER, for the same reason: switching it
+    edits no file.
+
+    Env var first, then the chapter, then the default -- so a chapter that
+    raised its limit by agreement still governs anything the run does not
+    explicitly budget, and unsetting the variable restores the old behaviour
+    exactly.
     """
+    env = os.environ.get("NB_PROBE_BUDGET")
+    if env:
+        try:
+            return float(env)
+        except ValueError:
+            pass
     value = globals().get("PROBE_BUDGET_CHAPTER")
     return PROBE_BUDGET if value is None else value
 

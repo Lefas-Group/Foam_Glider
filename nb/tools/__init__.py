@@ -1,15 +1,18 @@
 """
 The tool registry.
 
-One frozen, sorted list shared by both phases. Sorted after merging, because MCP
-servers do not guarantee stable tool ordering across restarts and tools render at
-prefix position 0 -- an unsorted merge would silently discard the cache every
-time the server came up in a different order.
+Sorted, because MCP servers do not guarantee stable tool ordering across restarts
+and tools render at prefix position 0 -- an unsorted merge silently breaks the
+byte-prefix match that caching depends on, every time the server comes up in a
+different order.
 
-Both phases share the list so they share the cache. `propose` is reachable from
-the write phase and simply has nothing to do there; the alternative is two
-prefixes and two cache objects to save a few hundred tokens that are cached
-anyway.
+The list is now PER PHASE. It used to be shared so that both phases hit one
+explicit cache object; with that cache deleted there is no such constraint, and
+`propose` -- 1,014 tokens, the largest declaration by a wide margin, larger than
+the next six combined -- was dead weight on every write turn. `check` is gone
+from both: a full chapter check re-solves every entry, which is minutes inside a
+loop, and its own description told the model not to use it. Both handlers remain;
+only their declarations are conditional.
 
 **`create_chapter` is deliberately NOT here.** Chapter creation is
 proposal-driven: `write.py` scaffolds from the approved `chapter_title` and
@@ -22,7 +25,7 @@ still exists; only `write.py` calls it.
 
 from google.genai import types
 
-from . import api, figures, interact, probe, refs, shell, verifiers
+from . import api, figures, guards, interact, probe, refs, shell, verifiers
 from ..schema import Proposal
 
 
@@ -35,6 +38,7 @@ def _decl(name, description, properties=None, required=()):
 
 
 S = {"type": "string"}
+N = {"type": "number"}
 B = {"type": "boolean"}
 
 
@@ -48,8 +52,16 @@ def native_declarations():
               "record what the solves cost.",
               {"question": dict(S, description="Python. The chapter's names are "
                                                "in scope; do not import it."),
-               "chapter": dict(S, description="Chapter directory name")},
-              ["question", "chapter"]),
+               "chapter": dict(S, description="Chapter directory name"),
+               "budget_s": dict(N, description=(
+                   "Seconds of wall clock this probe may take, drawn from the "
+                   "run's pool. Budget it: a single solve wants tens, a "
+                   "multistart hundreds. Enforced to about 15 s, so anything "
+                   "under ~20 buys nothing over 20. Asking for more than "
+                   "remains grants what remains, and the result says how much "
+                   "is left. Omitted takes the whole remaining pool, which "
+                   "wastes it."))},
+              ["question", "chapter", "budget_s"]),
 
         _decl("lint",
               "Run the 19-rule lint contract over a chapter without rendering. "
@@ -104,9 +116,15 @@ def native_declarations():
               "Ask the moment you find one; do not save it for the proposal, and "
               "never sweep a range instead of asking. Blocks until they answer.",
               {"name": dict(S, description="The quantity, e.g. 'static margin'"),
-               "why": dict(S, description="Why it changes what we are building"),
+               "why": dict(S, description="Why it changes what we are building "
+                                          "-- TEN WORDS at most, rule 8"),
+               "kind": dict(S, enum=["specified", "unknown", "derivable"],
+                            description="Classify it before asking. Only "
+                                        "'specified' may be asked: 'derivable' "
+                                        "you compute, 'unknown' you assume and "
+                                        "flag."),
                "options": dict(S, description="Plausible values, if that helps")},
-              ["name", "why"]),
+              ["name", "why", "kind"]),
 
         _decl("consult",
               "Ask the user for open-ended guidance -- not a Specified input and "
@@ -126,18 +144,39 @@ def native_declarations():
                 "the question is answered -- not before, and not with a second "
                 "question folded in."),
             parameters_json_schema=Proposal.model_json_schema()),
+        _decl("request_refactor",
+              "Declare that this entry cannot be written without changing the "
+              "chapter's _model.py, after a write to it was refused. ENDS THE "
+              "RUN: every existing entry in the chapter would have to be "
+              "re-solved to prove its answers did not move, and that is the "
+              "user's call. Use it only when the vehicle is genuinely wrong or "
+              "missing something the question needs -- not to restructure code "
+              "you would rather have written differently.",
+              {"chapter": S, "why": dict(S, description=(
+                  "What must change and why the entry cannot be written "
+                  "without it"))},
+              ("chapter", "why")),
     ]
 
 
-def build(session, fs):
+# Declarations a phase does not need. The handler stays wired either way, so a
+# model that somehow names one still gets a real answer rather than a KeyError.
+PHASE_OMITS = {
+    "write": ("propose",),      # the proposal is already approved and in the brief
+}
+
+
+def build(session, fs, phase=None):
     """(tools, handlers) -- one sorted list, one dispatch table."""
     nb = session.notebook
-    decls = sorted(native_declarations() + fs.declarations(), key=lambda d: d.name)
+    omit = set(PHASE_OMITS.get(phase, ())) | {"check"}
+    decls = sorted((d for d in native_declarations() + fs.declarations()
+                    if d.name not in omit), key=lambda d: d.name)
 
     handlers = dict(fs.handlers())
     handlers.update({
-        "probe": lambda question, chapter=None: probe.run_probe(
-            nb, chapter or session.chapter, question, session),
+        "probe": lambda question, chapter=None, budget_s=None: probe.run_probe(
+            nb, chapter or session.chapter, question, session, budget_s),
         "lint": lambda chapter: verifiers.lint_chapter(nb, chapter),
         "render": lambda target="": verifiers.render(nb, target),
         "check": lambda chapter="", force_all=False: verifiers.check(
@@ -147,10 +186,13 @@ def build(session, fs):
         "read_reference": lambda name: refs.read_reference(name),
         "read_figure": lambda chapter, stem, name="": figures.read_figure(
             nb, chapter, stem, name),
-        "ask_specified": lambda name, why, options="": interact.ask_specified(
-            session, name, why, options),
+        "ask_specified": lambda name, why, kind="specified", options="": (
+            interact.ask_specified(session, name, why, kind, options)),
         "consult": lambda question, why: interact.consult(session, question, why),
         "bash": lambda command: shell.bash(nb, command),
         "propose": lambda **kw: interact.propose(session, **kw),
+        "request_refactor": lambda chapter, why: interact.request_refactor(
+            session, chapter, why),
     })
+    handlers = guards.wrap_writes(handlers, session)
     return [types.Tool(function_declarations=decls)], handlers

@@ -11,6 +11,7 @@ import os
 import sys
 
 from .config import Notebook, SYSTEM_INSTRUCTION
+from .log import say
 
 
 def check(root):
@@ -53,12 +54,12 @@ def check(root):
 
 def main(argv):
     if not argv:
-        print("usage: python -m nb.preflight <notebook>")
+        say("usage: python -m nb.preflight <notebook>")
         return 2
     bad = check(argv[0])
     for b in bad:
-        print(f"  {b}")
-    print(f"\npreflight {'FAILED' if bad else 'ok'}"
+        say(f"  {b}")
+    say(f"\npreflight {'FAILED' if bad else 'ok'}"
           f"{f' -- {len(bad)} problem(s)' if bad else ''}")
     return 1 if bad else 0
 

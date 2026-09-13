@@ -1,15 +1,23 @@
 """
-    nb new   <notebook> [title]          scaffold a notebook, then prove it
-    nb ask   <notebook> "<question>"     probe, then propose and stop
-    nb write <notebook>                  write the approved proposal
-    nb view  <notebook> [--force]        render the whole site
+    nb new   <notebook> [title]              scaffold a notebook, then prove it
+    nb ask   <notebook> "<question>"         probe, write, render, commit
+    nb write <notebook> [--allow-refactor]   resume from an approved proposal
+    nb view  <notebook> [--force]            render the whole site
 
-`ask` and `write` are two commands because the gate between them is a process
-boundary, not a checkpoint: `ask` exits
-where a human decides, and `write` picks up from `proposal.json`. The two share
-no conversation state -- the entry's own code cells recompute the answer at
-render time, so the write phase needs the finding and the working code, not the
-transcript.
+`ask` runs a question through to a commit. It stops for two things, both of them
+decisions about structure or spend rather than approvals of output: a NEW
+CHAPTER, which later entries build on, and a refused edit to a chapter's
+`_model.py`, which would mean re-solving every sibling to prove the answers did
+not move. `nb write` resumes from `proposal.json` in either case.
+
+There is no gate on the finished entry, because by then lint, render and verify
+have all passed and an entry that turns out wrong is corrected by the next entry
+-- `superseded_by()` exists for exactly that, and the record is append-only. The
+rendered prose, with its real numbers, is printed when the entry commits.
+
+`ask` and `write` remain separate conversations inside one process: the write
+phase starts fresh from the proposal, which costs ~6% less than carrying the
+probe history forward and is what the two stops resume from.
 """
 
 import sys
@@ -50,7 +58,7 @@ def main(argv):
             print(USAGE)
             return 2
         from .phases.write import main as write
-        return write(rest[0])
+        return write(rest[0], allow_refactor="--allow-refactor" in rest)
 
     if cmd == "view":
         if not rest:

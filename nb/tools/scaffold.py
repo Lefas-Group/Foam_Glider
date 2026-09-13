@@ -9,6 +9,7 @@ A new NOTEBOOK is not offered. That wants a fresh session, which is a process
 decision rather than the agent's.
 """
 
+import os
 import re
 import shutil
 
@@ -23,23 +24,97 @@ PLACEHOLDER = ("<one sentence, then a bullet list: the aero method, the section,
 SLUG = re.compile(r"^(?:\d{2}-)?(?P<slug>[a-z0-9]+(?:-[a-z0-9]+)*)$")
 
 
-def _number(notebook, claim):
+def _allocate(notebook, slug, start=None):
     """
-    The number the next chapter gets. Code's decision, not the model's.
+    Create `chapters/NN-<slug>/` atomically, and return (name, path).
 
-    A count (`len(existing) + 1`) collides the moment a chapter is deleted or
-    carries `_lint-skip`, so this takes the max. More to the point, the model
-    used to supply the number and a wrong guess aborted `nb write` outright --
-    after the ask had already been paid for, with no chance to correct it. The
-    model owns the slug, which is judgement; the number is bookkeeping.
+    The number is code's decision, not the model's: the model used to supply it
+    and a wrong guess aborted `nb write` outright, after the ask had been paid
+    for. The model owns the slug, which is judgement; the number is bookkeeping.
+
+    `mkdir` IS the allocator. Reading the directory and then creating is a
+    read-then-write race -- two runs compute the same max and both believe they
+    own it -- whereas `mkdir` fails with `EEXIST` and the loser simply takes the
+    next number. That needs no lock, no coordinator, and no knowledge that
+    another run exists, which is why it beats having a coordinator assign
+    numbers: a coordinator that guesses wrong can waste a whole run, and this
+    cannot.
     """
-    if claim:
-        return claim[:2]
+    # `mkdir chapters/NN-slug` is NOT enough: it guards the NAME, and it is the
+    # NUMBER that must be unique -- two runs proposing different slugs both
+    # succeed at the same number. Measured: eight concurrent allocations
+    # produced three chapters numbered 13.
+    #
+    # So reserve the NUMBER, which is the thing being allocated. The marker
+    # lives under `_scratch/` rather than in `chapters/`, because `chapters_of`
+    # lists every directory it finds and a reservation is not a chapter. It is
+    # held only until the real directory exists, after which the directory
+    # itself is what makes the number visible to the next allocator.
+    held = notebook.scratch / ".alloc"
+    held.mkdir(parents=True, exist_ok=True)
     used = [int(c[:2]) for c in notebook.chapters() if c[:2].isdigit()]
-    return f"{max(used, default=0) + 1:02d}"
+    n = int(start) if start is not None else max(used, default=0) + 1
+    for _ in range(100):
+        marker = held / f"{n:02d}"
+        try:
+            marker.mkdir()
+        except FileExistsError:     # another run is mid-allocation on this one
+            n += 1
+            continue
+        try:
+            # Re-read while HOLDING the number, not before. The starting guess
+            # came from a scan every concurrent run made at the same moment, so
+            # on its own it is stale by construction; checking here is what
+            # makes the marker mean anything, because every allocator for this
+            # number is serialised behind it. It is also what makes an explicit
+            # `number` safe to pass -- a wrong one walks forward instead of
+            # landing on top of an existing chapter.
+            if any(c.startswith(f"{n:02d}-") for c in notebook.chapters()):
+                n += 1
+                continue
+            name = f"{n:02d}-{slug}"
+            try:
+                (notebook.chapters_dir / name).mkdir(parents=True)
+            except FileExistsError:
+                n += 1
+                continue
+            return name, notebook.chapters_dir / name
+        finally:
+            marker.rmdir()
+    raise RuntimeError(f"no free chapter number for {slug!r} below {n}")
 
 
-def create_chapter(notebook, name, title, defines="", claim=True):
+def _claim(notebook, slug):
+    """
+    Take over an untouched scaffold chapter atomically, or return None.
+
+    `os.rename` on a directory is atomic, so it is the claim: the winner gets
+    the directory, the loser's rename raises and it falls through to allocating
+    a fresh number. The previous version called `claimable_stub()` and then
+    `rmtree`, which meant two runs could both decide the same stub was theirs
+    and the loser died on an unhandled `FileNotFoundError`.
+
+    Rename first, rewrite the templated files after -- `_model.qmd` and
+    `index.qmd` bake the chapter path in, so the contents are only valid once
+    the directory has its final name.
+    """
+    stub = notebook.claimable_stub()
+    if stub is None:
+        return None
+    name = f"{stub[:2]}-{slug}"
+    target = notebook.chapters_dir / name
+    try:
+        os.rename(notebook.chapters_dir / stub, target)
+    except OSError:
+        return None                 # someone else claimed it, or it moved
+    # The stub's index may already have been rendered and frozen. Left behind is
+    # a freeze for a chapter that no longer exists, which nothing ever collects.
+    shutil.rmtree(notebook.freeze / stub, ignore_errors=True)
+    return stub, name, target
+
+
+def create_chapter(notebook, name, title, defines="", claim=True,
+                   number=None):
     """
     Create `chapters/<name>/` with index.qmd, _model.qmd, _model.py, _analysis.py.
 
@@ -48,31 +123,29 @@ def create_chapter(notebook, name, title, defines="", claim=True):
     anticipation.
 
     With `claim`, an untouched scaffold chapter is taken over rather than left
-    beside the new one -- see `Notebook.claimable_stub`. Delete-and-recreate
-    rather than rename, because `_model.qmd` and `index.qmd` bake the chapter
-    path in; recreating reuses the templating instead of patching two files.
+    beside the new one -- see `Notebook.claimable_stub`. Both paths allocate
+    ATOMICALLY (`rename` to claim, `mkdir` to create), so two concurrent runs
+    cannot end up believing they own the same directory.
+
+    `number` forces a starting number rather than deriving one. It is a hint,
+    not a demand: allocation still walks past a collision, so a caller that
+    guesses wrong costs nothing.
     """
     m = SLUG.match(name)
     if not m:
         return name, (f"rejected: {name!r}. Chapter directories are "
                       f"NN-kebab-case, e.g. '05-boom-structure'.")
+    slug = m.group("slug")
 
-    stub = notebook.claimable_stub() if claim else None
-    name = f"{_number(notebook, stub)}-{m.group('slug')}"
+    stub = None
+    claimed = _claim(notebook, slug) if claim else None
+    if claimed:
+        stub, name, target = claimed
+    else:
+        name, target = _allocate(notebook, slug, start=number)
     if not NAME.match(name):
         return name, f"rejected: {name!r} is not NN-kebab-case"
 
-    target = notebook.chapters_dir / name
-    if stub:
-        shutil.rmtree(notebook.chapters_dir / stub)
-        # The stub's index may already have been rendered and frozen. Left
-        # behind it is a freeze for a chapter that no longer exists, which
-        # nothing ever collects.
-        shutil.rmtree(notebook.freeze / stub, ignore_errors=True)
-    elif target.exists():
-        return name, f"rejected: {target} already exists"
-
-    target.mkdir(parents=True)
     sub = lambda s: s.replace("__CHAPTER__", name).replace("__TITLE__", title) \
         .replace("__WHAT_DEFINES_THE_CHAPTER__", defines or PLACEHOLDER)
 

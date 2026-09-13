@@ -18,6 +18,7 @@ import subprocess
 import sys
 
 from ..config import Notebook
+from ..log import say, tell
 
 
 def _unfrozen(notebook):
@@ -43,14 +44,14 @@ def site(notebook, force=False, verbose=True):
     holes = [] if force else _unfrozen(notebook)
     if holes:
         one = len(holes) == 1
-        print(f"  site      skipped — {len(holes)} "
+        say(f"  site      skipped — {len(holes)} "
               f"{'entry has' if one else 'entries have'} no freeze, and a "
               f"project render would re-solve {'it' if one else 'them'}:")
         for h in holes[:5]:
-            print(f"              {h}")
+            say(f"              {h}")
         if len(holes) > 5:
-            print(f"              … and {len(holes) - 5} more")
-        print(f"              `python -m nb view {notebook.root.name} --force` "
+            say(f"              … and {len(holes) - 5} more")
+        say(f"              `python -m nb view {notebook.root.name} --force` "
               f"to rebuild them anyway")
         return None
 
@@ -58,20 +59,20 @@ def site(notebook, force=False, verbose=True):
                        cwd=notebook.root, capture_output=True, text=True)
     if r.returncode != 0:
         tail = (r.stdout + r.stderr).strip().splitlines()[-3:]
-        print("  site      render FAILED — the entry is committed either way")
+        say("  site      render FAILED — the entry is committed either way")
         for line in tail:
-            print(f"              {line[:120]}")
+            say(f"              {line[:120]}")
         return None
 
     index = notebook.root / "_site" / "index.html"
     if verbose:
-        print(f"  site      {index}")
+        tell(f"  site      {index}")
     return index
 
 
 def main(argv):
     if not argv:
-        print("usage: python -m nb view <notebook> [--force]")
+        say("usage: python -m nb view <notebook> [--force]")
         return 2
     force = "--force" in argv
     return 0 if site(Notebook(argv[0]), force=force) else 1

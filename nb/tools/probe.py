@@ -14,6 +14,7 @@ keeps it out of project renders, like everything else in `_scratch/`.
 import os
 import subprocess
 import textwrap
+import time
 
 from .. import budgets
 from ..text import tail
@@ -25,7 +26,7 @@ PREAMBLE = (
 )
 
 
-def run_probe(notebook, chapter, question, session=None):
+def run_probe(notebook, chapter, question, session=None, budget_s=None):
     """Execute `question` as Python with the chapter preloaded. Returns stdout."""
     # `_probe_base` falls back to the first chapter alphabetically when
     # NB_CHAPTER is unset, and says so only on stderr. Swallowed into tool
@@ -45,6 +46,22 @@ def run_probe(notebook, chapter, question, session=None):
     env = dict(os.environ, NB_CHAPTER=chapter)
     timeout = budgets.probe_wall_clock(notebook, chapter)
 
+    # The run's pool, divided by the agent. `_notebook.py` reads
+    # NB_PROBE_BUDGET ahead of the chapter's own limit, so the watchdog inside
+    # the probe enforces exactly what was granted -- and our subprocess timeout
+    # sits above it, so the watchdog still gets to say WHY it killed something.
+    granted = None
+    if session is not None:
+        granted, left = session.take_probe_budget(budget_s)
+        if granted is not None and left is not None and left <= 0:
+            return ("probe pool exhausted -- this run has spent all the probe "
+                    "wall clock it was given. Propose now with what you have, "
+                    "and say in `rationale` what you did not get to.")
+        if granted:
+            env["NB_PROBE_BUDGET"] = f"{granted:.1f}"
+            timeout = granted + 60.0
+
+    started = time.perf_counter()
     try:
         r = subprocess.run(["uv", "run", "python", script.name],
                            cwd=scratch, env=env, capture_output=True,
@@ -59,6 +76,13 @@ def run_probe(notebook, chapter, question, session=None):
         out = got + f"\n[killed at {timeout:.0f}s -- outlived the chapter watchdog]"
 
     if session is not None:
+        session.record_probe(time.perf_counter() - started)
+        left = session.probe_left
+        if left is not None:
+            out += (f"\n[probe budget: {granted:.0f} s granted, "
+                    f"{time.perf_counter() - started:.0f} s used; "
+                    f"{left:.0f} s of the run's pool left. Budget the next probe "
+                    f"with `budget_s`.]")
         solves, seconds = budgets.aero_cost(out)
         session.record_cost(solves, seconds)
         ceiling = budgets.entry_ceiling(notebook, chapter)
