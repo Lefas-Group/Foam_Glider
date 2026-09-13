@@ -194,6 +194,40 @@ be computed, but nothing forces a sentence about a **shape** to match the shape.
 A caption claiming a crossover at 6 m/s when the curve crosses at 8 passes every
 rule. Verify reads the PNG and catches it.
 
+### Two streams, and how to look at each
+
+A run writes to both, so an unredirected terminal looks like one stream and reads
+the way it always did. Separate them when you want one or the other:
+
+**stdout is the conversation** — the questions it stops to ask, the proposal at a
+stop, the commit line, and the finished entry with its real numbers. The things
+you act on.
+
+**stderr is the telemetry** — one line per turn with tokens and tool, the model's
+own reasoning, lint, verify, render, probe budgets. The things you read when you
+want to know *why*.
+
+```bash
+ASK="uv run --group nb python -m nb ask"
+
+$ASK <notebook> "…" 2>/dev/null   # conversation only — questions and the entry
+$ASK <notebook> "…" 2>run.log     # same, telemetry kept for afterwards
+$ASK <notebook> "…" 2>&1 | less   # both, interleaved and scrollable
+$ASK <notebook> "…" >entry.md     # telemetry on screen, the entry into a file
+```
+
+**Careful with `>/dev/null`.** The questions live on stdout, so discarding it
+means answering a prompt you cannot see. `2>/dev/null` is the safe half.
+
+You do not have to choose in advance. **Everything from both streams is mirrored
+to `_scratch/run/status.log`**, so a second pane can watch a run live, and a run
+that died leaves a complete record including what the model was thinking on the
+turn it went wrong:
+
+```bash
+tail -f <notebook>/_scratch/run/status.log
+```
+
 ### Where state lives
 
     <notebook>/_scratch/run/proposal.json    the handoff; the only thing that
