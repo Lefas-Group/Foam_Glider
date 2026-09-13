@@ -27,6 +27,8 @@ of the same day.
 | thought summaries | thinking billed either way (398 vs 342); ~250 tok/turn of conversation |
 | rendered entry markdown | 5,624 tok full, **851 tok** with code cells stripped |
 | one entry end to end | ask $0.46 + write $0.33, 0 first-pass lint violations |
+| forked `_analysis.py` helpers | 12 shared across chapters, **11 byte-identical**; the one divergence is the fork's purpose |
+| `_analysis.py` reuse | 11 of 42 functions called by 2+ entries; 19 called by none |
 
 ---
 
@@ -163,58 +165,116 @@ instance mid-run. `metrics.Run` already has an `outcome` column — record
 
 ---
 
-## Stage 4c — commit ownership
+## Stage 4c — make each instance safe on its own, then decide ownership
 
-**1. `phases/write.py`: `--no-commit`.** Writes `_scratch/run/ready.json` — exact
-paths, title, chapter — and says on stdout that it is there. Default stays
+An earlier draft justified this with `index.lock`, *"a certainty, not a race"*.
+That is wrong, and the real danger is worse. Both were tested.
+
+**A commit is ~100 ms at the end of an ~8-minute run**, so lock collisions need
+two instances inside the same 100 ms window — rare, loud, and retryable.
+
+**The silent failure is the index sweep.** `_commit` does `git add -- <paths>`
+then `git commit -m title` **with no pathspec**, which commits *the whole index*:
+
+```
+A: git add entryA          index: entryA
+B: git add entryB          index: entryA + entryB
+A: git commit -m "titleA"  ← commits BOTH, under A's title
+B: git commit -m "titleB"  ← nothing to commit, fails
+```
+
+Measured — A's commit contained `a.txt` **and** `b.txt`. B's entry entered history
+under A's message. Its window is the whole add→commit span, and it produces wrong
+content rather than an error.
+
+**1. `phases/write.py`: commit with a pathspec —
+`git commit -m <title> -- <paths>`.**
+*Why:* a pathspec-limited commit bypasses the index and takes working-tree content
+for exactly those paths. Measured: two concurrent commits then contain only their
+own files. **One word, and each instance is correct on its own.**
+
+**2. `phases/write.py`: retry the commit once on `index.lock`.**
+*Why:* covers the rare loud collision that remains. Loud and retryable is the easy
+kind.
+
+**3. `phases/write.py`: `--no-commit`, writing `_scratch/run/ready.json`** — exact
+paths, title, chapter — with a line on stdout saying it is there. Default stays
 `--commit`.
-*Why:* git has one index under one lock, so two concurrent writes give
-`fatal: Unable to create index.lock` — a certainty, not a race. A fuzzy path list
-means a wrong `git add`, so the payload is a file, like `proposal.json`.
+*Why:* **this is an ownership feature, not a safety one.** Items 1 and 2 make
+concurrent commits correct; this lets the coordinator decide *what* is committed,
+in *what order*, and *whether at all* — so it can commit one of two overlapping
+entries and discard the other. Build it when the coordinator actually wants to
+veto. A fuzzy path list means a wrong `git add`, so the payload is a file, like
+`proposal.json`.
 
-**2. Skip `site()` under `--no-commit`; `nb view` becomes coordinator-invoked.**
+**4. Skip `site()` under `--no-commit`; `nb view` becomes coordinator-invoked.**
 *Why:* `quarto render` is not concurrency-safe within a project — shared
 `.quarto/` and `_site/`. One renderer at a time, by construction.
 
-**Rejected:** per-instance worktrees (a worktree and a merge step to solve what
-the coordinator solves by serialising one fast operation); a commit lock inside
-`nb` (concurrency control in the wrong layer).
+**Rejected:** per-instance worktrees (a worktree and a merge step to solve what a
+pathspec solves for free); a commit lock inside `nb` (serialises the cheapest part
+of a run to prevent a failure the pathspec already prevents).
 
 ---
 
-## Stage 4d — assigned, not derived, identifiers
+## Stage 4d — allocate identifiers atomically
 
-Three identifiers are computed from the filesystem, and all three race.
+Three identifiers are derived by reading the filesystem, and all three race in the
+gap between reading and creating. The fix is **local atomicity**, not coordination:
+`mkdir` and `rename` are already atomic, so each instance can be safe on its own
+without knowing another exists.
 
-**1. `tools/scaffold.py: create_chapter(..., number=None)`** — `--chapter-number`,
-falling back to today's derivation.
-*Why:* `_number` takes `max(existing) + 1`; two instances compute the same one.
+**1. `tools/scaffold.py: _number` allocates by atomic `mkdir`.** Try
+`chapters/NN-slug` with `exist_ok=False`; on `FileExistsError`, increment and
+retry.
+*Why:* `max(existing) + 1` is read-then-create, so two instances compute the same
+number. `mkdir` fails with `EEXIST` instead — whoever wins keeps the number, the
+loser takes the next one. ~5 lines, no coupling, and it works when no coordinator
+exists.
 
-**2. `config.py: claimable_stub()`** — callers may override with `--claim`.
-*Why:* two instances both see `01-first-chapter` as claimable and both `rmtree` it.
+**2. `tools/scaffold.py`: claim the stub by atomic `rename`, then rewrite.**
+*Why:* today both instances call `claimable_stub()`, both `rmtree` the same
+directory, and the loser raises an unhandled `FileNotFoundError`. `os.rename` on a
+directory is atomic: the winner takes it, the loser's rename raises and it falls
+through to allocating a fresh number. Rename first, rewrite the templated files
+after — `_model.qmd` bakes the chapter path in.
 
-**3. `phases/write.py: _stem(..., n=None)`** — `--stem`.
-*Why:* two parallel entries in one chapter on one day both get `01`.
+**3. `phases/write.py: _stem` allocates by atomic file creation.** Open the
+candidate `.qmd` with `"x"`; on collision, increment `NN`.
+*Why:* `_stem` counts same-day entries, so two parallel entries in one chapter on
+one day both get `01` and the second overwrites the first. Only bites under
+entry-parallel, which is out of scope below — but the fix is one flag on `open`.
 
-**`nb` rejects a collision rather than resolving one** — only the coordinator knows
-what the other instances are doing.
+**4. Optional overrides — `--chapter-number`, `--claim`, `--stem`.** They **fall
+back** to atomic allocation on collision rather than rejecting.
+*Why:* a coordinator may want a specific name, but it should not be able to waste
+a run by guessing wrong — that is the failure stage 3 removed by letting code
+renumber the model's guess. Atomic allocation as the floor means a coordinator bug
+costs nothing.
+
+**Why not have the coordinator assign?** It is the textbook answer — one allocator,
+no race — but it makes numbering **state the coordinator must maintain correctly**,
+adds a failure surface in the least-tested component, and turns a wrong guess into
+a wasted run. Local atomicity gets the same safety with no coupling. Reserve
+coordination for decisions only a coordinator can make: ordering, vetoing, naming.
 
 **Chapter-parallel is the default; entry-parallel is opt-in.** Different chapters
 share almost nothing. Entries within one share `_model.py` and `_analysis.py`, and
 both rule 2 and rule 19 make writes to them likely. Two instances promoting
 different helpers is a lost update — the loser's `footer()` names a function that
-no longer exists, surfacing as `OSError` from `inspect.getsource`. A lock held for
-the whole write loop serialises most of the benefit; measure before building it.
+no longer exists, surfacing as `OSError` from `inspect.getsource`. That is a
+content race, which atomic creation does **not** fix; it needs a lock held for the
+whole write loop, which serialises most of the benefit. Measure before building it.
 
 ### `check.py` is the refactoring proof, and nothing reaches it
 
-**4. `tools/__init__.py`: drop the `check` declaration; keep the module.**
+**5. `tools/__init__.py`: drop the `check` declaration; keep the module.**
 *Why:* 166 tokens a turn to offer something whose own description says *"SLOW and
 rarely what you want"*. A full chapter check re-solves every entry —
 `04-chosen-throw` is seven at 300–500 s each — inside a 40-turn loop with a 960 s
 probe ceiling. Same argument that removed `create_chapter`.
 
-**5. `phases/write.py`: run `check` conditionally (wired in 4b item 5).** Trigger:
+**6. `phases/write.py`: run `check` conditionally (wired in 4b item 5).** Trigger:
 `_model.py` changed **and** the chapter already had entries; `_touched()` already
 computes it.
 *Why:* rule 19 makes `_model.py` a file that changes by design. Entries exec it
@@ -390,6 +450,92 @@ identical code. The four budgets sit *above* all of that, as allocation.
 
 ---
 
+## Stage 4h — where helpers live
+
+*Depends on nothing and needs no coordinator. Four lint rules; the contract goes
+19 → 22, with rule 2 amended.*
+
+`_analysis.py` exists to **force consistency** between entries and to **save
+tokens**. Both were checked.
+
+**Consistency is working.** Twelve functions exist in more than one chapter,
+because forks copy `_analysis.py` wholesale. **Eleven are byte-identical across
+every copy.** The one exception is `optimise` — v1 in three chapters, v2 in
+`03-tabulated-section` — and that is the fork's *intended* difference, since
+`forking.md` says *"a fidelity change alters `_analysis.py`"*. The failure this
+prevents is on record: *"Four subtly different neutral points once existed in one
+chapter because nothing advertised the first, and one of the four took its moment
+reference from the wrong station."*
+
+**Tokens are a reuse bet.** Signatures sit in the cached prefix forever — 2,145
+tokens × 15 turns ≈ $0.006/run — against one avoided sibling read at 5,624 fresh
+tokens ≈ $0.011, plus the output saved by calling a function instead of writing
+it. It pays, **but only for functions that are actually reused**, and 31 of 42 are
+called by 0–1 entries.
+
+**1. Rule 20 — an entry-local function that reaches the vehicle belongs in
+`_analysis.py`.** Parse the entry's `{python}` cells for `def`s, run the fixed
+point `aero_calls_of` already uses, and check the transitive call set against
+`_model.py`'s names, the `_analysis.py` names and `AERO_PRIMITIVES`.
+*Why:* this is exactly the consistency criterion — the things that must not
+diverge are the ones touching the model; a table formatter diverging is harmless.
+It **fires on a chapter's first entry**, closing the same structural blindness
+rule 19 fixed. `_defs_of` and `module_summary` supply the pieces; the new part is
+extracting `def`s from `.qmd` cells, ~25 lines.
+*Cost:* false positives — a genuinely one-off measurement that touches the model
+gets forced into `_analysis.py`. **Ship it as a warning first** and see how often
+it fires before letting it block.
+
+**2. State the criterion in `system_instruction.md`.** *"A function that reaches
+the vehicle is chapter machinery and goes in `_analysis.py`; a function that only
+presents what has already been computed stays in the entry cell."*
+*Why:* so the agent lands it correctly first time and rule 20 only catches misses.
+Free, and one sentence.
+
+**3. Rule 21 — an `_analysis.py` function that no entry and no sibling function
+calls is dead.**
+*Why:* rule 2 promotes and nothing ever demotes, so the file only grows — 44,552
+tokens across four chapters against 17,984 for all four `_model.py`. Three are
+dead today (`design_geometry` ×2, `optimise_launch`). And under the consistency
+goal a dead function is worse than waste: it is a **divergence trap**, because
+someone calls the stale one. Detection is eight lines. Rule 20 makes this
+mandatory rather than optional — it promotes more, so something must demote.
+
+**4. Rule 22 — an `_analysis.py` function called only by other `_analysis.py`
+functions is private, and takes a `_` prefix.**
+*Why:* nineteen functions are called by no entry, but most have internal callers
+(`design_problem` +5, `optimise` +9). They are implementation, not API — yet they
+are public names, so they appear in `module_summary`, the cached prefix, and
+`api()`. About 17 such functions at ~51 tokens of signature each: **~870 tokens
+off the prefix (~6%)**, plus a shorter `api()` listing to scan. The precedent is
+already in the file — `_design_vector` and `_flight_once` are correctly private.
+`_defs_of` already has the call sets.
+
+**5. Amend rule 2 to be structural rather than textual.** Compare normalised
+function bodies or statement sequences instead of three consecutive identical
+lines.
+*Why:* the textual heuristic misses near-duplicates that differ by a variable
+name and misfires on coincidental formatting. Rule 20 takes most of its load
+anyway.
+
+**Rejected: always write helpers to `_analysis.py`.** Simpler to enforce — "no
+`def` in an entry cell" is a one-line AST check that retires rule 2 — but it makes
+every one-off a permanent resident of a cached prefix that only pays back on
+reuse, and it puts every helper in the shared namespace, so every later edit
+becomes a cross-entry refactor and 4b's refusal rule fires constantly instead of
+rarely. It also makes entry-parallel worse: that is out of scope *because* entries
+share `_analysis.py`, and this would make every entry write there.
+
+**Rejected: ask the coordinator where each helper goes.** The information
+asymmetry runs the wrong way. In 4e the coordinator holds the design brief —
+information the instance lacks. Here it has not read the function and knows
+strictly less. The one thing it does know is what siblings are in flight, and that
+is better given as context up front than as several round trips per entry. And
+`aero_calls_of`'s own docstring settles the general question: *"Derived rather
+than configured because the alternative was measurably wrong."*
+
+---
+
 ## Verification
 
 **The two-instance collision test comes first.** Every claim in 4c and 4d is
@@ -407,11 +553,14 @@ order, then keep it as the regression test.
   `--allow-refactor`, `check` runs by itself and commits on a clean diff. Seed a
   deliberate model change and confirm it stops with the moved entries named. The
   rendered prose comes back on stdout with the sha.
-- **4c** — two concurrent `--no-commit` writes both produce a `ready.json` with no
-  git error; the coordinator commits both serially.
+- **4c** — stage two entries, commit each with its own pathspec, and confirm each
+  commit contains only its own files; concurrent commits produce two commits with
+  the right messages. Under `--no-commit`, both produce a `ready.json` and the
+  coordinator commits them serially.
 - **4d** — two concurrent new-chapter runs produce `03` and `04`, not two `03`s,
-  and neither clobbers the other's stub. `check` on an untouched chapter reports an
-  empty diff and byte-identical PNGs.
+  and neither clobbers the other's stub; a deliberately wrong `--chapter-number`
+  falls back rather than aborting. `check` on an untouched chapter reports an empty
+  diff and byte-identical PNGs.
 - **4e** — a Specified input reaches the human and an Unknown does not; a Derivable
   declared as either is rejected at ask time; a tty run asks about Specified only;
   two instances assuming the same quantity differently are visible in the register.
@@ -419,6 +568,10 @@ order, then keep it as the regression test.
   ~67%; watch `cached_tokens` for a silent regression.
 - **4g** — a run given a deliberately small token budget proposes rather than dying;
   declared vs actual render cost is recorded and the error is visible.
+- **4h** — rules 21 and 22 fire on the three known dead functions and the ~17
+  internal-only ones, and on nothing else in the two clean notebooks. Rule 20 as a
+  warning: count how often it fires across a dozen entries before promoting it to
+  a violation. Confirm the prefix drops by ~870 tokens after rule 22 is applied.
 
 ---
 
@@ -428,17 +581,21 @@ order, then keep it as the regression test.
 2. **4a, two streams** — small, useful today, independent of any coordinator.
 3. **4b, remove the gate** — the largest simplification, depends on nothing, and
    every later stage is smaller against one command than two.
-4. **4c, commit ownership** — removes the hard blocker.
-5. **4d, assigned identifiers** — removes the silent corruption.
+4. **4c, safe commits** — one word (the pathspec) removes a silent-corruption
+   bug that exists today; `--no-commit` can wait for a coordinator that vetoes.
+5. **4d, atomic allocation** — removes the remaining races without coupling.
 6. **4e, input triage** — before the coordinator has habits; retrofitting the
    Specified rule means auditing everything it already decided.
 7. **4f, caching** — measured; deletes code rather than adding it. Any time.
 8. **4g, budgets** — needs 4a's split to report spend without drowning the
    conversation.
+9. **4h, where helpers live** — independent of everything; do it whenever. Rule 22
+   is free prefix; rule 20 wants a warning period first.
 
-Step 3 is worth doing for its own sake. Steps 2, 4 and 5 are the minimum for
-parallel chapters. Step 6 is what stops the coordinator deciding the design
-itself. 7 and 8 make it economical.
+Steps 3, 4, 5 and 9 stand on their own merits — 4 fixes a live bug, and 5 and 9
+need no coordinator at all. Steps 2, 4 and 5 are the minimum for driving parallel
+chapters. Step 6 is what stops the coordinator deciding the design itself. 7 and
+8 make it economical.
 
 ---
 
