@@ -1,0 +1,40 @@
+---
+title: "Unswept quarter chord"
+---
+
+{{< include _model.qmd >}}
+
+## The model
+
+```{python}
+#| echo: false
+#| output: asis
+import pathlib
+for _f in ("_model.py", "_analysis.py"):
+    _src = pathlib.Path(f"chapters/03-unswept-c4/{_f}").read_text()
+    print(f'::: {{.callout-note collapse="true"}}')
+    print(f"## `{_f}`\n")
+    print(f"```python\n{_src}\n```")
+    print(":::\n")
+```
+
+The zero-sweep line of the wing is moved from the leading edge to the quarter chord. Otherwise identical to the 02-fuselage-model.
+
+::: {.callout-tip}
+## Specified
+
+From the question and inherited, 2026-09-14:
+
+1. **Wing sweep:** zero at the quarter chord.
+2. **Fuselage:** 5 mm foam, doubled, 15x200 mm.
+3. **Objective:** minimum sink rate in trimmed glide.
+4. Solve budget `{python} f"{solve_budget():.0f}"` s, the notebook default.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **Tail:** H 100×30 mm, V 50×30 mm, fixed.
+2. **Sections:** NACA4405 and NACA0005, standing in for foam.
+3. **Fuselage width:** 10 mm, doubled 5 mm foam.
+:::
