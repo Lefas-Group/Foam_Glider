@@ -1,0 +1,37 @@
+---
+title: "What does the optimized design look like?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+import matplotlib.pyplot as plt
+import aerosandbox.numpy as np
+
+res = optimize_glider(verbose=False)
+sol = res["sol"]
+c_root_opt = sol.value(res["vars"]["c_root"])
+taper_opt = sol.value(res["vars"]["taper"])
+cg_x_opt = sol.value(res["vars"]["cg_x"])
+
+airplane_opt = make_glider(c_root_opt, taper_opt, cg_x_opt)
+```
+
+**Answer.** The optimized planform has a [`{python} f"{c_root_opt:.2f}"`]{.key} m root chord and tapers sharply to its lower bound of [`{python} f"{taper_opt:.1f}"`]{.key}. Span, sections, and tail match the chapter constraints (@fig-planform).
+
+```{python}
+#| label: fig-planform
+#| fig-cap: "Three-view drawing of the optimized foam glider planform."
+fig = plt.figure(figsize=(7, 6))
+axs = np.array([
+    [fig.add_subplot(2, 2, 1, projection='3d'), fig.add_subplot(2, 2, 2, projection='3d')],
+    [fig.add_subplot(2, 2, 3, projection='3d'), fig.add_subplot(2, 2, 4, projection='3d')]
+])
+airplane_opt.draw_three_view(axs=axs, show=False)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_glider)
+```
