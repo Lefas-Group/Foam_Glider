@@ -1,0 +1,60 @@
+---
+title: "How does it change if we model the fuselage and its mass?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+res = optimize_glider_with_fuse()
+sol = res["sol"]
+
+new_sink = sol.value(res["sink_rate"])
+new_mass = sol.value(res["mass"])
+new_c_root = sol.value(res["c_root"])
+
+old_sink = 0.36
+old_mass = 0.00356
+old_c_root = 0.0965
+
+c_root_bound = 0.15
+```
+
+::: {.hero-pair}
+[`{python} f"{old_sink:.2f}"`]{.hero-value}
+[m/s sink rate]{.hero-label}
+
+[`{python} f"{new_sink:.2f}"`]{.hero-value}
+[with fuselage]{.hero-label}
+:::
+
+**Answer.** Adding the fuselage increases the glider's mass, which drives the wing root chord to its maximum bound to carry the extra weight. This keeps the sink rate penalty to a minimum.
+
+::: {.callout-tip}
+## Specified
+Asked of the user, 2026-09-14:
+
+1. **Fuselage: 5 mm foam**, doubled up.
+2. **Dimensions: 15 mm high, 200 mm long**.
+:::
+
+::: {.callout-note}
+## Assumed
+1. **Fuselage width: 10 mm**, doubled 5 mm foam.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+print("| Metric | No Fuselage | With Fuselage |")
+print("|---|---|---|")
+print(f"| Mass (g) | {old_mass * 1000:.1f} | {new_mass * 1000:.1f} |")
+print(f"| Root Chord (mm) | {old_c_root * 1000:.0f} | {new_c_root * 1000:.0f} |")
+print(f"| Sink Rate (m/s) | {old_sink:.2f} | {new_sink:.2f} |")
+print("\n: Comparison of optimized glider parameters.")
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_glider_with_fuse)
+```

@@ -9,18 +9,17 @@ Added a 200 mm fuselage made of doubled-up 5 mm foam to `_model.py`. Its mass an
 ::: {.callout-tip}
 ## Specified
 
-<!-- One numbered item per commitment, ten words at most (rule 8). The test is
-     whether it is true of EVERY entry in this chapter -- the section, the
-     objective, the fixed dimensions. If it is true of only one entry, it
-     belongs in that entry instead. Date them: "Asked of the user, YYYY-MM-DD:". -->
-1. Solve budget `{python} f"{solve_budget():.0f}"` s, the notebook default.
+Asked of the user, 2026-09-14:
+
+1. **Fuselage: 5 mm foam**, doubled up.
+2. **Dimensions: 15 mm high, 200 mm long**.
+3. Solve budget `{python} f"{solve_budget():.0f}"` s, the notebook default.
 :::
 
 ::: {.callout-note}
 ## Assumed
 
-<!-- What this chapter takes on faith, one clause of reason each. Same test:
-     true of every entry, or it belongs in the entry. -->
+1. **Fuselage width: 10 mm**, doubled 5 mm foam.
 :::
 
 ## The model
