@@ -111,6 +111,8 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
     def on_turn(n, resp, turn):
         run_metrics.turn(resp)
         if verbose:
+            say()          # one blank line per turn, so a turn and its
+                           # reasoning read as one block
             calls = [p.function_call.name for p in (turn.parts or []) if p.function_call]
             say(report(resp, f"turn {n + 1}") +
                   (f"  ->  {', '.join(calls)}" if calls else "  ->  (done)"))
@@ -134,13 +136,14 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
             # and verify have passed, and an entry that turns out wrong is
             # corrected by the next entry, never by deletion.
             if proposal.route == "new_chapter":
-                # Reported HERE and not on the path that continues into `write`:
-                # the run is stopping, so this is the final word on what it
-                # spent. Continuing, `write` reports the question's total once
-                # rather than each phase reporting a different fraction.
+                # TELEMETRY, not conversation: spend is something to look at,
+                # never something to act on, and the per-probe lines already go
+                # to the log. Reported here and not on the path that continues
+                # into `write`, so one question yields one total rather than
+                # each phase reporting a different fraction of it.
                 if session.probe_pool:
-                    tell(f"  budget    {session.probe_spent:.0f} s of "
-                         f"{session.probe_pool:.0f} s probe pool used")
+                    say(f"  budget    {session.probe_spent:.0f} s of "
+                        f"{session.probe_pool:.0f} s probe pool used")
                 tell(render_stop(proposal, notebook))
                 return 0
             gate = proposal

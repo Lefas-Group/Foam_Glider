@@ -69,9 +69,12 @@ def close_log():
 # the same kind of thing when scanning. `nb watch` dims anything carrying this.
 GUTTER = "│ "
 _STAMP_W = 10                   # len("HH:MM:SS") + two spaces
-# Total line width for wrapped reasoning: 80 columns less the stamp and gutter,
+# Reasoning is indented one step PAST the run's own lines, so a turn reads as a
+# heading with its thinking beneath it rather than as another status line.
+_THOUGHT_INDENT = _STAMP_W + 2
+# Total line width for wrapped reasoning: 80 columns less the indent and gutter,
 # so a standard terminal never has to re-wrap and break the gutter.
-THOUGHT_WIDTH = 80 - _STAMP_W - len(GUTTER)
+THOUGHT_WIDTH = 80 - _THOUGHT_INDENT - len(GUTTER)
 
 
 def _stamped(args):
@@ -79,7 +82,9 @@ def _stamped(args):
     if not args:
         return args
     head = str(args[0])
-    if head.startswith(GUTTER[0]) or head.startswith("═") or not head.strip():
+    if head.startswith(GUTTER[0]):
+        return (" " * _THOUGHT_INDENT + head,) + args[1:]
+    if head.startswith("═") or not head.strip():
         return (" " * _STAMP_W + head,) + args[1:]
     # Status lines arrive with two leading spaces of their own; the stamp
     # replaces that indent rather than adding to it, so the columns they were

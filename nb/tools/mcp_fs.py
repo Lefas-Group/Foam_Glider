@@ -73,7 +73,18 @@ class FileSystem:
 
     @staticmethod
     def _errlog():
-        """The run log if one is open, else a sink. Never the terminal."""
+        """
+        The run log if one is open, else a sink. Never the terminal.
+
+        Its lines land UNSTAMPED, which is the one place the log breaks its own
+        rule that every line carries a time. It cannot be fixed by wrapping:
+        `stdio_client` hands this to a subprocess, so it must expose a real
+        file descriptor, and the child writes to that fd directly -- a wrapper
+        object's `write()` is never called. Stamping would take a pipe and a
+        reader thread, which is more machinery than a two-line start-up banner
+        is worth. `nb watch` is unaffected: it measures whether the file GREW,
+        not what the lines say.
+        """
         from ..log import _log
         import os
         return _log if _log is not None else open(os.devnull, "w")

@@ -15,8 +15,8 @@ import subprocess
 import sys
 import time
 
-from ..config import (MAX_LINT_ATTEMPTS, MAX_TURNS, MAX_VERIFY_ATTEMPTS,
-                      PROBE_POOL, Notebook)
+from ..config import (MAX_LINT_ATTEMPTS, MAX_RENDER_FIXES, MAX_TURNS,
+                      MAX_VERIFY_ATTEMPTS, PROBE_POOL, Notebook)
 from ..loop import Refactor, run
 from ..schema import Proposal
 from ..session import Session
@@ -40,17 +40,24 @@ The probe that produced this is gone -- everything you need is above.
 in the entry: an entry answers the question asked and stops.
 
 1. Create the entry at `{chapter}/{stem}.qmd`. Use `write_file` for the initial
-   version, then `edit_file` for every change after that.
+   version, then `edit_file` for every change after that. The entry is the ONLY
+   file you create: `index.qmd`, `_model.py` and `_analysis.py` already exist,
+   scaffolded, so `edit_file` them. A `write_file` over `index.qmd` silently
+   drops the `## The model` block it ships with, which is the only place a
+   reader sees the aircraft (rule 30).
    Its FIRST code cell must open with exactly these two lines (rule 28):
 
        ENTRY_CEILING = {ceiling}   # s for this render, granted by the user
        SOLVE_BUDGET = {solve}     # s for any one solve
 
    ENTRY_CEILING is not yours to choose -- it is what the user granted at the
-   prompt, the commit is refused if you change it, and a render that overruns
-   it is killed. SOLVE_BUDGET is yours: pick what one solve needs, knowing it
-   cannot outlive the render that contains it. Record both in the entry's
-   `## Specified` callout as inline expressions (rule 18), e.g.
+   prompt, the commit is refused if you change it, and it is the execution time
+   the render is killed at, directly and with no slack. SOLVE_BUDGET is yours:
+   pick what one solve needs, knowing it cannot outlive the render that
+   contains it. Record both in the entry's `## Specified` callout as inline
+   expressions (rule 18), under the heading "Granted at the prompt, {today}:" --
+   they were granted, not asked for, and a callout that says "Asked of the
+   user" above them describes a conversation that did not happen. e.g.
    "Render budget `{{python}} f\"{{ENTRY_CEILING:.0f}}\"` s."
    If the work genuinely cannot fit, ask for more with `ask_specified` rather
    than writing a different number.
@@ -67,8 +74,17 @@ in the entry: an entry answers the question asked and stops.
    19). If that file is still the bare scaffold, fill it: the aircraft, its
    operating conditions, its derived quantities. A parametric vehicle is a
    FUNCTION there taking the design variables and returning the `Airplane`;
-   the entry calls it. `_model.qmd` already execs it, so those names are in
-   scope in your cell -- do not import or redefine them.
+   the entry calls it.
+
+   HOW THE CHAPTER COMPOSES, because nothing else will tell you and a brand new
+   chapter has no sibling to copy: `_model.qmd` EXECS both `_model.py` and
+   `_analysis.py` into the page namespace. Every name in them is already in
+   scope -- in your entry cell, and in each other. They are not modules and are
+   not importable; `from _analysis import solve_it` raises ModuleNotFoundError
+   at render and is rule 29. Call the name directly.
+
+   Comments in those two files explain the MODEL, not your reasoning about
+   where to put things. They are rendered verbatim by the chapter index.
 
 6. A helper that solves takes `verbose=False` and passes it to `opti.solve()`
    (rule 23). IPOPT prints a sixty-line convergence table otherwise, and an
@@ -80,6 +96,13 @@ in the entry: an entry answers the question asked and stops.
    out. Your entry keeps what THIS question produced. If the index still holds
    template placeholders, fill them (rule 24).
 
+   Attribute each item to where it actually came from. "Asked of the user,
+   {today}:" covers ONLY what was put to them and answered -- which includes
+   any `ask_specified` answer from the probe that produced this proposal, and
+   that answer belongs in a Specified callout, because it is usually the reason
+   the chapter exists at all. Commitments inherited from an earlier chapter, or
+   read out of the question, are stated without a claim that anyone was asked.
+
 8. The title in the proposal is the entry's title (rule 26): one question, at
    most 18 words, ending in `?`. It is also the filename, so a brief pasted in
    whole gives a 70-character stem nobody can read.
@@ -90,10 +113,20 @@ clean; rendering and committing are handled after you finish.
 
 
 def _stem(notebook, chapter, title, today):
-    """`YYYY-MM-DD-NN-slug`; NN counts within the day so same-day entries sort."""
+    """
+    `YYYY-MM-DD-NN-slug`; NN counts within the day so same-day entries sort.
+
+    A file already carrying this slug for today is REUSED rather than numbered
+    past. That is the resume case: a run that wrote the entry and then failed
+    at the render left it on disk, and counting it as a sibling would write
+    `-02-` beside it and orphan the first, each time round.
+    """
     slug = "".join(c if c.isalnum() else "-" for c in title.lower())
     slug = "-".join(p for p in slug.split("-") if p)[:70].rstrip("-")
     existing = [p.name for p in notebook.entries(chapter)]
+    mine = [e for e in existing if e.startswith(today) and e[14:] == f"{slug}.qmd"]
+    if mine:
+        return mine[0][:-len(".qmd")]
     n = sum(1 for e in existing if e.startswith(today)) + 1
     return f"{today}-{n:02d}-{slug}"
 
@@ -278,8 +311,18 @@ def _commit(notebook, chapter, stem, entry_path, title, extra_paths=()):
     freeze = notebook.freeze / chapter / stem
     if freeze.exists():
         paths.append(rel(freeze))
+    # The chapter index's own freeze, for the same reason: `_refresh_index_freeze`
+    # drops it whenever what it renders moved, so a run that created or changed
+    # the chapter leaves a rebuilt one on disk that nothing else commits.
+    index_freeze = notebook.freeze / chapter / "index"
+    if index_freeze.exists():
+        paths.append(rel(index_freeze))
     # Shared machinery the run may have touched -- rule 2 promotion lands here.
-    for name in ("_analysis.py", "_model.py"):
+    # index.qmd and _model.qmd are in the list for a NEW chapter: they are
+    # scaffolded, not written by the model, so they were missing from every
+    # commit that created one -- leaving a chapter in history with an entry but
+    # no index, and a fresh clone with nothing to render the aircraft from.
+    for name in ("_analysis.py", "_model.py", "index.qmd", "_model.qmd"):
         f = notebook.chapters_dir / chapter / name
         if f.exists():
             changed = subprocess.run(
@@ -324,13 +367,15 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         tell(f"  no proposal at {notebook.proposal_path}. Run `nb ask` first.")
         return 1
     raw = json.loads(notebook.proposal_path.read_text())
-    # What `ask` had left of the pool when it stopped. Popped BEFORE validation
-    # so it never becomes a Proposal field, and so never appears in the
-    # `propose` tool schema as something the model is invited to fill in.
-    pool = raw.pop("_pool_left", PROBE_POOL)
-    ceiling = raw.pop("_render_ceiling", None)
-    pool_total = raw.pop("_pool_total", None)
-    proposal = Proposal.model_validate(raw)
+    # What `ask` had left of the pool when it stopped. Read out BEFORE
+    # validation so they never become Proposal fields, and so never appear in
+    # the `propose` tool schema as something the model is invited to fill in.
+    # `raw` keeps them, because it is what gets written back on a resume.
+    pool = raw.get("_pool_left", PROBE_POOL)
+    ceiling = raw.get("_render_ceiling")
+    pool_total = raw.get("_pool_total")
+    proposal = Proposal.model_validate(
+        {k: v for k, v in raw.items() if not k.startswith("_")})
     open_log(notebook, "write", proposal.title)
 
     if header:
@@ -340,10 +385,18 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     tell(f"  entry     {proposal.title}")
 
     chapter_msg = None
+    # RESUMED, not created again. A run that scaffolded a chapter and then died
+    # -- at the render, say -- leaves a chapter that is no longer claimable,
+    # because its index is filled in. Re-running `nb write` then allocated the
+    # NEXT number and wrote a duplicate beside it. The resolved name is written
+    # back to the proposal below, so on the second pass this is simply true.
+    already = (notebook.chapters_dir / proposal.chapter).is_dir()
+    if already:
+        tell(f"  chapter   resuming into existing chapters/{proposal.chapter}/")
     # Either route can be the first entry in a scaffold chapter: `propose`
     # refuses to hand one over without a chapter_title, so by here we have a
     # name for it and the claim is the same operation as creating one.
-    if proposal.route == "new_chapter" or (
+    elif proposal.route == "new_chapter" or (
             proposal.chapter == notebook.claimable_stub()):
         # chapter_title, not proposal.title: the chapter is named for what it
         # holds ("Flight path"), not for whichever question happened to create it.
@@ -355,6 +408,10 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         tell(f"  chapter   {chapter_msg.splitlines()[0]}")
         if chapter_msg.startswith("rejected"):
             return 1
+        # Record the NUMBER create_chapter allocated, immediately. Everything
+        # after this can fail, and the proposal on disk is what a resume reads.
+        raw["chapter"] = proposal.chapter
+        notebook.proposal_path.write_text(json.dumps(raw, indent=2))
 
     today = datetime.date.today().isoformat()
     stem = _stem(notebook, proposal.chapter, proposal.title, today)
@@ -378,7 +435,13 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     _chapter_dir = notebook.chapters_dir / proposal.chapter
     _before = {n: guards.bodies(_chapter_dir / n)
                for n in ("_model.py", "_analysis.py")}
-    _siblings = len(notebook.entries(proposal.chapter))
+    # SIBLINGS, which this entry is not one of. On a fresh run the entry does
+    # not exist yet and the count is right either way; on a RESUME it is already
+    # on disk from the failed attempt, and counting it meant a run that fixed
+    # its own _analysis.py was told it had moved a sibling's answers -- then
+    # gated on a baseline that cannot exist, because the page is not in HEAD.
+    _siblings = len([e for e in notebook.entries(proposal.chapter)
+                     if e.stem != stem])
 
     fs, handlers, make_config = setup(session, phase="write")
     try:
@@ -402,6 +465,8 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         def on_turn(n, resp, turn):
             run_metrics.turn(resp)
             if verbose:
+                say()          # one blank line per turn, so a turn and its
+                               # reasoning read as one block
                 calls = [p.function_call.name for p in (turn.parts or [])
                          if p.function_call]
                 say(report(resp, f"turn {n + 1}") +
@@ -439,26 +504,54 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         entry_path = notebook.chapters_dir / proposal.chapter / f"{stem}.qmd"
         _refresh_index_freeze(notebook, proposal.chapter)
         findings = []
-        for attempt in range(MAX_VERIFY_ATTEMPTS):
+        # Two budgets, not one. A render failure and a verify finding are
+        # different work, and spending a verify attempt on "the page does not
+        # build" would leave the entry one round short of fixing what verify
+        # then found -- the page has to build before verify has ever run.
+        attempt, renders = 0, 0
+        while attempt < MAX_VERIFY_ATTEMPTS:
             result, note = verify_phase.check(
                 notebook, proposal.chapter, stem, entry_path=entry_path)
             if note:
-                # NOT a skip-and-commit. Both cases this covers -- the render
-                # failed, or there is no freeze to read -- mean the entry could
-                # not be checked against its own output, and one of them means
-                # the page does not build at all. Committing either would put
-                # exactly the thing verify exists to catch into history.
-                tell(f"  verify    could not run — {note}")
-                run_metrics.close("verify_failed")
-                return 1
+                # NOT a skip-and-commit either way: both cases mean the entry
+                # could not be checked against its own output, and committing
+                # one would put exactly the thing verify exists to catch into
+                # history. But they are not the same failure. A page that does
+                # not BUILD is a code error with a traceback naming the line,
+                # which the model fixes in a turn -- so it gets the same
+                # treatment lint and verify findings already get. A missing
+                # freeze is nothing it can act on, and still ends the run.
+                buildable = not note.startswith(verify_phase.RENDER_FAILED)
+                if buildable or renders >= MAX_RENDER_FIXES:
+                    tell(f"  verify    could not run — {note}")
+                    run_metrics.close("verify_failed")
+                    return 1
+                renders += 1
+                run_metrics.set(render_fixes=renders)
+                tell(f"  render    FAILED — handing the error back "
+                      f"(attempt {renders} of {MAX_RENDER_FIXES})")
+                say(note)
+                contents.append({"role": "user", "parts": [{"text":
+                    "The page does not build. Quarto reported:\n\n" + note
+                    + "\n\nFix the cause and stop. The chapter's _model.py and "
+                      "_analysis.py are exec'd into the page namespace by "
+                      "_model.qmd, so their names are already in scope — "
+                      "importing them is what raises ModuleNotFoundError."}]})
+                loop_once()
+                clean, problems = verifiers.is_clean(notebook, proposal.chapter)
+                if not clean:
+                    tell(f"  lint      {len(problems)} blocking after the render "
+                          f"fix; stopping. The entry is on disk.")
+                    run_metrics.close("lint_failed")
+                    return 1
+                continue
             findings = result.findings
+            attempt += 1
             tell(f"  verify    {'ok' if result.ok else f'{len(findings)} finding(s)'}"
-                  f" (attempt {attempt + 1})")
+                  f" (attempt {attempt})")
             for f in findings:
                 tell(f"              {f}")
-            if result.ok:
-                break
-            if attempt == MAX_VERIFY_ATTEMPTS - 1:
+            if result.ok or attempt >= MAX_VERIFY_ATTEMPTS:
                 break
             contents.append({"role": "user", "parts": [{"text":
                 "The rendered page contradicts its own prose. A fresh reader "
@@ -582,7 +675,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         # given a budget nobody chose.
         total = pool_total or session.probe_pool
         spent = total - (session.probe_left or 0.0)
-        tell(f"  budget    {spent:.0f} s of {total:.0f} s probe pool used")
+        say(f"  budget    {spent:.0f} s of {total:.0f} s probe pool used")
     run_metrics.close("committed_refactor" if accepted else "committed")
 
     # The entry itself, with real numbers. Conversation, not telemetry: it is

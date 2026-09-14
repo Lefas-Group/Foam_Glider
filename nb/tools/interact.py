@@ -93,8 +93,10 @@ def ask_render_ceiling(default):
     """
     return ask_budget(
         "ENTRY RENDER BUDGET",
-        "  How long one render of this entry may take, in seconds. It bounds\n"
-        "  every solve inside it, and a render that overruns is killed.\n"
+        "  Seconds of EXECUTION this entry's render may take. It bounds every\n"
+        "  solve inside it, and a render that overruns is killed. Quarto's own\n"
+        "  startup and pandoc are paid on top and are not yours to set.\n"
+        "  There is no slack on this number: a slow machine needs a bigger one.\n"
         "  Enter accepts the notebook default.",
         default)
 

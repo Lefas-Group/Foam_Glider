@@ -45,6 +45,11 @@ If the prose is supported by the output, return ok with no findings.
 """
 
 
+# Prefix on the `note` a failed render returns, so the write loop can tell it
+# apart from "there is no freeze to read" without parsing the traceback.
+RENDER_FAILED = "render failed,"
+
+
 def rendered_markdown(notebook, chapter, stem):
     p = notebook.freeze / chapter / stem / "execute-results" / "html.json"
     if not p.exists():
@@ -68,7 +73,12 @@ def check(notebook, chapter, stem, entry_path=None, render_first=True):
     if render_first and entry_path:
         out = verifiers.render(notebook, str(entry_path.relative_to(notebook.root)))
         if "FAILED" in out:
-            return None, f"render failed, nothing to verify:\n{out}"
+            # RENDER_FAILED, not a bare note: the caller retries this one and
+            # not the other skip. A page that does not build is a code error the
+            # model can fix in a turn -- it cost a whole run once, on a
+            # `from _analysis import …` that no rule then caught -- whereas a
+            # missing freeze is nothing it can act on.
+            return None, f"{RENDER_FAILED} nothing to verify:\n{out}"
 
     markdown = rendered_markdown(notebook, chapter, stem)
     if markdown is None:

@@ -107,13 +107,17 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
         resp = complete(contents, cfg)
         turn = resp.candidates[0].content
         _log(transcript, turn)         # the record keeps the thinking
+        # The turn's own line FIRST, then the reasoning behind it. Printing the
+        # thoughts first put every `turn N` line after the block it belonged to,
+        # so it read as a heading for the NEXT turn -- which is most of why the
+        # log was hard to follow.
+        if on_turn:
+            on_turn(n, resp, turn)
         # Shown, then dropped: telemetry, never conversation, and never fed back.
         for part in (turn.parts or []):
             if getattr(part, "thought", None) and part.text:
                 thought(part.text)
         contents.append(_spoken(turn))
-        if on_turn:
-            on_turn(n, resp, turn)
 
         calls = [p.function_call for p in (turn.parts or []) if p.function_call]
         if not calls:

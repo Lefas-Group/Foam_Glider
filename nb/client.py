@@ -12,6 +12,8 @@ and -- when there was one -- explicit-cache lifecycle, which a
 chat-completions shape models poorly.
 """
 
+import re
+
 from google import genai
 from google.genai import types
 
@@ -101,9 +103,30 @@ def config(tools=None, system_instruction=None, response_schema=None,
     return types.GenerateContentConfig(**kw)
 
 
+# A daily quota is not a transient error and the six retries above cannot help:
+# the reset is hours away, not seconds. Caught here so it ends the run with the
+# one fact that matters -- when it can be tried again -- instead of a stack
+# trace ending in `raise ClientError(status_code, response_json, response)`,
+# which says nothing about what to do and buries the retry time in a 900-byte
+# JSON blob.
+_QUOTA = re.compile(r"retryDelay['\"]?[:=]\s*['\"]?(\d+)s")
+
+
 def complete(contents, cfg, model=MODEL):
-    return client().models.generate_content(
-        model=model, contents=contents, config=cfg)
+    from google.genai import errors
+    try:
+        return client().models.generate_content(
+            model=model, contents=contents, config=cfg)
+    except errors.ClientError as e:
+        if getattr(e, "code", None) != 429:
+            raise
+        m = _QUOTA.search(str(e))
+        wait = (f" Try again in about {int(m.group(1)) // 60} min."
+                if m else "")
+        raise SystemExit(
+            f"\n  API quota exhausted for {model}.{wait}\n"
+            f"  Nothing was committed; the entry is on disk and "
+            f"`nb write <notebook>` resumes from the same proposal.") from None
 
 
 def usage(resp):

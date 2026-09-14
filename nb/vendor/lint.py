@@ -407,6 +407,27 @@ def fixed_count_solves(source, aero_calls):
         and not _can_exit_early(node.body))
 
 
+# Rule 1, second half. `prose_of` strips inline expressions before the rule sees
+# the text, so a number typed INSIDE one is invisible to it -- which is exactly
+# what a run reached for when it wanted to cite an earlier chapter's answer and
+# wrote `{python} 0.401`. An expression that reads nothing and calls nothing is
+# not a computation; it is a hand-typed number wearing the syntax of one.
+#
+# Name, Attribute or Call is the test for "reaches something": f"{sink:.3f}"
+# carries a Name and passes, f"{0.401:.3f}" and a bare 0.401 do not. Measured
+# across all three notebooks -- 618 inline expressions, one hit.
+INLINE_BODY = re.compile(r"`\{python\}([^`]*)`")
+
+
+def _computes_nothing(expr):
+    try:
+        tree = ast.parse(expr.strip(), mode="eval")
+    except SyntaxError:
+        return False            # not ours to report; rule 1 is not a parser
+    return not any(isinstance(n, (ast.Name, ast.Attribute, ast.Call))
+                   for n in ast.walk(tree))
+
+
 def prose_of(text):
     """The entry's prose: no front matter, no code cells, no inline expressions."""
     t = re.sub(r"^---\n.*?\n---\n", "", text, flags=re.S)
@@ -1033,22 +1054,26 @@ def limits_of(root, entry):
 
 # How long a render may take, derived from what it will actually execute.
 #
-# SLACK sits just above the worst load inflation on record -- the same solve
-# measured 533.9 s against a 145 s baseline purely from machine load, 3.7x -- so
-# this deadline is a DEADLOCK DETECTOR, not a cost limit. Rule 17 is the cost
-# limit and it judges the recorded seconds afterwards. Erring high here costs
-# only the delay before a wedge is noticed; erring low kills honest work on a
-# busy laptop, which is the failure rule 17 was written to avoid.
+# THE GRANT GOVERNS. The user is asked for a render budget at the prompt, the
+# entry declares it as ENTRY_CEILING, and it is the whole of the executing cost
+# here -- no multiplier. The earlier 4x slack made that promise false: a granted
+# 20 s produced a 995 s deadline, of which only 80 s came from the grant.
 #
-# OVERHEAD covers pandoc and site assembly, which happen whether or not anything
-# executes. It is PER PAGE plus a floor, because it scales with the page count
-# and a flat floor would not survive a bigger notebook: an 8-page all-frozen
-# project render measured 11.4 s and 14.2 s, about 1.6 s a page, and the largest
-# notebook here has 31 pages -- which a flat 60 s would have sat right on top of.
-# 5 s a page is ~3x the measurement, matching the slack philosophy above.
-RENDER_SLACK = 4
-RENDER_OVERHEAD = 60.0
-RENDER_PER_PAGE = 5.0
+# The trade is real and is the reason the slack existed: the same solve measured
+# 533.9 s against a 145 s baseline purely from machine load, 3.7x, so a busy
+# laptop can now kill honest work. The recovery is a bigger number at the
+# prompt, which is the only knob and is meant to be.
+#
+# FLOOR is quarto's own startup and pandoc, which happen whether or not anything
+# executes: one frozen page measured 11.4 s and 11.6 s, and an UNFROZEN index --
+# which execs _notebook.py, _model.py and _analysis.py, importing aerosandbox --
+# measured 11.2 s, indistinguishable. So an index costs the floor and little
+# else, where it used to be charged a 200 s entry default. 35 s is ~3x the
+# measurement; erring high on a fixed cost is cheap, and it keeps the grant
+# visible as a separate term rather than buried in a multiplier.
+RENDER_FLOOR = 35.0         # startup + pandoc, once
+RENDER_PER_PAGE = 5.0       # pandoc per page in the target
+RENDER_INDEX = 15.0         # a page that executes definitions but never a solve
 
 
 def unfrozen(root, chapters):
@@ -1068,42 +1093,50 @@ def unfrozen(root, chapters):
     return out
 
 
-def render_deadline(root, chapters=None):
+def render_deadline(root, target=None):
     """
-    Seconds a `quarto render` of `chapters` may take before it is killed.
+    Seconds a `quarto render` of `target` may take before it is killed.
 
-    Scales with the WORK, not the target, which is what lets one formula cover a
-    single entry, a chapter and the whole project. A frozen page executes
-    nothing, so it contributes nothing: `check` deletes the freezes it
-    invalidates BEFORE rendering, which makes the unfrozen set exactly the work
-    list. An 8-page notebook with every freeze intact comes out near the floor,
-    where it belongs.
+    Scoped to the TARGET, which is what makes the grant mean anything. It used
+    to size every render from the whole project: rendering one entry was
+    charged for all 11 pages and for a chapter index it was not rendering, so
+    the number had nothing to do with the page being built.
 
-    Pages that declare no ceiling -- every `index.qmd`, and any entry predating
-    rule 28 -- take the notebook default rather than being skipped, so a legacy
-    notebook still gets a deadlock guard.
+    `target` is a path -- the notebook root, a chapter directory, or one .qmd --
+    or None for the whole project. A frozen page executes nothing and costs
+    nothing but pandoc: `check` deletes the freezes it invalidates BEFORE
+    rendering, which makes the unfrozen set exactly the work list.
+
+    An entry contributes the ENTRY_CEILING it declares, which is the number the
+    user granted at the prompt. Anything else that executes -- an index -- takes
+    RENDER_INDEX, because it defines and prints rather than solving.
     """
+    root = pathlib.Path(root)
+    target = root if target is None else pathlib.Path(target)
     # ALL chapters, not chapters_of(): a `_lint-skip` marker exempts a chapter
     # from being CHECKED, and quarto renders it regardless. Sizing the deadline
     # from the linted set would have left a project render of this notebook with
     # a budget for 10 of its 31 pages.
-    if chapters is None:
-        chapters = sorted(d.name for d in (root / "chapters").iterdir()
-                          if d.is_dir())
-    _, default_ceiling = _defaults(root)
-    default_ceiling = default_ceiling or 200.0
+    chapters = sorted(d.name for d in (root / "chapters").iterdir() if d.is_dir())
     pages = [q for c in chapters
-             for q in (root / "chapters" / c).glob("*.qmd")
+             for q in sorted((root / "chapters" / c).glob("*.qmd"))
              if not q.name.startswith("_")]
-    total = 0.0
-    for page in unfrozen(root, chapters):
+    if target.is_file():
+        pages = [q for q in pages if q == target]
+    elif target != root:
+        pages = [q for q in pages if target in q.parents]
+
+    frozen = {q for q in pages} - set(unfrozen(root, chapters))
+    total = RENDER_FLOOR + RENDER_PER_PAGE * len(pages)
+    for page in pages:
+        if page in frozen:
+            continue
         if ENTRY_FILE.match(page.name):
             _, ceiling = limits_of(root, page)
+            total += ceiling if ceiling else (_defaults(root)[1] or 200.0)
         else:
-            ceiling = None          # index.qmd and friends
-        total += ceiling if ceiling else default_ceiling
-    return (RENDER_OVERHEAD + RENDER_PER_PAGE * len(pages)
-            + RENDER_SLACK * total)
+            total += RENDER_INDEX
+    return total
 
 
 def render_quarto(target, root, cwd=None):
@@ -1121,7 +1154,7 @@ def render_quarto(target, root, cwd=None):
     goes, which `TimeoutExpired.stdout` preserves.
     """
     import subprocess
-    deadline = render_deadline(root)
+    deadline = render_deadline(root, target)
     try:
         return subprocess.run(["quarto", "render", str(target)],
                               capture_output=True, text=True, cwd=cwd,
@@ -1150,10 +1183,11 @@ def render_quarto(target, root, cwd=None):
         return subprocess.CompletedProcess(
             t.cmd, 124, blob,
             f"render killed after {deadline:.0f} s{where}\n"
-            f"  ({n} page(s) to execute x ceiling x {RENDER_SLACK} slack "
-            f"+ {RENDER_OVERHEAD:.0f} s + {RENDER_PER_PAGE:.0f} s/page)\n"
-            f"  Nothing was advancing. Raise the entry's ENTRY_CEILING if the "
-            f"work is genuinely this expensive.")
+            f"  ({RENDER_FLOOR:.0f} s floor + {RENDER_PER_PAGE:.0f} s/page "
+            f"+ the ENTRY_CEILING each of {n} unfrozen page(s) declares)\n"
+            f"  Nothing was advancing. The ceiling is what was granted at the "
+            f"prompt and it governs directly -- ask for more there if the work "
+            f"is genuinely this expensive.")
 
 
 def _budget_rules(root, chapters, entries):
@@ -1196,6 +1230,21 @@ def _budget_rules(root, chapters, entries):
                     (e, f"binds {name} = None — unbounded is no longer an "
                         f"option: the ceiling is what bounds the render, and "
                         f"a render with no bound is one that can hang"))
+
+        # 28, second half: a solve cannot outlive the render containing it.
+        # Declaring SOLVE_BUDGET = 60 under ENTRY_CEILING = 20 is not a slack
+        # setting, it is two numbers that cannot both hold -- the render is
+        # killed at 20 s and the solve budget never binds anything. Seen the
+        # first time an entry was written against a granted ceiling, so the
+        # combination is one the brief invites by calling SOLVE_BUDGET "yours".
+        if (budget is not None and ceiling is not None
+                and found_b and found_c and budget > ceiling):
+            problems.append(
+                (e, f"declares SOLVE_BUDGET = {budget:.0f} s under an "
+                    f"ENTRY_CEILING of {ceiling:.0f} s — one solve cannot "
+                    f"outlive the render that contains it. Lower the solve "
+                    f"budget, or ask for a bigger ceiling with ask_specified; "
+                    f"do not raise ENTRY_CEILING yourself, it was granted"))
 
         # 18: and says so where a reader looks, not only in code.
         spec = "".join(body for title, body in callouts_of(e.read_text())
@@ -1251,6 +1300,84 @@ def _budget_rules(root, chapters, entries):
                         f"instead, where it is on the record"))
     return problems
 
+# The chapter-local modules `_model.qmd` EXECS into the page namespace. They are
+# not importable and never were: `execute-dir: project` puts the cwd at the
+# notebook root, so `chapters/NN-name/` is not on sys.path.
+EXECD = ("_model", "_analysis", "_notebook")
+
+
+def _composition(root, chapters, entries):
+    """
+    Rules 29 and 30 -- the two halves of how a chapter composes.
+
+    Rule 29 is an ERROR, unlike its neighbours here, because the page does not
+    BUILD: `from _analysis import optimize_glider_unswept_c4` cost a whole run,
+    dying at the render with ModuleNotFoundError after lint had passed clean.
+    The names are already in scope; importing them is the mistake a fresh
+    chapter invites, because there is no sibling to copy the convention from.
+
+    Rule 30 guards the justification rule 19 rests on -- "the vehicle goes in
+    `_model.py` because the chapter index renders that file, so it is where a
+    reader looks for the aircraft". The scaffold ships that block; a model that
+    rewrites index.qmd with `write_file` rather than editing it drops the block
+    and nothing noticed, leaving a chapter whose aircraft appears nowhere.
+
+    Calibrated across every chapter of all three notebooks before being
+    written: rule 29 matched the two lines from that failed run and nothing
+    else, rule 30 matched that run's index and nothing else.
+    """
+    out = []
+    for c in chapters:
+        chapter = root / "chapters" / c
+        sources = [(e, entry_cells(e.read_text())) for e in entries
+                   if e.parent.name == c]
+        for py in sorted(chapter.glob("*.py")):
+            try:
+                sources.append((py, py.read_text()))
+            except OSError:
+                continue
+        for where, src in sources:
+            try:
+                tree = ast.parse(src)
+            except SyntaxError:
+                continue            # rule 29 is not the one that reports this
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    hit = node.module if node.module in EXECD else None
+                elif isinstance(node, ast.Import):
+                    hit = next((a.name for a in node.names if a.name in EXECD),
+                               None)
+                else:
+                    continue
+                if hit:
+                    out.append((where, (
+                        f"imports `{hit}` — it is not a module. _model.qmd "
+                        f"execs _model.py and _analysis.py into the page "
+                        f"namespace, so their names are ALREADY in scope; the "
+                        f"import raises ModuleNotFoundError at render. Delete "
+                        f"the line and call the name directly")))
+
+        # Rule 30. Two loose marks rather than one exact path: every index in
+        # the corpus builds the path with an f-string over a loop variable
+        # (`f"chapters/{c}/{_f}"`, with the loop named `_f`, `name` or `code`
+        # in different chapters), so the literal `chapters/NN-name/_model.py`
+        # appears in none of them. Naming the file AND its own chapter
+        # directory is what they all share -- checked against all 12 indexes
+        # across the three notebooks, where only the failing one misses both.
+        index = chapter / "index.qmd"
+        if not any(e.parent.name == c for e in entries) or not index.exists():
+            continue                # same exemption as rules 19 and 24
+        text = index.read_text()
+        if "_model.py" not in text or f"chapters/{c}" not in text:
+            out.append((index, (
+                "does not render its own _model.py — the scaffold's `## The "
+                "model` block is gone. Rule 19 puts the vehicle in _model.py "
+                "BECAUSE the index shows it; without the block the aircraft "
+                "appears nowhere a reader looks. Restore the block (edit the "
+                "index, never write_file over it)")))
+    return out
+
+
 def check(root, chapters):
     entries = [f for c in chapters
                for f in sorted((root / "chapters" / c).glob("*.qmd"))
@@ -1277,6 +1404,7 @@ def check(root, chapters):
     problems += _stale_freeze(root, chapters)
     problems += _budget_rules(root, chapters, entries)
     problems += _visuals_and_tables(root, chapters, entries)
+    problems += _composition(root, chapters, entries)
 
     # Rule 13. Scoped to `_analysis.py`: `_model.py` is rendered in full by the
     # chapter index, and `_notebook.py` is deliberately invisible, so requiring
@@ -1342,6 +1470,14 @@ def check(root, chapters):
         for n in dict.fromkeys(RESULT_NUMBER.findall(prose_of(text))):
             problems.append(
                 (f, f"hand-typed number {n!r} in prose — use `{{python}} …`"))
+
+        for expr in dict.fromkeys(e for e in INLINE_BODY.findall(text)
+                                  if _computes_nothing(e)):
+            problems.append(
+                (f, f"`{{python}} {expr.strip()}` computes nothing — it reads no "
+                    f"variable and calls no function, so the number was typed "
+                    f"by hand and rule 1 applies. Compute it, or if it belongs "
+                    f"to an earlier chapter, say so in prose and link the entry"))
 
         # The three word budgets.
         n = words(body_prose(text))

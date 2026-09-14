@@ -81,13 +81,13 @@ find things whose name gives no clue.
 - Call `aero_report()` at the end of a probe. It prints what the solves cost, and
   that number becomes the proposal's render cost.
 
-# The 28 rules lint checks
+# The 30 rules lint checks
 
 Know these before drafting, not after. Finding one from a lint run means the
 prose is already written.
 
 ```
- 1  no hand-typed number in prose — use `{python} …` (2+ decimals)
+ 1  no hand-typed number in prose — `{python} …` that reads a variable, not a literal
  2  no 3 consecutive code lines repeated across entries — promote to _analysis.py
  3  `**Answer.**` comes before the last code cell
  4  no sweeping a decision that should have been asked — record it as Specified
@@ -103,8 +103,8 @@ prose is already written.
 14  one visual per entry — a table counts as a figure
 15  a table is at most 6×4, excluding the header
 16  a budgeted chapter does not override SOLVE_BUDGET at a call site
-17  a frozen entry stays under its chapter's ENTRY_CEILING
-18  the solve budget in force is declared in the chapter's index
+17  a frozen entry stays under the ENTRY_CEILING it declares
+18  the budgets in force are declared in the entry's own Specified callout
 19  a chapter with an entry defines its vehicle in `_model.py`
 20  (warning) an entry-local function reaching the vehicle belongs in _analysis.py
 21  (warning) an `_analysis.py` function nothing calls is dead
@@ -114,7 +114,9 @@ prose is already written.
 25  no sentence enumerates more than five computed values — table it
 26  the title is ONE question, at most 18 words
 27  never assign to a name `_notebook.py` owns (`time`, `footer`, …) at cell top level
-28  every entry declares ENTRY_CEILING and SOLVE_BUDGET; neither may be None
+28  every entry declares ENTRY_CEILING and SOLVE_BUDGET — never None, solve ≤ ceiling
+29  never import `_model`, `_analysis` or `_notebook` — already in scope
+30  a chapter index renders its own `_model.py` — that is where the aircraft is
 ```
 
 `read_reference("why")` has the failure behind each one. Read it when a rule

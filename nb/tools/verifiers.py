@@ -73,10 +73,16 @@ def render(notebook, target=""):
     # Announced before it starts, so `nb watch` knows how long silence here is
     # allowed to last. Without it the watcher falls back to a flat 120 s and
     # would cry wolf over an honest 200 s render.
-    deadline = lint.render_deadline(notebook.root)
-    todo = lint.unfrozen(notebook.root,
-                         sorted(d.name for d in (notebook.root / "chapters").iterdir()
-                                if d.is_dir()))
+    # From the SAME path render_quarto will deadline on. Computed from the root
+    # here once, it announced a project-sized number for a one-page render --
+    # 90 s against the 60 s actually enforced, which is worse than saying
+    # nothing, since `nb watch` sizes its staleness warning on this line.
+    deadline = lint.render_deadline(notebook.root, path)
+    todo = [q for q in lint.unfrozen(
+                notebook.root,
+                sorted(d.name for d in (notebook.root / "chapters").iterdir()
+                       if d.is_dir()))
+            if path == notebook.root or q == path or path in q.parents]
     say(f"  render    deadline {deadline:.0f} s ({len(todo)} page(s) to execute)")
     r = lint.render_quarto(path, notebook.root, cwd=notebook.root)
     out = (r.stdout or "") + (r.stderr or "")

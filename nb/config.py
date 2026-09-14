@@ -7,6 +7,7 @@ same-directory imports of each other, so they have to be reachable as top-level
 names rather than as `nb.vendor.lint`.
 """
 
+import os
 import pathlib
 import sys
 
@@ -34,7 +35,12 @@ if str(VENDOR) not in sys.path:
 # Flash is a false economy here: the cheap model spent twenty times the turns
 # and produced nothing. Re-run the comparison on first-pass lint violations once
 # entries are being written -- that is the metric that decides it long-term.
-MODEL = "gemini-3.1-pro-preview"
+# $NB_MODEL overrides it for one run. That exists for the boring reason: the
+# quota is per MODEL per day (250), so a day spent testing against pro leaves
+# flash's bucket untouched and a smoke test can still run. It is not a way to
+# change what ships -- the default is the measured choice above, and metrics.py
+# records the model that actually served each run, so a row cannot lie about it.
+MODEL = os.environ.get("NB_MODEL", "gemini-3.1-pro-preview")
 
 # MINIMAL is in the enum but 400s on both candidate models. LOW/MEDIUM/HIGH are
 # the usable range, and this is the main cost lever.
@@ -59,6 +65,13 @@ MAX_TURNS = 40          # per agent loop
 MAX_CONSULTS = 3        # open-ended guidance can loop; a Specified input cannot
 MAX_LINT_ATTEMPTS = 3   # write -> lint -> write
 MAX_VERIFY_ATTEMPTS = 2  # write -> render -> verify -> write
+# write -> render -> write, on a page that does not BUILD. Its own budget, not a
+# slice of the verify one: the page has to render before verify has anything to
+# read, so charging a build error to verify leaves the entry a round short of
+# fixing whatever verify then finds. One is enough for the failure this exists
+# for -- a traceback naming the line -- and a second usually means the model is
+# guessing rather than reading it.
+MAX_RENDER_FIXES = 1
 CACHE_TTL = "3600s"
 
 # Every handler truncates its own output. Tracebacks keep the tail, listings the
