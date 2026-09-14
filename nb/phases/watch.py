@@ -29,6 +29,14 @@ from ..log import tell
 # think does not trip it.
 DEFAULT_QUIET = 120.0
 
+# Dimming happens HERE, not in the log. The run writes plain text -- the file
+# is read by `tail`, by grep, and one day by a coordinator, and escape codes in
+# it would be noise to all three. The reader is the one that knows it is
+# attached to a terminal, so the reader styles. Same split as the staleness
+# warning below.
+DIM, RESET = "\x1b[2m", "\x1b[0m"
+GUTTER = "│"
+
 PID = re.compile(r"\bpid (\d+)\b")
 DEADLINE = re.compile(r"deadline (\d+(?:\.\d+)?) s")
 
@@ -46,6 +54,16 @@ def _alive(pid):
         return True          # exists, owned by someone else
     except OSError:
         return None
+
+
+def _styled(text):
+    """Dim the model's reasoning so the run's own report stands out."""
+    out = []
+    for line in text.splitlines(keepends=True):
+        body = line.rstrip("\n")
+        out.append(f"{DIM}{body}{RESET}" + line[len(body):]
+                   if body.lstrip().startswith(GUTTER) else line)
+    return "".join(out)
 
 
 def _quiet_note(idle, limit, pid):
@@ -76,6 +94,8 @@ def follow(path, from_start=False, poll=0.25):
     """
     handle, size = None, 0
     pid, limit, last, warned = None, None, time.time(), False
+    pending = ""
+    colour = sys.stdout.isatty()
     try:
         while True:
             if handle is None:
@@ -89,7 +109,13 @@ def follow(path, from_start=False, poll=0.25):
 
             chunk = handle.read()
             if chunk:
-                sys.stdout.write(chunk)
+                # Buffer the tail: a read can land mid-line, and styling half a
+                # line leaves the escape code unterminated across the split.
+                chunk, pending = pending + chunk, ""
+                if not chunk.endswith("\n"):
+                    chunk, _, pending = chunk.rpartition("\n")
+                    chunk += "\n" if chunk else ""
+                sys.stdout.write(_styled(chunk) if colour else chunk)
                 sys.stdout.flush()
                 # The run tells us who it is and what it is waiting for.
                 for m in PID.finditer(chunk):

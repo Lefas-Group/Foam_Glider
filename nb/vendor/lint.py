@@ -1416,17 +1416,29 @@ def check(root, chapters):
                     (f, "**Answer.** comes after the last code cell — it should "
                         "come before the evidence"))
 
-    blocks = defaultdict(set)
+    # WITHIN a chapter, not across the notebook. The remedy this rule names --
+    # promote to `_analysis.py` -- only exists inside one chapter, because every
+    # chapter has its own. Comparing across them produced a finding whose advice
+    # could not be followed: two chapters drawing the same three-view, told to
+    # share a file that does not exist. Rule 20 is what watches for a helper
+    # that ought to be shared more widely, and it is a warning for that reason.
+    by_chapter = defaultdict(list)
     for f in entries:
-        lines = code_of(f.read_text())
-        for i in range(len(lines) - BLOCK + 1):
-            blocks[tuple(lines[i:i + BLOCK])].add(f.name)
-    for block, where in blocks.items():
-        if len(where) >= 2:
-            problems.append(
-                (None, f"{BLOCK} code lines repeated in {len(where)} entries "
-                       f"({', '.join(sorted(_label(n)[:23] for n in where))}) — promote "
-                       f"to _analysis.py:\n        " + "\n        ".join(block)))
+        by_chapter[f.parent.name].append(f)
+    for chapter, group in by_chapter.items():
+        blocks = defaultdict(set)
+        for f in group:
+            lines = code_of(f.read_text())
+            for i in range(len(lines) - BLOCK + 1):
+                blocks[tuple(lines[i:i + BLOCK])].add(f.name)
+        for block, where in blocks.items():
+            if len(where) >= 2:
+                problems.append(
+                    (None, f"{BLOCK} code lines repeated in {len(where)} entries "
+                           f"of {chapter} "
+                           f"({', '.join(sorted(_label(n)[:23] for n in where))}) — promote "
+                           f"to {chapter}/_analysis.py:\n        "
+                           + "\n        ".join(block)))
     return problems
 
 

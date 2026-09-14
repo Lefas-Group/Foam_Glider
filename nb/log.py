@@ -63,14 +63,25 @@ def close_log():
             _log = None
 
 
+# The gutter that marks a line as the model's reasoning rather than the run's
+# own report. A bar, not the `·` the old format used: `·` is already the field
+# separator inside budget lines ("15 s granted · 2 s used"), so the two read as
+# the same kind of thing when scanning. `nb watch` dims anything carrying this.
+GUTTER = "│ "
+_STAMP_W = 10                   # len("HH:MM:SS") + two spaces
+
+
 def _stamped(args):
     """Prefix the first line with HH:MM:SS; continuation lines stay aligned."""
     if not args:
         return args
     head = str(args[0])
-    if head.startswith("        ·") or head.startswith("═") or not head.strip():
-        return ("         " + head,) + args[1:]   # thoughts and rules: align only
-    return (f"{time.strftime('%H:%M:%S')} {head}",) + args[1:]
+    if head.startswith(GUTTER[0]) or head.startswith("═") or not head.strip():
+        return (" " * _STAMP_W + head,) + args[1:]
+    # Status lines arrive with two leading spaces of their own; the stamp
+    # replaces that indent rather than adding to it, so the columns they were
+    # written to line up under it.
+    return (f"{time.strftime('%H:%M:%S')}  {head.lstrip(' ')}",) + args[1:]
 
 
 def say(*args, **kw):
@@ -109,9 +120,22 @@ def thought(text):
     What the model was reasoning, indented so it never reads as output.
 
     Summaries, not raw chain of thought -- the API returns a condensed version.
-    They cost nothing extra to generate (the thinking happens either way and is
-    billed either way) and ~250 tokens/turn of conversation to carry, because
-    they arrive inside the model turn, which `loop.py` appends whole.
+    They cost nothing extra to generate: the thinking happens either way and is
+    billed either way, measured at 398 vs 342 thought tokens with this off and
+    on. They cost nothing to CARRY either, because `loop.py` shows them and then
+    drops them before appending the turn, so they never re-enter the
+    conversation -- which is also why they can confabulate freely here without
+    misleading the model later.
     """
+    blank = False
     for line in (text or "").strip().splitlines():
-        say(f"        · {line}")
+        # The summaries arrive as markdown paragraphs, so they carry blank
+        # lines and would otherwise print a bare gutter for each. Keep at most
+        # one, as a paragraph break.
+        if not line.strip():
+            blank = True
+            continue
+        if blank:
+            say(GUTTER.rstrip())
+            blank = False
+        say(f"{GUTTER}{line.rstrip()}")

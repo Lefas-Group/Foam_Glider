@@ -41,6 +41,19 @@ in the entry: an entry answers the question asked and stops.
 
 1. Create the entry at `{chapter}/{stem}.qmd`. Use `write_file` for the initial
    version, then `edit_file` for every change after that.
+   Its FIRST code cell must open with exactly these two lines (rule 28):
+
+       ENTRY_CEILING = {ceiling}   # s for this render, granted by the user
+       SOLVE_BUDGET = {solve}     # s for any one solve
+
+   ENTRY_CEILING is not yours to choose -- it is what the user granted at the
+   prompt, the commit is refused if you change it, and a render that overruns
+   it is killed. SOLVE_BUDGET is yours: pick what one solve needs, knowing it
+   cannot outlive the render that contains it. Record both in the entry's
+   `## Specified` callout as inline expressions (rule 18), e.g.
+   "Render budget `{{python}} f\"{{ENTRY_CEILING:.0f}}\"` s."
+   If the work genuinely cannot fit, ask for more with `ask_specified` rather
+   than writing a different number.
 2. Its code must recompute the answer, not restate it. Every number in prose is
    an inline `{{python}}` expression, never typed out (rule 1).
 3. Call `lint` with chapter `{chapter}` and fix what it reports. Each message
@@ -310,9 +323,13 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         if allow_refactor:
             tell("  refactor  allowed — _model.py is writable, and the chapter "
                   "will be re-proved before commit")
+        import lint as _lint
+        _default_solve, _default_ceiling = _lint._defaults(notebook.root)
         brief = BRIEF.format(
             proposal=json.dumps(proposal.model_dump(), indent=2),
-            chapter=proposal.chapter, stem=stem, today=today)
+            chapter=proposal.chapter, stem=stem, today=today,
+            ceiling=f"{(ceiling if ceiling is not None else _default_ceiling or 200.0):.1f}",
+            solve=f"{(_default_solve or 60.0):.1f}")
         contents = [{"role": "user", "parts": [{"text": brief}]}]
         # The scaffolder's own message -- which is the only place that says where
         # the vehicle goes. It used to be printed to the terminal and nowhere
