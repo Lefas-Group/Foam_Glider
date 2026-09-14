@@ -67,6 +67,10 @@ in the entry: an entry answers the question asked and stops.
    out. Your entry keeps what THIS question produced. If the index still holds
    template placeholders, fill them (rule 24).
 
+8. The title in the proposal is the entry's title (rule 26): one question, at
+   most 18 words, ending in `?`. It is also the filename, so a brief pasted in
+   whole gives a 70-character stem nobody can read.
+
 Today is {today}, so the entry stem is already dated for you. Stop when lint is
 clean; rendering and committing are handled after you finish.
 """
@@ -436,6 +440,11 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     # so the whole chapter's freeze goes in -- siblings and the chapter index --
     # or the committed freeze stops matching the committed code.
     title = proposal.title
+    # Rule 26 lets the title be a rephrasing, so the words actually used to ask
+    # have to survive somewhere that cannot be edited later. `proposal.json` is
+    # overwritten by the next run; the commit is not.
+    if proposal.question and proposal.question.strip() != title.strip():
+        title += f"\n\nAsked: {proposal.question.strip()}"
     extra = ()
     if accepted:
         extra = (notebook.freeze / proposal.chapter,)

@@ -341,7 +341,7 @@ def md_table(header, rows):
     is for. Right-aligns every column after the first, since the first holds row
     labels and the rest hold numbers.
 
-    Rule 15 caps a table at 3x4 or 4x3 excluding the header, and this does not
+    Rule 15 caps a table at 6x4 excluding the header, and this does not
     enforce that -- the linter reads the rendered output, which is the only place
     a table built by print() can be counted.
 

@@ -56,8 +56,19 @@ class Proposal(BaseModel):
     """
 
     title: str = Field(
-        description="The question, VERBATIM as asked. It becomes the entry title.")
-    question: str = Field(description="The question this entry answers")
+        description=(
+            "The question THIS entry answers, phrased as ONE question ending "
+            "in '?', 18 words at most (rule 26) — aim for about eight. "
+            "REPHRASE the ask: strip anything that holds for the whole chapter, "
+            "because that lives in its index.qmd, and turn a brief into a "
+            "question. 'optimise a glider for trimmed glide. It is constructed "
+            "of foam 5mm thick…' is a brief; 'Which planform gives the lowest "
+            "sink rate?' is its question. It becomes the entry title, the "
+            "sidebar text and the filename."))
+    question: str = Field(
+        description=("What was actually asked, verbatim. Never edited — the "
+                     "title may be rephrased, so this is the record of the "
+                     "request, and it is what the commit message carries."))
     chapter: str = Field(description="Chapter directory name, e.g. '04-chosen-throw'")
     route: Literal["entry", "new_chapter"] = Field(
         description=(

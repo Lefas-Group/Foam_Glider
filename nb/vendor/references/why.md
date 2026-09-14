@@ -77,9 +77,13 @@ beneath a plot that already showed the same quantities; one was 72 numbers under
 a figure plotting four of its eight columns. A table is a way of presenting
 evidence, not an appendix riding along beside the real one.
 
-**15 — a table fits in 3×4 or 4×3.** Past that it stops being something a reader
-takes in and becomes a grid to be searched. A wide two-row table is still a grid,
-so 2×5 fails too. Measured on the rendered output, because a table built by
+**15 — a table fits in 6×4.** Past that it stops being something a reader takes
+in and becomes a grid to be searched. Columns stay capped at four because a wide
+table is still a grid. **Raised from 3×4-or-4×3**, which was written against a
+table DECORATING a finding and also caught the case where the table IS the
+finding: six optimisation variables against their bounds needs 6×4, had no legal
+form, and the entry wrote fifteen numbers into one sentence instead — the same
+grid, minus the alignment. Rule 25 closes that escape. Measured on the rendered output, because a table built by
 `print()` in an `output: asis` cell is not parseable as a table anywhere in the
 source — but the frozen markdown holds it as literal pipe-markdown.
 
@@ -115,3 +119,21 @@ rewrite anyway. A numeric budget must appear as an inline expression so the pros
 cannot drift from the value. Paired with `_budget.py`, which a fork does not copy,
 so forgetting leaves a chapter on the safe defaults rather than on its parent's
 exemption.
+
+**25 — no sentence enumerates more than five computed values.** The other half of
+15. Prose had no row limit, so when a table was illegal the values went into a
+run-on sentence and read worse than the table would have. Five is not a guess:
+across 32 written entries the most any sentence carried was five, with the
+distribution falling away hard above three, and the sentence that earned this
+rule carried fifteen.
+
+**26 — the title is one question, at most 18 words.** The schema demanded the ask
+VERBATIM, which is right for a question and wrong for a brief: "optimise a glider
+for trimmed glide. It is constructed of foam 5mm thick density 174.4g/m^2, with a
+fixed 300mm span and a sensibly sized, fixed tail" became a title, a sidebar
+entry and a 70-character filename — and every constraint in it belonged to the
+chapter, so the title restated what `index.qmd` already said. Measured across 35
+entries: 34 are a single sentence ending in "?", the median is eight words, the
+longest legitimate one is eighteen, and the one exception fails all three checks.
+Rephrasing is allowed now, so the verbatim ask is recorded in the commit body
+whenever it differs from the title.

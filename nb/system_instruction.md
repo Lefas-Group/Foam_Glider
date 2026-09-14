@@ -81,7 +81,7 @@ find things whose name gives no clue.
 - Call `aero_report()` at the end of a probe. It prints what the solves cost, and
   that number becomes the proposal's render cost.
 
-# The 24 rules lint checks
+# The 26 rules lint checks
 
 Know these before drafting, not after. Finding one from a lint run means the
 prose is already written.
@@ -101,7 +101,7 @@ prose is already written.
 12  the freeze is not older than the model that froze it
 13  every `_analysis.py` function the entry calls is passed to `footer(…)`
 14  one visual per entry — a table counts as a figure
-15  a table is at most 3×4 or 4×3, excluding the header
+15  a table is at most 6×4, excluding the header
 16  a budgeted chapter does not override SOLVE_BUDGET at a call site
 17  a frozen entry stays under its chapter's ENTRY_CEILING
 18  the solve budget in force is declared in the chapter's index
@@ -111,6 +111,8 @@ prose is already written.
 22  (warning) an `_analysis.py` function called only internally is private (`_name`)
 23  every `solve()` passes `verbose` explicitly — IPOPT prints otherwise
 24  a chapter with an entry has no unfilled index placeholder
+25  no sentence enumerates more than five computed values — table it
+26  the title is ONE question, at most 18 words
 ```
 
 `read_reference("why")` has the failure behind each one. Read it when a rule
@@ -118,6 +120,13 @@ looks arbitrary, or before arguing one away.
 
 Rule 2 is a one-entry fix: promote the shared logic to `_analysis.py` and call it
 from your entry. The earlier entry is not touched.
+
+Rule 26 is where a brief becomes a question. An ask often arrives as a statement
+with the chapter's constraints attached — "optimise a glider for trimmed glide.
+It is constructed of foam 5mm thick…". Strip what holds for the whole chapter,
+because index.qmd already says it, and title the entry with what THIS question
+asks: "Which planform gives the lowest sink rate?". The words actually used are
+kept verbatim in the proposal's `question` and recorded in the commit.
 
 Rules 20 to 22 are warnings: they describe a chapter's accumulated state rather
 than the entry in front of you, and they do not block a commit.
@@ -137,7 +146,7 @@ number is what it is belongs in the caption or a code comment, not the answer.
 
 ```
 ---
-title: "<the question, exactly as asked>"
+title: "<the question THIS entry answers, as one question, ~8 words>"
 ---
 
 {{< include _model.qmd >}}
@@ -198,10 +207,13 @@ Order: hero → `**Answer.**` → callouts → evidence → `footer(...)`.
   the answer is a figure or a yes/no. Supporting values get `[…]{.key}`.
 - **One prose section.** A procedure folds into the answer as a numbered list; a
   caveat becomes a `::: {.callout-warning}`, which still counts against the 100.
-- **Prefer no visual, then a table, then a plot.** A figure costs roughly thirty
-  times a small table to read. Reach for one only when the *shape* is the
-  argument. Pass an explicit `figsize` — `draw_three_view()` and friends ignore
-  the notebook's rcParams.
+- **Choose the form the reader takes in fastest.** Not a ranking to apply blind:
+  a sentence for one or two values, a table once quantities are being compared
+  side by side, a plot only when the *shape* is the argument — a figure costs
+  roughly thirty times a small table to read. **More than five computed values
+  in one sentence is a table** (rule 25), and a table may be 6×4 (rule 15), so
+  there is room for it. Pass an explicit `figsize` — `draw_three_view()` and
+  friends ignore the notebook's rcParams.
 - **Captions describe, they do not conclude.** "Lift curve, drag curve and drag
   polar at 6 m/s", not "notice that everything is symmetric because…".
 - **Do not print working.** A fit slope, a Reynolds number already stated, a mass

@@ -78,10 +78,13 @@ the evidence: compute in one folded cell, answer, then show tables and figures.
 **Two questions come before any of this** (SKILL.md has them as rules, and
 `lint.py` checks them). A table counts as a figure, so an entry shows one or the
 other, never both — a grid under a plot that already shows the same quantities is
-the failure. And a table is at most 3×4 or 4×3 excluding the header; if the
-values will not fit, plot them, or quote the two or three that matter in the
-prose. What follows is how to build the table once you have established you want
-one.
+the failure. And a table is at most 6×4 excluding the header.
+
+If the values will not fit in 6×4, that is a signal about the QUESTION, not an
+invitation to prose: more than five computed values in one sentence is a rule
+25 violation, because a run-on list is the same grid to be searched with the
+alignment taken away. Narrow what is being compared, or split the entry. What
+follows is how to build the table once you have established you want one.
 
 Quarto treats tables as their own float type — not images. A cell whose last
 expression is a DataFrame (or a `Styler`) renders as a real HTML table:

@@ -39,7 +39,7 @@ entry can be written compliant rather than corrected afterwards.
     12  the freeze is not older than the model that froze it
     13  every `_analysis.py` function the entry calls is passed to `footer(…)`
     14  one visual per entry -- a table counts as a figure
-    15  a table is at most 3x4 or 4x3, excluding the header
+    15  a table is at most 6x4, excluding the header
     16  a budgeted chapter does not override SOLVE_BUDGET at a call site
     17  a frozen entry stays under its chapter's ENTRY_CEILING
     18  the solve budget in force is declared in the chapter's index
@@ -49,6 +49,8 @@ entry can be written compliant rather than corrected afterwards.
     22  an `_analysis.py` function called only internally is private (`_name`)
     23  every `solve()` passes `verbose` explicitly
     24  a chapter with an entry has no unfilled index placeholder
+    25  no sentence enumerates more than five computed values — table it
+    26  the title is ONE question, at most 18 words
 
 Two details the list cannot carry. A value written as an inline expression counts
 as ONE word, so tightening prose is never at odds with computing the numbers in
@@ -122,6 +124,24 @@ ENTRY_SELF = {"this", "that", "the", "a", "an", "each", "every", "same",
 # Word budgets. Prose is the whole entry's readable text; the two callouts and
 # the figure captions are excluded because they are indexes rather than reading.
 MAX_PROSE, MAX_FIG_CAP, MAX_CALLOUT_ITEM = 100, 50, 10
+
+# Rule 25. Measured across 32 written entries: the most inline expressions any
+# one sentence carries is FIVE, and the distribution falls away hard -- 42
+# sentences with one, 27 with two, 20 with three, 5 with four, 4 with five, and
+# nothing above. Six is therefore a threshold no honest sentence has ever
+# reached, and the sentence that earned this rule carried fifteen.
+MAX_INLINE_PER_SENTENCE = 5
+
+# Rule 26. Measured across 35 written entries: 34 are a single sentence ending
+# in "?", the median is 8 words and the longest legitimate one is 18. The single
+# exception is the same entry on all three counts -- two sentences, 26 words, no
+# question mark -- because the ask was pasted in verbatim with the chapter's
+# constraints still attached. 18 is the cap because it flags that entry and
+# nothing else; aim for the median.
+MAX_TITLE_WORDS = 18
+ENTRY_TITLE = re.compile(r'^title:\s*"(.+)"\s*$', re.M)
+SENTENCE = re.compile(r"(?<=[.!?])\s+")
+INLINE = re.compile(r"`\{python\}")
 
 
 def chapters_of(root):
@@ -428,6 +448,79 @@ def _one_drift(canonical, local):
 PLACEHOLDER = re.compile(r"<[a-z][^>\n]{2,60}>")
 
 
+def _title_is_a_question(entries):
+    """
+    Rule 26. The title is the question this entry answers, phrased as one.
+
+    The schema used to demand the ask VERBATIM, which is right when someone asks
+    a question and wrong when they state a brief: "optimise a glider for trimmed
+    glide. It is constructed of foam 5mm thick density 174.4g/m^2, with a fixed
+    300mm span and a sensibly sized, fixed tail" became a title, a sidebar entry
+    and a 70-character filename. Worse, every constraint in it belongs to the
+    CHAPTER -- so the title was restating what index.qmd already says, which is
+    the duplication rule 24's test exists to prevent one tier up.
+
+    Three checks, because the failure showed up on all three and each catches a
+    different kind of clunky: a statement rather than a question, two thoughts
+    rather than one, and length.
+
+    Rephrasing is now allowed, so the verbatim ask has to survive somewhere it
+    cannot be edited: `write.py` records it in the commit body whenever the
+    title differs from what was asked.
+    """
+    out = []
+    for f in entries:
+        m = ENTRY_TITLE.search(f.read_text())
+        if not m:
+            continue
+        title = m.group(1).strip()
+        n = len(title.split())
+        if n > MAX_TITLE_WORDS:
+            out.append((f, f"title is {n} words, over {MAX_TITLE_WORDS} — it is "
+                           f"the question THIS entry answers, not the brief. "
+                           f"Constraints that hold for the whole chapter belong "
+                           f"in its index.qmd"))
+        if len([x for x in SENTENCE.split(title) if x.strip()]) > 1:
+            out.append((f, "title is more than one sentence — one question, one "
+                           "entry, one title"))
+        if not title.endswith("?"):
+            out.append((f, "title is not a question — phrase it as the question "
+                           "the entry answers, ending in '?'"))
+    return out
+
+
+def _prose_enumeration(pages):
+    """
+    Rule 25. A list of computed values is a table, not a sentence.
+
+    The escape hatch rule 15 used to leave open. Six optimisation variables
+    against their bounds had no legal table under the old 3x4 cap, so the entry
+    wrote them into running prose instead: fifteen numbers in one sentence,
+    which is exactly the grid-to-be-searched rule 15 exists to prevent, only
+    without the alignment to make it scannable. Rule 15 now reaches 6x4 so the
+    table is available; this makes the prose form a violation rather than a free
+    fallback, which is what stops the pair contradicting each other.
+
+    Counted in the SOURCE, on inline expressions rather than rendered digits, so
+    it works before anything has been rendered and cannot be fooled by a number
+    that happens to appear in a word.
+
+    If the entry already spends its one visual (rule 14) on a figure, the
+    resolution is to decide which of the two carries the answer -- which is what
+    rule 14 asks for anyway. An entry that needs both is usually two questions.
+    """
+    out = []
+    for f in pages:
+        text = re.sub(r"```.*?```", "", f.read_text(), flags=re.S)
+        for sent in SENTENCE.split(text):
+            n = len(INLINE.findall(sent))
+            if n > MAX_INLINE_PER_SENTENCE:
+                out.append((f, f"one sentence carries {n} computed values — "
+                               f"past {MAX_INLINE_PER_SENTENCE} it is a table, "
+                               f"not a sentence; rule 15 allows 6×4"))
+    return out
+
+
 def _unfinished_index(root, chapters, entries):
     """
     Rule 24. A chapter that has an entry has an index someone finished.
@@ -666,7 +759,7 @@ def tables_in(md):
 
     A table is a header line, a `|---|` separator, then body rows. Counting the
     body only, and the columns from the header, is what the size rule is stated
-    in: "3x4 or 4x3, excluding the header".
+    in: "6x4, excluding the header".
     """
     lines = [l.strip() for l in md.splitlines()]
     found, i = [], 0
@@ -717,9 +810,20 @@ def _visuals_and_tables(root, chapters, entries):
             except (ValueError, KeyError, TypeError):
                 pass
         for rows, cols in seen:
-            if not ((rows <= 3 and cols <= 4) or (rows <= 4 and cols <= 3)):
+            # 6x4, raised from 3x4-or-4x3. The tighter cap was written against a
+            # table DECORATING a finding -- the failure behind rule 14 was 72
+            # numbers printed under a plot showing the same quantities. It also
+            # caught the case where the table IS the finding: six optimisation
+            # variables against their bounds is 6x4 at minimum, there was no
+            # legal table for it, and the entry fell back to prose -- which has
+            # no row limit, so it became a fifteen-number run-on sentence. That
+            # is the grid-to-be-searched this rule exists to prevent, minus the
+            # alignment. Rule 25 now closes that escape; this opens the door the
+            # answer should have gone through. Measured: every table in 32
+            # written entries is 3x3 or 4x3, so nothing existing needed it.
+            if not (rows <= 6 and cols <= 4):
                 found.append((f, (
-                    f"table is {rows}×{cols} — at most 3×4 or 4×3 excluding the "
+                    f"table is {rows}×{cols} — at most 6×4 excluding the "
                     f"header; past that it is a data dump, not evidence")))
     return found
 
@@ -950,6 +1054,8 @@ def check(root, chapters):
     problems += _shared_hygiene(root, chapters, entries)
     problems += _loud_solves(root, chapters, entries)
     problems += _unfinished_index(root, chapters, entries)
+    problems += _prose_enumeration(pages)
+    problems += _title_is_a_question(entries)
     problems += _stale_freeze(root, chapters)
     problems += _budget_rules(root, chapters)
     problems += _visuals_and_tables(root, chapters, entries)
