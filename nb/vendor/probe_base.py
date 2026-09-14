@@ -47,6 +47,6 @@ if not os.environ.get("NB_CHAPTER"):
 
 _chapter = _root / "chapters" / CHAPTER
 for _p in [_root / "_notebook.py", _chapter / "_model.py",
-           _chapter / "_analysis.py", _chapter / "_budget.py"]:
-    if _p.exists():                       # _budget.py is optional, by design
+           _chapter / "_analysis.py"]:
+    if _p.exists():
         exec(compile(_p.read_text(), str(_p), "exec"))

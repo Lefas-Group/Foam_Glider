@@ -214,6 +214,10 @@ def propose(session, **fields):
     out = proposal.model_dump()
     if session.probe_left is not None:
         out["_pool_left"] = round(session.probe_left, 1)
+        # The GRANT as well as the remainder, so the write phase can report the
+        # question's total spend against the number the user actually typed.
+        # Reporting against the remainder made one question read as two budgets.
+        out["_pool_total"] = round(session.probe_pool, 1)
     # The render ceiling the USER granted, carried across to the write phase so
     # the entry can declare the number it was given rather than one of its own.
     if getattr(session, "render_ceiling", None) is not None:

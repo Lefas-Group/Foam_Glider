@@ -45,20 +45,13 @@ import sys
 import freezediff
 import lint
 
-# _budget.py is here because it sets the solve budget, and a budget that binds
-# changes the answer -- so editing it can move a frozen number exactly as editing
-# the model can. It was omitted at first, which would have let a budget change
-# leave every page in the chapter serving values the current limits do not
-# produce.
-MODEL_FILES = ("_model.py", "_analysis.py", "_model.qmd", "_budget.py")
-
-# Of what _budget.py holds, only this can change an answer: a solve budget that
-# binds truncates a solve. ENTRY_CEILING is read by the linter alone and
-# PROBE_BUDGET_CHAPTER by the scratch watchdog alone, so neither can move a
-# rendered number -- and treating the whole file as model-affecting would make
-# raising a lint threshold cost a full chapter re-render, which is how a
-# correctness rule turns into a reason to avoid the tooling.
-BUDGET_RESULT_SYMBOLS = {"SOLVE_BUDGET"}
+# `_budget.py` used to be here: a chapter-wide solve budget that binds truncates
+# a solve, so editing it could move a frozen number exactly as editing the model
+# can. That concern dissolved when budgets moved to the ENTRY. An entry's
+# SOLVE_BUDGET now lives in the entry's own cells, and Quarto keys that page's
+# freeze on its own content -- so changing it already invalidates exactly the one
+# page it can affect, with no chapter-wide rule needed to arrange it.
+MODEL_FILES = ("_model.py", "_analysis.py", "_model.qmd")
 
 
 def _run(fn, argv):
@@ -184,10 +177,7 @@ def _freeze_targets(root, chapters, force_all):
                 consts.add(name)
                 continue
             funcs |= result[0]
-            # In _budget.py, only the solve budget can move a number; the rest is
-            # tooling. Everywhere else, any changed constant takes the chapter.
-            consts |= (result[1] & BUDGET_RESULT_SYMBOLS if name == "_budget.py"
-                       else result[1])
+            consts |= result[1]
         if consts:
             whole.append(c)
             why.append(f"{c}: {', '.join(sorted(consts)[:3])} — read anywhere")

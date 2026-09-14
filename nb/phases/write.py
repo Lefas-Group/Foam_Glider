@@ -174,8 +174,68 @@ def rendered_prose(notebook, chapter, stem):
     # dimensions sitting in the prose.
     md = re.sub(r"^:::+.*$", "", md, flags=re.M)
     md = re.sub(r"\{#[\w-]+[^}]*\}", "", md)
-    return "\n".join(line.rstrip() for line in md.splitlines()
-                      if line.strip()) or None
+    return _readable(md) or None
+
+
+# Quarto markup that means nothing outside a rendered page.
+FRONTMATTER = re.compile(r"\A---\n.*?\n---\n", re.S)
+SPAN = re.compile(r"\[([^\]]*)\]\{\.[\w-]+\}")     # [12.7°]{.hero-value}
+IMAGE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+HERO = re.compile(r"\[([^\]]*)\]\{\.hero-value\}\s*\n\[([^\]]*)\]\{\.hero-label\}")
+ESCAPED = re.compile(r"\\([.\-*_#])")                # 0\.10 -> 0.10
+
+
+def _readable(md, width=76):
+    r"""
+    The rendered entry as something a person can read in a terminal.
+
+    The freeze holds Quarto markdown, and printing it raw put `---` frontmatter,
+    `[12\.7°]{.hero-value}` spans, escaped decimals and `{.runtime}` in front of
+    the reader -- the answer was in there, but it had to be dug out.
+
+    A presentation layer rather than a change to what is stored: the freeze is
+    untouched, and the same cleanup serves a coordinator reading this off a
+    pipe, which is no better served by span syntax than a person is.
+
+    Figures keep their caption and their absolute path, on separate lines --
+    the path is long enough that inlining it buried the sentence that explains
+    what the figure shows.
+    """
+    import textwrap
+    title = ""
+    m = re.search(r'^title:\s*"(.+)"$', md[:400], re.M)
+    if m:
+        title = m.group(1)
+    md = FRONTMATTER.sub("", md)
+    # The hero pair is one fact -- a number and what it measures -- written as
+    # two spans on two lines so the page can style them. Joined before the
+    # spans are stripped, which is the only point where they are still
+    # distinguishable from ordinary prose.
+    md = HERO.sub(lambda m: f"{m.group(1)}  {m.group(2)}", md)
+    md = SPAN.sub(r"\1", md)
+    md = ESCAPED.sub(r"\1", md)
+    md = md.replace("**", "")
+
+    out = [title, ""] if title else []
+    for line in md.splitlines():
+        line = line.rstrip()
+        if not line:
+            continue
+        img = IMAGE.match(line.strip())
+        if img:
+            cap, path = img.group(1), img.group(2)
+            out.append("")
+            out += textwrap.wrap(f"figure  {cap}", width=width,
+                                 subsequent_indent="        ")
+            out.append(f"        {path}")
+            continue
+        if line.startswith("#"):
+            out += ["", line.lstrip("# ")]
+            continue
+        if line.startswith("Answer.") and out and out[-1]:
+            out.append("")
+        out += textwrap.wrap(line, width=width) or [""]
+    return "\n".join(out).strip()
 
 
 def _commit_with_lock_retry(repo, title, paths, attempts=3):
@@ -219,7 +279,7 @@ def _commit(notebook, chapter, stem, entry_path, title, extra_paths=()):
     if freeze.exists():
         paths.append(rel(freeze))
     # Shared machinery the run may have touched -- rule 2 promotion lands here.
-    for name in ("_analysis.py", "_model.py", "_budget.py"):
+    for name in ("_analysis.py", "_model.py"):
         f = notebook.chapters_dir / chapter / name
         if f.exists():
             changed = subprocess.run(
@@ -250,7 +310,7 @@ def _commit(notebook, chapter, stem, entry_path, title, extra_paths=()):
 
 
 def main(notebook_path, verbose=True, allow_refactor=False,
-         accept_refactor=False):
+         accept_refactor=False, header=True):
     bad = preflight(notebook_path)
     if bad:
         for b in bad:
@@ -269,12 +329,14 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     # `propose` tool schema as something the model is invited to fill in.
     pool = raw.pop("_pool_left", PROBE_POOL)
     ceiling = raw.pop("_render_ceiling", None)
+    pool_total = raw.pop("_pool_total", None)
     proposal = Proposal.model_validate(raw)
     open_log(notebook, "write", proposal.title)
 
-    tell(f"  notebook  {notebook.root.name}")
-    # With `say()` off the terminal, nothing else says the detail exists.
-    tell(f"  telemetry  python -m nb watch {notebook.root.name}")
+    if header:
+        tell(f"  notebook  {notebook.root.name}")
+        # With `say()` off the terminal, nothing else says the detail exists.
+        tell(f"  telemetry  python -m nb watch {notebook.root.name}")
     tell(f"  entry     {proposal.title}")
 
     chapter_msg = None
@@ -515,8 +577,12 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     tell(f"  commit    {sha}  ({detail})")
     tell(f"  first-pass violations: {first_pass}")
     if session.probe_pool:
-        tell(f"  budget    {session.probe_spent:.0f} s of "
-            f"{session.probe_pool:.0f} s probe pool used")
+        # The QUESTION's total against the grant, not this phase's slice against
+        # what was left of it: "4 s of 272 s" made the run look like it had been
+        # given a budget nobody chose.
+        total = pool_total or session.probe_pool
+        spent = total - (session.probe_left or 0.0)
+        tell(f"  budget    {spent:.0f} s of {total:.0f} s probe pool used")
     run_metrics.close("committed_refactor" if accepted else "committed")
 
     # The entry itself, with real numbers. Conversation, not telemetry: it is

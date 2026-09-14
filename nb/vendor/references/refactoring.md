@@ -28,7 +28,7 @@ normalises all four while **keeping the solve count**, which matters: masking th
 whole runtime line once hid a real 18 → 2.
 
 ```bash
-uv run python <skill>/check.py <notebook> [chapter ...]
+uv run --group nb python nb/vendor/check.py <notebook> [chapter ...]
 ```
 
 `check.py` lints, deletes the freeze, renders and diffs in one call, and names

@@ -126,9 +126,6 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
                             solves=session.solves,
                             solve_seconds=round(session.solve_seconds, 1))
             run_metrics.close("proposed")
-            if session.probe_pool:
-                tell(f"  budget    {session.probe_spent:.0f} s of "
-                    f"{session.probe_pool:.0f} s probe pool used")
             # A new chapter is the one stop that survives on this side of the
             # run: it is a structural commitment later entries build on, far
             # harder to undo than an entry, and it is decided BEFORE any of the
@@ -137,6 +134,13 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
             # and verify have passed, and an entry that turns out wrong is
             # corrected by the next entry, never by deletion.
             if proposal.route == "new_chapter":
+                # Reported HERE and not on the path that continues into `write`:
+                # the run is stopping, so this is the final word on what it
+                # spent. Continuing, `write` reports the question's total once
+                # rather than each phase reporting a different fraction.
+                if session.probe_pool:
+                    tell(f"  budget    {session.probe_spent:.0f} s of "
+                         f"{session.probe_pool:.0f} s probe pool used")
                 tell(render_stop(proposal, notebook))
                 return 0
             gate = proposal
@@ -166,7 +170,9 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
     # a conversation across a process boundary.
     tell("")
     from .write import main as write
-    return write(notebook_path, verbose=verbose)
+    # header=False: this process already said which notebook and where the
+    # telemetry is. Saying it twice made one question look like two runs.
+    return write(notebook_path, verbose=verbose, header=False)
 
 
 if __name__ == "__main__":

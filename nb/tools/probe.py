@@ -7,8 +7,10 @@ SOLVE_BUDGET as the default on asb.Opti.solve, and a probe that wrote
 by forgetting is not a budget, so the preamble is injected rather than asked for.
 
 Writes `_scratch/_nb_probe.py` rather than `_scratch/probe.py`: the latter is the
-human's own scratch file, gitignored but very much in use. The leading underscore
-keeps it out of project renders, like everything else in `_scratch/`.
+name a PERSON uses for their own scratch file, and clobbering it mid-session
+would be its own small disaster. Nothing scaffolds it any more -- it is simply a
+name this tool stays off. The leading underscore keeps ours out of project
+renders, like everything else in `_scratch/`.
 """
 
 import os
@@ -45,7 +47,9 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
     script.write_text(PREAMBLE + textwrap.dedent(question).strip() + "\n")
 
     env = dict(os.environ, NB_CHAPTER=chapter)
-    timeout = budgets.probe_wall_clock(notebook, chapter)
+    # Fallback only: with a session the grant below tightens this. One place
+    # owns the headroom over the watchdog.
+    timeout = budgets.probe_wall_clock()
 
     # The run's pool, divided by the agent. `_notebook.py` reads
     # NB_PROBE_BUDGET ahead of the chapter's own limit, so the watchdog inside
@@ -62,7 +66,7 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
                     "and say in `rationale` what you did not get to.")
         if granted:
             env["NB_PROBE_BUDGET"] = f"{granted:.1f}"
-            timeout = granted + 60.0
+            timeout = budgets.probe_wall_clock(granted)
 
     started = time.perf_counter()
     try:
@@ -76,7 +80,8 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
         # `_notebook.py`'s own watchdog should have fired first and said why;
         # reaching here means it did not. Partial output is still worth having.
         got = e.stdout if isinstance(e.stdout, str) else (e.stdout or b"").decode()
-        out = got + f"\n[killed at {timeout:.0f}s -- outlived the chapter watchdog]"
+        out = got + (f"\n[killed at {timeout:.0f}s -- outlived the probe's own "
+                     f"watchdog, which should have fired first and said why]")
 
     if session is not None:
         used = time.perf_counter() - started
@@ -96,11 +101,14 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
                 f" · {left:.0f} s of {session.probe_pool:.0f} s pool left")
         solves, seconds = budgets.aero_cost(out)
         session.record_cost(solves, seconds)
-        ceiling = budgets.entry_ceiling(notebook, chapter)
+        # The ceiling in force is the one the USER granted at the prompt, not
+        # anything the chapter carries -- chapters no longer carry budgets.
+        ceiling = getattr(session, "render_ceiling", None)
         if ceiling and session.solve_seconds > ceiling:
             out += (f"\n[ENTRY_CEILING: {session.solve_seconds:.0f} s of solves "
-                    f"against this chapter's {ceiling:.0f} s ceiling. Propose now, "
-                    f"or ask_specified whether to raise it -- that is a human call, "
-                    f"recorded in index.qmd.]")
+                    f"already, against the {ceiling:.0f} s granted for this "
+                    f"entry's render. Propose now with what you have, or "
+                    f"ask_specified whether to raise it -- that is the user's "
+                    f"call, and the entry records the answer.]")
 
     return tail(out)

@@ -8,10 +8,50 @@ that is not there. Five milliseconds here buys that back.
 
 import shutil
 import os
+import re
 import sys
 
 from .config import Notebook, SYSTEM_INSTRUCTION
 from .log import say
+
+
+# "# The 28 rules lint checks", then a fenced block of "NN  description".
+RULE_HEADING = re.compile(r"^# The (\d+) rules lint checks", re.M)
+RULE_LINE = re.compile(r"^\s*(\d+)  \S", re.M)
+
+
+def _rule_list_problems(text):
+    """
+    The rule list in the system instruction is internally consistent.
+
+    It is hand-written ON PURPOSE -- the descriptions are tuned for the model
+    ("no sweeping a decision that should have been asked -- record it as
+    Specified"), and deriving them from lint's function names would make them
+    worse. What a hand-written list cannot do is count itself, and that is the
+    part that went stale: the heading was bumped by hand when rule 28 landed.
+
+    So: numbers contiguous from 1, and the heading agreeing with how many are
+    listed. Adding a rule stays one edit, and the count cannot silently drift.
+    """
+    head = RULE_HEADING.search(text)
+    if not head:
+        return ["system instruction has no '# The N rules lint checks' heading"]
+    claimed = int(head.group(1))
+    nums = [int(n) for n in RULE_LINE.findall(text[head.end():])]
+    if not nums:
+        return ["the rule list is empty"]
+    out = []
+    if len(nums) != claimed:
+        out.append(f"rule list: heading says {claimed} but {len(nums)} are listed")
+    missing = sorted(set(range(1, max(nums) + 1)) - set(nums))
+    if missing:
+        out.append("rule list: gap: no rule "
+                   + ", ".join(str(m) for m in missing))
+    dupes = sorted({n for n in nums if nums.count(n) > 1})
+    if dupes:
+        out.append("rule list: duplicated: rule "
+                   + ", ".join(str(d) for d in dupes))
+    return out
 
 
 def check(root):
@@ -40,6 +80,8 @@ def check(root):
 
     if not SYSTEM_INSTRUCTION.exists():
         bad.append(f"no system instruction at {SYSTEM_INSTRUCTION}")
+    else:
+        bad += _rule_list_problems(SYSTEM_INSTRUCTION.read_text())
 
     if not os.environ.get("GEMINI_API_KEY"):
         bad.append("GEMINI_API_KEY unset")

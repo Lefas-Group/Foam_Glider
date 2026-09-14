@@ -52,9 +52,9 @@ be retitled, reordered or deleted, and nothing notices. The notebook's whole
 structure is later entries revising earlier ones, so those references are the
 structure, not decoration.
 
-**11 — `_notebook.py` matches the skill's copy.** It is vendored into each
+**11 — `_notebook.py` matches the canonical copy.** It is vendored into each
 notebook because it runs at render time; a shared one would make a notebook
-unrenderable without the skill, and would put a render-affecting file where
+unrenderable without `nb` installed, and would put a render-affecting file where
 Quarto's freeze cannot see edits to it — which has served stale pages here.
 Vendoring costs propagation; this rule buys it back.
 
@@ -116,7 +116,8 @@ that was untrue of a chapter with no pages at all. A budget is a decision about
 what the work may cost, so it belongs in `## Specified` with every other brief;
 declared there, an inherited one is visible in the single file a fork has to
 rewrite anyway. A numeric budget must appear as an inline expression so the prose
-cannot drift from the value. Paired with `_budget.py`, which a fork does not copy,
+cannot drift from the value. Paired with a per-entry declaration, which a fork
+cannot carry across,
 so forgetting leaves a chapter on the safe defaults rather than on its parent's
 exemption.
 

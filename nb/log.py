@@ -69,6 +69,9 @@ def close_log():
 # the same kind of thing when scanning. `nb watch` dims anything carrying this.
 GUTTER = "│ "
 _STAMP_W = 10                   # len("HH:MM:SS") + two spaces
+# Total line width for wrapped reasoning: 80 columns less the stamp and gutter,
+# so a standard terminal never has to re-wrap and break the gutter.
+THOUGHT_WIDTH = 80 - _STAMP_W - len(GUTTER)
 
 
 def _stamped(args):
@@ -117,7 +120,7 @@ def tell(*args, **kw):
 
 def thought(text):
     """
-    What the model was reasoning, indented so it never reads as output.
+    What the model was reasoning, in a gutter so it never reads as output.
 
     Summaries, not raw chain of thought -- the API returns a condensed version.
     They cost nothing extra to generate: the thinking happens either way and is
@@ -126,16 +129,27 @@ def thought(text):
     drops them before appending the turn, so they never re-enter the
     conversation -- which is also why they can confabulate freely here without
     misleading the model later.
+
+    WRAPPED HERE, at a fixed width, rather than left to the terminal. The
+    summaries arrive as long single-line paragraphs; letting the terminal wrap
+    them sent every continuation line back to column 0, so the gutter marked
+    only the first line of each and the rest ran under the timestamps. Fixed
+    width because this is a FILE -- `nb watch` and `tail` both read it, and
+    neither can re-flow what is already written.
+
+    Markdown bold is stripped: the summaries head their sections with
+    `**Like This**`, and the asterisks are noise in a terminal.
     """
+    import re
+    import textwrap
     blank = False
-    for line in (text or "").strip().splitlines():
-        # The summaries arrive as markdown paragraphs, so they carry blank
-        # lines and would otherwise print a bare gutter for each. Keep at most
-        # one, as a paragraph break.
-        if not line.strip():
+    for para in (text or "").strip().splitlines():
+        if not para.strip():
             blank = True
             continue
         if blank:
             say(GUTTER.rstrip())
             blank = False
-        say(f"{GUTTER}{line.rstrip()}")
+        para = re.sub(r"\*\*(.+?)\*\*", r"\1", para.rstrip())
+        for line in textwrap.wrap(para, width=THOUGHT_WIDTH) or [""]:
+            say(f"{GUTTER}{line}")

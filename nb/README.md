@@ -179,7 +179,7 @@ the agent can take.
     manifest.py    one line per entry: stem, title, hero value
     preflight.py   invariants the agent cannot fix, checked before any tokens
     inputs.py      every Specified and Assumed item, across the notebook
-    budgets.py     parses aero_report(); budgets now live in each entry
+    budgets.py     parses aero_report(); sizes the probe timeout
     metrics.py     one SQLite row per phase-run
     session.py     what one run accumulates
     text.py        output truncation
@@ -192,9 +192,9 @@ the agent can take.
 
     tools/         one handler per tool. mcp_fs.py is the only MCP left
                    guards.py refuses _model.py writes in a chapter with entries
-    scaffold/      templates: _quarto.yml, styles.css, probe.{py,qmd},
-                   and the chapter files
-    vendor/        copied from the skill; canonical from here on
+    scaffold/      templates: _quarto.yml, styles.css, and the chapter files
+    vendor/        lint, check, freezediff, library_explorer, the reference
+                   corpus, and the two files vendored into every notebook
 
 ### Why two commands
 

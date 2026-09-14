@@ -53,25 +53,29 @@ only to write it back out costs a great deal and buys nothing. Read only the
 
 ## Starting a notebook
 
-Build it from `templates/new-notebook.md` and the skill's `notebook.py` alone.
+`nb new <path> "<title>"` builds it, and proves it: the command lints and
+preflights before it returns, so a notebook that would fail its first `nb ask`
+fails here instead, seconds in rather than minutes.
+
 Notebooks share nothing at runtime: each has its own `_quarto.yml`, `_freeze/`,
 `_scratch/` and chapters, and `execute-dir: project` scopes every path inside its
 own notebook. Put a second notebook in a sibling directory of the first, so both
-use the one copy of this skill, its linter and its `notebook.py`. Start it in a
-fresh session where possible — conversation history is the larger pollution.
+use one copy of `nb`, its linter and its `notebook.py`.
 
-## The budget does not come with the fork, and must not
+## The budget does not come with the fork, and cannot
 
-A fork copies `_model.py` and `_analysis.py`. It does **not** copy `_budget.py`,
-which is the point: the new chapter starts on the notebook's default limits — the
-safe state — and going unbudgeted becomes the deliberate act of creating a file.
+A fork copies `_model.py` and `_analysis.py`. It copies no budget at all, because
+budgets are not chapter-scoped: every ENTRY declares its own `SOLVE_BUDGET` and
+`ENTRY_CEILING`, and the ceiling is the one the user granted at the prompt for
+that entry (rules 18 and 28).
 
-So after copying: **agree the chapter's budget with the user and write it down**,
-in `_budget.py` and as a `## Specified` line in `index.qmd`. Rule 18 checks the
-second; nothing but you checks the first.
+This used to need a separate `_budget.py`, kept out of `_model.py` precisely so a
+fork could not inherit it. That file is gone — there is nothing left to inherit,
+so the failure it guarded against cannot recur. It is on record because it did:
+one chapter was forked and silently took `SOLVE_BUDGET = None` across, together
+with a comment ("its pages are already frozen") that was untrue of a chapter with
+no pages at all.
 
-Size it from the configuration the chapter's entries will actually run. One
-chapter's budget was taken from a 70 s solve at 30 nodes while its entries solved
-at 60 nodes needing 210 s, so every entry solve was truncated — and, because the
-budget then defaulted to returning its last iterate, published. The same code gave
-11.22 s, 9.50 s and 8.92 s on three runs before anyone noticed.
+Size the budget from the configuration the entries will actually run. One
+chapter's was taken from a 70 s solve at 30 nodes while its entries solved at 60
+nodes needing 210 s, so every entry solve was truncated.

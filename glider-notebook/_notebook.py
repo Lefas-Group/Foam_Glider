@@ -101,7 +101,8 @@ _aero_cost = aero_cost
 # floats: rebinding one yields a wrong limit, not a traceback, so there is no
 # crash for an alias to prevent -- and rule 27 refuses the rebinding anyway. A
 # chapter raising its own limit uses different names (SOLVE_BUDGET_CHAPTER,
-# PROBE_BUDGET_CHAPTER), looked up dynamically, which this does not touch.
+# raised only by the per-probe grant in $NB_PROBE_BUDGET, which this does not
+# touch.
 
 
 def aero_report(reset=True):
@@ -278,13 +279,12 @@ if not getattr(asb.Opti.solve, "_is_budgeted", False):
 # helpfully named the variable to set. A guard that documents its own bypass at
 # the moment it fires is not a guard; it is a speed bump with a detour sign.
 #
-# Raising it is a decision for the user, taken in a chapter's _budget.py and
-# declared in its index.qmd under Specified, exactly as SOLVE_BUDGET is. Hitting
-# this limit is meant to STOP the work and produce a choice -- is this solve worth
-# it, can it be made cheaper, or should more time be asked for -- rather than a
-# reflex.
+# Raising it is a decision for the user, made by granting a bigger probe pool at
+# the prompt, out of which the agent budgets each probe. Hitting this limit is
+# meant to STOP the work and produce a choice -- is this solve worth it, can it be
+# made cheaper, or should more time be asked for -- rather than a reflex.
 PROBE_SILENCE = 120.0  # s of no output before the traceback says where it is
-PROBE_BUDGET = 300.0   # s a scratch probe may run; raise only in _budget.py
+PROBE_BUDGET = 300.0   # s a scratch probe may run, absent a per-probe grant
 
 _IN_KERNEL = "ipykernel" in sys.modules or hasattr(builtins, "__IPYTHON__")
 
@@ -311,11 +311,10 @@ if _IN_KERNEL:
 
 def _probe_budget():
     """
-    The probe budget in force: this probe's, else the chapter's, else default.
+    The probe budget in force: this probe's grant, else the default.
 
-    Read at CHECK time, not at arm time, because _budget.py is exec'd after this
-    file -- so a chapter that raised the limit has not been seen yet when the
-    watchdog starts. The watchdog therefore polls rather than sleeping once.
+    Read at CHECK time rather than at arm time. The watchdog therefore polls,
+    which also keeps it honest if the environment changes under it.
 
     $NB_PROBE_BUDGET wins when set, and is how a run divides a POOL of probe
     wall clock between its own probes: a listing probe asks for ten seconds, a
@@ -325,10 +324,9 @@ def _probe_budget():
     could take. Same channel as $NB_CHAPTER, for the same reason: switching it
     edits no file.
 
-    Env var first, then the chapter, then the default -- so a chapter that
-    raised its limit by agreement still governs anything the run does not
-    explicitly budget, and unsetting the variable restores the old behaviour
-    exactly.
+    Env var, else the default. There is no chapter override: budgets belong to
+    the entry now, and a probe runs before any entry exists -- the grant is the
+    only thing that can speak for it.
     """
     env = _os.environ.get("NB_PROBE_BUDGET")
     if env:
@@ -336,8 +334,7 @@ def _probe_budget():
             return float(env)
         except ValueError:
             pass
-    value = globals().get("PROBE_BUDGET_CHAPTER")
-    return PROBE_BUDGET if value is None else value
+    return PROBE_BUDGET
 
 
 if not _IN_KERNEL and not globals().get("_probe_guard_armed"):
@@ -353,8 +350,8 @@ if not _IN_KERNEL and not globals().get("_probe_guard_armed"):
               f"   - decide the answer is not worth this much compute;\n"
               f"   - make it cheaper -- fewer nodes, a held design, one arm "
               f"instead of a sweep;\n"
-              f"   - ask the user for more time, and record it in the chapter's "
-              f"_budget.py.]", file=sys.stderr, flush=True)
+              f"   - ask the user for more time, with a bigger budget_s or a "
+              f"bigger pool.]", file=sys.stderr, flush=True)
         faulthandler.dump_traceback(file=sys.stderr)
         os._exit(9)
 
@@ -372,9 +369,8 @@ if not _IN_KERNEL and not globals().get("_probe_guard_armed"):
             if time.perf_counter() - _probe_t0 > _probe_budget():
                 _probe_too_long()
 
-    # Polling, so a chapter that raises the limit in _budget.py is seen even
-    # though that file is exec'd after this one. A daemon thread, so a probe that
-    # finishes early is never held open by it.
+    # Polling rather than a single sleep, so the limit is re-read as the probe
+    # runs. A daemon thread, so a probe that finishes early is never held open.
     _probe_thread = threading.Thread(target=_probe_watch, daemon=True)
     _probe_thread.start()
 

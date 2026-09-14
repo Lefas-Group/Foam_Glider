@@ -20,7 +20,6 @@ import re
 import sys
 
 from .config import Notebook
-from . import budgets
 
 TITLE = re.compile(r'^title:\s*"(.+)"\s*$', re.M)
 HERO = re.compile(r"\[([^\]]*)\]\{\.hero-value\}")
@@ -66,9 +65,10 @@ def build(notebook):
     for chapter in notebook.chapters():
         index = notebook.chapters_dir / chapter / "index.qmd"
         title = _title(index.read_text()) if index.exists() else ""
-        ceiling = budgets.entry_ceiling(notebook, chapter)
-        note = f"  [entry ceiling {ceiling:.0f} s]" if ceiling else ""
-        out.append(f'{chapter} — "{title}"{note}')
+        # No chapter-level ceiling any more: budgets are per entry, and the
+        # one in force is granted at the prompt and stated in the write brief.
+        # Dropping it also shortens the cached prefix, which is free headroom.
+        out.append(f'{chapter} — "{title}"')
         for path in notebook.entries(chapter):
             stem, etitle, answer = entry_line(notebook, chapter, path)
             out.append(f"  {stem}")

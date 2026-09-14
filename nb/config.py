@@ -68,7 +68,7 @@ TRUNCATE = 8000
 # ---------------------------------------------------------------- budgets
 
 # `_notebook.py` runs its own watchdog that os._exit(9)s a probe at PROBE_BUDGET
-# (300 s, or PROBE_BUDGET_CHAPTER where a chapter raised it). Ours sits above it
+# (300 s, or the per-probe grant in $NB_PROBE_BUDGET). Ours sits above it
 # so that watchdog fires first: it knows why it killed the probe and says so,
 # where a subprocess timeout only knows that time ran out.
 PROBE_WALL_CLOCK = 960.0
@@ -100,8 +100,9 @@ PROBE_POOL = 900.0
 # turn while bounding the dead-socket case at 6 attempts rather than forever.
 API_TIMEOUT_MS = 300_000
 
-# Documented in `_notebook.py` but never enforced there -- no code reads it.
-# Chapters that care declare ENTRY_CEILING in their own `_budget.py`.
+# The default offered at the render-budget prompt, and the fallback for a page
+# that declares no ceiling of its own -- every `index.qmd`, and any entry written
+# before rule 28. Read by `lint._defaults`.
 DEFAULT_ENTRY_CEILING = 200.0
 
 

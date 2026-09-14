@@ -70,10 +70,12 @@ def main(path, title=None, subject=None, chapter="01-first-chapter",
         shutil.copy(VENDOR / canonical, root / dest)
 
     (root / ".gitignore").write_text(GITIGNORE)
+    # No probe scaffold: `tools/probe.py` writes its own `_scratch/_nb_probe.py`
+    # and imports `_probe_base`, so the `probe.qmd`/`probe.py` pair the skill
+    # used was never read by this system. A person who wants to probe by hand
+    # writes a file beside `_probe_base.py`, which is what the agent does.
     for tmpl, dest in (("_quarto.yml.tmpl", "_quarto.yml"),
-                       ("styles.css.tmpl", "styles.css"),
-                       ("probe.qmd.tmpl", "_scratch/probe.qmd"),
-                       ("probe.py.tmpl", "_scratch/probe.py")):
+                       ("styles.css.tmpl", "styles.css")):
         (root / dest).write_text(
             _render((SCAFFOLD / tmpl).read_text(), title, subject, chapter))
 
