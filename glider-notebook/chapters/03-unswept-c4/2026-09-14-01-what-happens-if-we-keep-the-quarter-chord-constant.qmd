@@ -6,7 +6,7 @@ title: "What happens if we keep the quarter chord constant?"
 
 ```{python}
 ENTRY_CEILING = 20.0   # s for this render, granted by the user
-SOLVE_BUDGET = 60.0    # s for any one solve
+SOLVE_BUDGET = 15.0    # s for any one solve
 
 ans = optimize_glider_unswept_c4(verbose=False)
 sink_rate = ans["sink_rate"]
