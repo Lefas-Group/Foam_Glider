@@ -1,0 +1,74 @@
+---
+title: "Why are the wings swept forwards?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 100.0   # s for this render, granted by the user
+SOLVE_BUDGET = 60.0     # s for any one solve
+
+res = optimize_glider_with_fuse(verbose=False)
+sol = res['sol']
+glider = make_glider_with_fuse(
+    sol.value(res['c_root']), 
+    sol.value(res['taper']), 
+    sol.value(res['cg_x'])
+)
+wing = glider.wings[0]
+
+le_sweep = wing.mean_sweep_angle(0)
+c4_sweep = wing.mean_sweep_angle(0.25)
+te_sweep = wing.mean_sweep_angle(1.0)
+```
+
+::: {.hero}
+[`{python} f"{-c4_sweep:.1f}°"`]{.hero-value}
+[quarter-chord forward sweep]{.hero-label}
+:::
+
+**Answer.** The leading edge is defined as completely straight (`{python} f"{le_sweep:.0f}°"` sweep). The optimizer chose a taper ratio of roughly `{python} f"{sol.value(res['taper']):.2f}"` to reduce induced drag. Because the chord shrinks while the leading edge stays fixed, the quarter-chord line—which defines aerodynamic sweep—is pulled forward at the tips, creating `{python} f"{-c4_sweep:.1f}°"` of forward sweep. The trailing edge is swept forward even more (`{python} f"{-te_sweep:.1f}°"`).
+
+::: {.callout-tip}
+## Specified
+Asked of the user, 2026-09-14:
+
+1. **Render budget:** `{python} f"{ENTRY_CEILING:.0f}"` s.
+2. **Solve budget:** `{python} f"{SOLVE_BUDGET:.0f}"` s.
+:::
+
+```{python}
+#| label: fig-sweep
+#| fig-cap: "Top-down view of the wing planform, showing the straight leading edge and the resulting forward sweep of the quarter-chord and trailing edge lines."
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(figsize=(6, 4))
+c_root_val = sol.value(res['c_root']) * 1000
+taper_val = sol.value(res['taper'])
+c_tip_val = c_root_val * taper_val
+b_half = 150 # mm
+
+# Right wing half
+ax.plot([0, b_half], [0, 0], 'k-', label="Leading edge (0°)")
+ax.plot([0, b_half], [-c_root_val, -c_tip_val], 'k-', label="Trailing edge")
+ax.plot([0, b_half], [-c_root_val * 0.25, -c_tip_val * 0.25], 'r--', label="Quarter-chord")
+ax.plot([0, 0], [0, -c_root_val], 'k-')
+ax.plot([b_half, b_half], [0, -c_tip_val], 'k-')
+
+# Left wing half
+ax.plot([0, -b_half], [0, 0], 'k-')
+ax.plot([0, -b_half], [-c_root_val, -c_tip_val], 'k-')
+ax.plot([0, -b_half], [-c_root_val * 0.25, -c_tip_val * 0.25], 'r--')
+ax.plot([-b_half, -b_half], [0, -c_tip_val], 'k-')
+
+ax.set_aspect('equal')
+ax.set_xlabel("Spanwise position (mm)")
+ax.set_ylabel("Chordwise position (mm) [Negative aft]")
+ax.legend(loc='lower center')
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_glider_with_fuse)
+```
