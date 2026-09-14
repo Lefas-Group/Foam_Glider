@@ -75,6 +75,32 @@ ENTRY_FILE = re.compile(r"^\d{4}-\d{2}-\d{2}-")
 # one decimal it yields dozens, nearly all conditions.
 RESULT_NUMBER = re.compile(r"\d+\.\d{2,}")
 
+# Rule 27. Every top-level name `_notebook.py` binds -- its imports, its helpers
+# and its state. READ FROM THE FILE rather than typed out here: the two live in
+# the same directory, and a hand-copied list would be wrong the first time
+# someone adds a helper, in the silent direction (no rule, no warning). Falls
+# back to the names that actually broke a render if the file cannot be parsed,
+# so the rule degrades rather than vanishing.
+def _machinery_names():
+    try:
+        tree = ast.parse((pathlib.Path(__file__).parent / "notebook.py").read_text())
+    except (OSError, SyntaxError):
+        return {"time", "pathlib", "aero_cost", "footer", "_T0", "_CHAPTER"}
+    names = set()
+    for n in tree.body:
+        if isinstance(n, (ast.Import, ast.ImportFrom)):
+            names |= {(a.asname or a.name).split(".")[0] for a in n.names}
+        elif isinstance(n, ast.FunctionDef):
+            names.add(n.name)
+        elif isinstance(n, ast.Assign):
+            names |= {t.id for t in n.targets if isinstance(t, ast.Name)}
+    # `_T0` and `_CHAPTER` are set by _model.qmd, not by _notebook.py, but
+    # footer() and superseded_by() read them and an entry can clobber both.
+    return names | {"_T0", "_CHAPTER"}
+
+
+MACHINERY = _machinery_names()
+
 # Lines that recur legitimately and say nothing about duplicated machinery.
 #
 # `footer(` is here because rule 13 REQUIRES one in every entry: a line the rules
@@ -92,9 +118,14 @@ RESULT_NUMBER = re.compile(r"\d+\.\d{2,}")
 #
 # Axis cosmetics are here for the older reason: every figure hides the same
 # spines and sets the same labels, and that says nothing about shared machinery.
+# ENTRY_CEILING and SOLVE_BUDGET are here because RULE 28 REQUIRES THEM in every
+# entry. Without the exemption rule 2 would flag the two identical lines rule 28
+# mandates the moment a third shared line followed -- one rule punishing another
+# rule's remedy, which is the failure mode this contract keeps rediscovering.
 BOILERPLATE = re.compile(
     r"^(plt\.|ax\d?\.|fig, ax|fig\.|import |from |show_source\(|footer\(|"
-    r"for s(ide)? in|\)|\]|\}|else:|try:|finally:)"
+    r"for s(ide)? in|\)|\]|\}|else:|try:|finally:|"
+    r"ENTRY_CEILING\s*=|SOLVE_BUDGET\s*=)"
 )
 BLOCK = 3  # consecutive code lines that count as a repeated block
 
@@ -446,6 +477,66 @@ def _one_drift(canonical, local):
 # prose is not something a real index writes, and nothing in the eight real
 # indexes matches it.
 PLACEHOLDER = re.compile(r"<[a-z][^>\n]{2,60}>")
+
+
+def _shadowed_machinery(root, chapters, entries):
+    """
+    Rule 27. An entry may not rebind a name `_notebook.py` owns.
+
+    `_model.qmd` EXECS `_notebook.py` into the page's own globals rather than
+    importing it -- every chapter names its model `_model`, so real imports
+    would collide in sys.modules -- which means `footer.__globals__` IS the
+    entry's namespace. An entry writing `time = h / opt_sink` leaves footer()
+    reading a float, and the render dies with
+
+        AttributeError: 'float' object has no attribute 'perf_counter'
+
+    pointing at `_notebook.py:450`: a file rule 11 pins byte-identical and the
+    author of the entry therefore cannot fix. Expensive (the solves are already
+    paid for), late (render, not lint) and aimed at the wrong file. This says it
+    at lint time instead, for nothing. `_notebook.py` also binds private aliases
+    so that a miss here degrades rather than crashes; the two are deliberately
+    independent.
+
+    TOP-LEVEL BINDINGS ONLY, and that is the whole subtlety. An earlier version
+    used ast.walk and flagged `time = np.linspace(0, t_final, N)` inside a
+    function in 2026-08-07-03-can-we-rewrite-the-trajectory -- a local, which
+    shadows nothing. Walking the tree finds binding sites that cannot possibly
+    reach the page namespace.
+
+    Imports are not assignments: `_model.py` legitimately says
+    `import aerosandbox as asb`, rebinding `asb` to the same object, and a rule
+    that fought the scaffold it ships with would be turned off within a day.
+
+    Chapter files are in scope with entries, because `_model.qmd` execs
+    `_model.py` and `_analysis.py` into that same namespace.
+
+    Calibrated before it was written: zero hits across 166 cells in every entry
+    of all three notebooks, and zero across 18 chapter .py files.
+    """
+    out = []
+    for f, src in ([(e, entry_cells(e.read_text())) for e in entries] +
+                   [(p, p.read_text())
+                    for c in chapters
+                    for p in (root / "chapters" / c).glob("_*.py")]):
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:
+            continue                      # rule 5 owns unparseable cells
+        for node in tree.body:            # top level only -- see the docstring
+            targets = (node.targets if isinstance(node, ast.Assign) else
+                       [node.target]
+                       if isinstance(node, (ast.AnnAssign, ast.AugAssign,
+                                            ast.For)) else [])
+            for t in targets:
+                for name in ast.walk(t):
+                    if isinstance(name, ast.Name) and name.id in MACHINERY:
+                        out.append((f, f"rebinds `{name.id}`, which "
+                                       f"_notebook.py still uses after your "
+                                       f"code runs — the traceback would land "
+                                       f"in a vendored file you cannot edit; "
+                                       f"rename it"))
+    return out
 
 
 def _title_is_a_question(entries):
@@ -898,104 +989,254 @@ def _bound(source, name):
     return False, None
 
 
-def _limits(root, chapter):
-    """
-    (solve budget, entry ceiling) in force for a chapter, or (None, None) if it
-    opted out. Defaults come from the notebook's own _notebook.py rather than
-    being restated here: rule 11 already pins that file to the skill's copy, so
-    reading it keeps one source instead of two that can drift.
-    """
+def _defaults(root):
+    """The notebook's own DEFAULT_* values, read from its `_notebook.py`."""
     nb = root / "_notebook.py"
-    nb_src = nb.read_text() if nb.exists() else ""
-    _, default_budget = _bound(nb_src, "DEFAULT_SOLVE_BUDGET")
-    _, default_ceiling = _bound(nb_src, "DEFAULT_ENTRY_CEILING")
-
-    # _budget.py wins where it exists, because _model.qmd execs it last. It is a
-    # separate file precisely so a fork cannot copy it; chapters written before
-    # it still bind in _analysis.py and are read there.
-    src = "".join((chapter / n).read_text() for n in ("_analysis.py", "_budget.py")
-                  if (chapter / n).exists())
-    found_b, budget = _bound(src, "SOLVE_BUDGET")
-    if found_b and budget is None:
-        return None, None               # deliberately unbounded
-    found_c, ceiling = _bound(src, "ENTRY_CEILING")
-    return (budget if found_b else default_budget,
-            None if (found_c and ceiling is None)
-            else (ceiling if found_c else default_ceiling))
+    src = nb.read_text() if nb.exists() else ""
+    _, budget = _bound(src, "DEFAULT_SOLVE_BUDGET")
+    _, ceiling = _bound(src, "DEFAULT_ENTRY_CEILING")
+    return budget, ceiling
 
 
-def _budget_rules(root, chapters):
+def limits_of(root, entry):
     """
-    Rules 16 and 17: a chapter that took a solve budget actually keeps to it.
+    (solve budget, entry ceiling) declared by an ENTRY, falling back to the
+    notebook defaults.
 
-    Both are OPT-OUT: a chapter is checked unless it binds SOLVE_BUDGET = None,
-    which is how a chapter whose pages are already frozen stays exempt. Keying
-    this on inaction was the earlier design and was wrong -- a guard you skip by
-    forgetting is not a guard, and forgetting is what it defends against. The
-    exemption is a line in the file, so there is no grandfather list to keep.
+    Budgets moved from the chapter to the entry because the entry is the unit of
+    work AND the unit the user is asked about: the render ceiling is granted at
+    the prompt, so it belongs in the page that spends it. The chapter-level
+    `_budget.py` is gone -- its own header records why it had to exist, a fork
+    that "silently inherited SOLVE_BUDGET = None" from its parent. Nothing is
+    inherited now, because nothing is chapter-scoped.
 
-    16 blocks, because it is static and so cannot fail differently on a busy
-    machine. 17 warns, because the same solve here measured 533.9 s against a
-    145 s baseline purely from load -- a hard block on wall clock would fail on
-    a loaded laptop and pass on an idle one. It blocks only past ENTRY_CEILING,
-    a number the user set, where load cannot be the explanation.
+    No new runtime machinery was needed: `_notebook.py` is EXEC'd into the page
+    namespace and `_budgeted_solve` re-reads `_active_budget()` on every call,
+    so a binding in the entry's own cell is already in force for every later
+    solve. Measured before this was written -- an entry binding
+    SOLVE_BUDGET = 0.001 reported it from solve_budget() and had its solve
+    refused by ipopt.
+
+    Returns the literal `None` where an entry bound None, so rule 28 can tell
+    that apart from having said nothing, which takes the default.
+    """
+    d_budget, d_ceiling = _defaults(root)
+    try:
+        src = entry_cells(entry.read_text())
+    except OSError:
+        return d_budget, d_ceiling
+    found_b, budget = _bound(src, "SOLVE_BUDGET")
+    found_c, ceiling = _bound(src, "ENTRY_CEILING")
+    return (budget if found_b else d_budget,
+            ceiling if found_c else d_ceiling)
+
+
+# How long a render may take, derived from what it will actually execute.
+#
+# SLACK sits just above the worst load inflation on record -- the same solve
+# measured 533.9 s against a 145 s baseline purely from machine load, 3.7x -- so
+# this deadline is a DEADLOCK DETECTOR, not a cost limit. Rule 17 is the cost
+# limit and it judges the recorded seconds afterwards. Erring high here costs
+# only the delay before a wedge is noticed; erring low kills honest work on a
+# busy laptop, which is the failure rule 17 was written to avoid.
+#
+# OVERHEAD covers pandoc and site assembly, which happen whether or not anything
+# executes. It is PER PAGE plus a floor, because it scales with the page count
+# and a flat floor would not survive a bigger notebook: an 8-page all-frozen
+# project render measured 11.4 s and 14.2 s, about 1.6 s a page, and the largest
+# notebook here has 31 pages -- which a flat 60 s would have sat right on top of.
+# 5 s a page is ~3x the measurement, matching the slack philosophy above.
+RENDER_SLACK = 4
+RENDER_OVERHEAD = 60.0
+RENDER_PER_PAGE = 5.0
+
+
+def unfrozen(root, chapters):
+    """Pages with no freeze -- the ones a render will actually EXECUTE."""
+    out = []
+    for c in chapters:
+        d = root / "chapters" / c
+        if not d.is_dir():
+            continue
+        for page in sorted(d.glob("*.qmd")):
+            if page.name.startswith("_"):
+                continue            # includes, not pages
+            f = (root / "_freeze" / "chapters" / c / page.stem
+                 / "execute-results" / "html.json")
+            if not f.exists():
+                out.append(page)
+    return out
+
+
+def render_deadline(root, chapters=None):
+    """
+    Seconds a `quarto render` of `chapters` may take before it is killed.
+
+    Scales with the WORK, not the target, which is what lets one formula cover a
+    single entry, a chapter and the whole project. A frozen page executes
+    nothing, so it contributes nothing: `check` deletes the freezes it
+    invalidates BEFORE rendering, which makes the unfrozen set exactly the work
+    list. An 8-page notebook with every freeze intact comes out near the floor,
+    where it belongs.
+
+    Pages that declare no ceiling -- every `index.qmd`, and any entry predating
+    rule 28 -- take the notebook default rather than being skipped, so a legacy
+    notebook still gets a deadlock guard.
+    """
+    # ALL chapters, not chapters_of(): a `_lint-skip` marker exempts a chapter
+    # from being CHECKED, and quarto renders it regardless. Sizing the deadline
+    # from the linted set would have left a project render of this notebook with
+    # a budget for 10 of its 31 pages.
+    if chapters is None:
+        chapters = sorted(d.name for d in (root / "chapters").iterdir()
+                          if d.is_dir())
+    _, default_ceiling = _defaults(root)
+    default_ceiling = default_ceiling or 200.0
+    pages = [q for c in chapters
+             for q in (root / "chapters" / c).glob("*.qmd")
+             if not q.name.startswith("_")]
+    total = 0.0
+    for page in unfrozen(root, chapters):
+        if ENTRY_FILE.match(page.name):
+            _, ceiling = limits_of(root, page)
+        else:
+            ceiling = None          # index.qmd and friends
+        total += ceiling if ceiling else default_ceiling
+    return (RENDER_OVERHEAD + RENDER_PER_PAGE * len(pages)
+            + RENDER_SLACK * total)
+
+
+def render_quarto(target, root, cwd=None):
+    """
+    `quarto render <target>`, killed if it stops making progress.
+
+    Returns the CompletedProcess. On a timeout it returns a stand-in with
+    returncode 124 and a message naming the page Quarto was on, because the
+    three call sites all want the same thing and a bare TimeoutExpired says only
+    that time ran out.
+
+    Naming the page is the whole point. `PROBE_WALL_CLOCK`'s comment asks for
+    exactly this property -- the inner limit should fire first "because it knows
+    why it killed the probe and says so" -- and Quarto prints `[n/N] path` as it
+    goes, which `TimeoutExpired.stdout` preserves.
+    """
+    import subprocess
+    deadline = render_deadline(root)
+    try:
+        return subprocess.run(["quarto", "render", str(target)],
+                              capture_output=True, text=True, cwd=cwd,
+                              timeout=deadline)
+    except subprocess.TimeoutExpired as t:
+        blob = ((t.stdout or b"").decode() if isinstance(t.stdout, bytes)
+                else (t.stdout or ""))
+        # Quarto's `[n/N] path` progress lines are the best answer, but it
+        # BLOCK-BUFFERS to a pipe, so a killed render usually leaves stdout
+        # empty -- measured. The work list is the fallback and is often exact:
+        # a render with one unfrozen page can only have been stuck on it.
+        todo = unfrozen(root, sorted(d.name for d in (root / "chapters").iterdir()
+                                     if d.is_dir()))
+        n = len(todo)
+        seen = re.findall(r"\[\d+/\d+\][^\n]*", blob)
+        if seen:
+            where = f", on {seen[-1].strip()}"
+        elif n == 1:
+            where = f", on {todo[0].parent.name}/{todo[0].name}"
+        elif todo:
+            where = (f", somewhere in {n} page(s) awaiting execution: "
+                     + ", ".join(q.name for q in todo[:3])
+                     + (" …" if n > 3 else ""))
+        else:
+            where = ""
+        return subprocess.CompletedProcess(
+            t.cmd, 124, blob,
+            f"render killed after {deadline:.0f} s{where}\n"
+            f"  ({n} page(s) to execute x ceiling x {RENDER_SLACK} slack "
+            f"+ {RENDER_OVERHEAD:.0f} s + {RENDER_PER_PAGE:.0f} s/page)\n"
+            f"  Nothing was advancing. Raise the entry's ENTRY_CEILING if the "
+            f"work is genuinely this expensive.")
+
+
+def _budget_rules(root, chapters, entries):
+    """
+    Rules 16, 17, 18 and 28 -- what an entry may spend, declared by the entry.
+
+    These were chapter-scoped, read from an optional `_budget.py`. That file is
+    gone: budgets belong to the entry, which is both the unit of work and the
+    unit the user is asked about, since the render ceiling is granted at the
+    prompt before the run starts.
+
+    28 BLOCKS and is the load-bearing one, because the ceiling is no longer
+    advisory -- `render_deadline()` derives an actual subprocess timeout from
+    it. An entry that declares nothing would be bounded by the notebook default
+    silently; an entry that declares None would have no bound at all, which is
+    the state that let a render hang unnoticed.
+
+    17 still WARNS below the ceiling, for the reason it always did: the same
+    solve here measured 533.9 s against a 145 s baseline purely from load, so a
+    hard block on wall clock would fail on a busy machine and pass on an idle
+    one. It blocks only PAST the ceiling, where load cannot be the explanation.
     """
     problems = []
+    for e in entries:
+        budget, ceiling = limits_of(root, e)
+        src = entry_cells(e.read_text())
+        found_b, _ = _bound(src, "SOLVE_BUDGET")
+        found_c, _ = _bound(src, "ENTRY_CEILING")
+
+        # 28: both declared, neither None.
+        for name, found, value in (("SOLVE_BUDGET", found_b, budget),
+                                   ("ENTRY_CEILING", found_c, ceiling)):
+            if not found:
+                problems.append(
+                    (e, f"declares no {name} — every entry states what it may "
+                        f"spend, in its own first cell; the render ceiling is "
+                        f"the one granted at the prompt"))
+            elif value is None:
+                problems.append(
+                    (e, f"binds {name} = None — unbounded is no longer an "
+                        f"option: the ceiling is what bounds the render, and "
+                        f"a render with no bound is one that can hang"))
+
+        # 18: and says so where a reader looks, not only in code.
+        spec = "".join(body for title, body in callouts_of(e.read_text())
+                       if title == "Specified")
+        if found_c and ceiling is not None and "ENTRY_CEILING" not in spec:
+            problems.append(
+                (e, "the render budget is not in the `## Specified` callout — "
+                    "it was granted by the user at the prompt, so it is a "
+                    "Specified input like any other and belongs on the record"))
+
+        # 17: what the frozen page actually cost.
+        if ceiling is None:
+            continue
+        hj = (root / "_freeze" / "chapters" / e.parent.name / e.stem
+              / "execute-results" / "html.json")
+        if not hj.exists():
+            continue
+        m = re.search(r"Executed in ([\d.]+) s",
+                      json.loads(hj.read_text()).get("result", {}).get("markdown", ""))
+        if not m:
+            continue
+        spent = float(m.group(1))
+        if spent > ceiling:
+            problems.append(
+                (e, f"took {spent:.0f} s, past its ENTRY_CEILING of "
+                    f"{ceiling:.0f} s — make it cheaper, or ask for more"))
+        elif spent > ceiling / 2:
+            problems.append(
+                (e, f"(warning) took {spent:.0f} s, over half the "
+                    f"{ceiling:.0f} s ceiling"))
+
+    # 16: the budget is negotiated once, not overridden per call site.
     for c in chapters:
-        chapter = root / "chapters" / c
-        budget, ceiling = _limits(root, chapter)
-
-        # 18: whatever budget is in force, the chapter says so out loud.
-        #
-        # A budget is a decision about what the work may cost, so it belongs in
-        # the chapter's Specified callout like any other brief. This exists
-        # because one chapter was forked from another and inherited "no limit"
-        # in a file nobody re-reads, carrying a comment that was false for it.
-        # Declared in index.qmd, an inherited budget is visible in the one file
-        # a fork must rewrite anyway.
-        #
-        # A number must appear as an INLINE EXPRESSION naming SOLVE_BUDGET, so
-        # the prose cannot drift from the value; an opted-out chapter only has
-        # to say so, there being no number to drift from.
-        index = chapter / "index.qmd"
-        if index.exists():
-            spec = "".join(body for title, body in callouts_of(index.read_text())
-                           if title == "Specified")
-            declared = (re.search(r"SOLVE_BUDGET|solve_budget\(", spec)
-                        if budget is not None
-                        else re.search(r"budget", spec, re.I))
-            if not declared:
-                want = ("an inline `{python} …solve_budget()…` expression"
-                        if budget is not None else "a line saying it is unbounded")
-                problems.append(
-                    (index, f"the solve budget in force ({budget}) is not in the "
-                            f"`## Specified` callout — add {want}, so the cost "
-                            f"this chapter may spend is a recorded decision"))
-
-            # A raised PROBE budget is the same kind of decision, and a more
-            # tempting one to take quietly: the notebook default is deliberately
-            # tight so that hitting it forces a choice, and raising it without
-            # saying so turns a stop back into a speed bump.
-            found_p, _ = _bound(
-                (chapter / "_budget.py").read_text()
-                if (chapter / "_budget.py").exists() else "",
-                "PROBE_BUDGET_CHAPTER")
-            if found_p and "PROBE_BUDGET_CHAPTER" not in spec:
-                problems.append(
-                    (index, "this chapter raises the probe budget but does not "
-                            "say so in `## Specified` — the default is tight on "
-                            "purpose, so a grant of more belongs on the record"))
-
-        if budget is None:
-            continue                    # chapter opted out, deliberately
-
-        # 16: the budget is negotiated once, not overridden per call site.
-        f = chapter / "_analysis.py"
+        f = root / "chapters" / c / "_analysis.py"
+        if not f.exists():
+            continue
         try:
             tree = ast.parse(f.read_text())
         except SyntaxError:
-            tree = None
-        for node in ast.walk(tree) if tree else []:
+            continue
+        for node in ast.walk(tree):
             if not (isinstance(node, ast.Call)
                     and isinstance(node.func, ast.Attribute)
                     and node.func.attr == "solve"):
@@ -1006,33 +1247,9 @@ def _budget_rules(root, chapters):
                 problems.append(
                     (f, f"solve() on line {node.lineno} passes "
                         f"{', '.join(local)} — that silently overrides the "
-                        f"chapter's SOLVE_BUDGET of {budget}. Raise the budget "
-                        f"by agreement and record it in index.qmd instead"))
-
-        # 17: what the frozen pages actually cost.
-        if ceiling is None:
-            continue
-        for hj in sorted((root / "_freeze" / "chapters" / c).glob(
-                "*/execute-results/html.json")) if (
-                root / "_freeze" / "chapters" / c).exists() else []:
-            m = re.search(r"Executed in ([\d.]+) s",
-                          json.loads(hj.read_text())
-                          .get("result", {}).get("markdown", ""))
-            if not m:
-                continue
-            spent, page = float(m.group(1)), hj.parts[-3]
-            where = chapter / f"{page}.qmd"
-            if spent > ceiling:
-                problems.append(
-                    (where, f"took {spent:.0f} s, past the chapter's "
-                            f"ENTRY_CEILING of {ceiling:.0f} s — make it "
-                            f"cheaper, or raise the ceiling by agreement"))
-            elif spent > ceiling / 2:
-                problems.append(
-                    (where, f"(warning) took {spent:.0f} s, over half the "
-                            f"{ceiling:.0f} s ceiling"))
+                        f"entry's SOLVE_BUDGET. Raise the budget in the entry "
+                        f"instead, where it is on the record"))
     return problems
-
 
 def check(root, chapters):
     entries = [f for c in chapters
@@ -1056,8 +1273,9 @@ def check(root, chapters):
     problems += _unfinished_index(root, chapters, entries)
     problems += _prose_enumeration(pages)
     problems += _title_is_a_question(entries)
+    problems += _shadowed_machinery(root, chapters, entries)
     problems += _stale_freeze(root, chapters)
-    problems += _budget_rules(root, chapters)
+    problems += _budget_rules(root, chapters, entries)
     problems += _visuals_and_tables(root, chapters, entries)
 
     # Rule 13. Scoped to `_analysis.py`: `_model.py` is rendered in full by the

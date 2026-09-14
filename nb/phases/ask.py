@@ -11,7 +11,7 @@ import sys
 from ..config import MAX_TURNS, PROBE_POOL
 from ..loop import Terminal, run
 from ..session import Session
-from ..tools.interact import ask_pool, render_stop
+from ..tools.interact import ask_pool, ask_render_ceiling, render_stop
 from ..preflight import check as preflight
 from .. import metrics
 from .common import setup, report
@@ -71,7 +71,8 @@ If a probe errors, read the traceback and fix the probe. Do not go looking
 through the notebook for why -- the traceback already says.
 """
 
-def main(notebook_path, question, carry_queue=None, verbose=True, pool=None):
+def main(notebook_path, question, carry_queue=None, verbose=True,
+         pool=None, ceiling=None):
     bad = preflight(notebook_path)
     if bad:
         for b in bad:
@@ -87,8 +88,15 @@ def main(notebook_path, question, carry_queue=None, verbose=True, pool=None):
     # agreed here bounds the whole question, not one phase of it.
     if pool is None:
         pool = ask_pool(PROBE_POOL)
+    # The render ceiling is granted here too, before anything is built, so the
+    # agent designs within it rather than discovering it at render time.
+    if ceiling is None:
+        import lint
+        _, default_ceiling = lint._defaults(notebook.root)
+        ceiling = ask_render_ceiling(default_ceiling or 200.0)
     session = Session(notebook, question, carry_queue=carry_queue,
                       metrics=run_metrics, probe_pool=pool)
+    session.render_ceiling = ceiling
 
     tell(f"  notebook  {notebook.root.name}")
     # With `say()` off the terminal, nothing else says the detail exists.

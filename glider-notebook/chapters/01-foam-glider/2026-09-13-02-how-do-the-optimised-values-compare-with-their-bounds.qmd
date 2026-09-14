@@ -5,6 +5,8 @@ title: "how do the optimised values compare with their bounds?"
 {{< include _model.qmd >}}
 
 ```{python}
+ENTRY_CEILING = 200.0   # s for this render (rule 28)
+SOLVE_BUDGET = 60.0     # s for any one solve
 result_dict = optimize_glider()
 sol = result_dict["sol"]
 vars_dict = result_dict["vars"]
@@ -15,6 +17,15 @@ taper_lb = bounds_dict["taper"][0]
 ```
 
 **Answer.** Only the taper ratio hits a bound, resting exactly on its lower limit. All other variables optimize strictly to the interior of their ranges.
+
+::: {.callout-tip}
+## Specified
+
+Granted at the prompt, 2026-09-13:
+
+1. Render budget `{python} f"{ENTRY_CEILING:.0f}"` s.
+2. Solve budget `{python} f"{SOLVE_BUDGET:.0f}"` s.
+:::
 
 ```{python}
 #| echo: false

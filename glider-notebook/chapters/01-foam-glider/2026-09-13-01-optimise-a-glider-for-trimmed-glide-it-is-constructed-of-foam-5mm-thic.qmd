@@ -5,6 +5,8 @@ title: "What is the minimum sink rate for the foam glider?"
 {{< include _model.qmd >}}
 
 ```{python}
+ENTRY_CEILING = 200.0   # s for this render (rule 28)
+SOLVE_BUDGET = 60.0     # s for any one solve
 res = optimize_glider()
 sol = res["sol"]
 sol_sink = sol.value(res["sink_rate"])
@@ -22,6 +24,15 @@ sol_ld = sol.value(res["L"] / res["D"])
 :::
 
 **Answer.** The optimum configuration features a highly tapered planform, hitting the lower taper bound of `{python} f"{sol_taper:.1f}"` to yield a root chord of `{python} f"{sol_c_root:.0f}"` mm. Trim is achieved with the CG at `{python} f"{sol_cg_x:.0f}"` mm, gliding at `{python} f"{sol_V:.1f}"` m/s on a flight path angle of `{python} f"{sol_gamma:.1f}"`&deg; (L/D of `{python} f"{sol_ld:.1f}"`).
+
+::: {.callout-tip}
+## Specified
+
+Granted at the prompt, 2026-09-13:
+
+1. Render budget `{python} f"{ENTRY_CEILING:.0f}"` s.
+2. Solve budget `{python} f"{SOLVE_BUDGET:.0f}"` s.
+:::
 
 ```{python}
 #| echo: false

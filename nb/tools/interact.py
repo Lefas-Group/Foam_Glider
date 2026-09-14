@@ -40,26 +40,20 @@ def _prompt(banner, body, hint):
     return line.strip()
 
 
-def ask_pool(default):
+def ask_budget(title, body, default):
     """
-    How much probe wall clock this question may spend, asked once.
+    A number the USER grants before the run starts, with a safe default.
 
     Deliberately NOT `_prompt`, which raises on EOF and on a blank line because
     "a Specified input is asked every time, never assumed". That rule is about
     inputs that change WHAT IS BEING BUILT, where a default would be a silent
-    design decision. A spend cap is not one: it changes only how long a wrong
-    turn is allowed to run, it has a defensible default, and a coordinator that
-    pipes a question and nothing else should get that default rather than a
-    dead run. So both EOF and Enter fall through to `default`.
-
-    The pool covers the whole QUESTION -- ask, write, and anything the queue
-    adds -- not one phase. Before this, each phase claimed its own, so a single
-    question could spend twice what the constant said and a queue of four could
-    spend eight times.
+    design decision. A budget is not one: it changes only how long a wrong turn
+    may run, it has a defensible default, and a coordinator that pipes a
+    question and nothing else should get that default rather than a dead run.
+    So EOF, Enter and anything unparseable all fall through to `default`.
     """
-    tell(f"\n{'─' * 72}\nPROBE TIME POOL\n{'─' * 72}")
-    tell("  Total probe wall clock for this question, in seconds. The agent\n"
-         "  divides it across its own probes. Enter accepts the default.\n")
+    tell(f"\n{'─' * 72}\n{title}\n{'─' * 72}")
+    tell(body + "\n")
     sys.stdout.write(f"  [{default:.0f}] > ")
     sys.stdout.flush()
     try:
@@ -69,8 +63,40 @@ def ask_pool(default):
     try:
         value = float(line.strip())
     except ValueError:
-        return default            # EOF, Enter, or something that is not a number
+        return default
     return value if value > 0 else default
+
+
+def ask_pool(default):
+    """Probe wall clock for the whole question. The AGENT divides this one."""
+    return ask_budget(
+        "PROBE TIME POOL",
+        "  Total probe wall clock for this question, in seconds. The agent\n"
+        "  divides it across its own probes. Enter accepts the default.",
+        default)
+
+
+def ask_render_ceiling(default):
+    """
+    Seconds ONE render of the entry may take. The agent does NOT divide this.
+
+    Granted rather than negotiated: the agent writes this number into the entry
+    as ENTRY_CEILING and `write` refuses to commit an entry that changed it. A
+    run that genuinely needs more asks through `ask_specified`, the same
+    escalation the probe pool uses -- which is what keeps one number in force
+    instead of two that can disagree.
+
+    It is a PER-RENDER ceiling, not a pool: the write phase may render several
+    times behind lint and verify retries, and each attempt gets the same
+    deadline, because the number describes what one render of this entry ought
+    to cost. It is also what rule 17 checks against the recorded seconds.
+    """
+    return ask_budget(
+        "ENTRY RENDER BUDGET",
+        "  How long one render of this entry may take, in seconds. It bounds\n"
+        "  every solve inside it, and a render that overruns is killed.\n"
+        "  Enter accepts the notebook default.",
+        default)
 
 
 def ask_specified(session, name, why, kind="specified", options=""):
@@ -188,6 +214,10 @@ def propose(session, **fields):
     out = proposal.model_dump()
     if session.probe_left is not None:
         out["_pool_left"] = round(session.probe_left, 1)
+    # The render ceiling the USER granted, carried across to the write phase so
+    # the entry can declare the number it was given rather than one of its own.
+    if getattr(session, "render_ceiling", None) is not None:
+        out["_render_ceiling"] = session.render_ceiling
     session.notebook.proposal_path.write_text(json.dumps(out, indent=2) + "\n")
     raise Terminal(proposal)
 

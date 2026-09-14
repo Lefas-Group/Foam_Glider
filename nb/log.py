@@ -24,6 +24,7 @@ two places. Anything that must be exact is a FILE read by path -- `proposal.json
 already works that way -- not a message to be parsed out of a stream.
 """
 
+import os
 import sys
 import time
 
@@ -43,7 +44,12 @@ def open_log(notebook, phase="", question=""):
     notebook.run.mkdir(parents=True, exist_ok=True)
     _log = (notebook.run / "status.log").open("a")
     stamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    print(f"\n{'═' * 72}\n{stamp}  {phase}  {question[:60]}\n{'═' * 72}",
+    # The PID goes in the header because it is what lets a watcher tell a run
+    # that is WEDGED from one that DIED without a word. Both happened in one
+    # week: a turn that blocked on a dead socket for 4h14m with the process
+    # alive, and a run that vanished mid-edit. They need different responses.
+    print(f"\n{'═' * 72}\n{stamp}  {phase}  pid {os.getpid()}  "
+          f"{question[:60]}\n{'═' * 72}",
           file=_log, flush=True)
     return _log
 
@@ -57,18 +63,44 @@ def close_log():
             _log = None
 
 
+def _stamped(args):
+    """Prefix the first line with HH:MM:SS; continuation lines stay aligned."""
+    if not args:
+        return args
+    head = str(args[0])
+    if head.startswith("        ·") or head.startswith("═") or not head.strip():
+        return ("         " + head,) + args[1:]   # thoughts and rules: align only
+    return (f"{time.strftime('%H:%M:%S')} {head}",) + args[1:]
+
+
 def say(*args, **kw):
-    """Detail. The log only -- never the terminal."""
+    """
+    Detail. The log only -- never the terminal.
+
+    Timestamped, because the log is now the ONLY live view of a run and a
+    watcher has to be able to work out that nothing has happened for a while.
+    Putting the clock here rather than in a heartbeat thread is deliberate: a
+    daemon thread printing "still alive" keeps printing happily while the main
+    thread is wedged, which is precisely the case worth detecting. The writer
+    emits facts; `nb watch` decides when they have stopped arriving.
+    """
     if _log is not None:
-        print(*args, file=_log, **kw)
+        print(*_stamped(args), file=_log, **kw)
         _log.flush()
 
 
 def tell(*args, **kw):
-    """Conversation. stdout, and the status log so the record is complete."""
+    """
+    Conversation. stdout, and the status log so the record is complete.
+
+    Stamped in the LOG but not on the terminal: the log is read by a watcher
+    working out whether anything is still happening, and a half-stamped file
+    makes that arithmetic guesswork. The terminal has a human in front of it
+    who does not need the time on every line.
+    """
     print(*args, **kw)
     if _log is not None:
-        print(*args, file=_log, **kw)
+        print(*_stamped(args), file=_log, **kw)
         _log.flush()
 
 

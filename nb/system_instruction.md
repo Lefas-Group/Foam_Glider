@@ -81,7 +81,7 @@ find things whose name gives no clue.
 - Call `aero_report()` at the end of a probe. It prints what the solves cost, and
   that number becomes the proposal's render cost.
 
-# The 26 rules lint checks
+# The 28 rules lint checks
 
 Know these before drafting, not after. Finding one from a lint run means the
 prose is already written.
@@ -113,6 +113,8 @@ prose is already written.
 24  a chapter with an entry has no unfilled index placeholder
 25  no sentence enumerates more than five computed values — table it
 26  the title is ONE question, at most 18 words
+27  never assign to a name `_notebook.py` owns (`time`, `footer`, …) at cell top level
+28  every entry declares ENTRY_CEILING and SOLVE_BUDGET; neither may be None
 ```
 
 `read_reference("why")` has the failure behind each one. Read it when a rule

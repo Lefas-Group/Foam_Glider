@@ -5,6 +5,8 @@ title: "how long does the optimised design fly for, compared with the previous d
 {{< include _model.qmd >}}
 
 ```{python}
+ENTRY_CEILING = 200.0   # s for this render (rule 28)
+SOLVE_BUDGET = 60.0     # s for any one solve
 opt_sink, opt_gamma, opt_v = get_optimized_flight_path()
 
 h = 2.0
@@ -18,6 +20,15 @@ distance = opt_v * np.cosd(opt_gamma) * flight_time
 :::
 
 **Answer.** From a launch height of `{python} f"{h:.0f}"` m, the optimised glider flies for `{python} f"{flight_time:.2f}"` s and covers `{python} f"{distance:.2f}"` m horizontally. The comparison to the previous design is omitted because the unoptimised initial guess does not achieve trimmed flight.
+
+::: {.callout-tip}
+## Specified
+
+Granted at the prompt, 2026-09-13:
+
+1. Render budget `{python} f"{ENTRY_CEILING:.0f}"` s.
+2. Solve budget `{python} f"{SOLVE_BUDGET:.0f}"` s.
+:::
 
 ::: {.callout-note}
 ## Assumed

@@ -262,8 +262,7 @@ def main(argv):
     print(f"freeze     discarded {len(whole)} chapter(s), {len(pages)} page(s)"
           f"; {len(served)} chapter(s) served from cache — {why}")
     shutil.rmtree(root / ".quarto", ignore_errors=True)
-    r = subprocess.run(["quarto", "render", str(root)],
-                       capture_output=True, text=True)
+    r = lint.render_quarto(root, root)
     blob = r.stdout + r.stderr
     if r.returncode:
         # Show the traceback and the cell it came from, not Quarto's chatter.

@@ -255,6 +255,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     # so it never becomes a Proposal field, and so never appears in the
     # `propose` tool schema as something the model is invited to fill in.
     pool = raw.pop("_pool_left", PROBE_POOL)
+    ceiling = raw.pop("_render_ceiling", None)
     proposal = Proposal.model_validate(raw)
     open_log(notebook, "write", proposal.title)
 
@@ -289,6 +290,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     run_metrics.set(chapter=proposal.chapter, entry_stem=stem)
     session = Session(notebook, proposal.question, proposal.chapter,
                       metrics=run_metrics, probe_pool=pool)
+    session.render_ceiling = ceiling
     # Accepting implies allowing: you cannot accept a diff you were never
     # permitted to produce.
     allow_refactor = allow_refactor or accept_refactor
@@ -465,6 +467,22 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     # overwritten by the next run; the commit is not.
     if proposal.question and proposal.question.strip() != title.strip():
         title += f"\n\nAsked: {proposal.question.strip()}"
+    # The render ceiling was GRANTED, not negotiated. Refuse to commit an entry
+    # that awarded itself a different one -- otherwise the number typed at the
+    # prompt is decoration, and the run's real spend is whatever the agent felt
+    # like. More is available, but only through `ask_specified`, which stops and
+    # asks a person.
+    if ceiling is not None:
+        import lint
+        _, declared = lint.limits_of(notebook.root, entry_path)
+        if declared != ceiling:
+            tell(f"  Not committed: the entry declares ENTRY_CEILING = "
+                 f"{declared}, but {ceiling:.0f} s was granted at the prompt.\n"
+                 f"  The budget is the user's to set. Ask for more with a "
+                 f"Specified input rather than\n  writing a different number.")
+            run_metrics.close("ceiling_changed")
+            return 1
+
     extra = ()
     if accepted:
         extra = (notebook.freeze / proposal.chapter,)
@@ -506,7 +524,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         # fresh pool per question would make the number agreed at the prompt
         # mean nothing.
         return ask(notebook_path, nxt, carry_queue=rest, verbose=verbose,
-                   pool=session.probe_left)
+                   pool=session.probe_left, ceiling=ceiling)
     return 0
 
 

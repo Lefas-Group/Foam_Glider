@@ -5,6 +5,8 @@ title: "How does it change if we model the fuselage and its mass?"
 {{< include _model.qmd >}}
 
 ```{python}
+ENTRY_CEILING = 200.0   # s for this render (rule 28)
+SOLVE_BUDGET = 60.0     # s for any one solve
 res = optimize_glider_with_fuse()
 sol = res["sol"]
 
@@ -28,6 +30,15 @@ c_root_bound = 0.15
 :::
 
 **Answer.** Adding the fuselage increases the glider's mass, which drives the wing root chord to its maximum bound to carry the extra weight. This keeps the sink rate penalty to a minimum.
+
+::: {.callout-tip}
+## Specified
+
+Granted at the prompt, 2026-09-14:
+
+1. Render budget `{python} f"{ENTRY_CEILING:.0f}"` s.
+2. Solve budget `{python} f"{SOLVE_BUDGET:.0f}"` s.
+:::
 
 ::: {.callout-tip}
 ## Specified

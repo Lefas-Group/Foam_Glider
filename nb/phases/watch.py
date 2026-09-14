@@ -14,6 +14,8 @@ already written to be read, and anything this added would be a second way of
 rendering the same lines, to be kept in step with the first.
 """
 
+import os
+import re
 import sys
 import time
 
@@ -21,15 +23,59 @@ from ..config import Notebook
 from ..log import tell
 
 
+# How long a run may be silent before the watcher says so, when it has not
+# declared a deadline of its own. Above the slowest turn measured across 16
+# completed runs (54 s at the worst run average, 13 s median), so an honest
+# think does not trip it.
+DEFAULT_QUIET = 120.0
+
+PID = re.compile(r"\bpid (\d+)\b")
+DEADLINE = re.compile(r"deadline (\d+(?:\.\d+)?) s")
+
+
+def _alive(pid):
+    """True if the process exists, False if not, None if we cannot tell."""
+    if pid is None:
+        return None
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True          # exists, owned by someone else
+    except OSError:
+        return None
+
+
+def _quiet_note(idle, limit, pid):
+    live = _alive(pid)
+    mins, secs = divmod(int(idle), 60)
+    who = "" if live is None else (
+        f" — pid {pid} alive but not advancing" if live
+        else f" — pid {pid} is GONE; the run died without a word")
+    return (f"          ⚠ {mins}m{secs:02d}s with no new line, past the "
+            f"{limit:.0f} s deadline{who}")
+
+
 def follow(path, from_start=False, poll=0.25):
     """
-    Print `path` as it grows, like `tail -f`.
+    Print `path` as it grows, like `tail -f`, and say when it stops growing.
+
+    The staleness warning is the point. `say()` no longer reaches the terminal,
+    so a wedged run and a thinking one look identical -- one sat blocked on a
+    dead socket for 4h14m and nothing noticed. The RUN emits facts (a timestamp
+    on every line, its pid in the header, the deadline of any bounded
+    operation); the WATCHER decides when they have stopped arriving. That split
+    is why this is not a heartbeat thread inside the run: such a thread would
+    keep printing cheerfully while the main thread was stuck.
 
     Handles a file that does not exist yet -- `nb watch` is usually opened
-    BEFORE the run it is watching, which is the whole point of having it -- and
-    a file that shrinks, which means a new run truncated it.
+    BEFORE the run it is watching -- and a file that shrinks, which means a new
+    run truncated it.
     """
     handle, size = None, 0
+    pid, limit, last, warned = None, None, time.time(), False
     try:
         while True:
             if handle is None:
@@ -45,6 +91,18 @@ def follow(path, from_start=False, poll=0.25):
             if chunk:
                 sys.stdout.write(chunk)
                 sys.stdout.flush()
+                # The run tells us who it is and what it is waiting for.
+                for m in PID.finditer(chunk):
+                    pid = int(m.group(1))
+                for m in DEADLINE.finditer(chunk):
+                    limit = float(m.group(1))
+                last, warned = time.time(), False
+
+            idle = time.time() - last
+            ceiling = limit if limit else DEFAULT_QUIET
+            if idle > ceiling and not warned:
+                print(_quiet_note(idle, ceiling, pid), flush=True)
+                warned = True               # once per stall, not once a second
 
             now = path.stat().st_size if path.exists() else 0
             if now < size:                  # truncated: reopen from the top

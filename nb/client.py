@@ -17,7 +17,7 @@ from google.genai import types
 
 # Aliased: `config` is already a function in this module.
 from . import config as settings
-from .config import MODEL, THINKING_LEVEL
+from .config import API_TIMEOUT_MS, MODEL, THINKING_LEVEL
 
 _client = None
 
@@ -40,7 +40,21 @@ def client():
         # Retriable by default: 408, 429, 500, 502, 503, 504, and httpx
         # transient errors. A 400 -- a missing signature, a bad schema -- is not
         # retried, which is right: it would fail identically five times.
+        # ...but retrying is worth nothing without a DEADLINE, which is what
+        # this was missing. A run hung for 4h14m in `_ssl__SSLSocket_read`
+        # after a render: the connection died silently -- no FIN, no RST -- so
+        # read(2) simply never returned. That produces no status code and
+        # raises nothing, so the six attempts above had nothing to catch and
+        # never fired. Unset, `timeout` leaves httpx with no read deadline at
+        # all, and the failure is indistinguishable from a slow think.
+        #
+        # 300 s against measured latency across 16 completed runs: 13.3 s per
+        # turn median, 54.4 s at the worst run average. That is ~5x the worst
+        # case seen, which leaves room for a single turn well above its run's
+        # average while still bounding a dead socket at six attempts x 5 min
+        # rather than forever. Milliseconds, per the SDK.
         _client = genai.Client(http_options=types.HttpOptions(
+            timeout=API_TIMEOUT_MS,
             retry_options=types.HttpRetryOptions(attempts=6)))
     return _client
 

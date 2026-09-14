@@ -7,14 +7,11 @@
 # `execute-dir: project`, so that is always the cwd.
 import pathlib
 
-# _budget.py comes last and is OPTIONAL: it carries this chapter's solve limits,
-# and a chapter without one runs on the notebook defaults. It is a separate file
-# so that forking a chapter -- which copies _model.py and _analysis.py -- cannot
-# carry the parent's budget across.
+# There is no _budget.py. Budgets belong to the ENTRY, which declares its own
+# SOLVE_BUDGET and ENTRY_CEILING in its first cell (rule 28).
 for _p in ["_notebook.py",
            "chapters/01-foam-glider/_model.py",
-           "chapters/01-foam-glider/_analysis.py",
-           "chapters/01-foam-glider/_budget.py"]:
+           "chapters/01-foam-glider/_analysis.py"]:
     if pathlib.Path(_p).exists():
         exec(compile(pathlib.Path(_p).read_text(), _p, "exec"))
 

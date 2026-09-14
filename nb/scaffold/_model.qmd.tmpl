@@ -7,14 +7,15 @@
 # `execute-dir: project`, so that is always the cwd.
 import pathlib
 
-# _budget.py comes last and is OPTIONAL: it carries this chapter's solve limits,
-# and a chapter without one runs on the notebook defaults. It is a separate file
-# so that forking a chapter -- which copies _model.py and _analysis.py -- cannot
-# carry the parent's budget across.
+# There is no _budget.py. Budgets belong to the ENTRY, which declares its own
+# SOLVE_BUDGET and ENTRY_CEILING in its first cell (rule 28) -- the entry is the
+# unit of work and the unit the user is asked about, since the render ceiling is
+# granted at the prompt. A chapter-level file had to be kept separate from
+# _model.py and _analysis.py precisely so a fork could not inherit it; nothing
+# is inherited now, because nothing is chapter-scoped.
 for _p in ["_notebook.py",
            "chapters/__CHAPTER__/_model.py",
-           "chapters/__CHAPTER__/_analysis.py",
-           "chapters/__CHAPTER__/_budget.py"]:
+           "chapters/__CHAPTER__/_analysis.py"]:
     if pathlib.Path(_p).exists():
         exec(compile(pathlib.Path(_p).read_text(), _p, "exec"))
 

@@ -90,6 +90,16 @@ PROBE_WALL_CLOCK = 960.0
 # ration an honest one. None disables it.
 PROBE_POOL = 900.0
 
+# Deadline on ONE API request, milliseconds. Without it a silently dead socket
+# blocks read(2) forever: a run sat in `_ssl__SSLSocket_read` for 4h14m after a
+# render, and the six retries in `client.py` never fired because a dead
+# connection raises nothing for them to catch.
+#
+# 300 s is ~5x the worst latency measured over 16 completed runs (13.3 s per
+# turn median, 54.4 s at the worst run average), so it leaves room for one slow
+# turn while bounding the dead-socket case at 6 attempts rather than forever.
+API_TIMEOUT_MS = 300_000
+
 # Documented in `_notebook.py` but never enforced there -- no code reads it.
 # Chapters that care declare ENTRY_CEILING in their own `_budget.py`.
 DEFAULT_ENTRY_CEILING = 200.0

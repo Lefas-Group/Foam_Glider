@@ -62,8 +62,8 @@ def site(notebook, force=False, verbose=True, page=None):
               f"to rebuild them anyway")
         return None
 
-    r = subprocess.run(["quarto", "render", str(notebook.root)],
-                       cwd=notebook.root, capture_output=True, text=True)
+    import lint
+    r = lint.render_quarto(notebook.root, notebook.root, cwd=notebook.root)
     if r.returncode != 0:
         tail = (r.stdout + r.stderr).strip().splitlines()[-3:]
         tell("  site      render FAILED — the entry is committed either way")

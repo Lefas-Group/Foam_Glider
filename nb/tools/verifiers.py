@@ -12,6 +12,7 @@ import subprocess
 
 from ..config import Notebook
 from ..text import tail
+from ..log import say
 
 
 def _problems(root, chapters):
@@ -64,8 +65,20 @@ def render(notebook, target=""):
     That is what `check` is for.
     """
     path = notebook.root if not target else notebook.root / target
-    r = subprocess.run(["quarto", "render", str(path)],
-                       capture_output=True, text=True, cwd=notebook.root)
+    # Deadlined: a wedged Jupyter kernel used to hang here forever, the same
+    # shape as the socket that hung a run for four hours. lint.render_quarto
+    # sizes the deadline from what will actually execute and names the page it
+    # died on.
+    import lint
+    # Announced before it starts, so `nb watch` knows how long silence here is
+    # allowed to last. Without it the watcher falls back to a flat 120 s and
+    # would cry wolf over an honest 200 s render.
+    deadline = lint.render_deadline(notebook.root)
+    todo = lint.unfrozen(notebook.root,
+                         sorted(d.name for d in (notebook.root / "chapters").iterdir()
+                                if d.is_dir()))
+    say(f"  render    deadline {deadline:.0f} s ({len(todo)} page(s) to execute)")
+    r = lint.render_quarto(path, notebook.root, cwd=notebook.root)
     out = (r.stdout or "") + (r.stderr or "")
     if r.returncode == 0:
         return tail(f"render ok.\n{out}", 2000)

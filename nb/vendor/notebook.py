@@ -77,6 +77,32 @@ mpl.rcParams.update({
 # =============================================================================
 aero_cost = {"calls": 0, "seconds": 0.0}
 
+# ---------------------------------------------------------------- shadow guard
+# `_model.qmd` EXECS this file into the PAGE's globals rather than importing it
+# -- every chapter names its model `_model`, so real imports would collide in
+# sys.modules -- which means the functions below have the entry's namespace as
+# their __globals__. An entry writing `time = h / opt_sink` therefore left
+# footer() reading a float:
+#
+#     AttributeError: 'float' object has no attribute 'perf_counter'
+#
+# ...raised from this file, which rule 11 pins byte-identical and the entry's
+# author cannot edit. Lint rule 27 refuses that rebinding at lint time; these
+# aliases mean a miss degrades instead of crashing. The two are independent on
+# purpose -- neither is a reason to skip the other.
+#
+# The public names stay exactly as they are: entries use `time` and `pathlib`
+# legitimately, and the point is to stop them mattering HERE.
+_time, _pathlib, _re, _inspect, _os = time, pathlib, re, inspect, os
+# An ALIAS, not a copy: `_model.qmd` zeroes the counter through the public name
+# with aero_cost.update(...), and that must be the dict footer() reads.
+_aero_cost = aero_cost
+# DEFAULT_SOLVE_BUDGET and PROBE_BUDGET are deliberately NOT aliased. They are
+# floats: rebinding one yields a wrong limit, not a traceback, so there is no
+# crash for an alias to prevent -- and rule 27 refuses the rebinding anyway. A
+# chapter raising its own limit uses different names (SOLVE_BUDGET_CHAPTER,
+# PROBE_BUDGET_CHAPTER), looked up dynamically, which this does not touch.
+
 
 def aero_report(reset=True):
     """
@@ -90,11 +116,11 @@ def aero_report(reset=True):
     Resets by default, so probes that print it repeatedly report per-section
     cost rather than a running total. Pass `reset=False` for the total.
     """
-    calls, seconds = aero_cost["calls"], aero_cost["seconds"]
+    calls, seconds = _aero_cost["calls"], _aero_cost["seconds"]
     each = f", {seconds / calls * 1e3:.0f} ms each" if calls else ""
     print(f"aero: {calls} solve(s), {seconds:.1f} s{each}")
     if reset:
-        aero_cost.update(calls=0, seconds=0.0)
+        _aero_cost.update(calls=0, seconds=0.0)
 
 
 # =============================================================================
@@ -304,7 +330,7 @@ def _probe_budget():
     explicitly budget, and unsetting the variable restores the old behaviour
     exactly.
     """
-    env = os.environ.get("NB_PROBE_BUDGET")
+    env = _os.environ.get("NB_PROBE_BUDGET")
     if env:
         try:
             return float(env)
@@ -397,7 +423,7 @@ def show_source(*objs):
     print("## The method, as called\n")
     print("```python")
     for o in objs:
-        print(inspect.getsource(o).rstrip())
+        print(_inspect.getsource(o).rstrip())
         print()
     print("```")
     print(":::")
@@ -420,10 +446,10 @@ def superseded_by(stem, reason):
     chapter = globals().get("_CHAPTER")
     if chapter is None:
         raise RuntimeError("superseded_by() needs _CHAPTER, set by _model.qmd")
-    hit = pathlib.Path(chapter) / f"{stem}.qmd"
+    hit = _pathlib.Path(chapter) / f"{stem}.qmd"
     if not hit.exists():
         raise FileNotFoundError(f"superseded_by({stem!r}): no {hit}")
-    title = re.search(r'^title:\s*"(.+)"$', hit.read_text(), re.M).group(1)
+    title = _re.search(r'^title:\s*"(.+)"$', hit.read_text(), _re.M).group(1)
     print('::: {.callout-important}')
     print("## Superseded\n")
     print(f"{reason} See [{title}]({stem}.qmd).")
@@ -445,9 +471,9 @@ def footer(*objs):
     """
     if objs:
         show_source(*objs)
-    n = aero_cost["calls"]
+    n = _aero_cost["calls"]
     cost = f" · {n} aero solve{'s' if n != 1 else ''}" if n else ""
-    print(f"[Executed in {time.perf_counter() - _T0:.1f} s{cost}]{{.runtime}}")
+    print(f"[Executed in {_time.perf_counter() - _T0:.1f} s{cost}]{{.runtime}}")
 
 
 def api(filename="_analysis.py"):
@@ -465,8 +491,8 @@ def api(filename="_analysis.py"):
     also keeps this file's own functions out of the listing.
     """
     for name, obj in sorted(globals().items()):
-        if not inspect.isfunction(obj):
+        if not _inspect.isfunction(obj):
             continue
         if obj.__code__.co_filename.endswith(filename):
-            summary = (inspect.getdoc(obj) or "").strip().split("\n")[0]
-            yield name + str(inspect.signature(obj)), summary
+            summary = (_inspect.getdoc(obj) or "").strip().split("\n")[0]
+            yield name + str(_inspect.signature(obj)), summary

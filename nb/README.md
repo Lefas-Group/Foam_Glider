@@ -39,6 +39,18 @@ Enter accepts 900 s — and the agent divides it: every `probe` call states a
 for more than remains grants what remains. When the pool is gone, the next probe
 is refused and it proposes with what it has.
 
+**A second budget is granted the same way: what one render of the entry may
+cost.** The agent does not divide this one and does not choose it — it writes the
+granted number into the entry as `ENTRY_CEILING`, and `write` refuses to commit
+an entry that changed it. A render that overruns four times that ceiling is
+killed, and the message names the page it was on. Work that genuinely needs more
+asks for it as a Specified input, which stops and asks a person.
+
+Budgets live in the **entry**, not the chapter: `_budget.py` is gone. Its own
+header recorded why it had to exist — a chapter forked from another *"silently
+inherited `SOLVE_BUDGET = None`"*. Nothing is inherited now, because nothing is
+chapter-scoped.
+
 One pool covers the whole question: what `ask` leaves goes out in `proposal.json`
 as `_pool_left`, `write` picks it up, and a queued follow-on inherits the
 remainder rather than claiming a fresh 900 s. It is the one prompt that takes a
@@ -99,7 +111,7 @@ uv run --group nb python -m nb.cache     <notebook> [--purge]  # held caches
 uv run --group nb python -m nb.prefix    <notebook> --measure  # cached prefix size
 uv run --group nb python -m nb.manifest  <notebook>            # what the model sees
 uv run --group nb python -m nb.preflight <notebook>            # before any tokens
-uv run --group nb python nb/vendor/lint.py <notebook>          # the 26 rules
+uv run --group nb python nb/vendor/lint.py <notebook>          # the 28 rules
 ```
 
 ---
@@ -167,7 +179,7 @@ the agent can take.
     manifest.py    one line per entry: stem, title, hero value
     preflight.py   invariants the agent cannot fix, checked before any tokens
     inputs.py      every Specified and Assumed item, across the notebook
-    budgets.py     reads _budget.py; parses aero_report()
+    budgets.py     parses aero_report(); budgets now live in each entry
     metrics.py     one SQLite row per phase-run
     session.py     what one run accumulates
     text.py        output truncation
@@ -197,7 +209,7 @@ at render time anyway.
 
 | | sees | catches |
 |---|---|---|
-| **lint** | the source | all 26 rules — budgets, hand-typed numbers, structure |
+| **lint** | the source | all 28 rules — budgets, hand-typed numbers, structure |
 | **render** | — | code that does not run |
 | **verify** | the *rendered* page and its figures, **not** the conversation | prose that contradicts the output |
 
