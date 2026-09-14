@@ -17,7 +17,7 @@ import sys
 from ..client import complete, config
 from ..schema import VerifyResult
 from ..tools import figures, verifiers
-from ..log import say
+from ..log import say, tell
 
 BRIEF = """\
 Below is a notebook entry exactly as it rendered: the prose with every inline
@@ -90,16 +90,16 @@ def main(argv):
     """`python -m nb.phases.verify <notebook> <chapter> <stem>`"""
     from ..config import Notebook
     if len(argv) < 3:
-        say("usage: python -m nb.phases.verify <notebook> <chapter> <stem>")
+        tell("usage: python -m nb.phases.verify <notebook> <chapter> <stem>")
         return 2
     notebook = Notebook(argv[0])
     result, note = check(notebook, argv[1], argv[2], render_first=False)
     if note:
-        say(f"  {note}")
+        tell(f"  {note}")
         return 2
-    say(f"  verify    {'ok' if result.ok else f'{len(result.findings)} finding(s)'}")
+    tell(f"  verify    {'ok' if result.ok else f'{len(result.findings)} finding(s)'}")
     for f in result.findings:
-        say(f"    {f}")
+        tell(f"    {f}")
     return 0 if result.ok else 1
 
 

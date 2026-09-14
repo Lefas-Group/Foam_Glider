@@ -50,10 +50,10 @@ def main(path, title=None, subject=None, chapter="01-first-chapter",
          chapter_title="First chapter", verbose=True):
     root = pathlib.Path(path).resolve()
     if root.exists() and any(root.iterdir()):
-        say(f"  {root} exists and is not empty")
+        tell(f"  {root} exists and is not empty")
         return 1
     if not CHAPTER_NAME.match(chapter):
-        say(f"  {chapter!r} is not NN-kebab-case, e.g. '01-first-chapter'")
+        tell(f"  {chapter!r} is not NN-kebab-case, e.g. '01-first-chapter'")
         return 1
     # The first chapter of a new notebook is 01 by construction. Normalise here
     # rather than let create_chapter renumber later -- the name is substituted
@@ -84,30 +84,30 @@ def main(path, title=None, subject=None, chapter="01-first-chapter",
     # the marker that says this chapter is still claimable.
     chapter, msg = create_chapter(notebook, chapter, chapter_title, claim=False)
     if msg.startswith("rejected"):
-        say(f"  {msg}")
+        tell(f"  {msg}")
         return 1
 
     if verbose:
-        say(f"  created   {root}")
-        say(f"  vendored  {', '.join(d for _, d in VENDORED)}  (rule 11)")
-        say(f"  chapter   chapters/{chapter}/")
+        tell(f"  created   {root}")
+        tell(f"  vendored  {', '.join(d for _, d in VENDORED)}  (rule 11)")
+        tell(f"  chapter   chapters/{chapter}/")
 
     # Prove it rather than claim it. A notebook that does not lint is a notebook
     # whose first `nb ask` fails at preflight, several minutes later.
     import lint
     problems = [m for _, m in lint.check(root, [chapter]) if "(warning)" not in m]
-    say(f"  lint      {'clean' if not problems else f'{len(problems)} problem(s)'}")
+    tell(f"  lint      {'clean' if not problems else f'{len(problems)} problem(s)'}")
     for m in problems:
-        say(f"              {m}")
+        tell(f"              {m}")
 
     from ..preflight import check as preflight
     bad = [b for b in preflight(root) if "GEMINI_API_KEY" not in b]
-    say(f"  preflight {'ok' if not bad else 'FAILED'}")
+    tell(f"  preflight {'ok' if not bad else 'FAILED'}")
     for b in bad:
-        say(f"              {b}")
+        tell(f"              {b}")
 
     if not problems and not bad:
-        say(f"\n  Fill chapters/{chapter}/_model.py with the vehicle, and say in"
+        tell(f"\n  Fill chapters/{chapter}/_model.py with the vehicle, and say in"
               f"\n  its index.qmd what defines the chapter. Then:"
               f"\n\n    uv run --group nb python -m nb ask {root.name} \"<question>\"\n")
     return 1 if (problems or bad) else 0

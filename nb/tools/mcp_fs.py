@@ -71,6 +71,13 @@ class FileSystem:
             self._error = e
             self._ready.set()
 
+    @staticmethod
+    def _errlog():
+        """The run log if one is open, else a sink. Never the terminal."""
+        from ..log import _log
+        import os
+        return _log if _log is not None else open(os.devnull, "w")
+
     async def _serve(self):
         from mcp import ClientSession, StdioServerParameters
         from mcp.client.stdio import stdio_client
@@ -78,7 +85,13 @@ class FileSystem:
         params = StdioServerParameters(
             command="npx",
             args=["-y", "@modelcontextprotocol/server-filesystem", str(self.allowed)])
-        async with stdio_client(params) as (r, w):
+        # The server greets stderr with a banner and a four-line dump of its
+        # allowed directories, every start. That was lost among the turn lines
+        # before; with the terminal carrying the conversation only it would be
+        # the most prominent thing on screen, and it is not ours to show.
+        # `stdio_client` takes an errlog, so it goes where the rest of the
+        # detail goes.
+        async with stdio_client(params, errlog=self._errlog()) as (r, w):
             async with ClientSession(r, w) as session:
                 await session.initialize()
                 self._session = session

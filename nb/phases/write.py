@@ -230,18 +230,20 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     bad = preflight(notebook_path)
     if bad:
         for b in bad:
-            say(f"  {b}")
+            tell(f"  {b}")
         return 1
 
     notebook = Notebook(notebook_path)
-    open_log(notebook)
+    open_log(notebook, "write", proposal.title if notebook.proposal_path.exists() else "")
     if not notebook.proposal_path.exists():
-        say(f"  no proposal at {notebook.proposal_path}. Run `nb ask` first.")
+        tell(f"  no proposal at {notebook.proposal_path}. Run `nb ask` first.")
         return 1
     proposal = Proposal.model_validate(json.loads(notebook.proposal_path.read_text()))
 
-    say(f"  notebook  {notebook.root.name}")
-    say(f"  entry     {proposal.title}")
+    tell(f"  notebook  {notebook.root.name}")
+    # With `say()` off the terminal, nothing else says the detail exists.
+    tell(f"  telemetry  python -m nb watch {notebook.root.name}")
+    tell(f"  entry     {proposal.title}")
 
     chapter_msg = None
     # Either route can be the first entry in a scaffold chapter: `propose`
@@ -256,7 +258,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         proposal.chapter, chapter_msg = create_chapter(
             notebook, proposal.chapter,
             proposal.chapter_title or proposal.title, proposal.chapter_defines)
-        say(f"  chapter   {chapter_msg.splitlines()[0]}")
+        tell(f"  chapter   {chapter_msg.splitlines()[0]}")
         if chapter_msg.startswith("rejected"):
             return 1
 
@@ -286,7 +288,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     fs, handlers, make_config = setup(session, phase="write")
     try:
         if allow_refactor:
-            say("  refactor  allowed — _model.py is writable, and the chapter "
+            tell("  refactor  allowed — _model.py is writable, and the chapter "
                   "will be re-proved before commit")
         brief = BRIEF.format(
             proposal=json.dumps(proposal.model_dump(), indent=2),
@@ -321,7 +323,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                 # The eval metric: violations before any correction round.
                 first_pass = len(problems)
                 run_metrics.set(first_pass_violations=first_pass)
-            say(f"  lint      {'clean' if clean else f'{len(problems)} blocking'}"
+            tell(f"  lint      {'clean' if clean else f'{len(problems)} blocking'}"
                   f" (attempt {attempt + 1})")
             if clean:
                 break
@@ -329,7 +331,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                 "Lint is not clean. Fix every one of these, then stop:\n\n"
                 + "\n".join(f"  {p}" for p in problems)}]})
         else:
-            say(f"  lint      still failing after {MAX_LINT_ATTEMPTS} attempts. "
+            tell(f"  lint      still failing after {MAX_LINT_ATTEMPTS} attempts. "
                   f"Nothing committed; the entry is on disk to fix by hand.")
             run_metrics.close("lint_failed")
             return 1
@@ -347,14 +349,14 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                 # not be checked against its own output, and one of them means
                 # the page does not build at all. Committing either would put
                 # exactly the thing verify exists to catch into history.
-                say(f"  verify    could not run — {note}")
+                tell(f"  verify    could not run — {note}")
                 run_metrics.close("verify_failed")
                 return 1
             findings = result.findings
-            say(f"  verify    {'ok' if result.ok else f'{len(findings)} finding(s)'}"
+            tell(f"  verify    {'ok' if result.ok else f'{len(findings)} finding(s)'}"
                   f" (attempt {attempt + 1})")
             for f in findings:
-                say(f"              {f}")
+                tell(f"              {f}")
             if result.ok:
                 break
             if attempt == MAX_VERIFY_ATTEMPTS - 1:
@@ -368,14 +370,14 @@ def main(notebook_path, verbose=True, allow_refactor=False,
             loop_once()
             clean, problems = verifiers.is_clean(notebook, proposal.chapter)
             if not clean:
-                say(f"  lint      {len(problems)} blocking after the verify fix; "
+                tell(f"  lint      {len(problems)} blocking after the verify fix; "
                       f"stopping. The entry is on disk.")
                 run_metrics.close("lint_failed")
                 return 1
 
         run_metrics.set(verify_findings=len(findings))
         if findings:
-            say(f"\n  Not committed: {len(findings)} verify finding(s) unresolved "
+            tell(f"\n  Not committed: {len(findings)} verify finding(s) unresolved "
                   f"after {MAX_VERIFY_ATTEMPTS} attempts. The entry is on disk.")
             run_metrics.close("verify_failed")
             return 1
@@ -393,7 +395,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                 moved += [f"{name}:{fn}" for fn in guards.changed_bodies(
                     _before[name], guards.bodies(_chapter_dir / name))]
         if moved:
-            say(f"  check     {', '.join(moved)} changed — re-proving "
+            tell(f"  check     {', '.join(moved)} changed — re-proving "
                   f"{_siblings} sibling entr"
                   f"{'y' if _siblings == 1 else 'ies'}")
             out = verifiers.check(notebook, proposal.chapter)
@@ -419,7 +421,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                     return 1
                 accepted = moved
             else:
-                say("  check     clean — the refactor moved nothing")
+                tell("  check     clean — the refactor moved nothing")
     except Refactor as r:
         # The agent tried to change the vehicle, was refused, and said why.
         # Ending here is the point: re-proving a chapter is minutes of solves,
@@ -454,13 +456,13 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     sha, detail = _commit(notebook, proposal.chapter, stem, entry_path,
                           title, extra_paths=extra)
     if sha is None:
-        say(f"  commit    FAILED — {detail}")
+        tell(f"  commit    FAILED — {detail}")
         run_metrics.close("commit_failed")
         return 1
     tell(f"  commit    {sha}  ({detail})")
-    say(f"  first-pass violations: {first_pass}")
+    tell(f"  first-pass violations: {first_pass}")
     if session.probe_pool:
-        say(f"  budget    {session.probe_spent:.0f} s of "
+        tell(f"  budget    {session.probe_spent:.0f} s of "
             f"{session.probe_pool:.0f} s probe pool used")
     run_metrics.close("committed_refactor" if accepted else "committed")
 
@@ -479,7 +481,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     # --- advance the queue -------------------------------------------------
     if proposal.queue:
         nxt, rest = proposal.queue[0], proposal.queue[1:]
-        say(f"\n  {len(proposal.queue)} question(s) queued. Next:\n    {nxt}\n")
+        tell(f"\n  {len(proposal.queue)} question(s) queued. Next:\n    {nxt}\n")
         from .ask import main as ask
         return ask(notebook_path, nxt, carry_queue=rest, verbose=verbose)
     return 0

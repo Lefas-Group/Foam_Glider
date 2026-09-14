@@ -75,17 +75,19 @@ def main(notebook_path, question, carry_queue=None, verbose=True):
     bad = preflight(notebook_path)
     if bad:
         for b in bad:
-            say(f"  {b}")
+            tell(f"  {b}")
         return 1
 
     from ..config import Notebook
     notebook = Notebook(notebook_path)
-    open_log(notebook)
+    open_log(notebook, "ask", question)
     run_metrics = metrics.Run(notebook, "ask", question)
     session = Session(notebook, question, carry_queue=carry_queue,
                       metrics=run_metrics)
 
-    say(f"  notebook  {notebook.root.name}")
+    tell(f"  notebook  {notebook.root.name}")
+    # With `say()` off the terminal, nothing else says the detail exists.
+    tell(f"  telemetry  python -m nb watch {notebook.root.name}")
     fs, handlers, make_config = setup(session, phase="ask")
     gate = None
     notebook.run.mkdir(parents=True, exist_ok=True)
@@ -112,7 +114,7 @@ def main(notebook_path, question, carry_queue=None, verbose=True):
                             solve_seconds=round(session.solve_seconds, 1))
             run_metrics.close("proposed")
             if session.probe_pool:
-                say(f"  budget    {session.probe_spent:.0f} s of "
+                tell(f"  budget    {session.probe_spent:.0f} s of "
                     f"{session.probe_pool:.0f} s probe pool used")
             # A new chapter is the one stop that survives on this side of the
             # run: it is a structural commitment later entries build on, far
@@ -127,7 +129,7 @@ def main(notebook_path, question, carry_queue=None, verbose=True):
             gate = proposal
         except RuntimeError as e:
             run_metrics.close("max_turns")
-            say(f"\n  {e}. Nothing was written.")
+            tell(f"\n  {e}. Nothing was written.")
             return 1
         except SystemExit:
             # Raised when a prompt hits EOF or is interrupted. Record it before
@@ -141,7 +143,7 @@ def main(notebook_path, question, carry_queue=None, verbose=True):
 
     if gate is None:
         run_metrics.close("no_proposal")
-        say("\n  The loop ended without a proposal. Nothing was written.")
+        tell("\n  The loop ended without a proposal. Nothing was written.")
         return 1
 
     # One command, two conversations. The write phase starts fresh from the
@@ -149,7 +151,7 @@ def main(notebook_path, question, carry_queue=None, verbose=True):
     # whole probe history forward (measured $0.404 split against $0.429 merged),
     # and it is what the two surviving stops resume from, since nothing persists
     # a conversation across a process boundary.
-    say("")
+    tell("")
     from .write import main as write
     return write(notebook_path, verbose=verbose)
 

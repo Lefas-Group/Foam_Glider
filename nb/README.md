@@ -194,47 +194,38 @@ be computed, but nothing forces a sentence about a **shape** to match the shape.
 A caption claiming a crossover at 6 m/s when the curve crosses at 8 passes every
 rule. Verify reads the PNG and catches it.
 
-### Two streams, and how to look at each
+### Two tabs, and what is in each
 
-A run writes to both, so an unredirected terminal looks like one stream and reads
-the way it always did. Separate them when you want one or the other:
+**The terminal is the conversation.** Questions it stops to ask, the milestones
+(`chapter`, `lint`, `verify`, `commit`), the finished entry with its real
+numbers, and anything that ends a run without committing. About ten lines for a
+successful entry.
 
-**stdout is the conversation** — the questions it stops to ask, the proposal at a
-stop, the commit line, and the finished entry with its real numbers. The things
-you act on.
-
-**stderr is the telemetry** — one line per turn with tokens and tool, lint,
-verify, render, probe budgets. The things you read when you want to know *why*.
-
-`--thoughts` adds the model's own reasoning to that stream. **Off by default**,
-and not only for tidiness: thought summaries arrive *inside* the model turn,
-which `loop.py` appends whole, so leaving them on means every later turn
-re-sends them and the model reads its own summaries back. Measured, those
-summaries confabulate on short turns — one decided `lint` meant fabric lint.
-A run is reproducible from `proposal.json`, so re-running with the flag when
-something looks wrong is cheap.
+**Everything else is detail** — one line per turn with tokens and tool, the
+model's own reasoning, per-probe budgets, lint output — and goes to
+`<notebook>/_scratch/run/status.log`. Follow it from another tab:
 
 ```bash
-ASK="uv run --group nb python -m nb ask"
-
-$ASK <notebook> "…" 2>/dev/null   # conversation only — questions and the entry
-$ASK <notebook> "…" 2>run.log     # same, telemetry kept for afterwards
-$ASK <notebook> "…" 2>&1 | less   # both, interleaved and scrollable
-$ASK <notebook> "…" >entry.md     # telemetry on screen, the entry into a file
-$ASK <notebook> "…" --thoughts    # add the model's reasoning to stderr
+uv run --group nb python -m nb watch <notebook>          # live, from now on
+uv run --group nb python -m nb watch <notebook> --all    # from the top
 ```
 
-**Careful with `>/dev/null`.** The questions live on stdout, so discarding it
-means answering a prompt you cannot see. `2>/dev/null` is the safe half.
+The log appends across runs and each opens with a dated separator, so you can
+read back through earlier ones. `nb watch` may be started before the run it
+watches.
 
-You do not have to choose in advance. **Everything from both streams is mirrored
-to `_scratch/run/status.log`**, so a second pane can watch a run live, and a run
-that died leaves a complete record including what the model was thinking on the
-turn it went wrong:
+**There is no flag for this.** Both streams used to land on the same terminal, so
+separating them meant redirecting one away — and it cannot be stdout, because
+that is where you type answers. An option everyone sets the same way is a default
+in disguise, so `say()` simply stopped reaching the terminal. The consequence is
+a rule: anything a run's outcome depends on must be `tell()`, or a failed run
+ends in silence.
 
-```bash
-tail -f <notebook>/_scratch/run/status.log
-```
+**The model's reasoning is always on**, and never re-enters the conversation.
+`loop.py` shows each thought part and then drops it before appending the turn —
+safe because Google's documentation attaches the enforced signature *"only to the
+first functionCall part"*, so filtering the part list preserves it. Verified with
+a negative control: a turn rebuilt from `name`+`args` still 400s.
 
 ### Where state lives
 

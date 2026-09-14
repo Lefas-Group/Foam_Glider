@@ -1,5 +1,5 @@
 ---
-title: "optimise a glider for trimmed glide. It is constructed of foam 5mm thick density 174.4g/m^2, with a fixed 300mm span and a sensibly sized, fixed tail"
+title: "What is the minimum sink rate for the foam glider?"
 ---
 
 {{< include _model.qmd >}}

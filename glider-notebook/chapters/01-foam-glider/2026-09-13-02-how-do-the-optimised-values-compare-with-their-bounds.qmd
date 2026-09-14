@@ -14,7 +14,21 @@ taper_val = sol.value(vars_dict["taper"])
 taper_lb = bounds_dict["taper"][0]
 ```
 
-**Answer.** Only the taper ratio hits a bound, resting exactly on its lower limit of `{python} f"{taper_lb:.2f}"` (`{python} f"{taper_val:.4f}"`). All other variables optimize strictly to the interior of their ranges: root chord `{python} f"{sol.value(vars_dict['c_root']):.3f}"` (`{python} f"{bounds_dict['c_root'][0]:.2f}"` to `{python} f"{bounds_dict['c_root'][1]:.2f}"`), CG `{python} f"{sol.value(vars_dict['cg_x']):.3f}"` (`{python} f"{bounds_dict['cg_x'][0]:.2f}"` to `{python} f"{bounds_dict['cg_x'][1]:.2f}"`), alpha `{python} f"{sol.value(vars_dict['alpha']):.2f}"` (`{python} f"{bounds_dict['alpha'][0]:.2f}"` to `{python} f"{bounds_dict['alpha'][1]:.2f}"`), velocity `{python} f"{sol.value(vars_dict['V']):.2f}"` (`{python} f"{bounds_dict['V'][0]:.2f}"` to `{python} f"{bounds_dict['V'][1]:.2f}"`), and flight path angle `{python} f"{sol.value(vars_dict['gamma']):.2f}"` (`{python} f"{bounds_dict['gamma'][0]:.2f}"` to `{python} f"{bounds_dict['gamma'][1]:.2f}"`).
+**Answer.** Only the taper ratio hits a bound, resting exactly on its lower limit. All other variables optimize strictly to the interior of their ranges.
+
+```{python}
+#| echo: false
+#| output: asis
+
+print("| Variable | Value | Lower Bound | Upper Bound |")
+print("|---|---|---|---|")
+print(f"| Taper | {taper_val:.2f} | {bounds_dict['taper'][0]:.2f} | {bounds_dict['taper'][1]:.2f} |")
+print(f"| Root Chord (m) | {sol.value(vars_dict['c_root']):.3f} | {bounds_dict['c_root'][0]:.2f} | {bounds_dict['c_root'][1]:.2f} |")
+print(f"| CG X (m) | {sol.value(vars_dict['cg_x']):.3f} | {bounds_dict['cg_x'][0]:.2f} | {bounds_dict['cg_x'][1]:.2f} |")
+print(f"| Alpha (°) | {sol.value(vars_dict['alpha']):.1f} | {bounds_dict['alpha'][0]:.0f} | {bounds_dict['alpha'][1]:.0f} |")
+print(f"| Velocity (m/s) | {sol.value(vars_dict['V']):.1f} | {bounds_dict['V'][0]:.0f} | {bounds_dict['V'][1]:.0f} |")
+print(f"| Gamma (°) | {sol.value(vars_dict['gamma']):.1f} | {bounds_dict['gamma'][0]:.0f} | {bounds_dict['gamma'][1]:.0f} |")
+```
 
 ```{python}
 #| echo: false

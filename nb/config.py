@@ -40,26 +40,20 @@ MODEL = "gemini-3.1-pro-preview"
 # the usable range, and this is the main cost lever.
 THINKING_LEVEL = "HIGH"
 
-# Thought SUMMARIES, returned as `thought` parts inside the model turn. OFF by
-# default; `--thoughts` turns them on for a run you are debugging.
+# Thought SUMMARIES, returned as `thought` parts inside the model turn. ON, and
+# no flag: `loop.py` SHOWS them and then drops them before appending the turn, so
+# they never re-enter the conversation and cost nothing but screen space -- which
+# they do not take either, since telemetry no longer reaches the terminal.
 #
-# They were on, and reading two runs' logs said no. On a turn whose real work is
-# one tool call, the summariser pads ~150 words of filler, and with little real
-# reasoning to summarise it confabulates: one turn decided lint meant "micro-
-# debris, possibly from instrumentation, lab coats or even the atmosphere", and
-# several summarised the act of summarising rather than the work.
+# They were off for a while because appending the turn whole meant the model read
+# its own summaries back, and those confabulate on short turns: one decided that
+# `lint` meant "micro-debris, possibly from instrumentation, lab coats or even
+# the atmosphere". Dropping them is safe because Google's documentation puts the
+# enforced signature "only to the first functionCall part" -- see `_spoken()`.
 #
-# That would be tolerable if it stayed on the terminal. It does not: thought
-# parts arrive INSIDE candidates[0].content, which `loop.py` appends whole, so
-# every later turn re-sends them and the model reads its own nonsense as context.
-#
-# Anthropic avoids this structurally -- their API strips prior-turn thinking and
-# excludes it from context accounting, and Claude Code shows it as ephemeral
-# terminal UI on top of that. Gemini has no equivalent, and pruning `contents`
-# ourselves breaks the implicit-caching byte prefix, which costs more than it
-# saves. So it is all-or-nothing, and off is the better default: a run is
-# reproducible from proposal.json, so re-running with --thoughts is cheap.
-INCLUDE_THOUGHTS = False
+# The thinking happens either way and is billed either way: measured 398 vs 342
+# thought tokens with this off and on, which is variance, not a surcharge.
+INCLUDE_THOUGHTS = True
 
 MAX_TURNS = 40          # per agent loop
 MAX_CONSULTS = 3        # open-ended guidance can loop; a Specified input cannot

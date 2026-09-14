@@ -1,7 +1,7 @@
 """
 The agent loop. Used by both phases.
 
-The one invariant that matters: append `resp.candidates[0].content` WHOLE.
+The one invariant that matters: never RECONSTRUCT a model turn.
 
 Model turns carry thought signatures -- encrypted blobs holding the model's
 reasoning state. The first function_call part of each step must carry its
@@ -10,9 +10,16 @@ call ... is missing a thought_signature". Gemini 3 validates this strictly;
 2.5 did not. Verified here with a negative control: appending the Content whole
 returns 200, rebuilding the turn from name+args returns 400.
 
-Reconstructing a turn from extracted text drops the signature, and it is also
-what would discard the cached prefix. Both failures have the same fix, which is
-to never do it.
+FILTERING the part list is not reconstructing it. A signature is an attribute of
+a Part, so a Part that survives a filter carries its signature with it; a Part
+built fresh from `name` and `args` does not. That is the whole distinction, and
+it is what lets `_spoken()` drop thought summaries below.
+
+Reconstructing would also discard the cached prefix. Filtering does not, as long
+as it is done EVERY turn: implicit caching matches a byte prefix, and a
+conversation that is consistently built the same way still grows monotonically.
+What breaks caching is editing history retroactively -- sending a turn one way
+and then a different way later.
 """
 
 import json
@@ -39,6 +46,35 @@ class Terminal(Exception):
     def __init__(self, payload):
         super().__init__("terminal tool called")
         self.payload = payload
+
+
+def _spoken(turn):
+    """
+    The turn as the model should hear it back: everything except its thinking.
+
+    Thought SUMMARIES arrive inside the model turn, so appending it whole means
+    every later turn re-sends them and the model reads its own summaries as
+    context. Measured, those summaries confabulate on short turns -- one decided
+    `lint` meant "micro-debris, possibly from instrumentation, lab coats or even
+    the atmosphere" -- and that is not something to feed back.
+
+    Safe because the enforced signature is not on a thought part. Google's
+    documentation: the signature is attached "only to the first functionCall
+    part", and the 400 fires when "the first functionCall part in any step of the
+    current turn lacks its thought_signature". Signatures elsewhere are
+    "recommended" and not validated -- but the last part of a response may carry
+    one, so a thought part that has a signature is kept anyway. That condition
+    should never fire, since thoughts come first; it costs nothing and it is the
+    only way this could quietly degrade reasoning.
+    """
+    from google.genai import types
+    parts = turn.parts or []
+    keep = [p for p in parts
+            if not getattr(p, "thought", None)
+            or getattr(p, "thought_signature", None)]
+    if len(keep) == len(parts):
+        return turn                     # nothing to drop; hand back the original
+    return types.Content(role=turn.role, parts=keep)
 
 
 def _log(path, turn, extra=None):
@@ -70,13 +106,12 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
     for n in range(max_turns):
         resp = complete(contents, cfg)
         turn = resp.candidates[0].content
-        contents.append(turn)          # WHOLE -- signatures included
-        _log(transcript, turn)
-        # Thought SUMMARIES, if the model returned any. Telemetry, never
-        # conversation: they explain a turn, they are not a result.
+        _log(transcript, turn)         # the record keeps the thinking
+        # Shown, then dropped: telemetry, never conversation, and never fed back.
         for part in (turn.parts or []):
             if getattr(part, "thought", None) and part.text:
                 thought(part.text)
+        contents.append(_spoken(turn))
         if on_turn:
             on_turn(n, resp, turn)
 
