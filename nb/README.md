@@ -33,10 +33,17 @@ the next queued question if the ask contained more than one.
 It stops to ask you about anything **Specified** — an input where a different
 answer changes *what is being built* — and otherwise runs through.
 
-**Each phase gets a pool of probe wall clock**, 900 s by default, and the agent
-divides it: every `probe` call states a `budget_s`, drawn from the pool, and the
-result says how much is left. Asking for more than remains grants what remains.
-When the pool is gone, the next probe is refused and it proposes with what it has.
+**A question gets one pool of probe wall clock**, asked for at the start —
+Enter accepts 900 s — and the agent divides it: every `probe` call states a
+`budget_s`, drawn from the pool, and the result says how much is left. Asking
+for more than remains grants what remains. When the pool is gone, the next probe
+is refused and it proposes with what it has.
+
+One pool covers the whole question: what `ask` leaves goes out in `proposal.json`
+as `_pool_left`, `write` picks it up, and a queued follow-on inherits the
+remainder rather than claiming a fresh 900 s. It is the one prompt that takes a
+default, because a spend cap has a defensible one — unlike a Specified input,
+where assuming would silently decide what is being built.
 
 That is the first bound on a run's compute that actually exists — each probe was
 capped at 300 s, but nothing capped how *many* probes a run could take. It also
@@ -76,6 +83,11 @@ missing freeze -- it silently re-executes it, and that is hundreds of seconds of
 aero solves. `nb view <notebook> --force` rebuilds them deliberately.
 
 Nothing reaches the notebook before you have seen the proposal.
+
+At a stop the terminal prints the decision, not the document: what stopped, what
+saying yes commits to, where the proposal is, and the one command to continue.
+The proposal is still the thing to read and edit — it is just not what a stop is
+*about*.
 
 ### Other commands
 

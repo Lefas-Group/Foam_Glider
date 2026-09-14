@@ -1,0 +1,38 @@
+---
+title: "Fuselage model"
+---
+
+{{< include _model.qmd >}}
+
+Added a 200 mm fuselage made of doubled-up 5 mm foam to `_model.py`. Its mass and drag are now included in the trimmed glide optimization.
+
+::: {.callout-tip}
+## Specified
+
+<!-- One numbered item per commitment, ten words at most (rule 8). The test is
+     whether it is true of EVERY entry in this chapter -- the section, the
+     objective, the fixed dimensions. If it is true of only one entry, it
+     belongs in that entry instead. Date them: "Asked of the user, YYYY-MM-DD:". -->
+1. Solve budget `{python} f"{solve_budget():.0f}"` s, the notebook default.
+:::
+
+::: {.callout-note}
+## Assumed
+
+<!-- What this chapter takes on faith, one clause of reason each. Same test:
+     true of every entry, or it belongs in the entry. -->
+:::
+
+## The model
+
+```{python}
+#| echo: false
+#| output: asis
+import pathlib
+for _f in ("_model.py", "_analysis.py"):
+    _src = pathlib.Path(f"chapters/02-fuselage-model/{_f}").read_text()
+    print(f'::: {{.callout-note collapse="true"}}')
+    print(f"## `{_f}`\n")
+    print(f"```python\n{_src}\n```")
+    print(":::\n")
+```

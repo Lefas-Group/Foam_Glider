@@ -33,13 +33,20 @@ def _unfrozen(notebook):
     return out
 
 
-def site(notebook, force=False, verbose=True):
+def site(notebook, force=False, verbose=True, page=None):
     """
     Render the whole project, unless that would mean re-solving.
 
     Returns the path to the site index, or None if it skipped or failed. Never
     raises and never changes an exit code: in `write` this runs AFTER the commit
     precisely so that nothing it finds can hold an entry hostage.
+
+    `page` is the one page the caller actually cares about -- the entry just
+    written -- and is reported INSTEAD of the site index. It is printed from
+    here rather than beside the entry's prose because this is the only place
+    that knows the render happened: `site` skips whenever any entry lacks a
+    freeze, which is routine, and a page path printed upstream of that would
+    point at nothing on every skipped run.
     """
     holes = [] if force else _unfrozen(notebook)
     if holes:
@@ -66,7 +73,7 @@ def site(notebook, force=False, verbose=True):
 
     index = notebook.root / "_site" / "index.html"
     if verbose:
-        tell(f"  site      {index}")
+        tell(f"  site      {page if page and page.exists() else index}")
     return index
 
 

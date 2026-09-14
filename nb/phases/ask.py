@@ -8,10 +8,10 @@ there is no pause the process did not choose.
 
 import sys
 
-from ..config import MAX_TURNS
+from ..config import MAX_TURNS, PROBE_POOL
 from ..loop import Terminal, run
 from ..session import Session
-from ..tools.interact import render_proposal
+from ..tools.interact import ask_pool, render_stop
 from ..preflight import check as preflight
 from .. import metrics
 from .common import setup, report
@@ -71,7 +71,7 @@ If a probe errors, read the traceback and fix the probe. Do not go looking
 through the notebook for why -- the traceback already says.
 """
 
-def main(notebook_path, question, carry_queue=None, verbose=True):
+def main(notebook_path, question, carry_queue=None, verbose=True, pool=None):
     bad = preflight(notebook_path)
     if bad:
         for b in bad:
@@ -82,8 +82,13 @@ def main(notebook_path, question, carry_queue=None, verbose=True):
     notebook = Notebook(notebook_path)
     open_log(notebook, "ask", question)
     run_metrics = metrics.Run(notebook, "ask", question)
+    # Asked only at the head of a chain. A queued follow-on, and the write
+    # phase, are handed what is left rather than prompted again -- the number
+    # agreed here bounds the whole question, not one phase of it.
+    if pool is None:
+        pool = ask_pool(PROBE_POOL)
     session = Session(notebook, question, carry_queue=carry_queue,
-                      metrics=run_metrics)
+                      metrics=run_metrics, probe_pool=pool)
 
     tell(f"  notebook  {notebook.root.name}")
     # With `say()` off the terminal, nothing else says the detail exists.
@@ -124,7 +129,7 @@ def main(notebook_path, question, carry_queue=None, verbose=True):
             # and verify have passed, and an entry that turns out wrong is
             # corrected by the next entry, never by deletion.
             if proposal.route == "new_chapter":
-                tell(render_proposal(proposal, notebook))
+                tell(render_stop(proposal, notebook))
                 return 0
             gate = proposal
         except RuntimeError as e:

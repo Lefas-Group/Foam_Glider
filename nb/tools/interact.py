@@ -40,6 +40,39 @@ def _prompt(banner, body, hint):
     return line.strip()
 
 
+def ask_pool(default):
+    """
+    How much probe wall clock this question may spend, asked once.
+
+    Deliberately NOT `_prompt`, which raises on EOF and on a blank line because
+    "a Specified input is asked every time, never assumed". That rule is about
+    inputs that change WHAT IS BEING BUILT, where a default would be a silent
+    design decision. A spend cap is not one: it changes only how long a wrong
+    turn is allowed to run, it has a defensible default, and a coordinator that
+    pipes a question and nothing else should get that default rather than a
+    dead run. So both EOF and Enter fall through to `default`.
+
+    The pool covers the whole QUESTION -- ask, write, and anything the queue
+    adds -- not one phase. Before this, each phase claimed its own, so a single
+    question could spend twice what the constant said and a queue of four could
+    spend eight times.
+    """
+    tell(f"\n{'─' * 72}\nPROBE TIME POOL\n{'─' * 72}")
+    tell("  Total probe wall clock for this question, in seconds. The agent\n"
+         "  divides it across its own probes. Enter accepts the default.\n")
+    sys.stdout.write(f"  [{default:.0f}] > ")
+    sys.stdout.flush()
+    try:
+        line = sys.stdin.readline()
+    except KeyboardInterrupt:
+        raise SystemExit("cancelled at the prompt")
+    try:
+        value = float(line.strip())
+    except ValueError:
+        return default            # EOF, Enter, or something that is not a number
+    return value if value > 0 else default
+
+
 def ask_specified(session, name, why, kind="specified", options=""):
     """
     A Specified input: a different answer changes WHAT WE ARE BUILDING.
@@ -147,43 +180,48 @@ def propose(session, **fields):
             proposal.queue.append(q)
 
     session.notebook.run.mkdir(parents=True, exist_ok=True)
-    session.notebook.proposal_path.write_text(
-        json.dumps(proposal.model_dump(), indent=2) + "\n")
+    # `_pool_left` is written beside the proposal, not into it: the write phase
+    # -- resumed in-process or from the terminal hours later -- needs to know
+    # what is left of the pool the user agreed to, and a Proposal FIELD would
+    # show up in the `propose` tool schema as a number the model is invited to
+    # choose for itself. The underscore says so to a reader editing the file.
+    out = proposal.model_dump()
+    if session.probe_left is not None:
+        out["_pool_left"] = round(session.probe_left, 1)
+    session.notebook.proposal_path.write_text(json.dumps(out, indent=2) + "\n")
     raise Terminal(proposal)
 
 
-def render_proposal(proposal, notebook):
-    """What the gate shows: the title, the figures, and the cost. Nothing else."""
-    out = [
+def render_stop(proposal, notebook):
+    """
+    Why the run stopped, what saying yes commits to, and how to continue.
+
+    This replaced a box that printed the proposal -- title, chapter, cost,
+    figures, inputs -- and then `nb write <notebook>`. Everything in it was
+    true and none of it said the run had STOPPED or why, so the reason had to
+    be inferred from the contents, and inferred wrongly: the guess was that a
+    new chapter forces a whole-chapter re-render. It does not. A new chapter
+    has no siblings, and `check` re-renders siblings only when `_model.py`
+    moves. The stop is a structural commitment, not a spend.
+
+    The proposal itself is still on disk, and is still the thing to read and
+    edit. What the terminal owes is the decision, which is not the same
+    document.
+    """
+    return "\n".join([
         "",
-        "═" * 72,
-        "PROPOSAL",
-        "═" * 72,
-        f"  title     {proposal.title}",
-        f"  chapter   {proposal.chapter}" +
-        ("   [NEW CHAPTER]" if proposal.route == "new_chapter" else ""),
-        f"  cost      {proposal.render_cost_s:.1f} s of solves",
-    ]
-    if proposal.figures:
-        for f in proposal.figures:
-            out.append(f"  figure    {f}")
-    else:
-        out.append("  figure    none")
-    if proposal.inputs:
-        out.append("")
-        for i in proposal.inputs:
-            out.append(f"  {i.kind:9s} {i.name} = {i.value}  ({i.owner}: {i.why})")
-    if proposal.queue:
-        out.append("")
-        out.append(f"  {len(proposal.queue)} further question(s) queued:")
-        out += [f"      {q}" for q in proposal.queue]
-    out += [
+        "─" * 72,
+        "STOPPED — this needs a NEW CHAPTER",
+        "─" * 72,
+        f"  {proposal.chapter}",
+        f'  "{proposal.title}"',
         "",
-        f"  written to {notebook.proposal_path}",
+        "  Why you: every later entry in the chapter builds on its _model.py,",
+        "  and changing it afterwards means re-solving all of them to prove",
+        "  the answers held. That is the commitment, not this one entry.",
         "",
-        "  Review it, edit it if you like, then:  nb write "
-        f"{notebook.root.name}",
-        "═" * 72,
+        f"  proposal  {notebook.proposal_path}",
+        f"  continue  python -m nb write {notebook.root.name}",
+        "─" * 72,
         "",
-    ]
-    return "\n".join(out)
+    ])

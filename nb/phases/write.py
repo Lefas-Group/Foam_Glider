@@ -16,7 +16,7 @@ import sys
 import time
 
 from ..config import (MAX_LINT_ATTEMPTS, MAX_TURNS, MAX_VERIFY_ATTEMPTS,
-                      Notebook)
+                      PROBE_POOL, Notebook)
 from ..loop import Refactor, run
 from ..schema import Proposal
 from ..session import Session
@@ -147,9 +147,20 @@ def rendered_prose(notebook, chapter, stem):
     except (OSError, ValueError, KeyError):
         return None
     md = CODE_CELL.sub("", md)
-    # Quarto's cell wrappers and anchors carry nothing a reader wants.
+    # Quarto writes a figure's path relative to the chapter directory, so it
+    # resolves nowhere from a terminal and nowhere at all for a coordinator
+    # reading this prose off a pipe. The same PNG sits under the freeze, which
+    # exists the moment the entry renders -- before this runs, and whether or
+    # not a site was ever built. Rewriting it here keeps the figure inline,
+    # where the argument put it, and keeps its caption, which is usually the
+    # densest sentence written about it.
+    md = md.replace(f"]({stem}_files/", f"]({notebook.freeze / chapter / stem}/")
+    # Quarto's cell wrappers and anchors carry nothing a reader wants. The
+    # attributes have to go with the anchor: an image carries its measured
+    # `{#fig-x width=901 height=458}`, and stripping the id alone left the
+    # dimensions sitting in the prose.
     md = re.sub(r"^:::+.*$", "", md, flags=re.M)
-    md = re.sub(r"\{#[\w-]+\}", "", md)
+    md = re.sub(r"\{#[\w-]+[^}]*\}", "", md)
     return "\n".join(line.rstrip() for line in md.splitlines()
                       if line.strip()) or None
 
@@ -234,11 +245,18 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         return 1
 
     notebook = Notebook(notebook_path)
-    open_log(notebook, "write", proposal.title if notebook.proposal_path.exists() else "")
+    # Before open_log, deliberately: there is no run to log against, and the
+    # log's separator wants a title that only the proposal can supply.
     if not notebook.proposal_path.exists():
         tell(f"  no proposal at {notebook.proposal_path}. Run `nb ask` first.")
         return 1
-    proposal = Proposal.model_validate(json.loads(notebook.proposal_path.read_text()))
+    raw = json.loads(notebook.proposal_path.read_text())
+    # What `ask` had left of the pool when it stopped. Popped BEFORE validation
+    # so it never becomes a Proposal field, and so never appears in the
+    # `propose` tool schema as something the model is invited to fill in.
+    pool = raw.pop("_pool_left", PROBE_POOL)
+    proposal = Proposal.model_validate(raw)
+    open_log(notebook, "write", proposal.title)
 
     tell(f"  notebook  {notebook.root.name}")
     # With `say()` off the terminal, nothing else says the detail exists.
@@ -270,7 +288,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     run_metrics = metrics.Run(notebook, "write", proposal.title)
     run_metrics.set(chapter=proposal.chapter, entry_stem=stem)
     session = Session(notebook, proposal.question, proposal.chapter,
-                      metrics=run_metrics)
+                      metrics=run_metrics, probe_pool=pool)
     # Accepting implies allowing: you cannot accept a diff you were never
     # permitted to produce.
     allow_refactor = allow_refactor or accept_refactor
@@ -476,14 +494,19 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     # After the commit, never before: a project render touches every page in the
     # notebook, and an unrelated broken one must not be able to block an entry
     # that has already passed lint, render and verify on its own terms.
-    site(notebook)
+    site(notebook, page=notebook.root / "_site" / "chapters"
+                        / proposal.chapter / f"{stem}.html")
 
     # --- advance the queue -------------------------------------------------
     if proposal.queue:
         nxt, rest = proposal.queue[0], proposal.queue[1:]
         tell(f"\n  {len(proposal.queue)} question(s) queued. Next:\n    {nxt}\n")
         from .ask import main as ask
-        return ask(notebook_path, nxt, carry_queue=rest, verbose=verbose)
+        # The pool is per QUESTION CHAIN, not per phase: a queue that claimed a
+        # fresh pool per question would make the number agreed at the prompt
+        # mean nothing.
+        return ask(notebook_path, nxt, carry_queue=rest, verbose=verbose,
+                   pool=session.probe_left)
     return 0
 
 

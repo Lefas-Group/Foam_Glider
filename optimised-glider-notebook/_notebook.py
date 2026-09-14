@@ -262,6 +262,27 @@ PROBE_BUDGET = 300.0   # s a scratch probe may run; raise only in _budget.py
 
 _IN_KERNEL = "ipykernel" in sys.modules or hasattr(builtins, "__IPYTHON__")
 
+if _IN_KERNEL:
+    # Jupyter echoes a cell's last expression. A figure cell ending in
+    # `airplane.draw_three_view(axs=axs, show=False)` therefore published
+    #   array([[<Axes3D: zlabel='$z_g$ [m]'>, ...]], dtype=object)
+    # into a rendered entry, directly under the figure it had just drawn.
+    #
+    # Suppressing the echo costs nothing that is used: print() is untouched,
+    # which is how md_table emits a table, and inline figures are flushed by
+    # the matplotlib backend's post-execute hook rather than by the repr.
+    # Checked across every freeze in both notebooks before this went in --
+    # every cell-output-display block is an image, so nothing anywhere relies
+    # on last-expression display.
+    #
+    # Here rather than in a lint rule because the rule could only fire AFTER a
+    # render had already paid for the entry, and the fix would be the same
+    # every time.
+    try:
+        get_ipython().ast_node_interactivity = "none"   # noqa: F821
+    except (NameError, AttributeError):
+        pass
+
 def _probe_budget():
     """
     The probe budget in force: this probe's, else the chapter's, else default.
