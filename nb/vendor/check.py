@@ -182,6 +182,19 @@ def _freeze_targets(root, chapters, force_all):
             whole.append(c)
             why.append(f"{c}: {', '.join(sorted(consts)[:3])} — read anywhere")
             continue
+
+        # The chapter INDEX renders `_model.py` and `_analysis.py` verbatim
+        # (rule 30), so ANY edit to either moves what it publishes -- including
+        # a comment-only one, which changes no symbol and therefore invalidates
+        # no entry. Without this, adding the fork header rule 31 demands left
+        # `check` discarding nothing, the index freeze older than its own
+        # source, and rule 12 reporting a stale freeze that only a full `--all`
+        # re-prove could clear -- re-solving a whole chapter to republish a
+        # comment. `write.py::_refresh_index_freeze` has always done this for
+        # its own runs; `check` did not. Below the `consts` branch, which
+        # already takes the whole chapter and the index with it.
+        if (root / "chapters" / c / "index.qmd").exists():
+            pages.append(f"{c}/index")
         defs = lint._defs_of(root / "chapters" / c)
         hit = []
         for page in sorted((root / "chapters" / c).glob("*.qmd")):
@@ -191,7 +204,8 @@ def _freeze_targets(root, chapters, force_all):
             if reach & funcs:
                 hit.append(f"{c}/{page.stem}")
         pages += hit
-        why.append(f"{c}: {len(hit)} page(s) reach {', '.join(sorted(funcs)[:3])}")
+        why.append(f"{c}: index, and {len(hit)} page(s) reach "
+                   f"{', '.join(sorted(funcs)[:3]) or 'no changed symbol'}")
     return whole, pages, "; ".join(why) if why else "nothing stale"
 
 
