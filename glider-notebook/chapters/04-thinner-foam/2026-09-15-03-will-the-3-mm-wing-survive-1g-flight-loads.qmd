@@ -1,0 +1,61 @@
+---
+title: "Will the 3 mm wing survive 1g flight loads?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 20.0   # s for this render, granted by the user
+SOLVE_BUDGET = 2.0     # s for any one solve
+
+import aerosandbox.numpy as np
+
+res = optimize_glider_3mm(verbose=False)
+c_root = res['c_root']
+taper = res['taper']
+mass = res['mass']
+
+weight = mass * 9.81
+L_half = weight / 2
+b_half = 0.15
+
+# Compute root bending moment from strip theory
+y = np.linspace(0, b_half, 100)
+c = c_root * (1 - (1 - taper) * (y / b_half))
+q = c / np.trapezoid(c, y) * L_half
+M_root = np.trapezoid(q * y, y)
+
+# Solid rectangular section modulus
+t = 0.003
+Z_root = (c_root * t**2) / 6
+max_stress = M_root / Z_root
+
+yield_stress = 300_000  # Pa
+safety_factor = yield_stress / max_stress
+```
+
+::: {.hero}
+[`{python} f"{max_stress / 1000:.1f}"` kPa]{.hero-value}
+[Maximum root bending stress]{.hero-label}
+:::
+
+**Answer.** The 3 mm wing easily survives the 1g flight loads of an ideal launch. The root bending stress is about [`{python} f"{max_stress / 1000:.1f}"`]{.key} kPa, providing a safety factor over [`{python} f"{safety_factor:.0f}"`]{.key} against the foam's assumed yield strength.
+
+::: {.callout-tip}
+## Specified
+Granted at the prompt, 2026-09-15:
+
+1. **Render budget**: `{python} f"{ENTRY_CEILING:.0f}"` s.
+2. **Solve budget**: `{python} f"{SOLVE_BUDGET:.0f}"` s.
+:::
+
+::: {.callout-note}
+## Assumed
+1. **Foam yield stress: 300 kPa**, determines safety factor.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_glider_3mm)
+```
