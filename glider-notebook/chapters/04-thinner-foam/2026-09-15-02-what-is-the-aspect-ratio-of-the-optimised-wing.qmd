@@ -1,0 +1,37 @@
+---
+title: "What is the aspect ratio of the optimised wing?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 20.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0    # s for any one solve
+
+res = optimize_glider_3mm(verbose=False)
+glider = make_glider_3mm(res['c_root'], res['taper'], res['cg_x'])
+ar = glider.wings[0].aspect_ratio()
+area = glider.wings[0].area()
+span = glider.wings[0].span()
+```
+
+::: {.hero}
+[`{python} f"{ar:.2f}"`]{.hero-value}
+[Aspect ratio]{.hero-label}
+:::
+
+**Answer.** The aspect ratio of the optimised main wing is `{python} f"{ar:.2f}"`. The optimiser settled on a wing area of `{python} f"{area:.4f}"` m² for the fixed `{python} f"{span:.1f}"` m span, constrained by the lower taper bound.
+
+::: {.callout-tip}
+## Specified
+Granted at the prompt, 2026-09-15:
+
+1. **Render budget**: `{python} f"{ENTRY_CEILING:.0f}"` s.
+2. **Solve budget**: `{python} f"{SOLVE_BUDGET:.0f}"` s.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_glider_3mm)
+```
