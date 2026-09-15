@@ -1,5 +1,37 @@
+import scipy.integrate as spi
 import aerosandbox as asb
 import aerosandbox.numpy as np
+
+def simulate_launch(glider, mass, alpha_trim, v_launch, z0=-1.5, t_max=10.0):
+    V_grid = np.linspace(0.1, 15, 50)
+    L_grid = []
+    D_grid = []
+    
+    # Compute aero forces across speeds
+    for v in V_grid:
+        op = asb.OperatingPoint(velocity=v, alpha=alpha_trim)
+        aero = asb.AeroBuildup(airplane=glider, op_point=op).run()
+        L_grid.append(aero["L"][0])
+        D_grid.append(aero["D"][0])
+        
+    def _dynamics(t, state):
+        x, z, V_curr, gamma_curr = state
+        if V_curr < 0.1: return [0, 0, 0, 0]
+        L = np.interp(V_curr, V_grid, L_grid)
+        D = np.interp(V_curr, V_grid, D_grid)
+        x_dot = V_curr * np.cos(gamma_curr)
+        z_dot = -V_curr * np.sin(gamma_curr)
+        V_dot = -D/mass - 9.81 * np.sin(gamma_curr)
+        gamma_dot = (L/mass - 9.81 * np.cos(gamma_curr)) / V_curr
+        return [x_dot, z_dot, V_dot, gamma_dot]
+    
+    def _hit_ground(t, state):
+        return state[1]
+    _hit_ground.terminal = True
+    _hit_ground.direction = 1
+    
+    res = spi.solve_ivp(_dynamics, [0, t_max], [0, z0, v_launch, 0], events=_hit_ground, max_step=0.05)
+    return res
 
 def optimize_glider_unswept_c4(verbose=False):
     opti = asb.Opti()
@@ -34,5 +66,7 @@ def optimize_glider_unswept_c4(verbose=False):
         "sink_rate": sol.value(sink_rate),
         "c_root": sol.value(c_root),
         "taper": sol.value(taper),
-        "cg_x": sol.value(cg_x)
+        "cg_x": sol.value(cg_x),
+        "alpha": sol.value(alpha),
+        "mass": sol.value(mass)
     }

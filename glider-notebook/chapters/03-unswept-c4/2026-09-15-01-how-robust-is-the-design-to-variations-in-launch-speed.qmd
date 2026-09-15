@@ -1,0 +1,62 @@
+---
+title: "How robust is the design to variations in launch speed?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 60.0
+SOLVE_BUDGET = 60.0
+
+import matplotlib.pyplot as plt
+import aerosandbox.numpy as np
+
+res = optimize_glider_unswept_c4(verbose=False)
+sol = res['sol']
+glider = make_glider_unswept_c4(res['c_root'], res['taper'], res['cg_x'])
+mass = res['mass']
+alpha_trim = res['alpha']
+
+sim_2 = simulate_launch(glider, mass, alpha_trim, 2.2)
+sim_4 = simulate_launch(glider, mass, alpha_trim, 4.0)
+sim_6 = simulate_launch(glider, mass, alpha_trim, 6.0)
+
+min_v2 = np.min(sim_2.y[2])
+min_v4 = np.min(sim_4.y[2])
+min_v6 = np.min(sim_6.y[2])
+```
+
+**Answer.** The glider is highly sensitive to launch speed. While it glides smoothly when launched near its trim speed, launching it faster causes it to pitch up sharply and stall due to the uncontrolled phugoid mode. At 4.0 m/s and 6.0 m/s, it drops to [`{python} f"{min_v4:.2f}"`]{.key} m/s and [`{python} f"{min_v6:.2f}"`]{.key} m/s, respectively, which is well below its stall speed.
+
+::: {.callout-tip}
+## Specified
+Granted at the prompt, 2026-09-15:
+
+1. **Render budget:** `{python} f"{ENTRY_CEILING:.0f}"` s.
+2. **Launch speeds:** 2.2, 4.0, and 6.0 m/s.
+:::
+
+::: {.callout-note}
+## Assumed
+1. **Simulation:** Point-mass with fixed alpha, lacking pitch inertia.
+:::
+
+```{python}
+#| label: fig-launch-trajectories
+#| fig-cap: "Flight paths simulated with a point-mass phugoid model for launches at 2.2, 4.0, and 6.0 m/s. Faster launches result in severe pitch-ups and stalls."
+plt.figure(figsize=(6, 4))
+plt.plot(sim_2.y[0], -sim_2.y[1], label="2.2 m/s")
+plt.plot(sim_4.y[0], -sim_4.y[1], label="4.0 m/s")
+plt.plot(sim_6.y[0], -sim_6.y[1], label="6.0 m/s")
+plt.xlabel("Distance [m]")
+plt.ylabel("Altitude [m]")
+plt.legend(title="Launch speed")
+plt.grid(True)
+plt.tight_layout()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_glider_unswept_c4, simulate_launch)
+```
