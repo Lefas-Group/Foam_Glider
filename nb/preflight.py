@@ -11,7 +11,7 @@ import os
 import re
 import sys
 
-from .config import Notebook, SYSTEM_INSTRUCTION
+from .config import NB, Notebook, SYSTEM_INSTRUCTION
 from .log import say
 
 
@@ -54,6 +54,37 @@ def _rule_list_problems(text):
     return out
 
 
+def _dead_config():
+    """
+    Constants in `config.py` that nothing reads.
+
+    Three of these bit in one week. `TEMPLATES` pointed at a directory that had
+    been deleted. `CACHE_TTL` outlived the explicit cache. Worst, a second
+    `DEFAULT_ENTRY_CEILING` sat here disagreeing with the notebook's own copy --
+    tightening it looked like it worked and changed nothing, because the value
+    in force came from `_notebook.py` and always had.
+
+    A dead constant is not untidy, it is a lie about where a number comes from,
+    and the cost is paid by whoever next tries to change it.
+    """
+    import re
+    src = (NB / "config.py").read_text()
+    names = re.findall(r"^([A-Z][A-Z0-9_]+) *=", src, re.M)
+    out = []
+    for name in names:
+        used = False
+        for f in NB.rglob("*.py"):
+            if f.name == "config.py" or "__pycache__" in f.parts:
+                continue
+            if re.search(rf"\b{name}\b", f.read_text()):
+                used = True
+                break
+        if not used:
+            out.append(f"config.{name} is read by nothing — delete it, or the "
+                       f"next person will change it and wonder why nothing moved")
+    return out
+
+
 def check(root):
     """Return a list of failures. Empty means go."""
     notebook = Notebook(root)
@@ -82,6 +113,8 @@ def check(root):
         bad.append(f"no system instruction at {SYSTEM_INSTRUCTION}")
     else:
         bad += _rule_list_problems(SYSTEM_INSTRUCTION.read_text())
+
+    bad += _dead_config()
 
     if not os.environ.get("GEMINI_API_KEY"):
         bad.append("GEMINI_API_KEY unset")

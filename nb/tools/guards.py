@@ -54,7 +54,15 @@ def wrap_writes(handlers, session):
                         f"did not move. Either write this entry against the "
                         f"vehicle as it is, or call request_refactor to say why "
                         f"it must change -- that stops the run for approval."}
-            return inner(**kw)
+            # Every successful write, counted. `lint_chapter` compares this
+            # against the count at its last call, so it can say "nothing has
+            # changed" instead of re-deriving the same answer: write runs spend
+            # 2-5 lint calls in 8-16 turns, and the transcript shows
+            # consecutive calls with no edit between them.
+            out = inner(**kw)
+            if not (isinstance(out, dict) and out.get("error")):
+                session.writes = getattr(session, "writes", 0) + 1
+            return out
         return call
 
     return {n: (guard(n, h) if n in ("edit_file", "write_file") else h)

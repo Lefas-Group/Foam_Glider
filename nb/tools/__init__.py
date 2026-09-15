@@ -189,7 +189,7 @@ def build(session, fs, phase=None):
     handlers.update({
         "probe": lambda question, chapter=None, budget_s=None: probe.run_probe(
             nb, chapter or session.chapter, question, session, budget_s),
-        "lint": lambda chapter: verifiers.lint_chapter(nb, chapter),
+        "lint": lambda chapter: verifiers.lint_chapter(nb, chapter, session),
         "render": lambda target="": verifiers.render(nb, target),
         "check": lambda chapter="", force_all=False: verifiers.check(
             nb, chapter, force_all),

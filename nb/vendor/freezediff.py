@@ -196,7 +196,13 @@ def main(argv):
 
     print(f"\n{changed} page(s) changed, {len(moved)} figure(s) changed, "
           f"{len(absent)} without a baseline, vs {ref}")
-    return 1 if (changed or moved or absent) else 0
+    # `absent` is NOT a failure. A page with no baseline is almost always the
+    # entry this run just wrote, and counting it made every new entry trip the
+    # refactor gate on its own -- the gate then reported "the refactor changed
+    # the answers" about a page that has no previous answer to change. The list
+    # is still printed above; `nb view` refuses on missing freezes, which is
+    # where the genuine "a freeze went missing" case is caught.
+    return 1 if (changed or moved) else 0
 
 
 if __name__ == "__main__":

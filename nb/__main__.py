@@ -4,6 +4,7 @@
     nb write <notebook> [--allow-refactor]   resume from an approved proposal
              [--accept-refactor]             …and commit a diff you have read
     nb view  <notebook> [--force]            render the whole site
+    nb eval  <notebook>                      what each model actually did
     nb watch <notebook> [--all]              follow the detail, live
 
 The terminal carries the conversation only -- the questions, the milestones, the
@@ -75,6 +76,13 @@ def main(argv):
             return 2
         from .phases.watch import main as watch
         return watch(rest)
+
+    if cmd == "eval":
+        if not rest:
+            print(USAGE)
+            return 2
+        from .phases.eval import main as evaluate
+        return evaluate(rest)
 
     if cmd == "view":
         if not rest:

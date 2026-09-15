@@ -31,14 +31,47 @@ def _problems(root, chapters):
     return blocking, warnings
 
 
-def lint_chapter(notebook, chapter):
+def _word_budgets(notebook, chapter):
+    """Prose words against rule 6's budget, per entry, so nobody counts by hand."""
+    import lint
+    lines = []
+    for e in sorted((notebook.chapters_dir / chapter).glob("*.qmd")):
+        if not lint.ENTRY_FILE.match(e.name):
+            continue
+        try:
+            n = lint.words(lint.body_prose(e.read_text()))
+        except OSError:
+            continue
+        lines.append(f"  {e.stem[:44]}: {n}/{lint.MAX_PROSE} words of prose")
+    return ("\n\nprose budgets (rule 6):\n" + "\n".join(lines)) if lines else ""
+
+
+def lint_chapter(notebook, chapter, session=None):
     """
     Lint one chapter. Scoped to the chapter, not the entry, because rule 2
     (repeated code) and rule 10 (sibling links) are cross-entry by nature.
+
+    Answers "nothing has changed" when no file has been written since the last
+    call. Re-running a pure function over unchanged inputs cannot produce a
+    different answer, and a model that asks anyway is spending a turn to be told
+    what it already knows -- which the transcripts show happening two or three
+    times a run.
+
+    The word counts are here for the same reason: rule 6 is a budget, and the
+    model twice shelled out to `bash` to count against it by hand. A budget you
+    have to measure yourself is a budget you measure wrong.
     """
+    if session is not None:
+        writes = getattr(session, "writes", 0)
+        if getattr(session, "_lint_at", None) == writes:
+            return ("lint: nothing has been written since your last call, so "
+                    "the answer is unchanged. Edit something, or move on.")
+        session._lint_at = writes
+
     blocking, warnings = _problems(notebook.root, [chapter])
+    budgets = _word_budgets(notebook, chapter)
     if not blocking and not warnings:
-        return "lint clean."
+        return "lint clean." + budgets
     out = []
     if blocking:
         out.append(f"{len(blocking)} blocking problem(s) -- fix all of these:")
@@ -46,7 +79,7 @@ def lint_chapter(notebook, chapter):
     if warnings:
         out.append(f"{len(warnings)} warning(s), not blocking:")
         out += [f"  {w}" for w in warnings]
-    return tail("\n".join(out))
+    return tail("\n".join(out)) + budgets
 
 
 def is_clean(notebook, chapter):

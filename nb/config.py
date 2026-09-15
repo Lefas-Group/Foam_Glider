@@ -14,7 +14,6 @@ import sys
 NB = pathlib.Path(__file__).resolve().parent
 VENDOR = NB / "vendor"
 REFERENCES = VENDOR / "references"
-TEMPLATES = VENDOR / "templates"
 SCAFFOLD = NB / "scaffold"
 SYSTEM_INSTRUCTION = NB / "system_instruction.md"
 
@@ -78,7 +77,6 @@ MAX_VERIFY_ATTEMPTS = 2  # write -> render -> verify -> write
 # for -- a traceback naming the line -- and a second usually means the model is
 # guessing rather than reading it.
 MAX_RENDER_FIXES = 1
-CACHE_TTL = "3600s"
 
 # Every handler truncates its own output. Tracebacks keep the tail, listings the
 # head; the cap is the same either way.

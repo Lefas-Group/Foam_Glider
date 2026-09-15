@@ -150,6 +150,27 @@ def _stem(notebook, chapter, title, today):
     return f"{today}-{n:02d}-{slug}"
 
 
+def _render_cost(notebook, chapter, stem):
+    """
+    (solves, seconds) from the entry's own footer line, or None.
+
+    Read back off the freeze rather than timed here, so the number recorded is
+    the one the published page shows -- footer() prints
+    `[Executed in 2.4 s · 1 aero solve]` and rule 17 judges that same line. Two
+    sources for one quantity is how they come to disagree.
+    """
+    import re
+    p = (notebook.freeze / chapter / stem / "execute-results" / "html.json")
+    try:
+        md = json.loads(p.read_text())["result"]["markdown"]
+    except (OSError, ValueError, KeyError):
+        return None
+    m = re.search(r"Executed in ([\d.]+) s(?: · (\d+) aero solve)?", md)
+    if not m:
+        return None
+    return int(m.group(2) or 0), float(m.group(1))
+
+
 def _why_and_diff(filename, fn, before, after, note):
     """
     One changed function, as the model explained it and as the source shows it.
@@ -623,6 +644,14 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                       f"stopping. The entry is on disk.")
                 run_metrics.close("lint_failed")
                 return 1
+
+        # What the RENDER cost, from the page it just produced. `ask` records
+        # its probes, but the entry's own solves -- the expensive ones, and the
+        # ones rule 17 judges -- were unrecorded, so every write row read 0.0
+        # even after the counter started working.
+        _cost = _render_cost(notebook, proposal.chapter, stem)
+        if _cost:
+            run_metrics.set(solves=_cost[0], solve_seconds=_cost[1])
 
         run_metrics.set(verify_findings=len(findings))
         if findings:

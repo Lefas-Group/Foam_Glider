@@ -103,7 +103,20 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
     """
     from google.genai import types
 
+    # A DEADLINE, not a guillotine. A run that hits max_turns is killed with no
+    # warning and nothing written: flash burned all 40 and produced nothing,
+    # never short of budget, just never deciding. Told how little is left, a
+    # model can propose what it has or say what is missing -- both worth more
+    # than the wall. Once, at 70%, because a countdown every turn becomes
+    # wallpaper and costs cache on each append.
+    warn_at = int(max_turns * 0.7)
     for n in range(max_turns):
+        if n == warn_at:
+            contents.append({"role": "user", "parts": [{"text":
+                f"{max_turns - n} of your {max_turns} turns remain. Finish with "
+                f"what you have: call the tool that ends this phase, or stop and "
+                f"say plainly what is still missing. Running out is the one "
+                f"outcome that produces nothing at all."}]})
         resp = complete(contents, cfg)
         turn = resp.candidates[0].content
         _log(transcript, turn)         # the record keeps the thinking
