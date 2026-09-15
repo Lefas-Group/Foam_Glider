@@ -1,0 +1,41 @@
+---
+title: "What wing loading does the current design fly at?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 20.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0    # s for any one solve
+
+opt = optimize_glider_unswept_c4(verbose=False)
+mass = opt["mass"]
+
+glider = make_glider_unswept_c4(opt["c_root"], opt["taper"], opt["cg_x"])
+main_wing_area = glider.wings[0].area()
+
+wing_loading_kg_m2 = mass / main_wing_area
+wing_loading_g_dm2 = wing_loading_kg_m2 * 10
+wing_loading_n_m2 = mass * 9.81 / main_wing_area
+```
+
+::: {.hero}
+[`{python} f"{wing_loading_g_dm2:.2f}"`]{.hero-value}
+[g/dm² wing loading]{.hero-label}
+:::
+
+**Answer.** The optimized glider has a wing loading of [`{python} f"{wing_loading_g_dm2:.2f}"`]{.key} g/dm² ([`{python} f"{wing_loading_kg_m2:.3f}"`]{.key} kg/m² or [`{python} f"{wing_loading_n_m2:.2f}"`]{.key} N/m²), calculated using the main wing's area.
+
+::: {.callout-tip}
+## Specified
+Granted at the prompt, 2026-09-15:
+
+1. **Render budget**: `{python} f"{ENTRY_CEILING:.0f}"` s.
+2. **Solve budget**: `{python} f"{SOLVE_BUDGET:.0f}"` s.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_glider_unswept_c4)
+```
