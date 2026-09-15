@@ -21,6 +21,10 @@ class Session:
         self.carry_queue = list(carry_queue or [])
         self.metrics = metrics
         self.asked = {}          # name -> value, from ask_specified
+        # function -> one-line reason, from declare_refactor. Read by the
+        # refactor gate, which otherwise names a changed function and nothing
+        # else -- leaving the user to run `git diff` to judge it.
+        self.refactor_notes = {}
         self.consults = 0
         self.solves = 0
         self.solve_seconds = 0.0

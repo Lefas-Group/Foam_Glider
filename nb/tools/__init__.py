@@ -144,6 +144,17 @@ def native_declarations():
                 "the question is answered -- not before, and not with a second "
                 "question folded in."),
             parameters_json_schema=Proposal.model_json_schema()),
+        _decl("declare_refactor",
+              "Record WHY you changed an existing function in _model.py or "
+              "_analysis.py. Required whenever you edit a function that was "
+              "already there -- adding a new one needs nothing. One line. It "
+              "is shown to the user beside the diff when the chapter is "
+              "re-proved, and a change nobody can explain is one nobody can "
+              "approve.",
+              {"function": dict(S, description="The function you changed"),
+               "why": dict(S, description=(
+                   "What changed and why, in one line"))},
+              ("function", "why")),
         _decl("request_refactor",
               "Declare that this entry cannot be written without changing the "
               "chapter's _model.py, after a write to it was refused. ENDS THE "
@@ -163,6 +174,7 @@ def native_declarations():
 # model that somehow names one still gets a real answer rather than a KeyError.
 PHASE_OMITS = {
     "write": ("propose",),      # the proposal is already approved and in the brief
+    "ask": ("declare_refactor",),   # the probe phase writes no chapter files
 }
 
 
@@ -193,6 +205,8 @@ def build(session, fs, phase=None):
         "propose": lambda **kw: interact.propose(session, **kw),
         "request_refactor": lambda chapter, why: interact.request_refactor(
             session, chapter, why),
+        "declare_refactor": lambda function, why: interact.declare_refactor(
+            session, function, why),
     })
     handlers = guards.wrap_writes(handlers, session)
     return [types.Tool(function_declarations=decls)], handlers

@@ -144,6 +144,20 @@ def consult(session, question, why):
     return f"The user said: {answer}"
 
 
+def declare_refactor(session, function, why):
+    """
+    Record the model's own account of why a shared function changed.
+
+    Kept OFF the gate's evidence: the diff decides, this only says what the
+    change was meant to be. The two together are what a reader needs -- the
+    gate used to print neither, so "`_analysis.py:optimize_glider_unswept_c4`
+    changed" was the whole explanation for holding an entry back.
+    """
+    session.refactor_notes[function] = " ".join(why.split())
+    return (f"Recorded. It is shown beside the diff of {function} when the "
+            f"chapter is re-proved.")
+
+
 def request_refactor(session, chapter, why):
     """
     Declare that the entry cannot be written without changing the vehicle.

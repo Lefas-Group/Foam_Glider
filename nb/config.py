@@ -32,20 +32,21 @@ if str(VENDOR) not in sys.path:
 #                          more prompt did not fix it.
 #   gemini-3.1-pro-preview 2 turns. One probe, then propose.
 #
-# That measurement is KEPT because it is what the current default has to beat,
-# not because it still decides the question. It was taken against an earlier
-# prefix and an earlier brief -- both have since been rewritten -- and a later
-# flash run probed the aircraft, reasoned about induced drag and reached
-# ask_specified in six turns, which the three runs above never did. So the
-# default is flash on the understanding that it is ON TRIAL.
+# Flash was then tried as the default and failed a FOURTH time, on the first
+# real question put to it: 40 turns, no proposal, nothing written. It was never
+# short of budget -- 24 probes in three minutes using 74 s of a 300 s pool --
+# and the physics was sound; it derived the foam CG and rearranged the ballast
+# equation correctly. It simply never committed to an answer, interleaving
+# read_reference, api_search and bash exactly as the runs above did.
 #
-# The metric that settles it is first-pass lint violations per entry, which
-# metrics.py records per run alongside the model that served it. Pro sits at 0
-# on its last three entries. If flash cannot hold that, this goes back.
+# So the measurement stands, now on four runs and a rewritten prefix: flash
+# probes well and does not decide. The metric that would reopen it is
+# first-pass lint violations per entry, which metrics.py records per run
+# alongside the model that served it; pro sits at 0 across its last six.
 #
 # $NB_MODEL overrides it for one run, in either direction -- the quota is per
 # MODEL per day (250), so a day spent on one leaves the other's bucket whole.
-MODEL = os.environ.get("NB_MODEL", "gemini-3.8-flash")
+MODEL = os.environ.get("NB_MODEL", "gemini-3.1-pro-preview")
 
 # MINIMAL is in the enum but 400s on both candidate models. LOW/MEDIUM/HIGH are
 # the usable range, and this is the main cost lever.
@@ -96,17 +97,18 @@ PROBE_WALL_CLOCK = 960.0
 # probe that asks for more than remains gets what remains rather than a refusal.
 #
 # The watchdog in `_notebook.py` polls every 15 s, so enforcement is coarse to
-# about that -- a 5 s grant kills at 15 s, measured. That is fine for what this
-# is for: the win is a cheap probe costing 15 s instead of the flat 300 s it
-# used to be allowed, not second-level precision.
+# about that -- a 5 s grant kills at 15 s, measured.
 #
-# This is the first bound on a run's compute that actually exists. Each probe was
-# capped at PROBE_BUDGET, but nothing capped how MANY probes a run could take --
-# ten legitimate ones is fifty minutes, and only MAX_TURNS would have stopped it.
+# 120 s, down from 900. Measured across every run in nb-metrics.db, a question
+# has consumed 15 s, 32 s, 74 s and 120 s of pool -- so this sits ON the worst
+# observed rather than above it, deliberately. The failure it now catches is the
+# one that actually happened: a run that has lost the plot probes cheaply and
+# endlessly (24 probes, 74 s, no proposal), which a generous pool cannot
+# distinguish from progress. A question that genuinely needs more is asked for
+# at the prompt, where a human sees the number.
 #
-# Sized generously: the point is to catch a run that has lost the plot, not to
-# ration an honest one. None disables it.
-PROBE_POOL = 900.0
+# None disables it.
+PROBE_POOL = 120.0
 
 # Deadline on ONE API request, milliseconds. Without it a silently dead socket
 # blocks read(2) forever: a run sat in `_ssl__SSLSocket_read` for 4h14m after a
@@ -118,10 +120,12 @@ PROBE_POOL = 900.0
 # turn while bounding the dead-socket case at 6 attempts rather than forever.
 API_TIMEOUT_MS = 300_000
 
-# The default offered at the render-budget prompt, and the fallback for a page
-# that declares no ceiling of its own -- every `index.qmd`, and any entry written
-# before rule 28. Read by `lint._defaults`.
-DEFAULT_ENTRY_CEILING = 200.0
+# No DEFAULT_ENTRY_CEILING here. There was one, and nothing read it: the prompt
+# default and lint's fallback both come from the NOTEBOOK's own `_notebook.py`
+# via `lint._defaults`, which is right -- a notebook has to render without `nb`
+# installed, so the number it renders under belongs to it. A second copy here
+# could only ever disagree, and did: this one said 20 s while the notebook said
+# 200 s, and the notebook won every time.
 
 
 class Notebook:

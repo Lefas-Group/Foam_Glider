@@ -150,7 +150,7 @@ def main(argv):
     repo = root.parent
     chapters = argv[1:] or chapters_of(root)
 
-    changed = absent = 0
+    changed, absent = 0, []
     for c in chapters:
         base = root / "_freeze" / "chapters" / c
         for p in sorted(base.glob("*/execute-results/html.json")) if base.exists() else []:
@@ -166,8 +166,11 @@ def main(argv):
                 continue
             old = at_ref(repo, ref, str(p.relative_to(repo)))
             if old is None:
-                print(f"  {_label(label)}: not in {ref} — no baseline")
-                absent += 1
+                # COLLECTED, not printed here. A page with no baseline is
+                # almost always the entry this run just wrote, and listing it
+                # among the changed ones made a new page read as a finding --
+                # the gate's output began with it, above the real diff.
+                absent.append(_label(label))
                 continue
             a, b = markdown_of(old.decode()), markdown_of(p.read_text())
             delta = [l for l in difflib.unified_diff(a, b, lineterm="", n=0)
@@ -186,8 +189,13 @@ def main(argv):
         for label, name in moved:
             print(f"    {_label(label)}: {name}")
 
+    if absent:
+        print(f"\n  new, so nothing to compare against ({len(absent)}):")
+        for label in absent:
+            print(f"    {label}")
+
     print(f"\n{changed} page(s) changed, {len(moved)} figure(s) changed, "
-          f"{absent} without a baseline, vs {ref}")
+          f"{len(absent)} without a baseline, vs {ref}")
     return 1 if (changed or moved or absent) else 0
 
 

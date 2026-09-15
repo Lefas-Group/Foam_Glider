@@ -211,7 +211,19 @@ def _defs_of(chapter):
             tree = ast.parse(f.read_text())
         except SyntaxError:
             continue
-        for node in ast.walk(tree):
+        # TOP LEVEL ONLY -- `tree.body`, not `ast.walk`. A function nested
+        # inside another is an implementation detail of its parent, not chapter
+        # API: nothing outside can call it and no entry can import it. Walking
+        # the whole tree made rules 21 and 22 demand that `_dynamics` and
+        # `_hit_ground`, defined inside `simulate_launch` and passed to
+        # `solve_ivp` by reference, be called or deleted. A run spent seven
+        # turns on that, worked out the cause ("the ast module visits all the
+        # FunctionDef nodes, even nested ones") and renamed them anyway.
+        #
+        # Calls are still collected with `ast.walk(node)`, so what a nested
+        # helper reaches still counts towards its parent -- `aero_calls_of`'s
+        # fixed point and rule 13 both depend on that and are unaffected.
+        for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 defs[node.name] = (name, {
                     (c.func.attr if isinstance(c.func, ast.Attribute)
@@ -1298,6 +1310,31 @@ def _budget_rules(root, chapters, entries):
                         f"{', '.join(local)} — that silently overrides the "
                         f"entry's SOLVE_BUDGET. Raise the budget in the entry "
                         f"instead, where it is on the record"))
+
+    # 18, the other half: a CHAPTER INDEX does not declare a budget. The
+    # scaffold template already says so -- "Budgets do NOT go here: each entry
+    # declares its own" -- but three indexes inherited the line from the
+    # chapter-budget era, and it is not merely stale. The index RENDERS the
+    # number, so changing the budget in force rewrites the index's output,
+    # which `check` reports as a changed value and the refactor gate then holds
+    # an unrelated entry for. That happened: `index: +4. Solve budget 60 s`.
+    for c in chapters:
+        index = root / "chapters" / c / "index.qmd"
+        if not index.exists():
+            continue
+        try:
+            text = index.read_text()
+        except OSError:
+            continue
+        hit = next((n for n in ("solve_budget(", "SOLVE_BUDGET", "ENTRY_CEILING")
+                    if n in text), None)
+        if hit:
+            problems.append(
+                (index, f"declares a budget (`{hit}`) — budgets belong to the "
+                        f"ENTRY, which states its own in its first cell and its "
+                        f"own Specified callout (rules 18 and 28). An index "
+                        f"that renders one also makes every budget change look "
+                        f"like a changed answer to `check`"))
     return problems
 
 # The chapter-local modules `_model.qmd` EXECS into the page namespace. They are

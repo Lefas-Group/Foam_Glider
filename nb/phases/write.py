@@ -86,6 +86,13 @@ in the entry: an entry answers the question asked and stops.
    Comments in those two files explain the MODEL, not your reasoning about
    where to put things. They are rendered verbatim by the chapter index.
 
+   If you EDIT a function that was already in either file -- as opposed to
+   adding a new one -- call `declare_refactor` with one line saying what
+   changed and why. Editing one means every sibling entry that reaches it gets
+   re-solved to prove its answers held, and the user decides whether to accept
+   that; they are shown your line beside the diff. Adding a function needs
+   nothing, which is the cheaper path when it is available.
+
 6. A helper that solves takes `verbose=False` and passes it to `opti.solve()`
    (rule 23). IPOPT prints a sixty-line convergence table otherwise, and an
    entry that publishes one has buried its answer under the working. Keep it a
@@ -129,6 +136,28 @@ def _stem(notebook, chapter, title, today):
         return mine[0][:-len(".qmd")]
     n = sum(1 for e in existing if e.startswith(today)) + 1
     return f"{today}-{n:02d}-{slug}"
+
+
+def _why_and_diff(filename, fn, before, after, note):
+    """
+    One changed function, as the model explained it and as the source shows it.
+
+    The note is the model's account and the diff is the evidence, in that order
+    and visibly separated -- a reason nobody can check is worth reading and
+    worth doubting. `guards.bodies()` stores `ast.unparse` output, so the diff
+    is of normalised source: comments and original spacing are gone, which
+    makes it a poor patch and a good summary of what actually moved.
+    """
+    import difflib
+    head = f"\n  {filename}:{fn}()"
+    said = (f"\n      said: {note}" if note else
+            "\n      said: (nothing — declare_refactor was not called)")
+    body = "\n".join(
+        f"      {l.rstrip()}" for l in difflib.unified_diff(
+            before.splitlines(), after.splitlines(),
+            lineterm="", n=1)
+        if not l.startswith(("---", "+++")))
+    return f"{head}{said}\n{body}"
 
 
 def _touched(notebook, chapter, *names):
@@ -480,28 +509,44 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                 on_turn=on_turn)
 
         # --- lint, which is mandatory whatever the loop believes ------------
-        for attempt in range(MAX_LINT_ATTEMPTS):
-            loop_once()
-            clean, problems = verifiers.is_clean(notebook, proposal.chapter)
-            if first_pass is None:
-                # The eval metric: violations before any correction round.
-                first_pass = len(problems)
-                run_metrics.set(first_pass_violations=first_pass)
-            tell(f"  lint      {'clean' if clean else f'{len(problems)} blocking'}"
-                  f" (attempt {attempt + 1})")
-            if clean:
-                break
-            contents.append({"role": "user", "parts": [{"text":
-                "Lint is not clean. Fix every one of these, then stop:\n\n"
-                + "\n".join(f"  {p}" for p in problems)}]})
+        # ASKED BEFORE THE LOOP, not after. A resumed run often has nothing for
+        # the model to do -- `--accept-refactor` re-enters with the entry
+        # already on disk, already clean and already verified -- and the loop
+        # ran anyway, costing 16 turns to re-read _model.py, _analysis.py and
+        # index.qmd and arrive back where it started. Measured on the
+        # launch-speed entry. Everything downstream still gates the entry, and
+        # a verify finding re-enters the loop exactly as before.
+        entry_path = notebook.chapters_dir / proposal.chapter / f"{stem}.qmd"
+        clean, problems = verifiers.is_clean(notebook, proposal.chapter)
+        if entry_path.exists() and clean:
+            first_pass = 0
+            run_metrics.set(first_pass_violations=0)
+            tell("  lint      clean before the loop — the entry is already "
+                 "written, so nothing was asked of the model")
         else:
-            tell(f"  lint      still failing after {MAX_LINT_ATTEMPTS} attempts. "
-                  f"Nothing committed; the entry is on disk to fix by hand.")
-            run_metrics.close("lint_failed")
-            return 1
+            for attempt in range(MAX_LINT_ATTEMPTS):
+                loop_once()
+                clean, problems = verifiers.is_clean(notebook, proposal.chapter)
+                if first_pass is None:
+                    # The eval metric: violations before any correction round.
+                    first_pass = len(problems)
+                    run_metrics.set(first_pass_violations=first_pass)
+                tell(f"  lint      "
+                     f"{'clean' if clean else f'{len(problems)} blocking'}"
+                     f" (attempt {attempt + 1})")
+                if clean:
+                    break
+                contents.append({"role": "user", "parts": [{"text":
+                    "Lint is not clean. Fix every one of these, then stop:\n\n"
+                    + "\n".join(f"  {p}" for p in problems)}]})
+            else:
+                tell(f"  lint      still failing after {MAX_LINT_ATTEMPTS} "
+                     f"attempts. Nothing committed; the entry is on disk to "
+                     f"fix by hand.")
+                run_metrics.close("lint_failed")
+                return 1
 
         # --- verify: does the prose match what actually rendered? -----------
-        entry_path = notebook.chapters_dir / proposal.chapter / f"{stem}.qmd"
         _refresh_index_freeze(notebook, proposal.chapter)
         findings = []
         # Two budgets, not one. A render failure and a verify finding are
@@ -581,11 +626,15 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         # notice. `check` deletes the freeze, re-renders and diffs -- expensive,
         # which is why it runs only when a body actually moved and the chapter
         # actually has siblings to break.
-        moved = []
+        moved, evidence = [], []
         if _siblings:
             for name in ("_model.py", "_analysis.py"):
-                moved += [f"{name}:{fn}" for fn in guards.changed_bodies(
-                    _before[name], guards.bodies(_chapter_dir / name))]
+                after = guards.bodies(_chapter_dir / name)
+                for fn in guards.changed_bodies(_before[name], after):
+                    moved.append(f"{name}:{fn}")
+                    evidence.append(_why_and_diff(
+                        name, fn, _before[name][fn], after[fn],
+                        session.refactor_notes.get(fn)))
         if moved:
             tell(f"  check     {', '.join(moved)} changed — re-proving "
                   f"{_siblings} sibling entr"
@@ -601,7 +650,14 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                 # rather than being swallowed by a flag.
                 tell(f"\n  {'─' * 70}\n  REFACTOR CHANGED THE ANSWERS"
                      f"{' — ACCEPTED' if accept_refactor else ' — not committed'}"
-                     f"\n  {'─' * 70}\n{out}\n")
+                     f"\n  {'─' * 70}")
+                # WHAT changed, before what it did to the answers. The gate used
+                # to print only the function's name, so judging it meant leaving
+                # the terminal and running `git diff` -- on the one decision the
+                # system explicitly hands to a human.
+                for block in evidence:
+                    tell(block)
+                tell(f"{out}\n")
                 if not accept_refactor:
                     tell(f"  The entry and the changed machinery are on disk. "
                          f"Either the change is wrong, or the entries it moved\n"

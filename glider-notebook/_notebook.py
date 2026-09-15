@@ -200,13 +200,32 @@ def aero_report(reset=True):
 # Both are starting points, not verdicts, and both read three ways: a number
 # overrides, None opts out, absence takes the default. Raising either is the
 # user's decision and belongs in the chapter's index.qmd as Specified.
-DEFAULT_SOLVE_BUDGET = 60.0    # seconds for any one solve
-DEFAULT_ENTRY_CEILING = 200.0  # seconds for one entry, checked by lint rule 17
+# Measured, not guessed: every entry in glider-notebook executes in 2.0-9.5 s,
+# so 200 s bounded nothing. The ceiling is the render DEADLINE now, directly and
+# with no slack, and headroom nobody chose is time a wedged render burns before
+# anyone notices. An entry that needs more asks at the prompt -- an expensive
+# entry should be a decision, not an inheritance.
+#
+# The solve budget stays BELOW the ceiling. A solve cannot outlive the render
+# containing it (rule 28), so defaults that broke that rule would put every
+# entry taking both of them in violation the moment it was written.
+DEFAULT_SOLVE_BUDGET = 15.0    # seconds for any one solve
+DEFAULT_ENTRY_CEILING = 20.0   # seconds for one entry, checked by lint rule 17
 
 
 def solve_budget():
     """
-    The budget in force, for a chapter index to quote in its Specified callout.
+    The budget in force. DEPRECATED, and nothing should call it.
+
+    It exists for a chapter index to quote, from when budgets were chapter-level.
+    They are the entry's now (rules 18 and 28), and an index that renders this
+    couples its own output to a number that has nothing to do with the chapter:
+    change the budget and `check` reports the index as a changed value, which
+    holds an unrelated entry at the refactor gate. Lint rejects it in an index.
+
+    Kept only because `_notebook.py` is compared byte-for-byte against the
+    vendored copy (rule 11), so deleting it would put every notebook that has
+    not been re-vendored in violation of a rule it currently passes.
 
     Public because `SOLVE_BUDGET` itself may not exist: a chapter that takes the
     notebook default never binds the name, so an index quoting it directly would

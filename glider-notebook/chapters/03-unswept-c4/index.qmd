@@ -28,7 +28,6 @@ From the question and inherited, 2026-09-14:
 1. **Wing sweep:** zero at the quarter chord.
 2. **Fuselage:** 5 mm foam, doubled, 15x200 mm.
 3. **Objective:** minimum sink rate in trimmed glide.
-4. Solve budget `{python} f"{solve_budget():.0f}"` s, the notebook default.
 :::
 
 ::: {.callout-note}
