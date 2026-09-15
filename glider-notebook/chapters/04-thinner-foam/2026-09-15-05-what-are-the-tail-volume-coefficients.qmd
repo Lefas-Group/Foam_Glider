@@ -1,0 +1,49 @@
+---
+title: "What are the tail volume coefficients?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 20.0   # s for this render, granted by the user
+SOLVE_BUDGET = 5.0     # s for any one solve
+PROBE_POOL = 120.0        # s granted for the probe
+PROBE_SPENT = 26.3      # s the probe actually used
+
+res = optimize_glider_3mm(verbose=False)
+c_root, taper, cg_x = res['c_root'], res['taper'], res['cg_x']
+glider = make_glider_3mm(c_root, taper, cg_x)
+
+wings = {w.name: w for w in glider.wings}
+wing, hstab, vstab = wings['Wing'], wings['H-tail'], wings['V-tail']
+
+Sw, cw, bw = wing.area(), wing.mean_aerodynamic_chord(), wing.span()
+Sh, Sv = hstab.area(), vstab.area()
+
+lh_cg = hstab.aerodynamic_center()[0] - cg_x
+lv_cg = vstab.aerodynamic_center()[0] - cg_x
+
+Vh_cg = (Sh * lh_cg) / (Sw * cw)
+Vv_cg = (Sv * lv_cg) / (Sw * bw)
+```
+
+::: {.hero-pair}
+[`{python} f"{Vh_cg:.2f}"`]{.hero-value}
+[Horizontal tail volume coefficient $V_H$]{.hero-label}
+
+[`{python} f"{Vv_cg:.3f}"`]{.hero-value}
+[Vertical tail volume coefficient $V_V$]{.hero-label}
+:::
+
+**Answer.** The horizontal tail volume coefficient ($V_H$) from the optimized center of gravity is [`{python} f"{Vh_cg:.2f}"`]{.key}, and the vertical tail volume coefficient ($V_V$) is [`{python} f"{Vv_cg:.3f}"`]{.key}.
+
+::: {.callout-tip}
+## Specified
+None.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_glider_3mm, make_glider_3mm)
+```
