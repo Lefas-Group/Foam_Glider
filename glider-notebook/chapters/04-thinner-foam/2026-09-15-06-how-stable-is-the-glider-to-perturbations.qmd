@@ -1,0 +1,58 @@
+---
+title: "How stable is the glider to perturbations?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 20.0
+SOLVE_BUDGET = 15.0
+PROBE_POOL = 120.0
+PROBE_SPENT = 55.1
+
+import scipy.optimize as opt_sci
+import aerosandbox as asb
+
+opt = optimize_glider_3mm(verbose=False)
+c_root = float(opt["c_root"])
+taper = float(opt["taper"])
+cg_x = float(opt["cg_x"])
+alpha = float(opt["alpha"])
+mass = float(opt["mass"])
+weight = mass * 9.81
+
+airplane = make_glider_3mm(c_root, taper, cg_x)
+
+def get_err(V_test):
+    op = asb.OperatingPoint(velocity=float(V_test), alpha=alpha)
+    aero = asb.AeroBuildup(airplane, op).run()
+    return float(aero["L"][0]) - weight
+
+res = opt_sci.root_scalar(get_err, bracket=[0.5, 20.0])
+trim_v = res.root
+
+op = asb.OperatingPoint(velocity=trim_v, alpha=alpha)
+derivs = asb.AeroBuildup(airplane, op).run_with_stability_derivatives()
+
+cma = float(derivs['Cma'][0])
+cnb = float(derivs['Cnb'][0])
+clb = float(derivs['Clb'][0])
+```
+
+**Answer.** The optimized glider is statically unstable in pitch ($C_{m_{\alpha}}$ = `{python} f"{cma:+.2f}"`) and slightly unstable in roll ($C_{l_{\beta}}$ = `{python} f"{clb:+.3f}"`), but remains stable in yaw ($C_{n_{\beta}}$ = `{python} f"{cnb:+.3f}"`). The optimizer placed the center of gravity behind the neutral point because static stability was never constrained during the trimmed glide optimization.
+
+::: {.callout-tip}
+## Specified
+None.
+:::
+
+::: {.callout-note}
+## Assumed
+None.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_glider_3mm)
+```
