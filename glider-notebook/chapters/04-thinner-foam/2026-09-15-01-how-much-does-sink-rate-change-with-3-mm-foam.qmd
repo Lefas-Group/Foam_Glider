@@ -1,0 +1,39 @@
+---
+title: "How much does sink rate change with 3 mm foam?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 20.0   # s for this render, granted by the user
+SOLVE_BUDGET = 5.0     # s for any one solve
+
+res = optimize_glider_3mm(verbose=False)
+sink_rate = res["sink_rate"]
+```
+
+::: {.hero}
+[`{python} f"{sink_rate:.2f}"`]{.hero-value}
+[m/s sink rate]{.hero-label}
+:::
+
+**Answer.** The minimum sink rate improves to `{python} f"{sink_rate:.2f}"` m/s. The reduction in mass from the thinner foam lowers the required flight speed, which decreases the sink rate despite the thinner airfoils.
+
+::: {.callout-tip}
+## Specified
+Granted at the prompt, 2026-09-15:
+
+1. **Render budget**: `{python} f"{ENTRY_CEILING:.0f}"` s.
+2. **Solve budget**: `{python} f"{SOLVE_BUDGET:.0f}"` s.
+:::
+
+::: {.callout-note}
+## Assumed
+None.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_glider_3mm)
+```
