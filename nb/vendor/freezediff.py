@@ -48,6 +48,8 @@ import json
 import pathlib
 import re
 import subprocess
+
+import lint
 import sys
 
 from lint import ENTRY_FILE, chapters_of, _label
@@ -60,14 +62,11 @@ from lint import ENTRY_FILE, chapters_of, _label
 #
 # The seconds are masked but the SOLVE COUNT is kept -- masking the whole runtime
 # line once hid a real 18 -> 2, which was the point of the change being checked.
-RUNTIME = re.compile(r"Executed in [0-9.]+ s")
-# The budget line carries the SAME measured seconds as the runtime line, so it
-# needs the same treatment or every re-render reports a changed value and trips
-# the refactor gate on a page nothing touched. Only the measured half is
-# masked: `render 2.2 of 20 s` keeps its 20, because the ceiling is a granted
-# number and a change to it IS a change worth reporting. Same reasoning as the
-# solve count above.
-BUDGET_USED = re.compile(r"render [0-9.]+ of ")
+# Masked through lint's definition, so the wording lives in one place. Only the
+# measured seconds go: the solve count stays because masking the whole line once
+# hid a real 18 -> 2, and the limits stay because a changed ceiling is a change
+# worth reporting. The probe figures are literals frozen with the entry, so they
+# do not vary between renders and need no mask.
 FENCE = re.compile(r"^```.*?^```", re.M | re.S)
 CELL_ID = re.compile(r"\{#[0-9a-f]{8}( |\})")
 FIG_ID = re.compile(r"-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
@@ -77,8 +76,7 @@ def markdown_of(blob):
     """The page's rendered markdown, with per-render noise normalised away."""
     d = json.loads(blob)
     md = d["result"]["markdown"] if isinstance(d.get("result"), dict) else ""
-    md = RUNTIME.sub("Executed in … s", md)
-    md = BUDGET_USED.sub("render … of ", md)
+    md = lint.RUNTIME_SECONDS.sub("Rendered in … s", md)
     md = FENCE.sub("<code cell>", md)
     md = CELL_ID.sub(r"{#ID\1", md)
     md = FIG_ID.sub("-UUID", md)

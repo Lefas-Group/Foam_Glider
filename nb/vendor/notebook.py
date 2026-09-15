@@ -516,36 +516,34 @@ def footer(*objs):
     if objs:
         show_source(*objs)
     elapsed = _time.perf_counter() - _T0
-    n = _aero_cost["calls"]
-    cost = f" · {n} aero solve{'s' if n != 1 else ''}" if n else ""
-    # UNCHANGED, deliberately. Rule 17, `write._render_cost` and
-    # `freezediff.RUNTIME` all parse this exact line; the budgets go on a
-    # second one rather than reshaping a string three things read.
-    print(f"[Executed in {elapsed:.1f} s{cost}]{{.runtime}}")
-
-    # The budgets, read straight out of the page's own namespace -- this file is
-    # exec'd into it, so `globals()` here IS the entry. They used to occupy the
-    # whole `## Specified` callout, which exists to record what the DESIGN
-    # committed to; an entry whose only Specified items were two budgets had
-    # nothing on the record about itself.
+    # ONE line: what this page cost, each figure beside the limit it was given.
+    # It was two -- a runtime line and a budget line -- which meant reading the
+    # same three numbers in two places to answer "did it fit?".
     #
-    # Whichever of the four are bound, in the order a reader wants them: what
-    # this render cost against what it was allowed, then what finding the answer
-    # cost against what that was allowed, then the per-solve cap. A hand-written
-    # entry that declares none of them prints no second line.
+    # Read from the page's own namespace: this file is exec'd into it, so
+    # `globals()` here IS the entry. A clause appears only if the number behind
+    # it exists, so a hand-written entry declaring nothing prints just the time.
+    #
+    # `lint.RUNTIME_SECONDS` and `RUNTIME_SOLVES` parse this line -- rule 17,
+    # `write._render_cost` and `freezediff`'s mask all go through them. Change
+    # the wording here and change it there.
     g = globals()
-    parts = []
-    if g.get("ENTRY_CEILING"):
-        parts.append(f"render {elapsed:.1f} of {g['ENTRY_CEILING']:.0f} s")
-    if g.get("PROBE_POOL"):
-        spent = g.get("PROBE_SPENT")
-        parts.append(f"probe {spent:.0f} of {g['PROBE_POOL']:.0f} s"
-                     if spent is not None else
-                     f"probe {g['PROBE_POOL']:.0f} s granted")
-    if g.get("SOLVE_BUDGET"):
-        parts.append(f"solve cap {g['SOLVE_BUDGET']:.0f} s")
-    if parts:
-        print(f"[budget · {' · '.join(parts)}]{{.budget}}")
+    ceiling = g.get("ENTRY_CEILING")
+    parts = [f"Rendered in {elapsed:.1f} s"
+             + (f" (limit {ceiling:.0f} s)" if ceiling else "")]
+
+    n = _aero_cost["calls"]
+    if n:
+        cap = g.get("SOLVE_BUDGET")
+        parts.append(f"{n} aero solve{'s' if n != 1 else ''}"
+                     + (f" (budget {cap:.0f} s each)" if cap else ""))
+
+    pool, spent = g.get("PROBE_POOL"), g.get("PROBE_SPENT")
+    if spent is not None:
+        parts.append(f"explored in {spent:.0f} s"
+                     + (f" (limit {pool:.0f} s)" if pool else ""))
+
+    print(f"[{' · '.join(parts)}]{{.runtime}}")
 
 
 def api(filename="_analysis.py"):

@@ -20,10 +20,12 @@ from ..log import say, tell
 def _prompt(banner, body, hint):
     # tell, not say: a question is the one thing a run cannot continue without,
     # so it belongs on the stream a reader is guaranteed to be watching.
+    # One rule, one blank line, the question, then the caret with its hint on
+    # the same line -- a hint on a line of its own read as another instruction
+    # to follow rather than as a label for the box you type in.
     tell(f"\n{'─' * 72}\n{banner}\n{'─' * 72}")
     tell(body)
-    tell(f"\n{hint}")
-    sys.stdout.write("> ")
+    sys.stdout.write(f"\n  [{hint}] > " if hint else "\n  > ")
     sys.stdout.flush()
     try:
         line = sys.stdin.readline()
@@ -88,8 +90,7 @@ def ask_pool(default):
     """Probe wall clock for the whole question. The AGENT divides this one."""
     return ask_budget(
         "PROBE TIME POOL",
-        "  Total probe wall clock for this question, in seconds. The agent\n"
-        "  divides it across its own probes. Enter accepts the default.",
+        "  Seconds of exploring, for the whole question.",
         default)
 
 
@@ -110,9 +111,7 @@ def ask_render_ceiling(default):
     """
     return ask_budget(
         "ENTRY RENDER BUDGET",
-        "  Seconds of solving this entry may take. Overrun and it is killed,\n"
-        "  with no slack, so a slow machine wants a bigger number. Quarto's own\n"
-        "  startup is extra and not yours to set. Enter accepts the default.",
+        "  Seconds of solving the entry may take. Overrun is killed.",
         default)
 
 
@@ -167,7 +166,7 @@ def confirm_assumptions(proposal):
     tell(f"\n{'─' * 72}\nASSUMPTIONS — confirm, or correct any\n{'─' * 72}")
     for n, i in enumerate(assumed, 1):
         tell(f"  {n}. {i.name}: {i.value or i.why}")
-    tell('\n  Enter accepts them. To correct one: "1: 12 mm"')
+    tell('\n  Enter accepts. Correct one with "1: 12 mm".')
     sys.stdout.write("> ")
     sys.stdout.flush()
     try:
@@ -218,8 +217,8 @@ def ask_specified(session, name, why, kind="specified", options=""):
     body = f"  {name}\n  {why}"
     if options:
         body += f"\n  options: {options}"
-    answer = _prompt(f"SPECIFIED INPUT NEEDED", body,
-                     "Your answer (or 'you decide' to delegate it):")
+    answer = _prompt("SPECIFIED INPUT NEEDED", body,
+                     "answer, or 'you decide'")
     session.record_answer(name, answer)
     if answer.lower() in DELEGATED:
         return ("Delegated. Decide it yourself if it is answerable in a "
@@ -235,8 +234,8 @@ def consult(session, question, why):
         return ("Consult budget spent. Decide it yourself and say so in the "
                 "proposal's rationale.")
     session.consults += 1
-    answer = _prompt("GUIDANCE", f"  {question}\n  (asking because: {why})",
-                     f"Your view ({session.consults_left} consult(s) left):")
+    answer = _prompt("GUIDANCE", f"  {question}\n  ({why})",
+                     f"your view ({session.consults_left} left)")
     return f"The user said: {answer}"
 
 
@@ -381,9 +380,8 @@ def render_stop(proposal, notebook):
         f"  {proposal.chapter}",
         f'  "{proposal.title}"',
         "",
-        "  Why you: every later entry in the chapter builds on its _model.py,",
-        "  and changing it afterwards means re-solving all of them to prove",
-        "  the answers held. That is the commitment, not this one entry.",
+        "  Later entries build on its _model.py — changing it then means",
+        "  re-solving all of them. That commitment is yours, not the entry.",
         "",
         f"  proposal  {notebook.proposal_path}",
         f"  continue  python -m nb write {notebook.root.name}",

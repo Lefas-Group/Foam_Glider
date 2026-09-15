@@ -158,8 +158,9 @@ def _render_cost(notebook, chapter, stem):
 
     Read back off the freeze rather than timed here, so the number recorded is
     the one the published page shows -- footer() prints
-    `[Executed in 2.4 s · 1 aero solve]` and rule 17 judges that same line. Two
-    sources for one quantity is how they come to disagree.
+    `[Rendered in 2.4 s (limit 20 s) · 1 aero solve …]` and rule 17 judges that
+    same line, through the same regex in `lint`. Two sources for one quantity is
+    how they come to disagree.
     """
     import re
     p = (notebook.freeze / chapter / stem / "execute-results" / "html.json")
@@ -167,10 +168,12 @@ def _render_cost(notebook, chapter, stem):
         md = json.loads(p.read_text())["result"]["markdown"]
     except (OSError, ValueError, KeyError):
         return None
-    m = re.search(r"Executed in ([\d.]+) s(?: · (\d+) aero solve)?", md)
-    if not m:
+    import lint
+    secs = lint.RUNTIME_SECONDS.search(md)
+    if not secs:
         return None
-    return int(m.group(2) or 0), float(m.group(1))
+    solves = lint.RUNTIME_SOLVES.search(md)
+    return int(solves.group(1)) if solves else 0, float(secs.group(1))
 
 
 def _why_and_diff(filename, fn, before, after, note):

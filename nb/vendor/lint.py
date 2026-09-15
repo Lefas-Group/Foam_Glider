@@ -77,6 +77,17 @@ ENTRY_FILE = re.compile(r"^\d{4}-\d{2}-\d{2}-")
 # once because three rules need the same list: rule 2 must not read them as a
 # repeated block, rule 18 must refuse them in a callout, and the transcription
 # check must not read them as citations.
+# The footer line `notebook.footer()` prints, parsed in exactly one place.
+# Three things read it -- rule 17 below, `write._render_cost`, and
+# `freezediff`'s per-render mask -- and they had three regexes between them,
+# which is three chances to miss a wording change.
+#
+# MEASURED is what varies between two renders of the same page; SOLVES is kept
+# out of it because masking the whole line once hid a real 18 -> 2, and the
+# limits are kept because a changed ceiling IS worth reporting.
+RUNTIME_SECONDS = re.compile(r"Rendered in ([\d.]+) s")
+RUNTIME_SOLVES = re.compile(r"· (\d+) aero solve")
+
 BUDGET_NAMES = {"ENTRY_CEILING", "SOLVE_BUDGET", "PROBE_POOL", "PROBE_SPENT"}
 
 RESULT_NUMBER = re.compile(r"\d+\.\d{2,}")
@@ -1287,8 +1298,8 @@ def _budget_rules(root, chapters, entries):
               / "execute-results" / "html.json")
         if not hj.exists():
             continue
-        m = re.search(r"Executed in ([\d.]+) s",
-                      json.loads(hj.read_text()).get("result", {}).get("markdown", ""))
+        m = RUNTIME_SECONDS.search(
+            json.loads(hj.read_text()).get("result", {}).get("markdown", ""))
         if not m:
             continue
         spent = float(m.group(1))
