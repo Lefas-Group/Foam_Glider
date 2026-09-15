@@ -1,0 +1,37 @@
+---
+title: "How heavy is the wing alone?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 20.0
+SOLVE_BUDGET = 15.0
+
+res = optimize_glider_3mm(verbose=False)
+glider = make_glider_3mm(res["c_root"], res["taper"], res["cg_x"])
+wing = glider.wings[0]
+area_density = 0.10464  # kg/m^2
+wing_mass_g = wing.area() * area_density * 1000
+```
+
+::: {.hero}
+[`{python} f"{wing_mass_g:.2f}"`]{.hero-value}
+[g]{.hero-label}
+:::
+
+**Answer.** The optimized 3 mm wing alone weighs `{python} f"{wing_mass_g:.2f}"` g, given a planform area of `{python} f"{wing.area():.3f}"` m² and foam area density of `{python} f"{area_density * 1000:.1f}"` g/m².
+
+::: {.callout-tip}
+## Specified
+Granted at the prompt, 2026-09-15:
+
+1. **Render budget**: `{python} f"{ENTRY_CEILING:.0f}"` s.
+2. **Solve budget**: `{python} f"{SOLVE_BUDGET:.0f}"` s.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_glider_3mm)
+```
