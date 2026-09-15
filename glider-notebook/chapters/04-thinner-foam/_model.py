@@ -1,3 +1,12 @@
+# Forked from chapters/03-unswept-c4/_model.py at 12794f6.
+#
+# Differences, all deliberate, all following from 3 mm foam instead of 5 mm:
+#   * wing sections naca4405 -> naca4403, tail naca0005 -> naca0003, so the
+#     airfoil thickness tracks the stock it is cut from.
+#   * fuselage width 0.010 -> 0.006 m, two plies of the thinner foam.
+#
+# The area density that goes with it is in _analysis.py, not here. Nothing
+# else differs.
 import aerosandbox as asb
 
 def make_glider_3mm(c_root, taper, cg_x):

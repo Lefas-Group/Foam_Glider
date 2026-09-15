@@ -1415,6 +1415,185 @@ def _composition(root, chapters, entries):
     return out
 
 
+# Quarto escapes decimals in the markdown it freezes -- 0.36 is stored as
+# `0\.36`. Missing that is not a small thing: the first version of the check
+# below matched NOTHING and read as "every citation in the notebook has already
+# drifted", which was wrong and alarming in the wrong direction.
+FROZEN_NUMBER = re.compile(r"\d+\.\d+")
+
+
+def _rendered_numbers(root, chapter):
+    """Every decimal number a chapter's frozen output actually shows."""
+    out = set()
+    d = root / "_freeze" / "chapters" / chapter
+    for f in d.rglob("html.json") if d.exists() else []:
+        try:
+            md = json.loads(f.read_text()).get("result", {}).get("markdown", "")
+        except (OSError, ValueError):
+            continue
+        out |= set(FROZEN_NUMBER.findall(md.replace("\\.", ".")))
+    return out
+
+
+def _transcribed(root, chapters, entries):
+    """
+    A number hand-typed into an entry that another chapter also publishes.
+
+    WARNING, and it will be wrong about a third of the time. Measured on this
+    corpus: one true positive (`old_sink = 0.36`, taken from 01-foam-glider and
+    rendered as an authority in a comparison table, which every other rule
+    passes), two false positives (a design bound that happens to equal a value
+    published elsewhere), and two misses (a number transcribed and then
+    REFORMATTED -- kg to g, or to fewer decimals -- which no string match can
+    see).
+
+    That precision is why it is a warning and why the remedy is a link rather
+    than a correction: the system deliberately has no `cite()` yet, so a
+    transcription is allowed. What is not allowed is one whose source cannot be
+    found, because nothing here can tell you when it goes stale.
+    """
+    out = []
+    published = {c: _rendered_numbers(root, c) for c in chapters}
+    for e in entries:
+        mine = e.parent.name
+        try:
+            tree = ast.parse(entry_cells(e.read_text()))
+        except (OSError, SyntaxError):
+            continue
+        for node in tree.body:
+            if not isinstance(node, ast.Assign):
+                continue
+            v = node.value
+            if not (isinstance(v, ast.Constant) and isinstance(v.value, float)):
+                continue
+            literal = repr(v.value)
+            if not RESULT_NUMBER.fullmatch(literal):
+                continue        # one decimal is a condition, not a result
+            names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            if not names or set(names) & {"ENTRY_CEILING", "SOLVE_BUDGET"}:
+                continue        # rule 28 requires these to be literal
+            source = [c for c in chapters
+                      if c != mine and literal in published.get(c, ())]
+            if source:
+                out.append((e, (
+                    f"(warning) `{names[0]} = {literal}` is hand-typed, and "
+                    f"{', '.join(source[:2])} publishes the same value — if it "
+                    f"came from there, name that entry in prose and link it "
+                    f"(rule 10). Nothing can tell you when a transcribed number "
+                    f"goes stale, so the link is the only trail back")))
+    return out
+
+
+# Two chapters this alike are a fork, not a coincidence: measured on this
+# notebook, 03 and 04 are 97% identical and 02 and 03 are 94%, while unrelated
+# chapters sit near 66%. The threshold only has to separate those.
+FORK_SIMILARITY = 0.85
+
+# What `forking.md` asks a forked file's header to carry. Checked by substring
+# because the header is prose -- the point is that a reader can answer "what
+# was this taken from, and what was meant to change", not that it match a form.
+FORK_HEADER = ("forked from", "differences")
+
+
+def _code_only(src):
+    """
+    Source with comments and formatting normalised away.
+
+    Similarity has to be measured on CODE. Measured on raw text, adding the
+    nine-line fork header rule 31 demands dropped 03-unswept-c4's similarity to
+    its parent from 94% to under the threshold -- so satisfying the rule made
+    the rule stop seeing the fork, and would let any fork evade it by carrying
+    a long enough comment. `ast.unparse` drops comments and normalises spacing,
+    which is exactly the difference that should not count.
+    """
+    try:
+        return ast.unparse(ast.parse(src))
+    except (SyntaxError, ValueError):
+        return src
+
+
+def model_kinship(root, chapters):
+    """
+    Every pair of chapters whose `_model.py` is close enough to be a copy.
+
+    Reported rather than judged: rule 31 asks a fork to declare itself, this
+    says what the notebook actually looks like. The number that matters is not
+    any one pair but the shape -- four chapters holding four copies of one
+    vehicle means a fix to the shared physics is four edits, and nothing will
+    tell you if you make three.
+    """
+    import difflib
+    src = {}
+    for c in chapters:
+        try:
+            src[c] = _code_only((root / "chapters" / c / "_model.py").read_text())
+        except OSError:
+            continue
+    out = []
+    names = sorted(src)
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            r = difflib.SequenceMatcher(None, src[a], src[b]).ratio()
+            if r >= FORK_SIMILARITY:
+                out.append((a, b, r))
+    return sorted(out, key=lambda t: -t[2])
+
+
+def _fork_provenance(root, chapters, entries):
+    """
+    Rule 31. A copied `_model.py` says what it was copied from.
+
+    `forking.md` has specified this since before the rule existed -- "the header
+    of the copy names its parent chapter, the commit it was taken at, and every
+    deliberate difference... `diff` between the two files is then the review, and
+    an empty `diff` on the file that was NOT meant to change is a positive check
+    rather than an absence of information."
+
+    Neither fork in this notebook had one. The doctrine was sound and entirely
+    unenforced, which is the worst of both: a reader who trusts it is misled,
+    and the review it promises never happens. Without the header a fork is
+    indistinguishable from a divergence nobody intended, and the physics now
+    lives in four places with nothing saying which is canonical.
+
+    Blocking, because it is cheap to satisfy at the moment of forking and
+    expensive to reconstruct later -- the commit it was taken at is the part
+    that rots first.
+    """
+    out = []
+    import difflib
+    models, code = {}, {}
+    for c in chapters:
+        f = root / "chapters" / c / "_model.py"
+        try:
+            models[c] = f.read_text()
+        except OSError:
+            continue
+        code[c] = _code_only(models[c])
+    for c, text in models.items():
+        if not any(e.parent.name == c for e in entries):
+            continue            # same exemption as rules 19, 24 and 30
+        # Only EARLIER chapters are candidate parents. Chapters are numbered in
+        # creation order, so similarity is symmetric but forking is not: without
+        # this the rule told 02-fuselage-model it was a fork of 03-unswept-c4,
+        # which was copied FROM it. A parent owes no provenance.
+        kin = [(o, difflib.SequenceMatcher(None, other, code[c]).ratio())
+               for o, other in code.items() if o < c]
+        close = sorted((r, o) for o, r in kin if r >= FORK_SIMILARITY)
+        if not close:
+            continue
+        head = text[:1200].lower()
+        if all(k in head for k in FORK_HEADER):
+            continue
+        ratio, parent = close[-1]
+        out.append((root / "chapters" / c / "_model.py", (
+            f"is {ratio:.0%} identical to chapters/{parent}/_model.py but says "
+            f"nothing about it — a fork's header names the parent chapter, the "
+            f"commit it was taken at, and every deliberate difference, so that "
+            f"`diff` between the two is the review. Add a comment header: "
+            f"\"Forked from {parent} at <commit>.\" and \"Differences: …\"")))
+    return out
+
+
 def check(root, chapters):
     entries = [f for c in chapters
                for f in sorted((root / "chapters" / c).glob("*.qmd"))
@@ -1442,6 +1621,8 @@ def check(root, chapters):
     problems += _budget_rules(root, chapters, entries)
     problems += _visuals_and_tables(root, chapters, entries)
     problems += _composition(root, chapters, entries)
+    problems += _transcribed(root, chapters, entries)
+    problems += _fork_provenance(root, chapters, entries)
 
     # Rule 13. Scoped to `_analysis.py`: `_model.py` is rendered in full by the
     # chapter index, and `_notebook.py` is deliberately invisible, so requiring

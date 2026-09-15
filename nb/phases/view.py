@@ -71,6 +71,19 @@ def site(notebook, force=False, verbose=True, page=None):
             tell(f"              {line[:120]}")
         return None
 
+    # What the notebook looks like structurally, where someone is already
+    # looking at it. Four chapters holding four copies of one vehicle is not a
+    # lint problem -- rule 31 covers the provenance -- but it IS the thing that
+    # decides how expensive the next physics fix is, and nothing else says it.
+    import lint as _lint
+    kin = _lint.model_kinship(notebook.root, notebook.chapters())
+    if kin and verbose:
+        tell(f"  models    {len(kin)} chapter pair(s) share a vehicle:")
+        for a, b, r in kin[:5]:
+            tell(f"              {r:.0%}  {a} ≈ {b}")
+        if len(kin) > 5:
+            tell(f"              … and {len(kin) - 5} more")
+
     index = notebook.root / "_site" / "index.html"
     if verbose:
         tell(f"  site      {page if page and page.exists() else index}")

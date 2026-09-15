@@ -81,7 +81,7 @@ find things whose name gives no clue.
 - Call `aero_report()` at the end of a probe. It prints what the solves cost, and
   that number becomes the proposal's render cost.
 
-# The 30 rules lint checks
+# The 31 rules lint checks
 
 Know these before drafting, not after. Finding one from a lint run means the
 prose is already written.
@@ -117,6 +117,7 @@ prose is already written.
 28  every entry declares ENTRY_CEILING and SOLVE_BUDGET — never None, solve ≤ ceiling
 29  never import `_model`, `_analysis` or `_notebook` — already in scope
 30  a chapter index renders its own `_model.py` — that is where the aircraft is
+31  a forked `_model.py` names its parent chapter, commit and differences
 ```
 
 `read_reference("why")` has the failure behind each one. Read it when a rule

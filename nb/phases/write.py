@@ -88,6 +88,13 @@ in the entry: an entry answers the question asked and stops.
    not importable; `from _analysis import solve_it` raises ModuleNotFoundError
    at render and is rule 29. Call the name directly.
 
+   A number taken from ANOTHER chapter is assigned in your code cell with a
+   comment naming the entry it came from, and your prose names and links that
+   entry: [its title](YYYY-MM-DD-NN-slug.qmd). There is no mechanism that
+   recomputes it, so the link is the only trail back when someone asks where
+   0.36 came from -- and the only warning anyone gets if that chapter is
+   re-rendered and the number moves.
+
    Comments in those two files explain the MODEL, not your reasoning about
    where to put things. They are rendered verbatim by the chapter index.
 

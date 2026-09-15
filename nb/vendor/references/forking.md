@@ -33,6 +33,25 @@ Worked examples, from the duration-glider chapter:
 - AeroBuildup → a vortex lattice → you would want both, to compare. **New
   chapter.**
 
+## Citing an earlier chapter's answer
+
+There is no mechanism for this, deliberately. A number from another chapter is
+**transcribed** -- assigned in the entry's code cell with a comment naming its
+source, and the source entry named and linked in prose so rule 10 records the
+dependency.
+
+What that costs you, stated plainly: **a transcription stays correct only until
+the cited chapter is re-rendered, and nothing will tell you when it stops.** Lint
+warns when a hand-typed number matches one another chapter publishes, but it is
+about a third accurate -- it misses any number that was reformatted on the way
+across, kg to g or 0.0965 to 0.096, which no string match can see.
+
+The known upgrade is a `cite(chapter, entry, key)` reading the committed freeze,
+which would make staleness detectable. It is not built because it changes what a
+chapter may depend on: a cited answer moving would invalidate every citer
+transitively, and `check`'s dependency graph is intra-chapter today. Build it
+when a stale citation is actually found in the record, not before.
+
 ## Copying a chapter
 
 A forked chapter copies **both** `_model.py` and `_analysis.py`: chapters share

@@ -1,3 +1,12 @@
+# Forked from chapters/01-foam-glider/_model.py at c8bd387.
+#
+# Differences, all deliberate:
+#   * a Fuselage is added -- 200 mm long, 15 mm high, 10 mm wide (two plies of
+#     5 mm foam) -- and passed to the Airplane, so its mass and drag now count.
+#   * the builder is renamed make_glider_with_fuse, since both aircraft exist.
+#
+# The wing, both tails and every section are unchanged; the rest of the diff
+# against the parent is reflow, not design.
 import aerosandbox as asb
 import aerosandbox.numpy as np
 
