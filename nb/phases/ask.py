@@ -98,9 +98,8 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
                       metrics=run_metrics, probe_pool=pool)
     session.render_ceiling = ceiling
 
-    tell(f"  notebook  {notebook.root.name}")
-    # With `say()` off the terminal, nothing else says the detail exists.
-    tell(f"  telemetry  python -m nb watch {notebook.root.name}")
+    say(f"  notebook  {notebook.root.name}")
+    tell(f"  detail    python -m nb watch {notebook.root.name}")
     fs, handlers, make_config = setup(session, phase="ask")
     gate = None
     notebook.run.mkdir(parents=True, exist_ok=True)

@@ -1439,13 +1439,14 @@ def _transcribed(root, chapters, entries):
     """
     A number hand-typed into an entry that another chapter also publishes.
 
-    WARNING, and it will be wrong about a third of the time. Measured on this
-    corpus: one true positive (`old_sink = 0.36`, taken from 01-foam-glider and
-    rendered as an authority in a comparison table, which every other rule
-    passes), two false positives (a design bound that happens to equal a value
-    published elsewhere), and two misses (a number transcribed and then
-    REFORMATTED -- kg to g, or to fewer decimals -- which no string match can
-    see).
+    A WARNING, because it still misses more than it catches. Measured on this
+    corpus after the own-chapter filter below: one true positive
+    (`old_sink = 0.36`, taken from 01-foam-glider and rendered as an authority
+    in a comparison table, which every other rule passes), no false positives,
+    and two misses in the same entry -- `old_mass` and `old_c_root`, both
+    transcribed and then REFORMATTED, kg to g and to fewer decimals, which no
+    string match can see. Precision is good; recall is the half that cannot be
+    fixed without `cite()`.
 
     That precision is why it is a warning and why the remedy is a link rather
     than a correction: the system deliberately has no `cite()` yet, so a
@@ -1472,6 +1473,20 @@ def _transcribed(root, chapters, entries):
             names = [t.id for t in node.targets if isinstance(t, ast.Name)]
             if not names or set(names) & {"ENTRY_CEILING", "SOLVE_BUDGET"}:
                 continue        # rule 28 requires these to be literal
+            # A value the chapter's OWN model or analysis already contains is
+            # a design constant of this vehicle, not a citation -- 0.15 is the
+            # half span, written into every `xyz_le`, and it was matching every
+            # chapter that publishes a span. This drops both false positives on
+            # record (`c_root_bound`, `b_half`) and keeps the true one
+            # (`old_sink = 0.36`, which appears nowhere in its own chapter).
+            own = ""
+            for f in ("_model.py", "_analysis.py"):
+                try:
+                    own += (root / "chapters" / mine / f).read_text()
+                except OSError:
+                    pass
+            if literal in own:
+                continue
             source = [c for c in chapters
                       if c != mine and literal in published.get(c, ())]
             if source:

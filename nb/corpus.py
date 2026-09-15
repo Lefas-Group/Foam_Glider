@@ -31,17 +31,16 @@ from .config import VENDOR  # noqa: F401  -- importing it puts vendor/ on the pa
 # (blocking, total). Total carries the warnings, which are the half most likely
 # to move silently: they do not fail a run, so nothing else would notice.
 EXPECTED = {
-    # The two warnings in glider-notebook and one in optimised-glider are the
-    # transcription check (`_transcribed`), which is ~1/3 precise by
-    # measurement and deliberately a warning. One is real -- `old_sink = 0.36`,
-    # taken from 01-foam-glider -- and the rest are design bounds that happen to
-    # equal a value published elsewhere.
-    "glider-notebook": (0, 2),
+    # glider-notebook's one warning is the transcription check: `old_sink =
+    # 0.36`, taken from 01-foam-glider and rendered as an authority. It is the
+    # only one, and it is real -- the design-constant false positives went when
+    # the check started ignoring values the chapter's own model already holds.
+    "glider-notebook": (0, 1),
     "aircraft-notebook": (27, 28),
     # +3 blocking from rule 31: its four chapters hold four copies of one
     # _model.py, three of them byte-identical to an earlier chapter and
     # none carrying a fork header. Correct, and frozen.
-    "optimised-glider-notebook": (59, 86),
+    "optimised-glider-notebook": (59, 85),
 }
 
 

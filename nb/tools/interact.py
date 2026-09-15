@@ -34,9 +34,15 @@ def _prompt(banner, body, hint):
         # EOF. There is deliberately no unattended mode: a Specified input is
         # asked every time, so with nobody to ask the run stops rather than
         # assuming. Failing loudly here is the whole point of the rule.
+        say("  answered   (stdin closed)")
         raise SystemExit(
             "\n  stdin closed with a question outstanding. `nb ask` needs a "
             "terminal:\n  a Specified input is asked every time, never assumed.")
+    # The ANSWER, in the log. The question was already there and the answer was
+    # not, so the record showed a run pausing five minutes at a prompt and gave
+    # no way to see what it was told -- which is the half that explains
+    # everything after it.
+    say(f"  answered   {line.strip() or '(default)'}")
     return line.strip()
 
 
@@ -69,8 +75,13 @@ def ask_budget(title, body, default):
     try:
         value = float(line.strip())
     except ValueError:
+        say(f"  answered   {default:.0f} (default)")
         return default
-    return value if value > 0 else default
+    if value <= 0:
+        say(f"  answered   {default:.0f} (default; {value} is not usable)")
+        return default
+    say(f"  answered   {value:.0f}")
+    return value
 
 
 def ask_pool(default):
@@ -99,11 +110,9 @@ def ask_render_ceiling(default):
     """
     return ask_budget(
         "ENTRY RENDER BUDGET",
-        "  Seconds of EXECUTION this entry's render may take. It bounds every\n"
-        "  solve inside it, and a render that overruns is killed. Quarto's own\n"
-        "  startup and pandoc are paid on top and are not yours to set.\n"
-        "  There is no slack on this number: a slow machine needs a bigger one.\n"
-        "  Enter accepts the notebook default.",
+        "  Seconds of solving this entry may take. Overrun and it is killed,\n"
+        "  with no slack, so a slow machine wants a bigger number. Quarto's own\n"
+        "  startup is extra and not yours to set. Enter accepts the default.",
         default)
 
 

@@ -441,10 +441,12 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     open_log(notebook, "write", proposal.title)
 
     if header:
-        tell(f"  notebook  {notebook.root.name}")
-        # With `say()` off the terminal, nothing else says the detail exists.
-        tell(f"  telemetry  python -m nb watch {notebook.root.name}")
-    tell(f"  entry     {proposal.title}")
+        # ONE line, and only the one a reader can act on. The notebook name is
+        # what they just typed, and the entry title is the first line of the
+        # finished prose printed at the end -- both were saying it twice.
+        tell(f"  detail    python -m nb watch {notebook.root.name}")
+    say(f"  notebook  {notebook.root.name}")
+    say(f"  entry     {proposal.title}")
 
     chapter_msg = None
     # RESUMED, not created again. A run that scaffolded a chapter and then died
@@ -454,7 +456,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     # back to the proposal below, so on the second pass this is simply true.
     already = (notebook.chapters_dir / proposal.chapter).is_dir()
     if already:
-        tell(f"  chapter   resuming into existing chapters/{proposal.chapter}/")
+        say(f"  chapter   resuming into existing chapters/{proposal.chapter}/")
     # Either route can be the first entry in a scaffold chapter: `propose`
     # refuses to hand one over without a chapter_title, so by here we have a
     # name for it and the claim is the same operation as creating one.
@@ -554,8 +556,8 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         if entry_path.exists() and clean:
             first_pass = 0
             run_metrics.set(first_pass_violations=0)
-            tell("  lint      clean before the loop — the entry is already "
-                 "written, so nothing was asked of the model")
+            say("  lint      clean before the loop — the entry is already "
+                "written, so nothing was asked of the model")
         else:
             for attempt in range(MAX_LINT_ATTEMPTS):
                 loop_once()
@@ -564,9 +566,13 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                     # The eval metric: violations before any correction round.
                     first_pass = len(problems)
                     run_metrics.set(first_pass_violations=first_pass)
-                tell(f"  lint      "
-                     f"{'clean' if clean else f'{len(problems)} blocking'}"
-                     f" (attempt {attempt + 1})")
+                # NOT `report` -- that name is imported from .common and read
+                # by on_turn, which closes over this scope; binding it here
+                # made every turn line raise NameError.
+                (say if clean else tell)(
+                    f"  lint      "
+                    f"{'clean' if clean else f'{len(problems)} blocking'}"
+                    f" (attempt {attempt + 1})")
                 if clean:
                     break
                 contents.append({"role": "user", "parts": [{"text":
@@ -625,8 +631,9 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                 continue
             findings = result.findings
             attempt += 1
-            tell(f"  verify    {'ok' if result.ok else f'{len(findings)} finding(s)'}"
-                  f" (attempt {attempt})")
+            (say if result.ok else tell)(
+                f"  verify    {'ok' if result.ok else f'{len(findings)} finding(s)'}"
+                f" (attempt {attempt})")
             for f in findings:
                 tell(f"              {f}")
             if result.ok or attempt >= MAX_VERIFY_ATTEMPTS:
@@ -764,8 +771,10 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         tell(f"  commit    FAILED — {detail}")
         run_metrics.close("commit_failed")
         return 1
-    tell(f"  commit    {sha}  ({detail})")
-    tell(f"  first-pass violations: {first_pass}")
+    n_paths = len(detail.split(", "))
+    tell(f"  commit    {sha}  ({n_paths} file(s))")
+    say(f"  commit    {sha}  ({detail})")
+    say(f"  first-pass violations: {first_pass}")
     if session.probe_pool:
         # The QUESTION's total against the grant, not this phase's slice against
         # what was left of it: "4 s of 272 s" made the run look like it had been

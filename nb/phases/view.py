@@ -33,7 +33,8 @@ def _unfrozen(notebook):
     return out
 
 
-def site(notebook, force=False, verbose=True, page=None):
+def site(notebook, force=False, verbose=True, page=None,
+         standalone=False):
     """
     Render the whole project, unless that would mean re-solving.
 
@@ -77,12 +78,17 @@ def site(notebook, force=False, verbose=True, page=None):
     # decides how expensive the next physics fix is, and nothing else says it.
     import lint as _lint
     kin = _lint.model_kinship(notebook.root, notebook.chapters())
-    if kin and verbose:
-        tell(f"  models    {len(kin)} chapter pair(s) share a vehicle:")
+    # TELEMETRY. This describes the notebook's standing shape, not anything
+    # the run just did, and printing five unchanging lines after every entry
+    # trained the eye to skip the block the finished prose sits in. `nb view`
+    # run on its own still shows it, because then it IS the question asked.
+    if kin:
+        report = tell if standalone else say
+        report(f"  models    {len(kin)} chapter pair(s) share a vehicle:")
         for a, b, r in kin[:5]:
-            tell(f"              {r:.0%}  {a} ≈ {b}")
+            report(f"              {r:.0%}  {a} ≈ {b}")
         if len(kin) > 5:
-            tell(f"              … and {len(kin) - 5} more")
+            report(f"              … and {len(kin) - 5} more")
 
     index = notebook.root / "_site" / "index.html"
     if verbose:
@@ -95,7 +101,8 @@ def main(argv):
         tell("usage: python -m nb view <notebook> [--force]")
         return 2
     force = "--force" in argv
-    return 0 if site(Notebook(argv[0]), force=force) else 1
+    return 0 if site(Notebook(argv[0]), force=force,
+                     standalone=True) else 1
 
 
 if __name__ == "__main__":
