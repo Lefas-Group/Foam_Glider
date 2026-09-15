@@ -50,6 +50,11 @@ in the entry: an entry answers the question asked and stops.
        ENTRY_CEILING = {ceiling}   # s for this render, granted by the user
        SOLVE_BUDGET = {solve}     # s for any one solve
 
+   `render_cost_s` in the proposal is what the probe's solves actually cost,
+   timed, not estimated -- size SOLVE_BUDGET from it. A 0.0 means the probe ran
+   no solves at all, so it tells you nothing about what this entry will cost;
+   it does not mean free.
+
    ENTRY_CEILING is not yours to choose -- it is what the user granted at the
    prompt, the commit is refused if you change it, and it is the execution time
    the render is killed at, directly and with no slack. SOLVE_BUDGET is yours:

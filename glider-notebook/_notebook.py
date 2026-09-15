@@ -261,10 +261,39 @@ if not getattr(asb.Opti.solve, "_is_budgeted", False):
             options = dict(kwargs.get("options") or {})
             options.setdefault("ipopt.max_wall_time", seconds)
             kwargs["options"] = options
-        return _unbudgeted_solve(self, *args, **kwargs)
+        # COUNTED HERE, because this is the only place every solve passes
+        # through. `aero_cost` was initialised, read by aero_report() and by
+        # footer(), reset by _model.qmd -- and written by nothing, so it read
+        # zero forever. Five consumers believed it: proposal.render_cost_s
+        # (which the write brief sizes SOLVE_BUDGET from), every
+        # metrics.solve_seconds row, the probe's overspend warning, footer()'s
+        # solve count, and aero_report() itself -- which told a probe that had
+        # just optimised an aircraft that it had run no solves at all.
+        #
+        # try/finally, so a solve that RAISES still counts: an infeasible
+        # problem or a budget kill cost the time either way, and the run worth
+        # seeing is exactly the one that overran.
+        _t0 = _time.perf_counter()
+        try:
+            return _unbudgeted_solve(self, *args, **kwargs)
+        finally:
+            _aero_cost["calls"] += 1
+            _aero_cost["seconds"] += _time.perf_counter() - _t0
 
     _budgeted_solve._is_budgeted = True
     asb.Opti.solve = _budgeted_solve
+
+# The counter lives on the WRAPPER, not in page globals. `aero_cost` is rebound
+# by every exec of this file, but the wrapper is installed once and closes over
+# whichever namespace installed it -- so if one process ever execs this for two
+# pages, the wrapper would count into the first page's dict while the second
+# page read its own, empty one. Sharing one dict makes the reset in _model.qmd
+# mean "zero it for this page", which is what it is written to mean.
+if hasattr(asb.Opti.solve, "_cost"):
+    aero_cost = asb.Opti.solve._cost
+else:
+    asb.Opti.solve._cost = aero_cost
+_aero_cost = aero_cost
 
 
 # =============================================================================

@@ -40,6 +40,12 @@ def _prompt(banner, body, hint):
     return line.strip()
 
 
+# What counts as handing the decision back. Named because `propose` needs the
+# same test: an input the user DELEGATED is owned by the agent, and recording it
+# as theirs would put words in their mouth -- "the user specified: you decide".
+DELEGATED = ("you decide", "your call", "you choose", "")
+
+
 def ask_budget(title, body, default):
     """
     A number the USER grants before the run starts, with a safe default.
@@ -125,7 +131,7 @@ def ask_specified(session, name, why, kind="specified", options=""):
     answer = _prompt(f"SPECIFIED INPUT NEEDED", body,
                      "Your answer (or 'you decide' to delegate it):")
     session.record_answer(name, answer)
-    if answer.lower() in ("you decide", "your call", "you choose", ""):
+    if answer.lower() in DELEGATED:
         return ("Delegated. Decide it yourself if it is answerable in a "
                 "sentence, and record it with owner='agent' and your reason. "
                 "If answering it needs computation, it is a question in its own "
@@ -212,6 +218,25 @@ def propose(session, **fields):
 
     # Measured, not guessed: aero_report() prints the solves the probe just ran.
     proposal.render_cost_s = round(session.solve_seconds, 1)
+
+    # Every input the user ACTUALLY answered, whether or not the model listed
+    # it. The check above catches the opposite error -- claiming an ask that
+    # never happened -- but nothing caught an ask that happened and went
+    # unrecorded, so "replace the current model", the answer that caused a whole
+    # chapter to exist, reached the entry nowhere. Which questions were put to
+    # the user is a fact about the run, not a judgement, so it is bookkeeping:
+    # done here for the same reason `carry_queue` is merged below, because a
+    # model asked to copy a list forward will sometimes improve it instead.
+    recorded = {i.name for i in proposal.inputs}
+    for name, value in session.asked.items():
+        if name in recorded:
+            continue
+        delegated = str(value).strip().lower() in DELEGATED
+        proposal.inputs.append(Input(
+            name=name, kind="specified",
+            owner="agent" if delegated else "user",
+            value=None if delegated else str(value),
+            why="delegated by the user" if delegated else "asked during the probe"))
 
     # Questions owed from an earlier ask, appended without disturbing any the
     # model added itself. Done here rather than in the prompt because it is
