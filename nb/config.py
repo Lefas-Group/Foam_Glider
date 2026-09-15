@@ -32,15 +32,20 @@ if str(VENDOR) not in sys.path:
 #                          more prompt did not fix it.
 #   gemini-3.1-pro-preview 2 turns. One probe, then propose.
 #
-# Flash is a false economy here: the cheap model spent twenty times the turns
-# and produced nothing. Re-run the comparison on first-pass lint violations once
-# entries are being written -- that is the metric that decides it long-term.
-# $NB_MODEL overrides it for one run. That exists for the boring reason: the
-# quota is per MODEL per day (250), so a day spent testing against pro leaves
-# flash's bucket untouched and a smoke test can still run. It is not a way to
-# change what ships -- the default is the measured choice above, and metrics.py
-# records the model that actually served each run, so a row cannot lie about it.
-MODEL = os.environ.get("NB_MODEL", "gemini-3.1-pro-preview")
+# That measurement is KEPT because it is what the current default has to beat,
+# not because it still decides the question. It was taken against an earlier
+# prefix and an earlier brief -- both have since been rewritten -- and a later
+# flash run probed the aircraft, reasoned about induced drag and reached
+# ask_specified in six turns, which the three runs above never did. So the
+# default is flash on the understanding that it is ON TRIAL.
+#
+# The metric that settles it is first-pass lint violations per entry, which
+# metrics.py records per run alongside the model that served it. Pro sits at 0
+# on its last three entries. If flash cannot hold that, this goes back.
+#
+# $NB_MODEL overrides it for one run, in either direction -- the quota is per
+# MODEL per day (250), so a day spent on one leaves the other's bucket whole.
+MODEL = os.environ.get("NB_MODEL", "gemini-3.8-flash")
 
 # MINIMAL is in the enum but 400s on both candidate models. LOW/MEDIUM/HIGH are
 # the usable range, and this is the main cost lever.
