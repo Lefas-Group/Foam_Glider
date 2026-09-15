@@ -22,14 +22,6 @@ span = glider.wings[0].span()
 
 **Answer.** The aspect ratio of the optimised main wing is `{python} f"{ar:.2f}"`. The optimiser settled on a wing area of `{python} f"{area:.4f}"` m² for the fixed `{python} f"{span:.1f}"` m span, constrained by the lower taper bound.
 
-::: {.callout-tip}
-## Specified
-Granted at the prompt, 2026-09-15:
-
-1. **Render budget**: `{python} f"{ENTRY_CEILING:.0f}"` s.
-2. **Solve budget**: `{python} f"{SOLVE_BUDGET:.0f}"` s.
-:::
-
 ```{python}
 #| echo: false
 #| output: asis

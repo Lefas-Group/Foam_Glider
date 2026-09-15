@@ -18,15 +18,6 @@ taper_lb = bounds_dict["taper"][0]
 
 **Answer.** Only the taper ratio hits a bound, resting exactly on its lower limit. All other variables optimize strictly to the interior of their ranges.
 
-::: {.callout-tip}
-## Specified
-
-Granted at the prompt, 2026-09-13:
-
-1. Render budget `{python} f"{ENTRY_CEILING:.0f}"` s.
-2. Solve budget `{python} f"{SOLVE_BUDGET:.0f}"` s.
-:::
-
 ```{python}
 #| echo: false
 #| output: asis

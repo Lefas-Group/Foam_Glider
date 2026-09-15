@@ -33,15 +33,6 @@ c_root_bound = 0.15
 
 ::: {.callout-tip}
 ## Specified
-
-Granted at the prompt, 2026-09-14:
-
-1. Render budget `{python} f"{ENTRY_CEILING:.0f}"` s.
-2. Solve budget `{python} f"{SOLVE_BUDGET:.0f}"` s.
-:::
-
-::: {.callout-tip}
-## Specified
 Asked of the user, 2026-09-14:
 
 1. **Fuselage: 5 mm foam**, doubled up.

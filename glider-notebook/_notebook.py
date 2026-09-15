@@ -515,9 +515,37 @@ def footer(*objs):
     """
     if objs:
         show_source(*objs)
+    elapsed = _time.perf_counter() - _T0
     n = _aero_cost["calls"]
     cost = f" · {n} aero solve{'s' if n != 1 else ''}" if n else ""
-    print(f"[Executed in {_time.perf_counter() - _T0:.1f} s{cost}]{{.runtime}}")
+    # UNCHANGED, deliberately. Rule 17, `write._render_cost` and
+    # `freezediff.RUNTIME` all parse this exact line; the budgets go on a
+    # second one rather than reshaping a string three things read.
+    print(f"[Executed in {elapsed:.1f} s{cost}]{{.runtime}}")
+
+    # The budgets, read straight out of the page's own namespace -- this file is
+    # exec'd into it, so `globals()` here IS the entry. They used to occupy the
+    # whole `## Specified` callout, which exists to record what the DESIGN
+    # committed to; an entry whose only Specified items were two budgets had
+    # nothing on the record about itself.
+    #
+    # Whichever of the four are bound, in the order a reader wants them: what
+    # this render cost against what it was allowed, then what finding the answer
+    # cost against what that was allowed, then the per-solve cap. A hand-written
+    # entry that declares none of them prints no second line.
+    g = globals()
+    parts = []
+    if g.get("ENTRY_CEILING"):
+        parts.append(f"render {elapsed:.1f} of {g['ENTRY_CEILING']:.0f} s")
+    if g.get("PROBE_POOL"):
+        spent = g.get("PROBE_SPENT")
+        parts.append(f"probe {spent:.0f} of {g['PROBE_POOL']:.0f} s"
+                     if spent is not None else
+                     f"probe {g['PROBE_POOL']:.0f} s granted")
+    if g.get("SOLVE_BUDGET"):
+        parts.append(f"solve cap {g['SOLVE_BUDGET']:.0f} s")
+    if parts:
+        print(f"[budget · {' · '.join(parts)}]{{.budget}}")
 
 
 def api(filename="_analysis.py"):

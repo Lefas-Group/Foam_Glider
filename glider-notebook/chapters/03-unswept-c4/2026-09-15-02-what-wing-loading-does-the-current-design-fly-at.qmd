@@ -26,14 +26,6 @@ wing_loading_n_m2 = mass * 9.81 / main_wing_area
 
 **Answer.** The optimized glider has a wing loading of [`{python} f"{wing_loading_g_dm2:.2f}"`]{.key} g/dm² ([`{python} f"{wing_loading_kg_m2:.3f}"`]{.key} kg/m² or [`{python} f"{wing_loading_n_m2:.2f}"`]{.key} N/m²), calculated using the main wing's area.
 
-::: {.callout-tip}
-## Specified
-Granted at the prompt, 2026-09-15:
-
-1. **Render budget**: `{python} f"{ENTRY_CEILING:.0f}"` s.
-2. **Solve budget**: `{python} f"{SOLVE_BUDGET:.0f}"` s.
-:::
-
 ```{python}
 #| echo: false
 #| output: asis

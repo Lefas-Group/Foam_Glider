@@ -30,10 +30,9 @@ min_v6 = np.min(sim_6.y[2])
 
 ::: {.callout-tip}
 ## Specified
-Granted at the prompt, 2026-09-15:
+Asked of the user, 2026-09-15:
 
-1. **Render budget:** `{python} f"{ENTRY_CEILING:.0f}"` s.
-2. **Launch speeds:** 2.2, 4.0, and 6.0 m/s.
+1. **Launch speeds:** 2.2, 4.0, and 6.0 m/s.
 :::
 
 ::: {.callout-note}

@@ -22,14 +22,6 @@ cg_x = ans["cg_x"]
 
 **Answer.** The sink rate is effectively unchanged at `{python} f"{sink_rate:.3f}"` m/s compared to the swept-leading-edge configuration. The optimal wing dimensions remain exactly the same at `{python} f"{c_root*1000:.0f}"` mm root chord and `{python} f"{taper:.1f}"` taper. The center of gravity moves aft to `{python} f"{cg_x*1000:.0f}"` mm to balance the shifted aerodynamic center.
 
-::: {.callout-tip}
-## Specified
-Granted at the prompt, 2026-09-14:
-
-1. **Render budget:** `{python} f"{ENTRY_CEILING:.0f}"` s.
-2. **Solve budget:** `{python} f"{SOLVE_BUDGET:.0f}"` s.
-:::
-
 ```{python}
 #| echo: false
 #| output: asis

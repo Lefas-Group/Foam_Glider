@@ -21,15 +21,6 @@ airplane_opt = make_glider_with_fuse(c_root_opt, taper_opt, cg_x_opt)
 
 **Answer.** Adding the fuselage and its mass drives the wing root chord to its maximum bound of [`{python} f"{c_root_opt:.2f}"`]{.key} m, resulting in a noticeably larger wing area compared to the bare-wing design (@fig-three-view-fuselage).
 
-::: {.callout-tip}
-## Specified
-
-Granted at the prompt, 2026-09-14:
-
-1. Render budget `{python} f"{ENTRY_CEILING:.0f}"` s.
-2. Solve budget `{python} f"{SOLVE_BUDGET:.0f}"` s.
-:::
-
 ```{python}
 #| label: fig-three-view-fuselage
 #| fig-cap: "Three-view drawing of the optimized foam glider with fuselage."

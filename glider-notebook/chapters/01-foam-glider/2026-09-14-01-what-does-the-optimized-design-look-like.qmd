@@ -21,15 +21,6 @@ airplane_opt = make_glider(c_root_opt, taper_opt, cg_x_opt)
 
 **Answer.** The optimized planform has a [`{python} f"{c_root_opt:.2f}"`]{.key} m root chord and tapers sharply to its lower bound of [`{python} f"{taper_opt:.1f}"`]{.key}. Span, sections, and tail match the chapter constraints (@fig-planform).
 
-::: {.callout-tip}
-## Specified
-
-Granted at the prompt, 2026-09-14:
-
-1. Render budget `{python} f"{ENTRY_CEILING:.0f}"` s.
-2. Solve budget `{python} f"{SOLVE_BUDGET:.0f}"` s.
-:::
-
 ```{python}
 #| label: fig-planform
 #| fig-cap: "Three-view drawing of the optimized foam glider planform."

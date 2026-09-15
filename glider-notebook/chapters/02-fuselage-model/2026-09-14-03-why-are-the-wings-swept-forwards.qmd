@@ -29,14 +29,6 @@ te_sweep = wing.mean_sweep_angle(1.0)
 
 **Answer.** The leading edge is defined as completely straight (`{python} f"{le_sweep:.0f}°"` sweep). The optimizer chose a taper ratio of roughly `{python} f"{sol.value(res['taper']):.2f}"` to reduce induced drag. Because the chord shrinks while the leading edge stays fixed, the quarter-chord line—which defines aerodynamic sweep—is pulled forward at the tips, creating `{python} f"{-c4_sweep:.1f}°"` of forward sweep. The trailing edge is swept forward even more (`{python} f"{-te_sweep:.1f}°"`).
 
-::: {.callout-tip}
-## Specified
-Asked of the user, 2026-09-14:
-
-1. **Render budget:** `{python} f"{ENTRY_CEILING:.0f}"` s.
-2. **Solve budget:** `{python} f"{SOLVE_BUDGET:.0f}"` s.
-:::
-
 ```{python}
 #| label: fig-sweep
 #| fig-cap: "Top-down view of the wing planform, showing the straight leading edge and the resulting forward sweep of the quarter-chord and trailing edge lines."

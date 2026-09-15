@@ -49,6 +49,8 @@ in the entry: an entry answers the question asked and stops.
 
        ENTRY_CEILING = {ceiling}   # s for this render, granted by the user
        SOLVE_BUDGET = {solve}     # s for any one solve
+       PROBE_POOL = {pool}        # s granted for the probe
+       PROBE_SPENT = {spent}      # s the probe actually used
 
    `render_cost_s` in the proposal is what the probe's solves actually cost,
    timed, not estimated -- size SOLVE_BUDGET from it. A 0.0 means the probe ran
@@ -60,10 +62,10 @@ in the entry: an entry answers the question asked and stops.
    the render is killed at, directly and with no slack. SOLVE_BUDGET is yours:
    pick what one solve needs, knowing it cannot outlive the render that
    contains it. Record both in the entry's `## Specified` callout as inline
-   expressions (rule 18), under the heading "Granted at the prompt, {today}:" --
-   they were granted, not asked for, and a callout that says "Asked of the
-   user" above them describes a conversation that did not happen. e.g.
-   "Render budget `{{python}} f\"{{ENTRY_CEILING:.0f}}\"` s."
+   `footer()` prints all four at the foot of the page, so they do NOT go in the
+   `## Specified` callout -- that callout is for what the DESIGN was committed
+   to, and budgets in it crowd out the thing it exists for (rule 18). If nothing
+   else was specified, the callout says "None."
    If the work genuinely cannot fit, ask for more with `ask_specified` rather
    than writing a different number.
 2. Its code must recompute the answer, not restate it. Every number in prose is
@@ -518,7 +520,12 @@ def main(notebook_path, verbose=True, allow_refactor=False,
             proposal=json.dumps(proposal.model_dump(), indent=2),
             chapter=proposal.chapter, stem=stem, today=today,
             ceiling=f"{(ceiling if ceiling is not None else _default_ceiling or 200.0):.1f}",
-            solve=f"{(_default_solve or 60.0):.1f}")
+            solve=f"{(_default_solve or 60.0):.1f}",
+            # What the PROBE cost, for the footer. The page cannot derive these
+            # -- they belong to the `nb ask` run, not to the render -- so they
+            # are declared as literals and frozen with the entry.
+            pool=f"{(pool_total or pool or 0.0):.1f}",
+            spent=f"{max(0.0, (pool_total or pool or 0.0) - (pool or 0.0)):.1f}")
         contents = [{"role": "user", "parts": [{"text": brief}]}]
         # The scaffolder's own message -- which is the only place that says where
         # the vehicle goes. It used to be printed to the terminal and nowhere

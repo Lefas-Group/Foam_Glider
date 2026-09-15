@@ -8,10 +8,12 @@ there is no pause the process did not choose.
 
 import sys
 
-from ..config import MAX_TURNS, PROBE_POOL
+from ..config import MAX_CONSULTS, MAX_TURNS, PROBE_POOL
 from ..loop import Terminal, run
 from ..session import Session
-from ..tools.interact import ask_pool, ask_render_ceiling, render_stop
+from ..tools.interact import (ask_pool, ask_render_ceiling,
+                              confirm_assumptions, persist,
+                              render_stop)
 from ..preflight import check as preflight
 from .. import metrics
 from .common import setup, report
@@ -116,11 +118,63 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
             say(report(resp, f"turn {n + 1}") +
                   (f"  ->  {', '.join(calls)}" if calls else "  ->  (done)"))
 
-    try:
+    def probe_once():
+        """One pass of the loop, returning the proposal it ended with."""
         try:
             run(contents, make_config(), handlers,
                 transcript=notebook.transcript_path, max_turns=MAX_TURNS,
                 on_turn=on_turn)
+        except Terminal as t:
+            return t.payload
+        return None
+
+    try:
+        try:
+            proposal = probe_once()
+            if proposal is None:
+                raise Terminal(None)     # handled by the `gate is None` path
+
+            # Every assumption, put to the user before anything is built on it.
+            # A CORRECTION re-enters the probe rather than falling through to
+            # write: `findings` and `working_code` were computed under the old
+            # value, and a changed constant may recompute at render time but a
+            # changed METHOD cannot. Writing from them would launder a rejected
+            # assumption into an unchanged answer, which is worse than never
+            # having asked.
+            for _ in range(MAX_CONSULTS):
+                corrected = confirm_assumptions(proposal)
+                # ALWAYS, not only when corrected: `propose` wrote the file
+                # before raising, so the accepted-as-stated case still needs
+                # `_assumptions_confirmed` recorded or a resumed `nb write`
+                # would ask again.
+                persist(proposal, notebook)
+                if not corrected:
+                    break
+                if not session.probe_left:
+                    tell(f"\n  Corrected {', '.join(corrected)}, but the probe "
+                         f"pool is spent — the proposal on disk was computed "
+                         f"under the old value(s) and is not safe to write "
+                         f"from.\n  Re-run `nb ask` with a bigger pool.")
+                    run_metrics.close("assumption_corrected")
+                    return 1
+                tell(f"  re-probing — {', '.join(corrected)} corrected, so the "
+                     f"answer it found no longer follows")
+                contents.append({"role": "user", "parts": [{"text":
+                    "The user CORRECTED these assumptions:\n\n"
+                    + "\n".join(f"  {i.name} = {i.value}"
+                                for i in proposal.inputs
+                                if i.name in corrected)
+                    + "\n\nYour findings and working code were computed under "
+                      "the old values, so they no longer follow. Probe again "
+                      "with the corrected ones and propose afresh — do not "
+                      "reuse the previous answer."}]})
+                again = probe_once()
+                if again is None:
+                    break
+                proposal = again
+
+            t = Terminal(proposal)
+            raise t
         except Terminal as t:
             proposal = t.payload
             run_metrics.set(chapter=proposal.chapter,

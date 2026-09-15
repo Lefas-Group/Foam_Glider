@@ -73,6 +73,12 @@ ENTRY_FILE = re.compile(r"^\d{4}-\d{2}-\d{2}-")
 # 6 m/s, 0.5 deg, 10% -- and flagging those is noise. Measured on this notebook:
 # at two decimals the whole thing yields a handful of hits, nearly all real; at
 # one decimal it yields dozens, nearly all conditions.
+# The four an entry declares in its first cell, printed by footer(). Named
+# once because three rules need the same list: rule 2 must not read them as a
+# repeated block, rule 18 must refuse them in a callout, and the transcription
+# check must not read them as citations.
+BUDGET_NAMES = {"ENTRY_CEILING", "SOLVE_BUDGET", "PROBE_POOL", "PROBE_SPENT"}
+
 RESULT_NUMBER = re.compile(r"\d+\.\d{2,}")
 
 # Rule 27. Every top-level name `_notebook.py` binds -- its imports, its helpers
@@ -125,7 +131,7 @@ MACHINERY = _machinery_names()
 BOILERPLATE = re.compile(
     r"^(plt\.|ax\d?\.|fig, ax|fig\.|import |from |show_source\(|footer\(|"
     r"for s(ide)? in|\)|\]|\}|else:|try:|finally:|"
-    r"ENTRY_CEILING\s*=|SOLVE_BUDGET\s*=)"
+    r"ENTRY_CEILING\s*=|SOLVE_BUDGET\s*=|PROBE_POOL\s*=|PROBE_SPENT\s*=)"
 )
 BLOCK = 3  # consecutive code lines that count as a repeated block
 
@@ -1258,14 +1264,21 @@ def _budget_rules(root, chapters, entries):
                     f"budget, or ask for a bigger ceiling with ask_specified; "
                     f"do not raise ENTRY_CEILING yourself, it was granted"))
 
-        # 18: and says so where a reader looks, not only in code.
+        # 18, inverted. Budgets used to be REQUIRED in the Specified callout,
+        # on the reasoning that a granted number is a Specified input. True, but
+        # it crowded out the thing the callout exists for: an entry whose only
+        # Specified items were two budgets recorded nothing about its own
+        # design. `footer()` prints them now, from the declarations themselves,
+        # so the page still shows them and the callout is free again.
         spec = "".join(body for title, body in callouts_of(e.read_text())
                        if title == "Specified")
-        if found_c and ceiling is not None and "ENTRY_CEILING" not in spec:
+        named = sorted(n for n in BUDGET_NAMES if n in spec)
+        if named:
             problems.append(
-                (e, "the render budget is not in the `## Specified` callout — "
-                    "it was granted by the user at the prompt, so it is a "
-                    "Specified input like any other and belongs on the record"))
+                (e, f"declares {', '.join(named)} in the `## Specified` callout "
+                    f"— footer() prints the budgets now, so that callout is for "
+                    f"what the DESIGN was committed to. Delete the budget "
+                    f"item(s); if nothing else was specified, say `None.`"))
 
         # 17: what the frozen page actually cost.
         if ceiling is None:
@@ -1471,7 +1484,7 @@ def _transcribed(root, chapters, entries):
             if not RESULT_NUMBER.fullmatch(literal):
                 continue        # one decimal is a condition, not a result
             names = [t.id for t in node.targets if isinstance(t, ast.Name)]
-            if not names or set(names) & {"ENTRY_CEILING", "SOLVE_BUDGET"}:
+            if not names or set(names) & BUDGET_NAMES:
                 continue        # rule 28 requires these to be literal
             # A value the chapter's OWN model or analysis already contains is
             # a design constant of this vehicle, not a citation -- 0.15 is the

@@ -19,14 +19,6 @@ sink_rate = res["sink_rate"]
 
 **Answer.** The minimum sink rate improves to `{python} f"{sink_rate:.2f}"` m/s. The reduction in mass from the thinner foam lowers the required flight speed, which decreases the sink rate despite the thinner airfoils.
 
-::: {.callout-tip}
-## Specified
-Granted at the prompt, 2026-09-15:
-
-1. **Render budget**: `{python} f"{ENTRY_CEILING:.0f}"` s.
-2. **Solve budget**: `{python} f"{SOLVE_BUDGET:.0f}"` s.
-:::
-
 ::: {.callout-note}
 ## Assumed
 None.

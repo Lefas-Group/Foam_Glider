@@ -116,6 +116,87 @@ def ask_render_ceiling(default):
         default)
 
 
+def persist(proposal, notebook):
+    """
+    Re-write proposal.json, preserving the private `_` fields already on disk.
+
+    `propose` writes the file and THEN raises, so anything the gate changes
+    afterwards -- a corrected assumption -- exists only in memory, and the write
+    phase re-reads the file. Without this the confirmation would have looked
+    like it worked and changed nothing that mattered.
+    """
+    path = notebook.proposal_path
+    private = {}
+    if path.exists():
+        try:
+            private = {k: v for k, v in json.loads(path.read_text()).items()
+                       if k.startswith("_")}
+        except ValueError:
+            pass
+    out = proposal.model_dump()
+    out.update(private)
+    out["_assumptions_confirmed"] = True
+    path.write_text(json.dumps(out, indent=2) + "\n")
+
+
+def confirm_assumptions(proposal):
+    """
+    Show every assumption the probe made, and take corrections.
+
+    Returns the names corrected, so the caller knows whether the proposal still
+    stands. Assumptions were never confirmed before: `ask_specified` covers
+    inputs where a different answer changes WHAT IS BEING BUILT, and an
+    assumption is the other kind -- "assume and say what it costs". That is
+    defensible for the cost, and silent about the premise, so "point-mass with
+    fixed alpha" went into the record unexamined and an entry was built on it.
+
+    BATCHED, not asked one at a time, because per-assumption asking makes the
+    model judge which of its assumptions are load-bearing -- the judgement rule
+    4 exists because it gets it wrong -- and interrupts a run that has nothing
+    wrong with it. Here the user sees the whole set at once, including the ones
+    the model would not have thought to raise.
+
+    EOF and a blank line ACCEPT, following `ask_budget` rather than `_prompt`:
+    this is a confirmation with a safe default, not a question that must be
+    answered, and raising on EOF would kill every piped run.
+    """
+    assumed = [i for i in proposal.inputs if i.owner == "assumed"]
+    if not assumed:
+        return []
+
+    tell(f"\n{'─' * 72}\nASSUMPTIONS — confirm, or correct any\n{'─' * 72}")
+    for n, i in enumerate(assumed, 1):
+        tell(f"  {n}. {i.name}: {i.value or i.why}")
+    tell('\n  Enter accepts them. To correct one: "1: 12 mm"')
+    sys.stdout.write("> ")
+    sys.stdout.flush()
+    try:
+        line = sys.stdin.readline()
+    except KeyboardInterrupt:
+        raise SystemExit("cancelled at the prompt")
+    answer = (line or "").strip()
+    if not answer:
+        say("  answered   (accepted as stated)")
+        return []
+
+    corrected = []
+    for part in answer.split(";"):
+        head, _, value = part.partition(":")
+        try:
+            i = assumed[int(head.strip()) - 1]
+        except (ValueError, IndexError):
+            tell(f"  ignored    {part.strip()!r} — expected \"N: value\"")
+            continue
+        # The same shape `ask_specified` produces, so nothing downstream has to
+        # learn a second one: the user answered it, so they own it, and an input
+        # they chose is Specified by definition.
+        i.kind, i.owner, i.value = "specified", "user", value.strip()
+        i.why = "corrected at the prompt"
+        corrected.append(i.name)
+        say(f"  answered   {i.name} -> {i.value}")
+    return corrected
+
+
 def ask_specified(session, name, why, kind="specified", options=""):
     """
     A Specified input: a different answer changes WHAT WE ARE BUILDING.

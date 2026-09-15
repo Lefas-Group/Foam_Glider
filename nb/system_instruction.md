@@ -104,7 +104,7 @@ prose is already written.
 15  a table is at most 6×4, excluding the header
 16  a budgeted chapter does not override SOLVE_BUDGET at a call site
 17  a frozen entry stays under the ENTRY_CEILING it declares
-18  budgets are declared in the ENTRY's Specified callout — never the index's
+18  budgets are declared in the entry's first cell — footer() prints them, not a callout
 19  a chapter with an entry defines its vehicle in `_model.py`
 20  (warning) an entry-local function reaching the vehicle belongs in _analysis.py
 21  (warning) an `_analysis.py` function nothing calls is dead
