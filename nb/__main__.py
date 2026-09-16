@@ -1,10 +1,13 @@
 """
     nb new   <notebook> [title]              scaffold a notebook, then prove it
     nb ask   <notebook> "<question>"         probe, write, render, commit
+             [--detach] [--answers f.json]    …detached, answered via the board
     nb write <notebook> [--allow-refactor]   resume from an approved proposal
              [--accept-refactor]             …and commit a diff you have read
     nb view  <notebook> [--force]            render the whole site
     nb eval  <notebook>                      what each model actually did
+    nb board <notebook>                      N agents, one terminal
+    nb answer <notebook> [run] "<value>"     reply to a waiting run
     nb watch <notebook> [--all]              follow the detail, live
 
 The terminal carries the conversation only -- the questions, the milestones, the
@@ -33,6 +36,23 @@ import sys
 USAGE = __doc__.strip()
 
 
+def _answers(argv):
+    """`--answers file.json`: replies supplied up front, so the board is not
+    interrupted for anything already decided."""
+    if "--answers" not in argv:
+        return None
+    i = argv.index("--answers")
+    if i + 1 >= len(argv):
+        return None
+    import json
+    import pathlib
+    try:
+        return json.loads(pathlib.Path(argv[i + 1]).read_text())
+    except (OSError, ValueError) as e:
+        print(f"  --answers: {e}")
+        return None
+
+
 def main(argv):
     # A run is minutes long and prints one line per turn. Block-buffered to a
     # file or a pipe that is a silent hang, which is indistinguishable from a
@@ -59,7 +79,11 @@ def main(argv):
             print(USAGE)
             return 2
         from .phases.ask import main as ask
-        return ask(rest[0], " ".join(rest[1:]))
+        detach = "--detach" in rest
+        answers = _answers(rest)
+        words = [r for r in rest[1:]
+                 if not r.startswith("--") and not r.endswith(".json")]
+        return ask(rest[0], " ".join(words), detach=detach, answers=answers)
 
     if cmd == "write":
         if not rest:
@@ -68,7 +92,8 @@ def main(argv):
         from .phases.write import main as write
         return write(rest[0],
                      allow_refactor="--allow-refactor" in rest,
-                     accept_refactor="--accept-refactor" in rest)
+                     accept_refactor="--accept-refactor" in rest,
+                     detach="--detach" in rest)
 
     if cmd == "watch":
         if not rest:
@@ -76,6 +101,20 @@ def main(argv):
             return 2
         from .phases.watch import main as watch
         return watch(rest)
+
+    if cmd == "board":
+        if not rest:
+            print(USAGE)
+            return 2
+        from .phases.board import main as board
+        return board(rest)
+
+    if cmd == "answer":
+        if len(rest) < 2:
+            print(USAGE)
+            return 2
+        from .phases.answer import main as answer
+        return answer(rest)
 
     if cmd == "eval":
         if not rest:

@@ -113,8 +113,36 @@ def _claim(notebook, slug):
     return stub, name, target
 
 
+def _fork_sources(notebook, parent):
+    """
+    A parent chapter's `_model.py` and `_analysis.py` AT THE LAST COMMIT.
+
+    From `git show`, never the working tree, for two reasons that are really
+    one. A fork taken while the parent is dirty copies another agent's
+    unfinished work -- which is how parallel chapter work would corrupt itself.
+    And rule 31 makes the copy declare the commit it was taken at, so reading
+    the tree would make that header a lie even single-threaded.
+
+    The CODE shells to git, never the agent: `shell.py` keeps `git show` off
+    the allowlist because the first run of this system spent eight turns on git
+    archaeology. This is the same bargain check.py already makes.
+    """
+    import subprocess
+    repo = notebook.repo
+    head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=repo,
+                          capture_output=True, text=True)
+    ref = head.stdout.strip() or "HEAD"
+    out = {}
+    for fname in ("_model.py", "_analysis.py"):
+        rel = (notebook.chapters_dir / parent / fname).relative_to(repo)
+        r = subprocess.run(["git", "show", f"{ref}:{rel}"], cwd=repo,
+                           capture_output=True, text=True)
+        out[fname] = r.stdout if r.returncode == 0 else None
+    return ref, out
+
+
 def create_chapter(notebook, name, title, defines="", claim=True,
-                   number=None):
+                   number=None, fork_from=""):
     """
     Create `chapters/<name>/` with index.qmd, _model.qmd, _model.py, _analysis.py.
 
@@ -151,14 +179,36 @@ def create_chapter(notebook, name, title, defines="", claim=True,
 
     (target / "_model.qmd").write_text(sub((SCAFFOLD / "_model.qmd.tmpl").read_text()))
     (target / "index.qmd").write_text(sub((SCAFFOLD / "index.qmd.tmpl").read_text()))
-    (target / "_model.py").write_text((SCAFFOLD / "_model.py.tmpl").read_text())
-    (target / "_analysis.py").write_text("")
+    forked = ""
+    if fork_from:
+        ref, src = _fork_sources(notebook, fork_from)
+        if src.get("_model.py"):
+            header = (f"# Forked from chapters/{fork_from}/_model.py at {ref}.\n"
+                      f"#\n"
+                      f"# Differences, all deliberate:\n"
+                      f"#   * TODO: one line per change you make below.\n"
+                      f"#\n"
+                      f"# Nothing else differs. An empty `diff` against the "
+                      f"parent everywhere else\n# is the positive check that "
+                      f"says so.\n")
+            (target / "_model.py").write_text(header + src["_model.py"])
+            (target / "_analysis.py").write_text(src.get("_analysis.py") or "")
+            forked = (f"\n\n_model.py and _analysis.py were COPIED from "
+                      f"chapters/{fork_from}/ at commit {ref} -- from the "
+                      f"commit, not the working tree, so nothing half-finished "
+                      f"came across. The rule 31 header is already there: "
+                      f"replace its TODO line with one line per deliberate "
+                      f"difference as you make them, and change nothing you "
+                      f"did not mean to.")
+    if not forked:
+        (target / "_model.py").write_text((SCAFFOLD / "_model.py.tmpl").read_text())
+        (target / "_analysis.py").write_text("")
 
     what = (f"claimed the empty scaffold chapters/{stub}/ as chapters/{name}/"
             if stub else f"created chapters/{name}/")
     return name, (
             f"{what} with index.qmd, _model.qmd, _model.py and an empty "
-            f"_analysis.py.\n\n"
+            f"_analysis.py.{forked}\n\n"
             f"If you build this chapter's _model.py by COPYING an earlier "
             f"chapter's, say so at the top of the file before you render "
             f"anything (rule 31): \"# Forked from chapters/NN-name/_model.py "

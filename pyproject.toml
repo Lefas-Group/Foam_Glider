@@ -25,6 +25,11 @@ nb = [
     "pydantic>=2.11",
     # MCP filesystem server client. Pinned <2 to match the existing group.
     "mcp>=1.2,<2",
+    # The one dependency on the READING side: `nb board` and `nb watch`.
+    # Hand-rolled ANSI was tried and shipped an invisible bug -- `\x1b[2m` is
+    # correct and macOS Terminal.app ignores it, so the dimming never appeared.
+    # rich asks the terminal what it supports, and strips styling when piped.
+    "rich>=13",
 ]
 # Pinned to 1.x: the vendored server uses mcp.server.fastmcp.FastMCP,
 # which 2.x renamed to MCPServer.

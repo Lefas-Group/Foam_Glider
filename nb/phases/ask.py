@@ -18,6 +18,7 @@ from ..preflight import check as preflight
 from .. import metrics
 from .common import setup, report, spoken_calls
 from ..log import open_log, say, tell
+from .. import runstate
 
 BRIEF = """\
 You are in the ASK phase.
@@ -74,15 +75,28 @@ through the notebook for why -- the traceback already says.
 """
 
 def main(notebook_path, question, carry_queue=None, verbose=True,
-         pool=None, ceiling=None):
+         pool=None, ceiling=None, run_id=None, detach=False,
+         answers=None):
     bad = preflight(notebook_path)
     if bad:
         for b in bad:
             tell(f"  {b}")
         return 1
 
-    from ..config import Notebook
-    notebook = Notebook(notebook_path)
+    from ..config import Notebook, new_run_id
+    # A NEW run, always: `ask` starts one. `write` resuming afterwards takes the
+    # most recent, which is this one, so the two phases share a directory
+    # without passing an id between them.
+    notebook = Notebook(notebook_path, run_id=run_id or new_run_id())
+    runstate.write(notebook, phase="ask", question=question,
+                   chapter=None, turn=0, waiting_on=None)
+    if detach:
+        # Nobody is at this terminal: every question goes to the run directory
+        # and waits there. `nb board` or `nb answer` replies.
+        from ..mailbox import Mailbox
+        from ..tools.interact import use_mailbox
+        use_mailbox(Mailbox(notebook, answers=answers))
+        tell(f"  run       {notebook.run_id}")
     open_log(notebook, "ask", question)
     run_metrics = metrics.Run(notebook, "ask", question)
     # Asked only at the head of a chain. A queued follow-on, and the write
@@ -117,6 +131,7 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
             calls = spoken_calls(turn)
             say(report(resp, f"turn {n + 1}") +
                 (f"  ->  {', '.join(calls)}" if calls else "  ->  (done)"))
+        runstate.write(notebook, turn=n + 1, chapter=session.chapter)
 
     def probe_once():
         """One pass of the loop, returning the proposal it ended with."""
@@ -228,7 +243,8 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
     from .write import main as write
     # header=False: this process already said which notebook and where the
     # telemetry is. Saying it twice made one question look like two runs.
-    return write(notebook_path, verbose=verbose, header=False)
+    return write(notebook_path, verbose=verbose, header=False,
+                 run_id=notebook.run_id, detach=detach, answers=answers)
 
 
 if __name__ == "__main__":

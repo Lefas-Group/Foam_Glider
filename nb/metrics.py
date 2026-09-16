@@ -49,7 +49,13 @@ ADDED = (("lint_calls", "INTEGER"),)
 
 def _db(notebook):
     notebook.scratch.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(notebook.scratch / "nb-metrics.db")
+    con = sqlite3.connect(notebook.scratch / "nb-metrics.db", timeout=10)
+    # The db is shared by every run in the notebook, so with agents in parallel
+    # there are several writers. WAL lets readers and one writer proceed at
+    # once; busy_timeout makes a second writer wait rather than raise
+    # `database is locked`. Both are per-connection and idempotent.
+    con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA busy_timeout=5000")
     con.execute(SCHEMA)
     for col, typ in ADDED:
         try:

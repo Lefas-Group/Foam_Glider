@@ -1,0 +1,73 @@
+"""
+`run.json` -- what a run IS, while it is still running.
+
+`nb-metrics.db` records a run when it `close()`s, so a running agent has no row
+at all: the db is history and cannot answer "what is happening right now". With
+one agent that gap was covered by the pid in `status.log`'s header, which
+`nb watch` parses to tell a wedged run from a dead one. With eight it is not.
+
+So each run publishes a small document, rewritten at every phase transition:
+
+    {"run": "20260916-a3f2", "pid": 81234, "chapter": "04-thinner-foam",
+     "question": "how stable is it?", "phase": "ask", "turn": 7,
+     "started": 1758030000.0, "waiting_on": null}
+
+`nb board` draws its table from these, and a coordinator agent reads the same
+files -- one registry, not two mechanisms. `waiting_on` names a pending question
+so "who is blocked" is answerable without opening every run directory.
+
+Written with a temp file and `os.replace`, which is atomic on POSIX: a reader
+polling every 250 ms must never catch a half-written document. This is the one
+place in the system where a reader and a writer are guaranteed to race.
+"""
+
+import json
+import os
+import time
+
+
+def write(notebook, **fields):
+    """Merge `fields` into the run's state document. Never raises."""
+    state = notebook.run_state
+    try:
+        state.parent.mkdir(parents=True, exist_ok=True)
+        current = read(notebook)
+        current.update(fields)
+        current.setdefault("run", notebook.run_id)
+        current.setdefault("pid", os.getpid())
+        current.setdefault("started", time.time())
+        current["updated"] = time.time()
+        tmp = state.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(current, indent=1) + "\n")
+        os.replace(tmp, state)
+        return current
+    except OSError:
+        # Telemetry must never be able to fail a run. A board that cannot see a
+        # run is a worse outcome than a run that stops, but only slightly, and
+        # the run is the thing with the value in it.
+        return {}
+
+
+def read(notebook_or_dir):
+    """The state document, or {} if absent or mid-write."""
+    d = getattr(notebook_or_dir, "run", notebook_or_dir)
+    try:
+        return json.loads((d / "run.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def alive(state):
+    """True if the pid exists, False if not, None if we cannot tell."""
+    pid = state.get("pid")
+    if not pid:
+        return None
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return None

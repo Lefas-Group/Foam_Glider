@@ -28,6 +28,7 @@ from . import verify as verify_phase
 from .view import site
 from .common import setup, report, spoken_calls
 from ..log import open_log, say, tell
+from .. import runstate
 
 BRIEF = """\
 You are in the WRITE phase. The proposal below was approved. Write the entry.
@@ -443,14 +444,20 @@ def _commit(notebook, chapter, stem, entry_path, title, extra_paths=()):
 
 
 def main(notebook_path, verbose=True, allow_refactor=False,
-         accept_refactor=False, header=True):
+         accept_refactor=False, header=True, run_id=None,
+         detach=False, answers=None):
     bad = preflight(notebook_path)
     if bad:
         for b in bad:
             tell(f"  {b}")
         return 1
 
-    notebook = Notebook(notebook_path)
+    notebook = Notebook(notebook_path, run_id=run_id)
+    runstate.write(notebook, phase="write")
+    if detach:
+        from ..mailbox import Mailbox
+        from ..tools.interact import use_mailbox
+        use_mailbox(Mailbox(notebook, answers=answers))
     # Before open_log, deliberately: there is no run to log against, and the
     # log's separator wants a title that only the proposal can supply.
     if not notebook.proposal_path.exists():
@@ -496,7 +503,8 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         # may have claimed an empty scaffold chapter instead of adding a sibling.
         proposal.chapter, chapter_msg = create_chapter(
             notebook, proposal.chapter,
-            proposal.chapter_title or proposal.title, proposal.chapter_defines)
+            proposal.chapter_title or proposal.title, proposal.chapter_defines,
+            fork_from=proposal.forked_from)
         tell(f"  chapter   {chapter_msg.splitlines()[0]}")
         if chapter_msg.startswith("rejected"):
             return 1
@@ -567,6 +575,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                 calls = spoken_calls(turn)
                 say(report(resp, f"turn {n + 1}") +
                     (f"  ->  {', '.join(calls)}" if calls else "  ->  (done)"))
+            runstate.write(notebook, turn=n + 1, chapter=proposal.chapter)
 
         first_pass = None
 

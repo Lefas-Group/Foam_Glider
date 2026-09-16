@@ -259,7 +259,26 @@ if not getattr(asb.Opti.solve, "_is_budgeted", False):
             # Merged, never assigned: a caller passing its own solver options
             # must not lose them to the budget.
             options = dict(kwargs.get("options") or {})
-            options.setdefault("ipopt.max_wall_time", seconds)
+            # WALL TIME ONLY OUTSIDE A KERNEL -- that is, in a probe and not in
+            # a render. The two are different failures.
+            #
+            # In a probe, being killed for overrunning the wall budget IS the
+            # budget working: the agent asked for 15 s, took longer, is told
+            # so, raises `budget_s` and re-probes. Cheap and self-correcting.
+            #
+            # In a render it is destructive for a reason that has nothing to do
+            # with budgets. A failed render is handed to the model as an error
+            # to FIX, so a solve slowed by a neighbour -- or by a background
+            # compile -- presents as a bug in an entry that is correct, and the
+            # model may edit it to fix a race. The retry then renders cleanly
+            # and the spurious edit ships.
+            #
+            # The headroom is already thin without any parallelism: the
+            # heaviest entries render in 11-13 s against a 15 s SOLVE_BUDGET.
+            # A render stays bounded by max_cpu_time above and by the render
+            # deadline outside it, so nothing here is unbounded.
+            if not globals().get("_IN_KERNEL"):
+                options.setdefault("ipopt.max_wall_time", seconds)
             kwargs["options"] = options
         # COUNTED HERE, because this is the only place every solve passes
         # through. `aero_cost` was initialised, read by aero_report() and by

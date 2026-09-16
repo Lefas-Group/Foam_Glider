@@ -126,19 +126,86 @@ API_TIMEOUT_MS = 300_000
 # 200 s, and the notebook won every time.
 
 
+def new_run_id():
+    """
+    Sortable, short, and unique enough: `20260916-145233-a3f2`.
+
+    The TIME is in it, not just the date. A first version used `%Y%m%d-` plus
+    four random hex, so two runs on the same day sorted by their random suffix
+    and "the most recent run" resolved to whichever happened to sort last --
+    which `nb write` then resumed. Caught by a detached run being answered into
+    the wrong directory.
+    """
+    import datetime
+    import secrets
+    return (datetime.datetime.now().strftime("%Y%m%d-%H%M%S-")
+            + secrets.token_hex(2))
+
+
 class Notebook:
     """Every path the system needs, derived from the notebook root."""
 
-    def __init__(self, root):
+    def __init__(self, root, run_id=None):
         self.root = pathlib.Path(root).resolve()
         if not (self.root / "chapters").is_dir():
             raise SystemExit(f"{self.root} is not a notebook (no chapters/)")
         self.chapters_dir = self.root / "chapters"
         self.freeze = self.root / "_freeze" / "chapters"
         self.scratch = self.root / "_scratch"
-        self.run = self.scratch / "run"
+        # PER RUN, because `_scratch/run/` assumed one writer: a second agent
+        # overwrote the first's proposal.json -- its only resume point -- and,
+        # worse, its probe script, which is WRITTEN AND THEN EXECUTED. Two
+        # agents probing within a second and one runs the other's code,
+        # attributing the answer to the wrong question, silently.
+        #
+        # `run_id=None` resolves to the most recent existing run, so `nb write`
+        # stays one command and a single-agent session never sees an id.
+        self.run_id = run_id or self._latest_run() or new_run_id()
+        self.run = self.scratch / "runs" / self.run_id
         # freezediff resolves git paths against the notebook's parent.
         self.repo = self.root.parent
+
+    def _latest_run(self):
+        """
+        The most recently TOUCHED run, by mtime rather than by name.
+
+        Belt and braces with the sortable id above: an id is only as ordered as
+        the clock that made it, and a directory copied or restored keeps its
+        name while getting a new mtime. What `nb write` wants is "the run I was
+        just in", which is a fact about the filesystem.
+        """
+        d = self.scratch / "runs"
+        if not d.is_dir():
+            return None
+        runs = [p for p in d.iterdir() if p.is_dir()]
+        if not runs:
+            return None
+        return max(runs, key=lambda p: p.stat().st_mtime).name
+
+    def runs(self):
+        """Every run directory, newest first -- what `nb board` enumerates."""
+        d = self.scratch / "runs"
+        if not d.is_dir():
+            return []
+        return sorted((p for p in d.iterdir() if p.is_dir()),
+                      key=lambda p: p.name, reverse=True)
+
+    @property
+    def run_state(self):
+        """The live registry: what this run is, and what it is waiting for."""
+        return self.run / "run.json"
+
+    @property
+    def question_path(self):
+        return self.run / "question.json"
+
+    @property
+    def answer_path(self):
+        return self.run / "answer.json"
+
+    @property
+    def probe_script(self):
+        return self.run / "probe.py"
 
     @property
     def proposal_path(self):

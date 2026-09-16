@@ -101,6 +101,15 @@ class Proposal(BaseModel):
             "Only for route='new_chapter'. The CHAPTER's name, two or three "
             "words in the style of 'Flight path' or 'Chosen throw' — not the "
             "entry's question."))
+    forked_from: str = Field(
+        default="",
+        description=(
+            "Only for route='new_chapter', and only when this chapter's vehicle "
+            "is a COPY of an existing one: the chapter directory it is copied "
+            "from, e.g. '03-unswept-c4'. The copy is then made for you, from "
+            "the last commit rather than the working tree, with the header "
+            "rule 31 requires already written. Leave empty for a genuinely new "
+            "aircraft."))
     chapter_defines: str = Field(
         default="",
         description=(

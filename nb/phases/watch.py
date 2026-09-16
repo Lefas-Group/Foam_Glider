@@ -34,7 +34,6 @@ DEFAULT_QUIET = 120.0
 # it would be noise to all three. The reader is the one that knows it is
 # attached to a terminal, so the reader styles. Same split as the staleness
 # warning below.
-DIM, RESET = "\x1b[2m", "\x1b[0m"
 GUTTER = "│"
 
 PID = re.compile(r"\bpid (\d+)\b")
@@ -56,14 +55,34 @@ def _alive(pid):
         return None
 
 
-def _styled(text):
-    """Dim the model's reasoning so the run's own report stands out."""
-    out = []
-    for line in text.splitlines(keepends=True):
-        body = line.rstrip("\n")
-        out.append(f"{DIM}{body}{RESET}" + line[len(body):]
-                   if body.lstrip().startswith(GUTTER) else line)
-    return "".join(out)
+def _console():
+    """A rich console, or None when rich is unavailable."""
+    try:
+        from rich.console import Console
+    except ImportError:
+        return None
+    return Console(soft_wrap=True)
+
+
+def _emit(console, text):
+    """
+    Print, dimming the model's reasoning so the run's own report stands out.
+
+    Through `rich` rather than by hand. The hand-rolled version emitted
+    `\x1b[2m`, which is correct and which macOS Terminal.app ignores, so the
+    dimming never appeared and nothing in code review could show that. A library
+    that asks the terminal what it supports is the fix; `dim` degrades to a grey
+    where faint is unsupported, and to nothing at all when piped.
+    """
+    if console is None:
+        sys.stdout.write(text)
+        sys.stdout.flush()
+        return
+    for line in text.splitlines():
+        if line.lstrip().startswith(GUTTER):
+            console.print(line, style="grey50", highlight=False)
+        else:
+            console.print(line, highlight=False, markup=False)
 
 
 def _quiet_note(idle, limit, pid):
@@ -95,7 +114,7 @@ def follow(path, from_start=False, poll=0.25):
     handle, size = None, 0
     pid, limit, last, warned = None, None, time.time(), False
     pending = ""
-    colour = sys.stdout.isatty()
+    console = _console()
     try:
         while True:
             if handle is None:
@@ -115,8 +134,7 @@ def follow(path, from_start=False, poll=0.25):
                 if not chunk.endswith("\n"):
                     chunk, _, pending = chunk.rpartition("\n")
                     chunk += "\n" if chunk else ""
-                sys.stdout.write(_styled(chunk) if colour else chunk)
-                sys.stdout.flush()
+                _emit(console, chunk)
                 # The run tells us who it is and what it is waiting for.
                 for m in PID.finditer(chunk):
                     pid = int(m.group(1))
@@ -148,7 +166,8 @@ def main(argv):
     if not argv:
         print("usage: uv run --group nb python -m nb watch <notebook> [--all]")
         return 2
-    notebook = Notebook(argv[0])
+    notebook = Notebook(argv[0], run_id=argv[1] if len(argv) > 1
+                        and not argv[1].startswith("--") else None)
     log = notebook.run / "status.log"
     tell(f"  watching   {log}"
          f"{'' if log.exists() else '  (waiting for a run to start)'}")

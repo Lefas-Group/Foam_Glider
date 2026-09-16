@@ -117,11 +117,33 @@ def render(notebook, target=""):
                        if d.is_dir()))
             if path == notebook.root or q == path or path in q.parents]
     say(f"  render    deadline {deadline:.0f} s ({len(todo)} page(s) to execute)")
-    r = lint.render_quarto(path, notebook.root, cwd=notebook.root)
-    out = (r.stdout or "") + (r.stderr or "")
-    if r.returncode == 0:
-        return tail(f"render ok.\n{out}", 2000)
-    return tail(f"render FAILED (exit {r.returncode}):\n{out}")
+
+    # UNDER A LOCK, and retried once. Two renders on one project fail four
+    # trials out of four, on `_freeze/site_libs/`, which the Quarto project
+    # shares. The lock covers other agents; the retry covers what no lock
+    # inside `nb` can see -- a person running `quarto preview` in another
+    # terminal, which holds nothing and re-renders on every file change.
+    #
+    # Retrying is nearly free: the failure happens AFTER the page executes, so
+    # the freeze is already written and the second attempt is a cache hit,
+    # measured at 14 s. And it matters more than it looks, because a failed
+    # render is handed to the model as something to FIX -- so a race would
+    # otherwise present as a bug in an entry that is correct.
+    from ..locks import render_lock
+    for attempt in (1, 2):
+        with render_lock(notebook) as got:
+            if not got:
+                say("  render    proceeding without the lock — timed out "
+                    "waiting for another render")
+            r = lint.render_quarto(path, notebook.root, cwd=notebook.root)
+        out = (r.stdout or "") + (r.stderr or "")
+        if r.returncode == 0:
+            return tail(f"render ok.\n{out}", 2000)
+        if attempt == 1 and "site_libs" in out:
+            say("  render    site_libs race — retrying once (the freeze "
+                "survives, so this is a cache hit)")
+            continue
+        return tail(f"render FAILED (exit {r.returncode}):\n{out}")
 
 
 def check(notebook, chapter="", force_all=False, no_render=False):

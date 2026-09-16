@@ -6,11 +6,17 @@ SOLVE_BUDGET as the default on asb.Opti.solve, and a probe that wrote
 `import aerosandbox` directly would run outside it. A budget the model can skip
 by forgetting is not a budget, so the preamble is injected rather than asked for.
 
-Writes `_scratch/_nb_probe.py` rather than `_scratch/probe.py`: the latter is the
-name a PERSON uses for their own scratch file, and clobbering it mid-session
-would be its own small disaster. Nothing scaffolds it any more -- it is simply a
-name this tool stays off. The leading underscore keeps ours out of project
-renders, like everything else in `_scratch/`.
+Writes into the RUN's own directory, `_scratch/runs/<id>/probe.py`, and runs
+with that as the cwd. It used to be one shared `_scratch/_nb_probe.py`, written
+and then executed -- so two agents probing within a second of each other and one
+would run the other's code, attribute the answer to the wrong question, and say
+nothing. A per-run path removes the race without a lock: a probe reads the
+chapter's files and writes only here.
+
+The cwd matters as much as the path. A probe that saves a figure writes a
+relative filename, so it lands beside its own script rather than in a shared
+`_scratch/`. `_probe_base`'s `sys.path` insert is absolute, so it survives the
+move.
 """
 
 import os
@@ -22,8 +28,13 @@ from .. import budgets
 from ..log import say
 from ..text import tail
 
+# `_probe_base` lives in `_scratch/`, one level above the run directory the
+# script now sits in, so it has to be put on the path explicitly -- the cwd no
+# longer finds it. Absolute, because the probe's own cwd is the run directory
+# and a relative hop would break the moment anything changed it.
 PREAMBLE = (
     "# Written by `nb`. The chapter is loaded and the solve budget is armed.\n"
+    "import sys; sys.path.insert(0, {scratch!r})\n"
     "from _probe_base import *  # noqa: F403,F401\n"
     "\n"
 )
@@ -41,10 +52,11 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
                 f"The chapter decides which model is loaded, so it is never "
                 f"optional and never guessed.")
 
-    scratch = notebook.scratch
-    scratch.mkdir(parents=True, exist_ok=True)
-    script = scratch / "_nb_probe.py"
-    script.write_text(PREAMBLE + textwrap.dedent(question).strip() + "\n")
+    run_dir = notebook.run
+    run_dir.mkdir(parents=True, exist_ok=True)
+    script = notebook.probe_script
+    script.write_text(PREAMBLE.format(scratch=str(notebook.scratch))
+                      + textwrap.dedent(question).strip() + "\n")
 
     env = dict(os.environ, NB_CHAPTER=chapter)
     # Fallback only: with a session the grant below tightens this. One place
@@ -71,7 +83,7 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
     started = time.perf_counter()
     try:
         r = subprocess.run(["uv", "run", "python", script.name],
-                           cwd=scratch, env=env, capture_output=True,
+                           cwd=run_dir, env=env, capture_output=True,
                            text=True, timeout=timeout)
         out = (r.stdout or "") + (r.stderr or "")
         if r.returncode != 0:

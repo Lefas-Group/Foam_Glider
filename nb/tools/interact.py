@@ -17,9 +17,27 @@ from ..schema import Input, Proposal
 from ..log import say, tell
 
 
+# Set by `ask`/`write` when `--detach` is passed. None means a person is at the
+# terminal and nothing below changes -- the single-user path is untouched.
+MAILBOX = None
+
+
+def use_mailbox(mailbox):
+    global MAILBOX
+    MAILBOX = mailbox
+
+
 def _prompt(banner, body, hint):
     # tell, not say: a question is the one thing a run cannot continue without,
     # so it belongs on the stream a reader is guaranteed to be watching.
+    if MAILBOX is not None:
+        # Detached: nobody is here to type. The question goes to disk and this
+        # blocks until `nb board`, `nb answer` or a coordinator replies.
+        tell(f"\n{'─' * 72}\n{banner}\n{'─' * 72}")
+        tell(body)
+        tell(f"  waiting for an answer — {MAILBOX.notebook.question_path}")
+        return MAILBOX.ask("specified", banner, body)
+
     # One rule, one blank line, the question, then the caret with its hint on
     # the same line -- a hint on a line of its own read as another instruction
     # to follow rather than as a label for the box you type in.
@@ -66,6 +84,18 @@ def ask_budget(title, body, default):
     question and nothing else should get that default rather than a dead run.
     So EOF, Enter and anything unparseable all fall through to `default`.
     """
+    if MAILBOX is not None:
+        tell(f"\n{'─' * 72}\n{title}\n{'─' * 72}")
+        tell(body + "\n")
+        got = MAILBOX.ask("budget", title, body, default=default)
+        try:
+            value = float(str(got).strip())
+        except ValueError:
+            value = 0.0
+        value = value if value > 0 else default
+        say(f"  answered   {value:.0f}")
+        return value
+
     tell(f"\n{'─' * 72}\n{title}\n{'─' * 72}")
     tell(body + "\n")
     sys.stdout.write(f"  [{default:.0f}] > ")
@@ -167,13 +197,21 @@ def confirm_assumptions(proposal):
     for n, i in enumerate(assumed, 1):
         tell(f"  {n}. {i.name}: {i.value or i.why}")
     tell('\n  Enter accepts. Correct one with "1: 12 mm".')
-    sys.stdout.write("> ")
-    sys.stdout.flush()
-    try:
-        line = sys.stdin.readline()
-    except KeyboardInterrupt:
-        raise SystemExit("cancelled at the prompt")
-    answer = (line or "").strip()
+    if MAILBOX is not None:
+        # A confirmation with a safe default: accepting is the right answer if
+        # nobody replies, so an unattended run is never stranded by one.
+        answer = MAILBOX.ask("assumptions", "assumptions",
+                             "\n".join(f"{n}. {i.name}: {i.value or i.why}"
+                                        for n, i in enumerate(assumed, 1)),
+                             default="").strip()
+    else:
+        sys.stdout.write("> ")
+        sys.stdout.flush()
+        try:
+            line = sys.stdin.readline()
+        except KeyboardInterrupt:
+            raise SystemExit("cancelled at the prompt")
+        answer = (line or "").strip()
     if not answer:
         say("  answered   (accepted as stated)")
         return []
