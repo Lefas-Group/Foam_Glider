@@ -16,6 +16,8 @@ uv run --group nb python -m nb write <notebook>              # resume a stop
 uv run --group nb python -m nb watch <notebook>              # follow the detail
 uv run --group nb python -m nb view  <notebook> [--force]    # build the site
 uv run --group nb python -m nb eval  <notebook>              # runs, by model
+uv run --group nb python -m nb board <notebook>              # N agents, one terminal
+uv run --group nb python -m nb answer <notebook> [run] "…"   # reply to a waiting run
 ```
 
 `ask` is one command per entry: probe, write, lint, render, verify, commit,
@@ -55,11 +57,54 @@ with **no slack**. All of it prints in the entry's footer:
 Rendered in 2.3 s (limit 20 s) · 1 aero solve (budget 15 s each) · explored in 55 s (limit 120 s)
 ```
 
-## Two tabs
+## Running several at once
+
+One agent per chapter, all from one terminal. Never two agents in the same
+chapter — `_analysis.py` is shared writable state and rule 2 compares code
+across entries.
+
+```bash
+# fire them off; each prints a run id and returns immediately
+for q in "how stiff is the spar?" "what is the tail volume?"; do
+  uv run --group nb python -m nb ask glider-notebook "$q" --detach &
+done
+
+# then watch and answer them, in one terminal
+uv run --group nb python -m nb board glider-notebook
+```
+
+`board` shows a live table — run, chapter, phase, turn, how long since it last
+moved, and whether it is running, waiting or done. When an agent asks something
+the table parks, the question appears, and what you type is the answer. Other
+runs keep working; only their display pauses.
+
+The board is a **view, not a supervisor**. It owns no agent. Kill it and the
+agent is still waiting; restart it and the question is still there; or answer
+from anywhere:
+
+```bash
+uv run --group nb python -m nb answer glider-notebook "3 mm"       # the only waiter
+uv run --group nb python -m nb answer glider-notebook <run> "3 mm" # when several wait
+```
+
+That independence is the point: a coordinating agent later writes the same
+`answer.json`, and the board keeps showing the conversation either way.
+
+Questions and answers live in `_scratch/runs/<id>/`, so they survive a restart
+and can be read afterwards. Pre-empt the common ones with
+`--answers answers.json`, a flat `{"name": "value"}` map consulted before
+anything is asked.
+
+**What is bounded:** renders take one lock per notebook and retry once, because
+two concurrent renders fail on `_freeze/site_libs/` — measured, 4 trials out of
+4. Probes are not locked; they write only inside their own run directory.
+
+## Where the detail goes
 
 The terminal carries the conversation — questions, failures, decisions, the
-finished entry. Everything else goes to `_scratch/run/status.log`; follow it
-with `nb watch`, which dims the reasoning and warns when a run stops advancing.
+finished entry. Everything else goes to `_scratch/runs/<id>/status.log`; follow
+it with `nb watch <notebook> [run]`, which dims the reasoning and warns when a
+run stops advancing. With no run id it follows the most recent.
 
 ## Structure
 
@@ -72,7 +117,8 @@ session.py   per-run state                      figures · shell · mcp_fs
 schema.py    Proposal and Input        vendor/  lint · check · freezediff
 prefix.py    the cached system prefix           notebook · probe_base
 metrics.py   one row per phase                  library_explorer · references/
-corpus.py    the regression test
+corpus.py    the regression test     locks.py    the render lock
+runstate.py  run.json, the live view  mailbox.py  question.json/answer.json
 ```
 
 `vendor/notebook.py` and `probe_base.py` are copied into each notebook and

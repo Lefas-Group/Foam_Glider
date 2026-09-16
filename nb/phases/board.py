@@ -31,7 +31,7 @@ from ..log import tell
 from .. import mailbox, runstate
 
 REFRESH = 0.5
-TAIL = 12          # log lines kept per run in the stream
+SHOWN = 10         # rows: live runs always, then the most recent finished ones
 
 
 def _runs(notebook):
@@ -45,7 +45,13 @@ def _runs(notebook):
         state["alive"] = runstate.alive(state)
         state["question"] = mailbox.pending(d)
         out.append(state)
-    return out
+    # Live runs first, whatever their age -- a board that scrolls a waiting
+    # agent off the bottom because six finished ones are newer would hide the
+    # one thing it exists to show. Finished runs are kept for context and
+    # capped, since every run ever is not context.
+    live = [r for r in out if r["alive"] is not False]
+    done = [r for r in out if r["alive"] is False]
+    return live + done[:max(0, SHOWN - len(live))]
 
 
 def _table(runs):
@@ -55,6 +61,7 @@ def _table(runs):
                                 ("chapter", "", "left"),
                                 ("phase", "", "left"),
                                 ("turn", "", "right"),
+                                ("for", "grey50", "right"),
                                 ("state", "", "left")):
         t.add_column(col, style=style or None, justify=justify)
     for r in runs:
@@ -64,8 +71,11 @@ def _table(runs):
             state = "[bold yellow]waiting[/bold yellow]"
         else:
             state = "[green]running[/green]"
+        since = time.time() - (r.get("updated") or r.get("started") or time.time())
         t.add_row(r.get("run", "?"), r.get("chapter") or "—",
-                  r.get("phase", "?"), str(r.get("turn", "")), state)
+                  r.get("phase", "?"), str(r.get("turn", "")),
+                  f"{since / 60:.0f}m" if since >= 60 else f"{since:.0f}s",
+                  state)
     return t
 
 
