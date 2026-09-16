@@ -129,7 +129,7 @@ def check(root):
 
 def main(argv):
     if not argv:
-        say("usage: python -m nb.preflight <notebook>")
+        say("usage: uv run --group nb python -m nb.preflight <notebook>")
         return 2
     bad = check(argv[0])
     for b in bad:

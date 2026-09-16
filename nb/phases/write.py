@@ -472,7 +472,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         # ONE line, and only the one a reader can act on. The notebook name is
         # what they just typed, and the entry title is the first line of the
         # finished prose printed at the end -- both were saying it twice.
-        tell(f"  detail    python -m nb watch {notebook.root.name}")
+        tell(f"  detail    uv run --group nb python -m nb watch {notebook.root.name}")
     say(f"  notebook  {notebook.root.name}")
     say(f"  entry     {proposal.title}")
 
@@ -743,8 +743,8 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                          f"Either the change is wrong, or the entries it moved\n"
                          f"  need superseding rather than silently updating. If "
                          f"the diff is presentation only and you have read it:\n"
-                         f"    python -m nb write {notebook.root.name} "
-                         f"--accept-refactor\n")
+                         f"    uv run --group nb python -m nb write "
+                         f"{notebook.root.name} --accept-refactor\n")
                     run_metrics.close("refactor_moved_answers")
                     return 1
                 accepted = moved
@@ -760,7 +760,8 @@ def main(notebook_path, verbose=True, allow_refactor=False,
              f"  chapter   {r.chapter}  ({r.entries} entr"
              f"{'y' if r.entries == 1 else 'ies'} would be re-proved)\n"
              f"  why       {r.why}\n\n  If that is right:\n"
-             f"    python -m nb write {notebook.root.name} --allow-refactor\n")
+             f"    uv run --group nb python -m nb write "
+             f"{notebook.root.name} --allow-refactor\n")
         return 2
     finally:
         fs.stop()

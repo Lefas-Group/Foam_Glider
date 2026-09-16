@@ -79,7 +79,7 @@ def build(notebook):
 
 def main(argv):
     if not argv:
-        print("usage: python -m nb.manifest <notebook>")
+        print("usage: uv run --group nb python -m nb.manifest <notebook>")
         return 2
     notebook = Notebook(argv[0])
     text = build(notebook)

@@ -59,8 +59,8 @@ def site(notebook, force=False, verbose=True, page=None,
             tell(f"              {h}")
         if len(holes) > 5:
             tell(f"              … and {len(holes) - 5} more")
-        tell(f"              `python -m nb view {notebook.root.name} --force` "
-              f"to rebuild them anyway")
+        tell(f"              `uv run --group nb python -m nb view "
+              f"{notebook.root.name} --force` to rebuild them anyway")
         return None
 
     import lint
@@ -101,7 +101,7 @@ def site(notebook, force=False, verbose=True, page=None,
 
 def main(argv):
     if not argv:
-        tell("usage: python -m nb view <notebook> [--force]")
+        tell("usage: uv run --group nb python -m nb view <notebook> [--force]")
         return 2
     force = "--force" in argv
     return 0 if site(Notebook(argv[0]), force=force,

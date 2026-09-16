@@ -384,7 +384,7 @@ def render_stop(proposal, notebook):
         "  re-solving all of them. That commitment is yours, not the entry.",
         "",
         f"  proposal  {notebook.proposal_path}",
-        f"  continue  python -m nb write {notebook.root.name}",
+        f"  continue  uv run --group nb python -m nb write {notebook.root.name}",
         "─" * 72,
         "",
     ])

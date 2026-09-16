@@ -88,7 +88,7 @@ and figure bytes against git — what a refactor must pass.
 
 ## Testing a change
 
-`python -m nb.corpus` lints all three notebooks against recorded counts. Every
+`uv run --group nb python -m nb.corpus` lints all three notebooks against recorded counts. Every
 rule here was calibrated with that sweep; by hand it got the wrong answer twice,
 once because a rule silently stopped applying, which looks exactly like a
 notebook that improved. A change that moves the counts updates them in the same

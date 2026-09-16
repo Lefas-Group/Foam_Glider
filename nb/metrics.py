@@ -142,7 +142,7 @@ def summary(notebook):
 def main(argv):
     from .config import Notebook
     if not argv:
-        print("usage: python -m nb.metrics <notebook>")
+        print("usage: uv run --group nb python -m nb.metrics <notebook>")
         return 2
     print(summary(Notebook(argv[0])))
     return 0

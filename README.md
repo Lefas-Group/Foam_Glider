@@ -100,7 +100,7 @@ uv run --group nb python -m nb ask glider-notebook "why is the tail so big?"
 
 It asks for two budgets, stops for anything Specified, confirms its assumptions,
 then writes, renders, verifies and commits one entry. Follow the detail in a
-second tab with `python -m nb watch glider-notebook`.
+second tab with `uv run --group nb python -m nb watch glider-notebook`.
 [`nb/README.md`](nb/README.md) covers the rest.
 
 ## Using the skill with Claude

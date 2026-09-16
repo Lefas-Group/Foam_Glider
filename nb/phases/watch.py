@@ -146,7 +146,7 @@ def follow(path, from_start=False, poll=0.25):
 
 def main(argv):
     if not argv:
-        print("usage: python -m nb watch <notebook> [--all]")
+        print("usage: uv run --group nb python -m nb watch <notebook> [--all]")
         return 2
     notebook = Notebook(argv[0])
     log = notebook.run / "status.log"

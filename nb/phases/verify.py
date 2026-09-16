@@ -97,10 +97,11 @@ def check(notebook, chapter, stem, entry_path=None, render_first=True):
 
 
 def main(argv):
-    """`python -m nb.phases.verify <notebook> <chapter> <stem>`"""
+    """`uv run --group nb python -m nb.phases.verify <notebook> <chapter> <stem>`"""
     from ..config import Notebook
     if len(argv) < 3:
-        tell("usage: python -m nb.phases.verify <notebook> <chapter> <stem>")
+        tell("usage: uv run --group nb python -m nb.phases.verify "
+             "<notebook> <chapter> <stem>")
         return 2
     notebook = Notebook(argv[0])
     result, note = check(notebook, argv[1], argv[2], render_first=False)

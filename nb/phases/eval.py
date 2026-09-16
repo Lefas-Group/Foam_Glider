@@ -41,7 +41,7 @@ ORDER BY model, phase
 
 def main(argv):
     if not argv:
-        tell("usage: python -m nb eval <notebook>")
+        tell("usage: uv run --group nb python -m nb eval <notebook>")
         return 2
     notebook = Notebook(argv[0])
     db = notebook.scratch / "nb-metrics.db"

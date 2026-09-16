@@ -101,7 +101,7 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
     session.render_ceiling = ceiling
 
     say(f"  notebook  {notebook.root.name}")
-    tell(f"  detail    python -m nb watch {notebook.root.name}")
+    tell(f"  detail    uv run --group nb python -m nb watch {notebook.root.name}")
     fs, handlers, make_config = setup(session, phase="ask")
     gate = None
     notebook.run.mkdir(parents=True, exist_ok=True)

@@ -173,7 +173,7 @@ def measure(notebook):
 
 def main(argv):
     if not argv:
-        print("usage: python -m nb.prefix <notebook> [--measure]")
+        print("usage: uv run --group nb python -m nb.prefix <notebook> [--measure]")
         return 2
     notebook = Notebook(argv[0])
     if "--measure" in argv:

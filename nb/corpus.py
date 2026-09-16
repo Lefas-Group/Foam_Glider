@@ -1,5 +1,6 @@
 """
-`python -m nb.corpus` -- the notebooks, linted, against counts on record.
+`uv run --group nb python -m nb.corpus` -- the notebooks, linted,
+against counts on record.
 
 The only regression test there is, and it exists because the alternative was
 measured and failed. Every lint rule in this system was calibrated by running it
