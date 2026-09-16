@@ -1,0 +1,51 @@
+---
+title: "What sink rate is achieved when all geometry parameters are optimized?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 20.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 120.0        # s granted for the probe
+PROBE_SPENT = 6.8      # s the probe actually used
+
+res = optimize_full_glider(verbose=False)
+sol = res["sol"]
+
+sink_rate = sol.value(res["sink_rate"])
+sweep = sol.value(res["sweep"])
+dihedral = sol.value(res["dihedral"])
+h_span = sol.value(res["h_span"])
+h_chord = sol.value(res["h_chord"])
+boom_len = sol.value(res["boom_len"])
+
+opt_airplane = sol.value(res["airplane"])
+```
+
+::: {.hero}
+[`{python} f"{sink_rate:.3f}"`]{.hero-value}
+[m/s sink rate]{.hero-label}
+:::
+
+**Answer.** The minimum sink rate drops to `{python} f"{sink_rate:.3f}"` m/s. The previously fixed tail areas and boom length were shrunk drastically (`{python} f"{h_span*1000:.0f}"` mm span, `{python} f"{h_chord*1000:.0f}"` mm chord, and `{python} f"{boom_len*1000:.0f}"` mm boom) to save mass and profile drag. To maintain the 10% static margin and lateral stability with such a small tail, the wing is swept forward (`{python} f"{sweep:.1f}"`&deg;) and given dihedral (`{python} f"{dihedral:.1f}"`&deg;).
+
+```{python}
+#| label: fig-fully-optimized
+#| fig-cap: "Top, front, and side views of the fully optimized glider. The tail and boom have shrunk dramatically to reduce drag and weight, while the wing is swept forward with dihedral to provide stability."
+import matplotlib.pyplot as plt
+import aerosandbox.numpy as np
+
+fig = plt.figure(figsize=(8, 6))
+axs = np.array([
+    [fig.add_subplot(2, 2, 1, projection='3d'), fig.add_subplot(2, 2, 2, projection='3d')],
+    [fig.add_subplot(2, 2, 3, projection='3d'), fig.add_subplot(2, 2, 4, projection='3d')]
+])
+opt_airplane.draw_three_view(axs=axs, show=False)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_full_glider)
+```
