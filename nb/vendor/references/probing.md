@@ -29,6 +29,19 @@ here or the discovery listing is empty.
 
 Set `CHAPTER` in `_probe_base.py` when working on a different chapter.
 
+**A surprise about a return type means READ, not probe again.** A `TypeError`
+about 0-dimensional arrays, a value that is an array where you expected a
+scalar, a CasADi object where you expected numpy — all of it is written down in
+`read_reference("aerosandbox")` under *Return types*. One run spent four probes
+and about eight turns establishing that `run_with_stability_derivatives()`
+returns `Cma` as a shape-(1,) array, which that page states outright. A probe
+costs a turn and a subprocess; the reference costs one tool call and answers
+several questions at once.
+
+The same applies before you start: if the question needs an AeroSandbox call
+this notebook has not used before, read the page first rather than discovering
+its shape one probe at a time.
+
 ## Figures from a probe
 
 There is no `probe.qmd`. The `probe` tool runs Python, and that is the whole

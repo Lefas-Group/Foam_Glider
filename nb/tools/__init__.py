@@ -145,12 +145,13 @@ def native_declarations():
                 "question folded in."),
             parameters_json_schema=Proposal.model_json_schema()),
         _decl("declare_refactor",
-              "Record WHY you changed an existing function in _model.py or "
-              "_analysis.py. Required whenever you edit a function that was "
-              "already there -- adding a new one needs nothing. One line. It "
-              "is shown to the user beside the diff when the chapter is "
-              "re-proved, and a change nobody can explain is one nobody can "
-              "approve.",
+              "Say why you changed a function that was already in _model.py "
+              "or _analysis.py. This is the PROCEDURE for editing shared code, "
+              "not a reason to avoid it: _analysis.py is yours to improve, "
+              "adding a function needs nothing at all, and editing one needs "
+              "only this one line. It is shown to the user beside the diff "
+              "when the chapter is re-proved. Copying logic into your entry to "
+              "avoid calling this leaves every later entry to copy it again.",
               {"function": dict(S, description="The function you changed"),
                "why": dict(S, description=(
                    "What changed and why, in one line"))},

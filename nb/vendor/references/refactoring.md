@@ -5,6 +5,25 @@ machinery must render it", and "deleting the freeze is not optional". This is th
 workflow and the reasoning behind it. Read it before touching a chapter's
 `_model.py` or `_analysis.py`.
 
+
+## Which file is guarded, and which is yours
+
+`_analysis.py` **is yours to edit.** Adding a function to it is free and is the
+normal way a chapter grows. Editing a function that is already there is a
+refactor: call `declare_refactor` with one line saying what changed and why,
+and the chapter is re-proved before the entry commits. That is a procedure, not
+a prohibition.
+
+`_model.py` is the guarded one. A write to it is refused once the chapter has
+entries, because it is the aircraft every one of them was solved against.
+
+The asymmetry needs saying because it has been read backwards. A run that
+wanted `optimize_glider_3mm` to return its trim velocity — a correct and small
+improvement — talked itself out of it with *"rule 2 says I can't touch
+`_analysis.py`"*. Rule 2 says the opposite: it tells you to PROMOTE repeated
+code INTO that file. The cost of getting this wrong is invisible: the entry
+carries its own copy of the workaround, and the next entry writes it again.
+
 ## Promotion is allowed; silent rewriting is not
 
 Promoting a helper means editing an earlier entry to call it. That is allowed,

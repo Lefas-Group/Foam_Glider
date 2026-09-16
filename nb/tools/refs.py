@@ -11,13 +11,24 @@ from ..text import head
 BOOK = REFERENCES / "aerosandbox-book"
 
 DOCS = {
+    # Each line has to name the SITUATION, not the subject. "Read before writing
+    # dynamics" did not fire for a run computing stability derivatives, which
+    # then spent four probes rediscovering a return type this page states
+    # outright. A description the model has to classify itself into is one it
+    # will classify itself out of.
     "why": "The failure behind each lint rule. Read before arguing one away.",
-    "refactoring": "Proving a _model.py/_analysis.py change moved nothing.",
+    "refactoring": "Which of _model.py and _analysis.py you may edit, and how "
+                   "to prove a change to either moved no answer.",
     "forking": "When a model change earns a new chapter, and how to copy one.",
-    "probing": "Scratch-probe mechanics, and timing/benchmark hygiene.",
+    "probing": "Scratch-probe mechanics, timing hygiene, and when to stop "
+               "probing and read instead.",
     "surrogates": "Lookup tables and cached polars: what level to cache at.",
-    "quarto": "Render and tooling traps. Read when a render fails.",
-    "aerosandbox": "API traps and solver behaviour. Read before writing dynamics.",
+    "quarto": "Render and tooling traps. Read when a render fails, or before "
+              "writing a figure or table you have not written here before.",
+    "aerosandbox": "API traps, return types and solver behaviour. Read BEFORE "
+                   "the first probe that calls an AeroSandbox function this "
+                   "notebook has not used yet — it answers in one call what "
+                   "costs several probes to find out.",
 }
 
 

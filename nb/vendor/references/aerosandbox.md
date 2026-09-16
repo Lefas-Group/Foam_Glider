@@ -36,6 +36,40 @@ Two results that look like bugs and are not:
   larger than the flat pattern it is cut from. Below the tracing uncertainty
   here, but it is why `area()` and a flat integral disagree on a twisted surface.
 
+**A stability derivative is only meaningful at the TRIM speed.** At chuck-glider
+Reynolds numbers the polars are strongly Re-dependent, so the derivatives move
+with velocity even at fixed `alpha`. Measured on the 3 mm glider at its optimum
+`alpha = 7.1°`, sweeping velocity alone:
+
+| V (m/s) | 1.94 | 2.50 | 3.65 | 5.00 | 10.00 |
+|---|---|---|---|---|---|
+| `Cma` | +0.392 | +0.605 | +0.749 | +0.457 | +0.023 |
+
+A 32x spread, and not monotonic — it peaks near 3.65 m/s. Re is ~16 000 at
+trim (c ~ 0.12 m), where the airfoil is nowhere near its high-Re behaviour. At
+`alpha = 4°` the same sweep changes the SIGN: -0.004 at 1.94, +0.024 at 5.0,
+-0.152 at 10.0.
+
+So a derivative evaluated at a convenient round number can report a stable
+aircraft that is not one. Solve for trim first, then evaluate there, and say
+which speed you used. This is the one on this page that publishes a wrong
+conclusion rather than merely wasting time.
+
+**An `asb.Opti` local cannot be recovered from `sol`.** `sol.value(V)` needs the
+variable OBJECT, so if the helper that built it did not return `V`, it is gone —
+there is no lookup by name. `optimize_glider_3mm` returns `sink_rate` and `mass`
+but neither `V` nor `gamma`, and a run that needed the trim speed spent a dozen
+turns reconstructing it.
+
+**A solve helper returns the variables it solved for**, not only the scalars
+derived from them. Returning `sol` alone is not enough for the same reason.
+
+**Do not fixed-point iterate on trim velocity.** `V <- sqrt(2W / (rho S CL))`
+diverges, because `D(V)` feeds back harder than the update damps: observed
+0.77 -> 10.2 -> NaN in three steps. `scipy.optimize.root_scalar` on
+`L(V) - W` with a bracket converges first time, and `AeroBuildup.run()` is cheap
+enough that the root-find costs nothing next to the `Opti` solve.
+
 **`x_np` is a point derivative, not a band average.** `run_with_stability_derivatives()`
 finite-differences over a hard-coded 0.001 rad. At chuck-glider Reynolds numbers
 `Cm` against `CL` is genuinely curved, so `x_np` varies with the angle you take

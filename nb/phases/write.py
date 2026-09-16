@@ -104,6 +104,12 @@ in the entry: an entry answers the question asked and stops.
    Comments in those two files explain the MODEL, not your reasoning about
    where to put things. They are rendered verbatim by the chapter index.
 
+   `_analysis.py` IS YOURS TO EDIT. Adding a function to it is free and is how
+   a chapter grows; `_model.py` is the guarded one, and a write to it is
+   refused once the chapter has entries. Rule 2 tells you to promote repeated
+   code INTO _analysis.py -- it has been read backwards, as a ban on touching
+   it, which leaves each entry carrying its own copy of the same workaround.
+
    If you EDIT a function that was already in either file -- as opposed to
    adding a new one -- call `declare_refactor` with one line saying what
    changed and why. Editing one means every sibling entry that reaches it gets
