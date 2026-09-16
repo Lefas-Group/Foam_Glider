@@ -1,7 +1,28 @@
 # Cross-chapter parallelism, and a coordinator instead of a person
 
-**Status: plan, not implemented.** Written after auditing the shared state a
-second `nb` process would touch.
+**Status: plan, not implemented.**
+
+The target is **N agents on different chapters of one notebook, launched and
+answered from a single terminal**, with a coordinator agent eventually taking
+over the answering while the user still watches.
+
+In one paragraph: give every run its own scratch directory, put a lock and a
+retry around **rendering only**, and move the three blocking prompts onto files so that
+`nb board` — one terminal — can show every run and answer any of them. Parallel
+runs become **correct** after the second of those and **usable** after the
+board. Files rather than pipes throughout, because a coordinator that restarts
+has to be able to pick the conversation back up, and scrollback is not state.
+
+One thing was measured rather than assumed: **two concurrent `quarto render`
+calls on one project fail, four times out of four**, on `_freeze/site_libs/` —
+without corrupting any value, and with the freeze surviving. That is why the fix
+is a lock plus a retry rather than either alone.
+
+One finding is not about parallelism at all: the heaviest entries render in
+**11–13 s against a 15 s solve budget**, so a background compile is already
+enough to kill a solve mid-render — which then asks the model to fix a
+non-existent bug in a correct entry. Worth fixing whether or not any of the rest
+is built.
 
 ---
 
@@ -19,7 +40,10 @@ and it is the only axis that makes a single design go faster. Cross-notebook
 parallelism works today, unmodified, but a notebook is an aircraft — it buys
 breadth, never depth.
 
-Three things stand in the way. They are independent and can land separately.
+**Three things stand in the way** — shared files, the question interface, and
+machine load — and they are independent enough to land separately. Two further
+sections follow them: where the coordinator's context comes from, and why
+chapters in a chain turn out to parallelise after all.
 
 ---
 
@@ -37,7 +61,7 @@ Three things stand in the way. They are independent and can land separately.
 `_nb_probe.py` is the dangerous one: it fails *silently and plausibly*, attributing
 one agent's result to another's question.
 
-### Option 1a — run-scoped scratch (recommended)
+### Run-scoped scratch
 
 ```
 _scratch/runs/<run-id>/   proposal.json · transcript.jsonl · status.log · probe.py
@@ -48,26 +72,14 @@ _scratch/nb-metrics.db    shared, with WAL
 every path (`proposal_path`, `transcript_path`, `run`), so this is a constructor
 argument threaded through, not a search-and-replace.
 
-- **For**: small, local, and each agent's artefacts stay inspectable afterwards
-  rather than being overwritten by the next run — which is useful even with one
-  agent.
-- **Against**: `nb write <notebook>` with no run id becomes ambiguous. Resolve by
-  defaulting to the most recent run, and printing the id it chose.
+Useful even single-user: each run's artefacts stay inspectable afterwards
+instead of being overwritten by the next one.
 
-### Option 1b — git worktree per agent
+The one wrinkle is that `nb write <notebook>` with no run id becomes ambiguous.
+Resolve it by defaulting to the most recent run and printing the id chosen, so
+the resume path stays a single command.
 
-Each agent gets `git worktree add` on its own branch; the coordinator merges.
-
-- **For**: total isolation — scratch, freeze, `.quarto`, git index. No locks
-  anywhere, and a failed agent is discarded by deleting a branch.
-- **Against**: `_freeze/` is **committed**, so every merge is a conflict over
-  generated JSON, and the 63 MB `.git` is copied per worktree. Worse, it hides
-  the collision rather than resolving it: two agents editing one chapter's
-  `_analysis.py` merge cleanly and produce an entry neither validated.
-- **Verdict**: rejected for chapters. It is the right answer for cross-*notebook*
-  work, which needs no isolation anyway.
-
-### sqlite, either way
+### sqlite
 
 `PRAGMA journal_mode=WAL` and `PRAGMA busy_timeout=5000` in `metrics._db`. Two
 lines, stdlib, and the standard answer for multi-process readers with occasional
@@ -101,7 +113,8 @@ interim an earlier draft proposed, and puts the question interface back on the
 critical path — for a different reason than a coordinator agent would: it is
 needed for the USER first, and a coordinator inherits it unchanged.
 
-**Agents never read stdin in this mode.** They write questions to files and
+**`--detach` implies the mailbox**, because a detached process has no terminal
+to read: one flag, not two. Agents in this mode never touch stdin. They write questions to files and
 poll; nothing owns their terminal, so nothing has to multiplex it.
 
 ```
@@ -154,17 +167,49 @@ being answered by something else — which is exactly the "observe the
 conversation" requirement, satisfied by construction rather than by a second
 mechanism.
 
-### Rendering the board: plain stdio, not a TUI
+### Rendering: adopt `rich`
 
-`rich` and `textual` would both give a nicer board — a live table, a fixed
-question pane. Neither is installed, and a full-screen TUI fights two things the
-project already relies on: scrollback *is* the record, and output must survive
-being piped. `watch.py` already does ANSI dimming by hand behind
-`sys.stdout.isatty()`, which is the pattern to follow.
+An earlier draft argued for plain stdio on the grounds that `watch.py` already
+dims by hand. That reasoning was weak, and the evidence is that the hand-rolled
+dimming **does not render**.
 
-Start line-oriented with a short `[chapter·phase]` tag. If N agents prove
-genuinely unreadable that way, `rich` is a contained upgrade to one file — but
-it should be earned by an unreadable board, not assumed.
+Diagnosed: the code is correct — `_styled()` does emit `\x1b[2m` around gutter
+lines, verified against real log lines — but **SGR 2 (faint) is the least
+supported ANSI attribute there is**, ignored outright by macOS Terminal.app
+among others. The immediate fix is one character class: `\x1b[90m` (bright
+black) or `\x1b[38;5;244m` (256-colour grey), both near-universal. That fix is
+worth making regardless of what follows, and it is independent of any
+dependency.
+
+But hand-rolled escapes are the wrong substrate for a board carrying eight
+concurrent runs, and the faint bug is a fair sample of why: every attribute is a
+guess about the terminal, tested only by looking.
+
+**`rich`, not `textual`.**
+
+| | |
+|---|---|
+| **`rich`** | a *printing* library. `Live` + `Table` gives a refreshing run table above a scrolling log, which is exactly the board's shape. Detects `isatty()` itself and strips styling when piped, so "output must survive a pipe" is handled by the library rather than by a flag we maintain. Synchronous — no restructuring. |
+| **`textual`** | a full TUI *application* framework: async event loop, widgets, mouse, focus. Justified for scrolling panes per agent and keyboard navigation; for a table plus a question prompt it is a large amount of machinery and an async rewrite of a synchronous program. |
+
+Recommended: **`rich` in the `nb` dependency group**, used in three places:
+
+- **`nb board`** — a `Live` table of runs (chapter, phase, turn, last line,
+  waiting-on) above the tagged stream, with the pending question rendered as a
+  panel rather than as prose competing with the log.
+- **`nb watch`** — replace the hand-rolled `DIM`/`RESET` and the manual
+  `isatty()` branch. This is where the bug is.
+- **the run's own conversation output** — the boxes drawn today with `─ * 72`
+  and the answer block assembled by `_readable()` are both doing by hand what
+  `rich` does properly, including the wrapping that currently assumes 80
+  columns because a file cannot be re-flowed.
+
+**What NOT to let it touch:** `status.log`. The log is plain text on purpose —
+read by `tail`, by `grep`, and eventually by a coordinator agent — and the
+writer/reader split (*"the run emits facts; `nb watch` decides when they have
+stopped arriving"*) depends on it staying that way. `rich` belongs on the
+reading side only. That constraint is the same one that made the dimming live
+in `watch.py` rather than in `log.py`, and it survives this change intact.
 
 ### Alternatives, and why not
 
@@ -173,6 +218,8 @@ it should be earned by an unreadable board, not assumed.
 | **named pipes (FIFO)** | no trace once read, so the user cannot observe or audit; open() blocks until both ends attach; nothing survives a restart |
 | **unix socket / local HTTP** | same observability objection, plus a server to supervise. Robust and standard, and still the wrong shape for a system whose state is files |
 | **one supervisor process owning stdin** | good UX, but it becomes a thing to keep alive, and a crashed supervisor takes every agent's question with it |
+| **`rich`** | **use** — for the board, `nb watch`, and the conversation output. Not for `status.log`, which stays plain. The one dependency this plan adds, and it is on the READING side only: nothing an agent writes depends on it |
+| **`textual`** | rejected — an async TUI framework where a live table suffices |
 | **Celery / RQ / Huey** | a broker for N≈4 local subprocesses |
 | **MCP server for answers** | the project already runs one for the filesystem; a second protocol where two JSON files suffice |
 
@@ -184,8 +231,8 @@ is needed at all. It does not replace it — anticipating every Specified input 
 exactly the judgement `ask_specified` exists because models get wrong.
 
 **Do not break the single-user path.** Interactive stdin stays the default; the
-mailbox is enabled by `--coordinator`, so a person at a terminal sees exactly
-what they see today.
+mailbox arrives with `--detach`, so a person at a terminal sees exactly what
+they see today.
 
 ## Problem 3 — load, and the deadline I removed
 
@@ -196,9 +243,27 @@ Two measurements already on record, both in the repo:
 - *"Never run two heavy probes at once. Both starve and neither number means
   anything."* (`probing.md`)
 
-The render deadline used to carry 4× slack for exactly this. **It was removed
-this week at the user's request**, so `ENTRY_CEILING` is now the execution time
-with no headroom. Under N-way concurrency, honest renders will be killed.
+The render deadline used to carry 4× slack for exactly this. **That slack was
+removed**, so `ENTRY_CEILING` is now execution time with no headroom. Under
+N-way concurrency, honest renders will be killed.
+
+**How much is actually serialised — measured, not assumed.** Across 16 runs with
+a real solve measurement, the **median CPU fraction of a phase is 2.3%**: solves
+of 1–17 s inside phases of 100–1400 s. The rest is API latency. Adding the
+render floor (~11 s of kernel and pandoc, ~3 renders an entry) gives roughly
+**48 s of serialisable work in a 458 s entry — about 10%**.
+
+| agents | utilisation of the serialised resource |
+|---|---|
+| 2 | 21% |
+| 4 | 42% |
+| 8 | 84% — queueing begins to bite |
+
+So serialising costs almost nothing up to four agents and starts to matter near
+eight, where the render lock becomes the ceiling. The machine has 8 cores
+and IPOPT is single-threaded, so four concurrent solves would not starve each
+other even unlocked. The lock is bought for *correctness* of the render, and it
+implies no probe serialisation at all.
 
 Options, in increasing order of honesty:
 
@@ -208,11 +273,110 @@ Options, in increasing order of honesty:
   active count read from the run directories. Honest and automatic, but the
   ceiling stops meaning "seconds of solving" and starts meaning something
   conditional.
-- **Serialise the expensive phases** behind one lock per notebook — probe
-  subprocesses and renders — so agents overlap on thinking (API latency, which
-  is most of the wall clock) and queue on CPU. **Recommended.** A run is
-  ~13 s/turn of API time against ~2–10 s of solving, so the overlap is where the
-  gain is; solving was never the bottleneck.
+- **Lock the RENDER only.** Not probes — see below. Agents overlap on thinking,
+  which is ~98% of the wall clock, and queue on the one operation that provably
+  breaks. **Recommended.**
+
+### Budgets under load: keep wall clock, fix only the kill
+
+Serialising probes was proposed for **budget accuracy**. It is not worth it, and
+neither is changing the clock the pool is charged in.
+
+Five things are measured in wall clock, and all of them over-charge under load:
+the probe pool, the probe watchdog, `ipopt.max_wall_time`, `aero_cost` (and so
+`render_cost_s`), and rule 17 judging the footer.
+
+**Measured inflation**, identical work against N competitors:
+
+| concurrent | CPU | wall |
+|---|---|---|
+| 1 | 0.92 s | 0.97 s |
+| 2 | 1.71 s | 1.89 s |
+| 4 | 1.87 s | 2.19 s |
+| 8 | 2.10 s | 3.29 s |
+
+CPU is **not** work-invariant either — 2.0× against wall's 2.3× at N=4 — because
+this machine has 4 performance and 4 efficiency cores, and displaced work lands
+on a slower one. There is no cheap clock that measures work.
+
+**So accept the inflation.** The decisive fact is what happens when the pool
+runs out, and it is *graceful*: the agent is told to *"propose now with what you
+have, and say in `rationale` what you did not get to."* The consequence of a
+shrinking effective budget is **less exploration, recorded in the entry** — not
+a failed run, not lost work. A sanity bound that degrades by writing down what
+it skipped is behaving correctly.
+
+Wall clock also keeps the prompt honest: *"seconds of exploring"* means elapsed
+seconds, which is what the person granting it experiences. Charging CPU would
+make the granted number mean something the user cannot observe.
+
+**One number to revisit.** The worst run on record spent 55 s of its 120 s pool
+unloaded; at N=4 that becomes ~124 s, just over. So heavy runs will start
+hitting the cap at four agents. Either widen the pool when fanning out, or
+accept the graceful degradation — both are defensible, and the prompt already
+takes a value per run, so a coordinator can simply grant more when it knows how
+many agents are running.
+
+**Killing a starved solve is fine in a PROBE and bad in a RENDER**, and the two
+go through the same `_budgeted_solve`.
+
+In a probe it is the budget working. The agent asked for 15 s, took longer, and
+gets told so; it raises `budget_s` and re-probes. Cheap, visible,
+self-correcting — there is no case for protecting it.
+
+In a render it is destructive for a reason that has nothing to do with budgets:
+a failed render **hands its traceback to the model and asks it to fix the
+cause** (`MAX_RENDER_FIXES`). A solve killed by a neighbour therefore presents
+as a code error in an entry that is correct, and the model may edit it to fix a
+race — after which the retry renders cleanly and the spurious edit ships.
+
+**And the headroom is already thin, today, without any parallelism.** The
+heaviest entries on record render in 11–13 s against a 15 s `SOLVE_BUDGET`:
+1.25×. A background compile is enough. Parallelism does not create this; it
+makes it routine.
+
+So: **apply the wall limit only outside a Jupyter kernel.** `_notebook.py`
+already computes `_IN_KERNEL`, which is exactly the probe/render distinction,
+and `_budgeted_solve` reads its globals at call time. Two lines:
+
+- **probe** — `max_cpu_time` *and* `ipopt.max_wall_time`, plus the watchdog. The
+  wall contract is enforced strictly, as granted.
+- **render** — `max_cpu_time` only. Still bounded twice: by CPU, and by the
+  render deadline, which has its own floor.
+
+Accounting stays in the clock the user granted. The kill switch is strict where
+being killed is cheap, and lenient where being killed corrupts an entry.
+
+### The lock is for rendering. Probes need run-scoping, not a lock
+
+Worth separating, because an earlier draft said "probe subprocesses and renders"
+and only the second was measured.
+
+**A render writes to project-level state.** `_freeze/site_libs/` and `.quarto/`
+belong to the Quarto *project*, and every render touches them even when
+rendering one page. That is the measured failure, and it cannot be made
+finer-grained than one lock per notebook, because the contended directory is
+per-notebook.
+
+**A probe writes to nothing shared, once run-scoped.** It reads `_notebook.py`,
+`_model.py` and `_analysis.py` — reads only — and writes exactly two things,
+both of which are collisions that run-scoping fixes rather than a lock:
+
+- `_scratch/_nb_probe.py`, the script, which is problem 1's dangerous case
+- `_scratch/_probe_fig.png`, the figure filename `probing.md` documents
+
+Move both under `_scratch/runs/<id>/` and set the probe's `cwd` there, and two
+probes share nothing. The `sys.path` insert in `probe_base` is already absolute,
+so it survives the cwd change.
+
+**That leaves only CPU contention, which is not currently a problem**: 8 cores,
+single-threaded IPOPT, and a median 2.3% CPU fraction per phase. Locking probes
+would serialise the cheapest part of the run for no measured benefit.
+
+**When that would change:** a probe doing a multistart or a sweep is a different
+animal, and the 3.7× inflation on record came from exactly that. The design
+should leave room for an optional probe lock — same `flock` helper, different
+lock file — without taking one now.
 
 ### Measured: concurrent renders fail, reproducibly
 
@@ -267,18 +431,101 @@ survives.
 
 ---
 
-## What the coordinator needs, that already exists
+## Where the coordinator's context comes from
+
+Mostly from things that already exist, and — importantly — **the same things the
+agents read**. There is no bespoke coordinator format to invent or keep in step.
+
+### Results: the manifest, already built
+
+`manifest.build()` is the ledger of what the notebook knows: one line per entry,
+stem plus title plus the hero answer, read from the **committed freeze** rather
+than the source, so it carries `0.36 m/s` and not
+`{python} f"{res['sink']:.2f}"`. 17 entries, 2.5 kB, regenerated on every commit
+and never hand-maintained — it picked up a chapter created minutes ago without
+anyone touching it.
+
+It is already in every agent's prefix, with the instruction that a computed
+value contradicting one of these is a *correction* to be stated, never a silent
+overwrite. The coordinator reading the same block means coordinator and agents
+cannot disagree about what is known.
+
+### History: `nb-metrics.db`, already built
+
+One row per phase: model, chapter, entry stem, turns, lint calls, first-pass
+violations, solve seconds, outcome, duration. `nb eval` already aggregates it.
+This is how the coordinator answers "is this working?" — which chapters cost
+most, where runs die, whether a model change helped.
+
+**Its gap: the row is written only on `close()`.** A running agent has no row at
+all, so the db is history and cannot be a live view.
+
+### Live: the one piece missing
+
+Today the only marker of a live run is the pid in the `status.log` header, which
+`nb watch` parses to tell a wedged run from a dead one. That is enough for one
+run and not enough for eight.
+
+Add `_scratch/runs/<id>/run.json`, written at start and updated at each phase
+transition:
+
+```json
+{"run": "20260916-a3f2", "pid": 81234, "chapter": "04-thinner-foam",
+ "question": "how stable is it?", "phase": "ask", "turn": 7,
+ "started": "...", "waiting_on": null}
+```
+
+`nb board` needs exactly this to draw its table, so the board and the
+coordinator consume one file rather than two mechanisms. `waiting_on` names the
+pending question, which is how "who is blocked" is answered without opening
+every run directory.
+
+### Conversation: this is what the mailbox is really for
+
+The strongest argument for files over a supervisor's pipes is not ergonomics —
+it is that **a coordinator's context does not survive its own scrollback**. An
+agent coordinator will be compacted, restarted, or handed over mid-flight. If
+the questions and answers lived in a terminal, that history is simply gone, and
+the coordinator re-asks things the user already settled.
+
+With `question.json` / `answer.json` per run, the conversation is durable and
+greppable: a restarted coordinator reconstructs what was asked, what was
+answered, by whom, and when — by reading files, which is the one thing it can
+always do.
+
+**Answers already reach the permanent record** by a separate path: `propose`
+merges them into `inputs`, the entry writes them into its `## Specified`
+callout, and chapter-level commitments land in `index.qmd` — which the prefix
+carries for every chapter. So "what has the user already told us about this
+chapter" is answered today. What the mailbox adds is the *cross-run, in-flight*
+view: what is being asked right now, and what was answered in the last hour but
+is not yet committed anywhere.
+
+### What this means for the design
+
+The coordinator needs no new context pipeline. It needs:
+
+- the manifest — **exists**
+- the metrics db — **exists**
+- a live run registry — `run.json`, small, and needed by `nb board` anyway
+- a durable conversation — the mailbox files, which is the reason to prefer
+  them over any transport that leaves no trace
+
+Three of the four are already built or already required for other reasons. That
+is the argument for the file-based design, restated: not that files are
+convenient, but that they are the only form of state a restarted agent can pick
+back up.
+
+## What else already helps
 
 - **The chapter dependency graph is derivable.** Rule 31 fork headers name each
   chapter's parent: `01 ← 02 ← 03 ← 04` parses straight out of `_model.py`.
   Useful for ordering, **but not an exclusion** — see below.
 - **`lint.model_kinship()`** already reports which chapters share a vehicle.
-- **`nb eval`** already aggregates runs by model, and would aggregate by agent
-  with one more column.
 - **Prose logs, not an event stream.** `log.py` decided this deliberately:
   *"A coordinating agent reads prose natively, and JSON costs more."* Keep it.
-  The coordinator tails `status.log` per run and reads `proposal.json` when it
-  needs something exact.
+  `rich` goes on the reading side only — the log stays plain text, which is what
+  lets `tail`, `grep`, `nb board` and a coordinator all read the same file.
 
 ## Chains can parallelise — the earlier claim was too strong
 
@@ -328,36 +575,97 @@ looser and more accurate constraint.
 
 | | verdict |
 |---|---|
-| `fcntl.flock` (stdlib) | **use** — POSIX advisory locks, no dependency, matches the project's no-framework stance |
+| `fcntl.flock` (stdlib) | **use** — POSIX advisory locks, ~30 lines, no dependency |
 | `filelock` / `portalocker` | better tested and cross-platform; not worth a dependency for a macOS/Linux tool |
 | SQLite WAL + `busy_timeout` | **use** — two pragmas, solves the metrics db outright |
-| `git worktree` | rejected for chapters (see 1b); right for cross-notebook |
+| `git worktree` | rejected — `_freeze/` is committed, so every merge conflicts over generated JSON, and it hides collisions rather than preventing them: two agents editing one `_analysis.py` merge cleanly into an entry neither validated. Right for cross-*notebook* work, which needs no isolation anyway |
 | Celery / RQ / Huey | rejected — needs a broker for N≈4 local subprocesses |
 | An MCP server for answers | rejected — the project already runs one for the filesystem, and this would be a second protocol where two JSON files suffice |
 | `concurrent.futures` in-process | rejected — agents are subprocesses today, which gives isolation and a real exit code for free |
 
 ---
 
+## Files
+
+| path | change |
+|---|---|
+| `nb/config.py` | `Notebook(root, run_id=None)`; `run`, `proposal_path`, `transcript_path` and the probe script move under `_scratch/runs/<id>/`. 19 call sites reference these |
+| `nb/metrics.py` | WAL + `busy_timeout`; write a `run.json` row at START as well as the db row at close |
+| `nb/tools/probe.py` | probe script and figure into the run directory, and `cwd` with them. No lock: a probe writes nothing shared once scoped |
+| `nb/tools/verifiers.py` | render under a notebook lock, with one retry |
+| `nb/vendor/notebook.py` | `_budgeted_solve` sets `ipopt.max_wall_time` only when `not _IN_KERNEL` — strict in probes, CPU-only in renders |
+| `nb/locks.py` *(new)* | a `flock` context manager; ~30 lines. Used by the render; left available for an optional probe lock if probes ever get heavy |
+| `nb/tools/interact.py` | mailbox path for the three blocking prompts, behind `--detach`; stdin path unchanged |
+| `nb/phases/board.py` *(new)* | the single terminal: run table, tagged stream, question panel, answering |
+| `nb/phases/answer.py` *(new)* | `nb answer <run> "…"` — one file write, for scripts and second terminals |
+| `nb/phases/ask.py`, `write.py` | `--detach`, `--answers`, and a run id through to `Notebook` |
+| `nb/phases/watch.py` | `rich` in place of the hand-rolled dimming; follow all runs |
+| `nb/tools/scaffold.py` | fork from `git show <ref>:<path>` rather than the working tree |
+| `nb/vendor/references/forking.md` | "Copy with `cp`" becomes "copy from the commit" |
+| `nb/vendor/references/probing.md` | the documented figure path `_scratch/_probe_fig.png` becomes run-relative |
+| `pyproject.toml` | `rich` in the `nb` group |
+| `nb/README.md` | the new commands and the parallel model |
+
+Everything in `vendor/` except `forking.md` is untouched: no lint rule changes,
+so `nb.corpus` should not move at any point.
+
+## Open questions
+
+Worth deciding during the work rather than pretending they are settled:
+
+- **The render lock cannot cover a human.** `quarto preview` in another terminal
+  is outside `nb` and no advisory lock inside it will help. Worse than a plain
+  failure: a failed render now **hands its traceback to the model** and asks it
+  to fix the cause (`MAX_RENDER_FIXES`), so a race presents as a code error in
+  an entry that is fine, and the model may make a spurious edit that then
+  renders cleanly on the retry and ships. Detecting a live preview and warning
+  is cheap; letting the model try to fix `utime` on `site_libs` is not.
+- **Does `rich`'s `Live` cooperate with a blocking prompt?** The board must
+  stop refreshing while the user types, or the input line is repainted away.
+  `Live.stop()`/`start()` around the prompt is the expected answer, and it needs
+  trying before the board's shape is fixed.
+- **What is the mailbox timeout?** Too short and a user who steps away loses a
+  run; too long and a wedged coordinator holds an agent all night. It probably
+  wants to be generous (an hour) and paired with `run.json` making the wait
+  visible, rather than short and safe.
+- **How much does `_readable()` move to `rich`?** It currently wraps at a fixed
+  76 columns because the same text goes to a file. If the terminal and the log
+  diverge in formatting, that is two renderings to keep in step — the same trap
+  `log.py` avoided once already.
+- **How far does the render lock scale?** With billing expanded, quota stops
+  being the ceiling and the render lock becomes it. One entry needs ~33 s of
+  render behind a per-notebook lock; at N=8 that is ~84% utilisation and runs
+  start queueing noticeably. The lock cannot be made finer — the contended
+  directory is the Quarto project — so genuinely large fan-out would mean
+  several notebook *copies*, which is cross-notebook parallelism wearing a
+  different hat. Worth knowing before promising N=8 on one notebook.
+
 ## Order of work
 
-**Two agents become correct at step 3; usable at step 5.** Steps 2–3 are
-mechanical and loud when they fail; 4–5 are the interface.
+**Correct at step 3, usable at step 6.** Steps 2–4 are
+mechanical and loud when they fail; 5–6 are the interface.
 
 1. ~~Measure concurrent quarto.~~ **Done** — fails reproducibly on
    `_freeze/site_libs/`, corrupting no value. See problem 3.
-2. **Run-scoped scratch** (1a) + sqlite WAL. Worth doing single-user anyway:
-   run artefacts stop being clobbered by the next run.
-3. **Render lock + one retry.** Parallel runs are now correct.
-4. **`--mailbox` questions and `--detach`.** Agents stop reading stdin: they
+2. **Run-scoped scratch** + sqlite WAL, plus `run.json` per run — the live
+   registry `nb board` and a coordinator both read. Worth doing single-user
+   anyway: run artefacts stop being clobbered by the next run.
+3. **Render lock + one retry.** Renders only — probes need nothing beyond
+   step 2. Parallel runs are now correct.
+4. **`ipopt.max_wall_time` only outside a kernel** — strict in probes, where a
+   kill is cheap and self-correcting; CPU-only in renders, where a kill
+   presents as a code error and invites a spurious fix. Worth doing regardless
+   of parallelism: the heaviest entries are at 1.25× of the solve budget today.
+5. **`--detach`.** Agents stop reading stdin: they
    write `question.json`, poll, and on timeout exit with the question on disk.
    `nb answer` covers the scripted case and any second terminal.
-5. **`nb board`** — the single terminal: tagged live stream, pending questions,
+6. **`nb board`** — the single terminal: tagged live stream, pending questions,
    inline answering. This is the deliverable the whole thing is for.
-6. **Fork from a commit** (`git show` rather than `cp`), making the rule 31
+7. **Fork from a commit** (`git show` rather than `cp`), making the rule 31
    header true by construction and removing the only real chain hazard. Worth
    doing single-threaded too.
-7. **`--answers` pre-answers**, to cut how often the board is interrupted at all.
-8. **Coordinator agent**: writes `answer.json` instead of the user typing.
+8. **`--answers` pre-answers**, to cut how often the board is interrupted at all.
+9. **Coordinator agent**: writes `answer.json` instead of the user typing.
    Nothing else changes, and `nb board` keeps showing the conversation.
 
 ## Verification
@@ -368,7 +676,7 @@ mechanical and loud when they fail; 4–5 are the interface.
 - **The probe-script race, deliberately.** Two agents probing within a second;
   each result must match its own question. This is the failure that is silent
   and plausible, so it needs a test rather than an observation.
-- **A question under `--coordinator`** is answered through the mailbox without
+- **A question under `--detach`** is answered through the mailbox without
   the agent losing its probe history — measured by the pool spend before and
   after, which must not reset.
 - **Timeout falls back cleanly**: no answer written, agent exits, question is on
@@ -377,6 +685,18 @@ mechanical and loud when they fail; 4–5 are the interface.
   flags, behaves exactly as today.
 - **Load**: N agents' rendered values must equal the values they produce alone.
   A render killed by a neighbour is the regression to watch for.
+- **A probe still respects its wall budget.** Give a probe a solve budget it
+  cannot meet and confirm it is still killed and still says why. Leniency here
+  would be a regression, not a fix.
+- **A render is not killed by a neighbour.** Render the heaviest entry (13 s
+  against a 15 s budget) while three probes run. Before the change it should
+  die and the write phase should ask the model to fix a non-bug; after it, it
+  should render late and unchanged. That second half — that the model is not
+  invited to edit a correct entry — is the point of the change.
+- **Pool exhaustion stays graceful under load.** A run that hits its pool
+  because of its neighbours must still commit an entry, with `rationale`
+  recording what it did not get to. If it fails instead, the accepted trade-off
+  has not held.
 - **The render race is actually fixed**: repeat the measured experiment through
   `nb` rather than raw quarto — four concurrent renders, zero failures. Without
   the lock it failed 4 times out of 4.
@@ -384,6 +704,11 @@ mechanical and loud when they fail; 4–5 are the interface.
   while another forks it; the fork's content must equal `git show <ref>:<path>`
   for the ref in its own header, and must not contain the first agent's
   uncommitted work.
+- **A restarted reader loses nothing.** Kill `nb board` and any coordinator
+  mid-flight, then reconstruct from files alone: which runs are live
+  (`run.json`), what each has answered so far (`question.json`/`answer.json`),
+  and what the notebook knows (`manifest`). If that reconstruction needs
+  scrollback, the design has failed its main purpose.
 - **The conversation is observable**: after a run that asked something, the
   question and its answer are both on disk and both appear in `nb board`,
   whether a person or a coordinator answered.
@@ -392,9 +717,15 @@ mechanical and loud when they fail; 4–5 are the interface.
   Answering from a second terminal with `nb answer` must release the agent
   while the first board is not even running.
 - **It scales to the number actually wanted**: launch eight detached asks across
-  eight chapters and drive them from one board. What to watch for is not
-  correctness but legibility — whether a tagged line stream is still readable at
-  that count, which is what decides whether `rich` is earned.
+  eight chapters and drive them from one board, and confirm the run table stays
+  readable at that count.
+- **Styling actually renders.** The bug being fixed is invisible in code review
+  — `_styled()` emits the right escape and the terminal ignores it. Check the
+  rendered output by eye, in the terminal that is actually used, not by
+  asserting on the bytes.
+- **Piping still works.** `nb board` and `nb watch` through a pipe must emit no
+  escape sequences at all, and `status.log` must stay plain text whatever the
+  reader does.
 
 ## Out of scope
 
