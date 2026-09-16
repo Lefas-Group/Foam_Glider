@@ -15,8 +15,10 @@ contract, renders, is checked against its own output, and commits. See
 
 The goal either way is to replace the user with a higher-level agent that
 interrogates the design assumptions and outputs and drives further decisions.
-`nb` is the shape that makes it possible: it already runs unattended apart from
-the questions it must ask, and several instances could be driven in parallel.
+The groundwork is in: several agents now work different chapters of one notebook
+at once, each with its own run directory, and their questions go to files rather
+than to a terminal — so the same interface serves a person today and a
+coordinating agent later, with the conversation observable either way.
 
 There are three notebooks. `glider-notebook` is the live one, written by `nb`.
 `aircraft-notebook` and `optimised-glider-notebook` were written by the skill
@@ -101,6 +103,21 @@ uv run --group nb python -m nb ask glider-notebook "why is the tail so big?"
 It asks for two budgets, stops for anything Specified, confirms its assumptions,
 then writes, renders, verifies and commits one entry. Follow the detail in a
 second tab with `uv run --group nb python -m nb watch glider-notebook`.
+
+Several at once, one agent per chapter, driven from a single terminal:
+
+```bash
+uv run --group nb python -m nb ask glider-notebook "<question>" --detach &
+uv run --group nb python -m nb board glider-notebook
+```
+
+`--detach` returns a run id immediately; `board` shows every run and lets you
+answer whichever is asking. Questions and answers are files under
+`_scratch/runs/<id>/`, so the board is a view rather than a supervisor — kill
+it and the agent is still waiting, or answer from anywhere with `nb answer`.
+That is also the seam a coordinating agent will step into, writing the same
+files while you keep watching the same board.
+
 [`nb/README.md`](nb/README.md) covers the rest.
 
 ## Using the skill with Claude

@@ -31,7 +31,13 @@ from ..log import say, tell
 GITIGNORE = ("/.quarto/\n"
              "**/*.quarto_ipynb\n"
              "/_site/\n"
-             "/_freeze/site_libs/\n")
+             "/_freeze/site_libs/\n"
+             # Per-run working state: probe scripts, logs, proposals, the
+             # render lock. This repo's root .gitignore already covers it, so
+             # a notebook created HERE was fine by accident -- one created in a
+             # sibling directory, which `nb new` exists to support, would have
+             # committed a directory per run.
+             "/_scratch/\n")
 
 # Rule 11: vendored, and checked byte-for-byte. The tuple order is
 # (canonical in vendor/, destination in the new notebook).
