@@ -1,305 +1,170 @@
 # `nb` — the design-notebook agent
 
-Turns a design question into a Quarto lab-notebook entry that passes a 26-rule
+Turns a design question into a Quarto lab-notebook entry that passes a 32-rule
 lint contract, renders, and is checked against its own output before it commits.
 
 Distilled from the `design-notebook` Claude Code skill, and runs without it, on
-Gemini. Design and rationale: `../agentic-notebook-spec.md`.
+Gemini. Requires `GEMINI_API_KEY`, and `quarto`, `git`, `npx` on `PATH`.
 
-Requires `GEMINI_API_KEY`, and `quarto`, `git`, `npx` on `PATH`.
-
-**Run everything from the repo root.** `python -m nb` finds the package because
-Python puts the current directory on `sys.path` — there is no installed entry
-point, so from anywhere else it is `ModuleNotFoundError: No module named 'nb'`.
-From outside the project it fails twice: `uv run` finds no `pyproject.toml`
-walking up, and falls back to a system interpreter without the dependencies. The
-notebook argument is a path, so `optimised-glider-notebook` resolves relative to
-that same root.
+**Run everything from the repo root.** There is no installed entry point:
+`python -m nb` finds the package because Python puts the current directory on
+`sys.path`. From anywhere else it is `ModuleNotFoundError`, and from outside the
+project `uv run` finds no `pyproject.toml` and falls back to an interpreter
+without the dependencies.
 
 ---
 
-## Use
+## Commands
 
 ```bash
-uv run --group nb python -m nb new <notebook> [title]   # once per aircraft
-uv run --group nb python -m nb ask <notebook> "why is the tail so big?"
+uv run --group nb python -m nb new   <notebook> [title]      # once per aircraft
+uv run --group nb python -m nb ask   <notebook> "<question>" # the main one
+uv run --group nb python -m nb write <notebook>              # resume a stop
+uv run --group nb python -m nb watch <notebook>              # follow the detail
+uv run --group nb python -m nb view  <notebook> [--force]    # build the site
+uv run --group nb python -m nb eval  <notebook>              # runs, by model
 ```
 
-**One command per entry.** It probes the chapter's model, writes the entry, fixes
-it against lint, renders it, verifies the prose against what actually rendered,
-commits, prints the entry with its real numbers, rebuilds the site, and picks up
-the next queued question if the ask contained more than one.
+`ask` is one command per entry. It probes the chapter's model, writes the entry,
+fixes it against lint, renders it, verifies the prose against what actually
+rendered, commits, prints the entry with its real numbers, rebuilds the site,
+and picks up the next queued question if the ask contained more than one.
 
-It stops to ask you about anything **Specified** — an input where a different
-answer changes *what is being built* — and otherwise runs through.
+## What it asks you
 
-**A question gets one pool of probe wall clock**, asked for at the start —
-Enter accepts 900 s — and the agent divides it: every `probe` call states a
-`budget_s`, drawn from the pool, and the result says how much is left. Asking
-for more than remains grants what remains. When the pool is gone, the next probe
-is refused and it proposes with what it has.
+**Two budgets, at the start.** Seconds of exploring for the whole question
+(default 120), and seconds of solving one render of the entry may take
+(default 20). Enter accepts either. These are the only prompts with defaults,
+because a spend cap has a defensible one.
 
-**A second budget is granted the same way: what one render of the entry may
-cost.** The agent does not divide this one and does not choose it — it writes the
-granted number into the entry as `ENTRY_CEILING`, and `write` refuses to commit
-an entry that changed it. A render that overruns four times that ceiling is
-killed, and the message names the page it was on. Work that genuinely needs more
-asks for it as a Specified input, which stops and asks a person.
+**Specified inputs, whenever one comes up.** An input where a different answer
+changes *what is being built*. Answer it, or type `you decide` to delegate —
+delegation is recorded as the agent's decision, not yours.
 
-Budgets live in the **entry**, not the chapter: `_budget.py` is gone. Its own
-header recorded why it had to exist — a chapter forked from another *"silently
-inherited `SOLVE_BUDGET = None`"*. Nothing is inherited now, because nothing is
-chapter-scoped.
+**Assumptions, once, before anything is built on them.** Everything the probe
+assumed, listed together. Enter accepts; `1: 12 mm` corrects one. **A correction
+re-enters the probe** rather than continuing — the findings were computed under
+the old value, and a changed *method* cannot be fixed by re-rendering.
 
-One pool covers the whole question: what `ask` leaves goes out in `proposal.json`
-as `_pool_left`, `write` picks it up, and a queued follow-on inherits the
-remainder rather than claiming a fresh 900 s. It is the one prompt that takes a
-default, because a spend cap has a defensible one — unlike a Specified input,
-where assuming would silently decide what is being built.
+## The two stops
 
-That is the first bound on a run's compute that actually exists — each probe was
-capped at 300 s, but nothing capped how *many* probes a run could take. It also
-makes the agent forecast: a probe that asks for 400 s and finishes in 20 tells
-you it does not understand what it is doing. Enforcement is coarse to about 15 s,
-the watchdog's poll interval, so budgets under ~20 s buy nothing.
+A run halts, writes `proposal.json` and exits for exactly two things, both
+decisions about **structure or spend** made before the work they authorise is
+paid for:
 
-### The two stops
+- **a new chapter** — later entries build on its `_model.py`, so changing it
+  afterwards means re-solving all of them;
+- **a refused refactor** — an edit to a `_model.py` that existing entries
+  already depend on.
 
-A run halts, writes `proposal.json` and exits for exactly two things. Both are
-decisions about **structure or spend**, made before the work they authorise is
-paid for — not approvals of finished output:
+`nb write <notebook>` resumes from the proposal in either case. There is **no**
+gate on a finished entry: by then lint, render and verify have all passed, the
+record is append-only, and an entry that turns out wrong is corrected by the
+next one.
 
-| | why it stops |
-|---|---|
-| **a new chapter** | later entries build on it, and it is far harder to undo than an entry |
-| **an edit to `_model.py` in a chapter that has entries** | every sibling would have to be re-solved to prove its answers did not move |
+## Budgets
 
-Resume either with:
+| | default | enforced by |
+|---|---|---|
+| probe pool, per question | 120 s | the agent divides it; a probe asking for more than remains gets what remains |
+| `ENTRY_CEILING`, per render | 20 s | granted at the prompt, written into the entry, commit refused if changed |
+| `SOLVE_BUDGET`, per solve | 15 s | the agent's to choose, and must fit inside the ceiling |
+
+Budgets belong to the **entry**, never the chapter — nothing is inherited by a
+fork. The render deadline is `35 s floor + 5 s/page + the ceilings of the pages
+that will execute`, with **no slack**: a slow machine needs a bigger number at
+the prompt. All four figures print in the entry's footer:
+
+```
+Rendered in 2.3 s (limit 20 s) · 1 aero solve (budget 15 s each) · explored in 55 s (limit 120 s)
+```
+
+## Two tabs
+
+The terminal carries the **conversation** — questions, failures, decisions, the
+finished entry. Everything else (turn lines, the model's reasoning, per-probe
+budgets, lint output) goes to `<notebook>/_scratch/run/status.log`.
 
 ```bash
-uv run --group nb python -m nb write <notebook> [--allow-refactor]
+uv run --group nb python -m nb watch <notebook>     # in a second tab
 ```
 
-### Why there is no gate on the finished entry
-
-By then lint, render and verify have all passed, and what is left to reject is
-either something `ask_specified` should have caught during probing, or something
-the notebook already has an answer for: *"that is a correction — say so in YOUR
-entry… Never edit the earlier entry."* `superseded_by()` exists because the
-record is append-only. Rejecting also refunds nothing — the run is already paid
-for — and `git revert` on one entry and its freeze is cheap.
-
-`write` builds the site only when every entry already has a freeze. Otherwise it
-names the ones that do not and stops, because a project render does not fail on a
-missing freeze -- it silently re-executes it, and that is hundreds of seconds of
-aero solves. `nb view <notebook> --force` rebuilds them deliberately.
-
-Nothing reaches the notebook before you have seen the proposal.
-
-At a stop the terminal prints the decision, not the document: what stopped, what
-saying yes commits to, where the proposal is, and the one command to continue.
-The proposal is still the thing to read and edit — it is just not what a stop is
-*about*.
-
-### Other commands
-
-```bash
-uv run --group nb python -m nb view      <notebook> [--force]  # build the site
-uv run --group nb python -m nb.inputs    <notebook>            # specified + assumed
-uv run --group nb python -m nb.metrics   <notebook>            # cost + the eval
-uv run --group nb python -m nb.cache     <notebook> [--purge]  # held caches
-uv run --group nb python -m nb.prefix    <notebook> --measure  # cached prefix size
-uv run --group nb python -m nb.manifest  <notebook>            # what the model sees
-uv run --group nb python -m nb.preflight <notebook>            # before any tokens
-uv run --group nb python nb/vendor/lint.py <notebook>          # the 28 rules
-```
-
----
-
-## Making a new notebook
-
-```bash
-uv run --group nb python -m nb new my-new-notebook "My New Glider"
-```
-
-Creates the directory as a sibling of the existing notebooks, scaffolds
-`_quarto.yml`, `styles.css`, `.gitignore`, `_scratch/`, the two vendored files
-and a first chapter — then **lints and preflights before it returns**, so a
-broken notebook fails here rather than several minutes into your first `ask`.
-
-```
-  created   /…/my-new-notebook
-  vendored  _notebook.py, _scratch/_probe_base.py  (rule 11)
-  chapter   chapters/01-first-chapter/
-  lint      clean
-  preflight ok
-```
-
-Then fill `chapters/01-first-chapter/_model.py` with the vehicle, say in its
-`index.qmd` what defines the chapter, and `nb ask` it.
-
-You can also just `nb ask` straight away. The first chapter is a **claimable
-stub**: an `ask` that routes `new_chapter` takes the empty scaffold over and
-renames it, rather than leaving a dead `01` beside a real `02`. The scaffold has
-to exist at all because `_quarto.yml`'s `auto: "chapters"` crashes on an empty
-`chapters/`.
-
-Options: a second positional argument is the site title (defaults to the
-directory name); `chapter=` and `chapter_title=` override the first chapter.
-It refuses a non-empty directory and a chapter name that is not `NN-kebab-case`.
-
-**Why this is a command and not a documented procedure.** `_notebook.py` and
-`_scratch/_probe_base.py` are *vendored* into every notebook — Quarto execs them
-at render time, so a notebook has to render without `nb` installed — and lint
-rule 11 requires them byte-identical to `vendor/`. Copied by hand, a stray edit
-or a truncated paste is silent until the first lint run.
-
-**Adding a chapter is not this.** Propose `route: "new_chapter"` and `nb write`
-scaffolds it from `chapter_title` and `chapter_defines`. A chapter is a
-structural commitment later entries build on, so it goes through the gate;
-`create_chapter` is deliberately not a tool the model can call. The model
-supplies the slug; the code supplies the number, so a wrong guess renumbers
-rather than aborting a run the ask has already been paid for. A new *notebook*
-is a second aircraft, which is why it is a command you run rather than a route
-the agent can take.
-
----
+`watch` dims the reasoning and warns when a run has stopped advancing, using the
+pid and deadline the run writes into the log. The writer emits facts; the reader
+decides they have stopped arriving — a heartbeat thread inside the run would
+keep printing cheerfully while the main thread was stuck.
 
 ## Structure
 
-    __main__.py    the CLI: new | ask | write | view
-    config.py      model, paths, caps. Importing it puts vendor/ on sys.path
-    schema.py      Proposal and Input. Pydantic generates the tool schemas AND
-                   validates on the way back in, so a malformed propose is an
-                   error the model can read
-    client.py      complete(contents, cfg) — the ONE provider seam
-    loop.py        the agent loop
-    log.py         say() -> stderr (telemetry), tell() -> stdout (conversation)
-    prefix.py      assembles what gets cached
-    manifest.py    one line per entry: stem, title, hero value
-    preflight.py   invariants the agent cannot fix, checked before any tokens
-    inputs.py      every Specified and Assumed item, across the notebook
-    budgets.py     parses aero_report(); sizes the probe timeout
-    metrics.py     one SQLite row per phase-run
-    session.py     what one run accumulates
-    text.py        output truncation
+```
+__main__.py      the six commands
+config.py        model, budgets, limits; importing it puts vendor/ on sys.path
+client.py        the one provider seam — swap this to change model vendor
+loop.py          the turn loop, thought-signature handling, turn deadline
+session.py       per-run state: pool, answers, consults, refactor notes
+schema.py        Proposal and Input, with the rules the schema can enforce
+prefix.py        the cached system prefix: rules, chapter map, API surface
+metrics.py       one row per phase into _scratch/nb-metrics.db
+corpus.py        the regression test — lint counts for all three notebooks
+preflight.py     what must be true before a run starts
 
-    phases/new.py     scaffold a notebook, then lint and preflight it
-    phases/view.py    project render, guarded against re-solving a lost freeze
-    phases/ask.py     preflight -> probe loop -> propose -> write (or stop)
-    phases/write.py   scaffold? -> write loop -> lint -> render -> verify -> commit
-    phases/verify.py  one toolless call on the rendered page + its figures
-
-    tools/         one handler per tool. mcp_fs.py is the only MCP left
-                   guards.py refuses _model.py writes in a chapter with entries
-    scaffold/      templates: _quarto.yml, styles.css, and the chapter files
-    vendor/        lint, check, freezediff, library_explorer, the reference
-                   corpus, and the two files vendored into every notebook
-
-### Why two commands
-
-The gate between them is a **process boundary, not a checkpoint**. Every run
-stops at exactly one place and the process exits there, so nothing ever has to
-survive a pause it did not choose — which is why there is no orchestration
-framework and no checkpointer. `proposal.json` is the whole handoff; the phases
-share no conversation state, because the entry's code cells recompute the answer
-at render time anyway.
-
-### Three checks, in order of what they can see
-
-| | sees | catches |
-|---|---|---|
-| **lint** | the source | all 28 rules — budgets, hand-typed numbers, structure |
-| **render** | — | code that does not run |
-| **verify** | the *rendered* page and its figures, **not** the conversation | prose that contradicts the output |
-
-`verify` exists for what lint cannot reach: rule 1 forces the numbers in prose to
-be computed, but nothing forces a sentence about a **shape** to match the shape.
-A caption claiming a crossover at 6 m/s when the curve crosses at 8 passes every
-rule. Verify reads the PNG and catches it.
-
-### Two tabs, and what is in each
-
-**The terminal is the conversation.** Questions it stops to ask, the milestones
-(`chapter`, `lint`, `verify`, `commit`), the finished entry with its real
-numbers, and anything that ends a run without committing. About ten lines for a
-successful entry.
-
-**Everything else is detail** — one line per turn with tokens and tool, the
-model's own reasoning, per-probe budgets, lint output — and goes to
-`<notebook>/_scratch/run/status.log`. Follow it from another tab:
-
-```bash
-uv run --group nb python -m nb watch <notebook>          # live, from now on
-uv run --group nb python -m nb watch <notebook> --all    # from the top
+phases/   ask · write · verify · new · view · watch · eval · common
+tools/    probe · verifiers · interact · guards · scaffold · api · figures
+          refs · shell · mcp_fs (filesystem, in its own process)
+vendor/   lint.py · check.py · freezediff.py · notebook.py · probe_base.py
+          library_explorer.py · references/
 ```
 
-The log appends across runs and each opens with a dated separator, so you can
-read back through earlier ones. `nb watch` may be started before the run it
-watches.
+`vendor/` is shared with the notebooks: `notebook.py` and `probe_base.py` are
+copied into each one and compared byte-for-byte by rule 11, because a notebook
+has to render without `nb` installed.
 
-**There is no flag for this.** Both streams used to land on the same terminal, so
-separating them meant redirecting one away — and it cannot be stdout, because
-that is where you type answers. An option everyone sets the same way is a default
-in disguise, so `say()` simply stopped reaching the terminal. The consequence is
-a rule: anything a run's outcome depends on must be `tell()`, or a failed run
-ends in silence.
+## Three checks, in order of what they can see
 
-**The model's reasoning is always on**, and never re-enters the conversation.
-`loop.py` shows each thought part and then drops it before appending the turn —
-safe because Google's documentation attaches the enforced signature *"only to the
-first functionCall part"*, so filtering the part list preserves it. Verified with
-a negative control: a turn rebuilt from `name`+`args` still 400s.
+- **lint** reads the source. Cheap, runs first, and every message names its own
+  fix. 3 attempts.
+- **verify** reads the *rendered* page and its figures, with a fresh model and
+  no memory of writing it — it catches prose that describes what the model
+  believed rather than what came out. 2 attempts. A render that fails outright
+  gets 1 fix of its own, since the page must build before verify has anything
+  to read.
+- **check** deletes the freezes an edit can have invalidated, re-renders, and
+  diffs the values and figure bytes against git. This is what a refactor has to
+  pass before it can move a shared function.
 
-### Where state lives
+## Testing a change
 
-    <notebook>/_scratch/run/proposal.json    the handoff; the only thing that
-                                             crosses the process boundary
-    <notebook>/_scratch/run/transcript.jsonl one line per turn, with thoughts
-    <notebook>/_scratch/run/status.log       the telemetry stream, mirrored
-    <notebook>/_scratch/nb-metrics.db        one row per phase-run
+```bash
+uv run --group nb python -m nb.corpus
+```
 
-All under `_scratch/`, which is gitignored. Nothing a run leaves behind is ever
-committed except the entry and its freeze.
+Lints all three notebooks and asserts the counts on record. Every rule here was
+calibrated by running that sweep; doing it by hand got the wrong answer twice in
+one session, once by a rule that silently stopped applying — which looks exactly
+like a notebook that improved. A rule change that moves the counts must update
+them in the same commit that justifies it.
 
----
+`nb eval <notebook>` groups the recorded runs by model: turns, lint calls,
+first-pass violations, and how many reached a proposal. That table, not a
+comment, is what decides a model swap. `NB_MODEL=gemini-3.8-flash` overrides the
+model for one run without touching a tracked file.
 
 ## Four things that will bite
 
-**Append `resp.candidates[0].content` whole.** Model turns carry thought
-signatures; the first `function_call` part of each step must carry its signature
-back byte-identically or the next request 400s. Rebuilding a turn from name and
-args drops it — verified, with a negative control.
+**Quarto freeze tracks the page, not its includes.** Editing a chapter's
+`_model.py` does not invalidate its entries — they go on serving values the
+model no longer produces. That is why `check` exists and why rule 12 reports a
+dirty shared module against a clean freeze.
 
-**The prefix is a byte-exact match.** A date, a path, an unsorted dict in the
-system instruction silently invalidates the lot. Check
-`usage_metadata.cached_content_token_count` — zero across repeated calls means
-something is varying. The cache key includes the model ID, because a cache object
-belongs to the model that created it.
+**Every chapter is exec'd, never imported.** `_model.qmd` execs `_model.py` and
+`_analysis.py` into the page namespace, so their names are already in scope and
+`from _analysis import …` raises `ModuleNotFoundError` at render (rule 29).
 
-**Do not add an explicit cache back.** There was one; it cost about twice what it
-saved. Passing `cached_content` does not add to implicit caching, it *replaces*
-it — measured over six turns, 23.9% hit at $0.4121 with an explicit cache against
-67.0% at $0.2082 without, and the cached count pinned at exactly the cache size
-on every turn while the conversation grew. Implicit caching stores nothing and
-bills no storage. Watch `cached_tokens` in metrics: it is best-effort, so a
-silent drop in the ratio is the only symptom you would get.
+**A number from another chapter is transcribed, not computed.** There is no
+`cite()`. The entry links its source and lint warns when a hand-typed number
+matches one another chapter publishes — about a third of them are caught, and
+nothing detects drift after the cited chapter re-renders.
 
-**Do not prune the conversation either.** Editing anything breaks the byte-prefix
-match from that point on, so a prune costs one cold turn to save a 90% discount
-on every later one — break-even is nine more turns, and runs are 14–15 total.
-The lever is `TRUNCATE`, which caps what enters in the first place.
-
-**Images must be inline parts, not base64 in a function response.** The same PNG
-costs 1,298 tokens as an image part the model can read, or ~23k tokens as a
-base64 string it cannot.
-
----
-
-## Diverging from the skill
-
-`vendor/` is the canonical copy now. The skill is its ancestor and the two are
-expected to drift apart; there is deliberately **no drift check between them**,
-because that would reintroduce the coupling this removes. Rule 11 still pins each
-notebook's `_notebook.py` and `_scratch/_probe_base.py` to `vendor/`, which is
-the coupling that has to stay.
+**An `nb` run does not survive the lid closing.** A run that spans a laptop
+sleep looks identical to a wedged one: pid alive, nothing advancing. No timeout
+helps, because the process is not running to observe it.
