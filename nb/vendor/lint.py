@@ -85,7 +85,13 @@ ENTRY_FILE = re.compile(r"^\d{4}-\d{2}-\d{2}-")
 # MEASURED is what varies between two renders of the same page; SOLVES is kept
 # out of it because masking the whole line once hid a real 18 -> 2, and the
 # limits are kept because a changed ceiling IS worth reporting.
-RUNTIME_SECONDS = re.compile(r"Rendered in ([\d.]+) s")
+# BOTH spellings. The line used to read "Executed in N s" and every freeze
+# written before the rename still says so -- permanently, for the two frozen
+# corpus notebooks. Matching only the new wording made rule 17 find nothing and
+# skip its check on six entries, so a frozen notebook silently LOST six
+# problems: a rule that stops applying looks exactly like a notebook that got
+# better. `nb.corpus` is what caught it.
+RUNTIME_SECONDS = re.compile(r"(?:Executed|Rendered) in ([\d.]+) s")
 RUNTIME_SOLVES = re.compile(r"· (\d+) aero solve")
 
 BUDGET_NAMES = {"ENTRY_CEILING", "SOLVE_BUDGET", "PROBE_POOL", "PROBE_SPENT"}
@@ -1578,6 +1584,43 @@ def model_kinship(root, chapters):
     return sorted(out, key=lambda t: -t[2])
 
 
+def _empty_callouts(root, chapters, entries):
+    """
+    Rule 32. A callout whose whole content is "None." should not be there.
+
+    Cheap to write and cheap to read past, which is why it accumulated: every
+    entry carried a `## Specified` and an `## Assumed` heading, and on a page
+    that specified nothing and assumed nothing both said "None." -- eight lines
+    of furniture around two words, printed above the answer. A reader scanning
+    for what was assumed had to read the box to learn there was nothing in it.
+
+    Absence is already unambiguous: an entry with no Assumed callout assumed
+    nothing, exactly as an entry with no figure has no figure.
+    """
+    # Entries AND chapter indexes. The scaffold ships both callouts in an
+    # index, so a chapter that genuinely assumes nothing is the case most
+    # likely to end up with a box saying so.
+    pages = list(entries) + [root / "chapters" / c / "index.qmd"
+                             for c in chapters
+                             if (root / "chapters" / c / "index.qmd").exists()]
+    out = []
+    for e in pages:
+        try:
+            text = e.read_text()
+        except OSError:
+            continue
+        for title, body in callouts_of(text):
+            if title not in ("Specified", "Assumed"):
+                continue
+            words = re.sub(r"[^a-z0-9]+", " ", body.lower()).split()
+            if words in ([], ["none"]):
+                out.append((e, f"has an empty `## {title}` callout — delete it. "
+                                f"Nothing was {title.lower()}, and a box saying "
+                                f"so costs a heading and four lines to carry "
+                                f"one word"))
+    return out
+
+
 def _fork_provenance(root, chapters, entries):
     """
     Rule 31. A copied `_model.py` says what it was copied from.
@@ -1662,6 +1705,7 @@ def check(root, chapters):
     problems += _composition(root, chapters, entries)
     problems += _transcribed(root, chapters, entries)
     problems += _fork_provenance(root, chapters, entries)
+    problems += _empty_callouts(root, chapters, entries)
 
     # Rule 13. Scoped to `_analysis.py`: `_model.py` is rendered in full by the
     # chapter index, and `_notebook.py` is deliberately invisible, so requiring

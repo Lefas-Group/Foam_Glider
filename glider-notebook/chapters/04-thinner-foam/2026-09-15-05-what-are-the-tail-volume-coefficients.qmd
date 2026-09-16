@@ -37,11 +37,6 @@ Vv_cg = (Sv * lv_cg) / (Sw * bw)
 
 **Answer.** The horizontal tail volume coefficient ($V_H$) from the optimized center of gravity is [`{python} f"{Vh_cg:.2f}"`]{.key}, and the vertical tail volume coefficient ($V_V$) is [`{python} f"{Vv_cg:.3f}"`]{.key}.
 
-::: {.callout-tip}
-## Specified
-None.
-:::
-
 ```{python}
 #| echo: false
 #| output: asis

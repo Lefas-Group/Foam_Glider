@@ -176,6 +176,8 @@ def create_chapter(notebook, name, title, defines="", claim=True,
             f"Then FILL chapters/{name}/index.qmd with edit_file -- not only "
             f"the sentence at the top, but both callouts, which ship as "
             f"template placeholders and are a lint failure if left (rule 24). "
+            f"DELETE a callout that has nothing to go in it -- a box saying "
+            f"\"None.\" is furniture, and rule 32 refuses it. "
             f"EDIT it, never write_file over it: it already carries a `## The "
             f"model` block that renders _model.py and _analysis.py, and a "
             f"chapter whose index does not show its aircraft is rule 30.\n\n"

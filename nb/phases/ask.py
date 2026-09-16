@@ -16,7 +16,7 @@ from ..tools.interact import (ask_pool, ask_render_ceiling,
                               render_stop)
 from ..preflight import check as preflight
 from .. import metrics
-from .common import setup, report
+from .common import setup, report, spoken_calls
 from ..log import open_log, say, tell
 
 BRIEF = """\
@@ -114,9 +114,9 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
         if verbose:
             say()          # one blank line per turn, so a turn and its
                            # reasoning read as one block
-            calls = [p.function_call.name for p in (turn.parts or []) if p.function_call]
+            calls = spoken_calls(turn)
             say(report(resp, f"turn {n + 1}") +
-                  (f"  ->  {', '.join(calls)}" if calls else "  ->  (done)"))
+                (f"  ->  {', '.join(calls)}" if calls else "  ->  (done)"))
 
     def probe_once():
         """One pass of the loop, returning the proposal it ended with."""

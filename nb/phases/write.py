@@ -26,7 +26,7 @@ from ..tools.scaffold import create_chapter
 from .. import metrics
 from . import verify as verify_phase
 from .view import site
-from .common import setup, report
+from .common import setup, report, spoken_calls
 from ..log import open_log, say, tell
 
 BRIEF = """\
@@ -64,8 +64,12 @@ in the entry: an entry answers the question asked and stops.
    contains it. Record both in the entry's `## Specified` callout as inline
    `footer()` prints all four at the foot of the page, so they do NOT go in the
    `## Specified` callout -- that callout is for what the DESIGN was committed
-   to, and budgets in it crowd out the thing it exists for (rule 18). If nothing
-   else was specified, the callout says "None."
+   to, and budgets in it crowd out the thing it exists for (rule 18).
+
+   OMIT a callout that would be empty. A box containing the word "None." is
+   furniture: it takes a heading and four lines to say that nothing happened,
+   and a reader scanning for what was assumed has to read it to find that out.
+   No Specified inputs and no Assumptions means neither callout appears.
    If the work genuinely cannot fit, ask for more with `ask_specified` rather
    than writing a different number.
 2. Its code must recompute the answer, not restate it. Every number in prose is
@@ -282,7 +286,11 @@ FRONTMATTER = re.compile(r"\A---\n.*?\n---\n", re.S)
 SPAN = re.compile(r"\[([^\]]*)\]\{\.[\w-]+\}")     # [12.7°]{.hero-value}
 IMAGE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 HERO = re.compile(r"\[([^\]]*)\]\{\.hero-value\}\s*\n\[([^\]]*)\]\{\.hero-label\}")
-ESCAPED = re.compile(r"\\([.\-*_#])")                # 0\.10 -> 0.10
+# Quarto escapes whatever pandoc might read as markup, and the set is wider
+# than it first appears: `\.` in a decimal, but also `\+` in a derivative sign,
+# which left C_m_alpha = \+0.39 on screen. Any backslash before punctuation is
+# an escape here, because prose has no other reason to carry one.
+ESCAPED = re.compile(r"\\([^\w\s])")                 # 0\.10 -> 0.10, \+ -> +
 
 
 def _readable(md, width=76):
@@ -330,11 +338,20 @@ def _readable(md, width=76):
             out.append(f"        {path}")
             continue
         if line.startswith("#"):
-            out += ["", line.lstrip("# ")]
+            # A callout heading is a LABEL for what follows, not a section of
+            # its own. Rendered as a bare line it competed with the answer --
+            # "Specified" in the same weight as the sentence the entry exists
+            # for. Lower-cased and indented, it reads as the caption it is.
+            out += ["", f"  {line.lstrip('# ').lower()}"]
             continue
-        if line.startswith("Answer.") and out and out[-1]:
-            out.append("")
-        out += textwrap.wrap(line, width=width) or [""]
+        if line.startswith("Answer."):
+            if out and out[-1]:
+                out.append("")
+            line = line[len("Answer."):].lstrip()
+            out += ["ANSWER", ""]
+        indent = "  " if out and out[-1].startswith("  ") else ""
+        out += textwrap.wrap(line, width=width, initial_indent=indent,
+                             subsequent_indent=indent) or [""]
     return "\n".join(out).strip()
 
 
@@ -541,10 +558,9 @@ def main(notebook_path, verbose=True, allow_refactor=False,
             if verbose:
                 say()          # one blank line per turn, so a turn and its
                                # reasoning read as one block
-                calls = [p.function_call.name for p in (turn.parts or [])
-                         if p.function_call]
+                calls = spoken_calls(turn)
                 say(report(resp, f"turn {n + 1}") +
-                      (f"  ->  {', '.join(calls)}" if calls else "  ->  (done)"))
+                    (f"  ->  {', '.join(calls)}" if calls else "  ->  (done)"))
 
         first_pass = None
 
@@ -781,8 +797,11 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         tell(f"  commit    FAILED — {detail}")
         run_metrics.close("commit_failed")
         return 1
+    # Held back until AFTER the entry prints. On its own above the block it
+    # read as a stray line with nothing to attach to; below it, beside the page
+    # path, it is the provenance of the thing just read.
     n_paths = len(detail.split(", "))
-    tell(f"  commit    {sha}  ({n_paths} file(s))")
+    committed = f"  commit    {sha} · {n_paths} file{'s' if n_paths != 1 else ''}"
     say(f"  commit    {sha}  ({detail})")
     say(f"  first-pass violations: {first_pass}")
     if session.probe_pool:
@@ -800,6 +819,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     prose = rendered_prose(notebook, proposal.chapter, stem)
     if prose:
         tell(f"\n{'─' * 72}\n{prose}\n{'─' * 72}")
+    tell(committed)
 
     # After the commit, never before: a project render touches every page in the
     # notebook, and an unrelated broken one must not be able to block an entry

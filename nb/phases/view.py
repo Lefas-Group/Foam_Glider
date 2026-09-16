@@ -92,7 +92,10 @@ def site(notebook, force=False, verbose=True, page=None,
 
     index = notebook.root / "_site" / "index.html"
     if verbose:
-        tell(f"  site      {page if page and page.exists() else index}")
+        # "page" when it is the entry just written, "site" when it is the whole
+        # index: the word should say which of the two you are being handed.
+        target = page if page and page.exists() else index
+        tell(f"  {'page' if target is page else 'site'}      {target}")
     return index
 
 

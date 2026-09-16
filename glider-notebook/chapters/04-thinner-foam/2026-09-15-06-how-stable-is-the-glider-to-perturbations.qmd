@@ -41,16 +41,6 @@ clb = float(derivs['Clb'][0])
 
 **Answer.** The optimized glider is statically unstable in pitch ($C_{m_{\alpha}}$ = `{python} f"{cma:+.2f}"`) and slightly unstable in roll ($C_{l_{\beta}}$ = `{python} f"{clb:+.3f}"`), but remains stable in yaw ($C_{n_{\beta}}$ = `{python} f"{cnb:+.3f}"`). The optimizer placed the center of gravity behind the neutral point because static stability was never constrained during the trimmed glide optimization.
 
-::: {.callout-tip}
-## Specified
-None.
-:::
-
-::: {.callout-note}
-## Assumed
-None.
-:::
-
 ```{python}
 #| echo: false
 #| output: asis
