@@ -1,0 +1,38 @@
+---
+title: "Does the fully optimized design look sensible?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 20.0   # s for this render, granted by the user
+SOLVE_BUDGET = 18.0     # s for any one solve
+PROBE_POOL = 120.0        # s granted for the probe
+PROBE_SPENT = 46.1      # s the probe actually used
+
+res = optimize_full_glider(verbose=False)
+sol = res["sol"]
+airplane = sol.value(res["airplane"])
+sweep = sol.value(res["sweep"])
+boom_len = sol.value(res["boom_len"])
+taper = sol.value(res["airplane"].wings[0].xsecs[1].chord / res["airplane"].wings[0].xsecs[0].chord)
+```
+
+**Answer.** The optimized geometry features highly forward-swept wings ([`{python} f"{-sweep:.0f}\u00b0"`]{.key}), extreme taper ([`{python} f"{taper:.1f}"`]{.key}), and a tiny, short-coupled tail on a [`{python} f"{boom_len*1000:.0f}"`]{.key} mm boom (@fig-three-view). While mathematically optimal for trimmed glide, the extreme proportions suggest it may be pushing the limits of the simple modeling assumptions.
+
+```{python}
+#| label: fig-three-view
+#| fig-cap: "Three-view drawing of the fully optimized glider, constructed from 3 mm foam."
+import matplotlib.pyplot as plt
+
+axs = airplane.draw_three_view(show=False)
+fig = axs[0, 0].figure
+fig.set_size_inches(8, 8)
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_full_glider)
+```
