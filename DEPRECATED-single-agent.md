@@ -9,6 +9,10 @@ concurrency.
 That version is kept as the tag **`nb-single-agent`**, and it works: preflight
 passes, `nb.corpus` passes, and a checkout runs with no manual steps.
 
+**If `git worktree add` says the tag is unknown**, the tag is not on the remote:
+tags are not pushed by `git push`, they need `git push origin nb-single-agent`.
+Ask whoever owns the repo to push it, or recreate it locally from the history.
+
 ## Getting it running
 
 ```bash

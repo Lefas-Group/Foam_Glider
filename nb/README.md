@@ -68,6 +68,13 @@ figure bytes against git — what a refactor must pass.
 rule here was calibrated with that sweep; by hand it got the wrong answer twice.
 A change that moves the counts updates them in the same commit.
 
+## The version before this one
+
+`nb-single-agent` tags the system as it was before parallelism: one agent, one
+notebook, questions at the terminal. It still runs —
+[`../DEPRECATED-single-agent.md`](../DEPRECATED-single-agent.md) has the one
+command.
+
 ## Four things that will bite
 
 - **Freeze tracks the page, not its includes.** Editing `_model.py` leaves its
