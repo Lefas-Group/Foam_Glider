@@ -66,7 +66,18 @@ THINKING_LEVEL = "HIGH"
 # thought tokens with this off and on, which is variance, not a surcharge.
 INCLUDE_THOUGHTS = True
 
-MAX_TURNS = 40          # per agent loop
+# Raised from 40 once `stuck.Detector` existed. At 40 the cap was doing
+# detection work it is bad at -- a run that wedged at turn 10 burned thirty more
+# before anything stopped it -- so it had to stay tight, which also meant a
+# genuinely hard entry could run out of room. With stuck runs caught at ~8
+# barren turns, the cap goes back to being what it is for: a bound on spend, and
+# a guarantee that the process ends whatever else fails.
+#
+# `outcome = max_turns` is therefore now a DIAGNOSTIC, not a routine ending. It
+# means the run spent its whole budget and the detector never fired: either a
+# genuinely hard entry or a blind spot in the heuristic, and both are worth
+# opening. `python -m nb eval <notebook>` lists outcomes by run.
+MAX_TURNS = 60          # per agent loop
 MAX_CONSULTS = 3        # open-ended guidance can loop; a Specified input cannot
 MAX_LINT_ATTEMPTS = 3   # write -> lint -> write
 MAX_VERIFY_ATTEMPTS = 2  # write -> render -> verify -> write

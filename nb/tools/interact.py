@@ -27,6 +27,39 @@ def use_mailbox(mailbox):
     MAILBOX = mailbox
 
 
+def ask_stuck(found, phase):
+    """
+    Route the stuck-detector's finding the same way every other question goes,
+    and hand back the text to put to the model.
+
+    It does NOT reuse `_prompt`, for one reason: `_prompt` treats EOF as fatal,
+    because a Specified input must never be assumed. This question is the
+    opposite -- "carry on" is the safe answer, so stdin closing, a Ctrl-C, or
+    nobody being there must all mean carry on. A detector that can kill an
+    unattended run when it guesses wrong would be worse than no detector.
+    """
+    from .. import stuck
+
+    def asker(why, options, default):
+        tell(f"\n{'─' * 72}\nNO PROGRESS — {phase} phase\n{'─' * 72}")
+        tell(f"  {why}")
+        if MAILBOX is not None:
+            tell(f"  waiting up to {stuck.ASK_WAIT / 60:.0f} min — "
+                 f"{MAILBOX.notebook.question_path}")
+            return MAILBOX.ask("stuck", "NO PROGRESS", why, options,
+                               default=default, wait=stuck.ASK_WAIT)
+        sys.stdout.write(f"\n  [{options}] > ")
+        sys.stdout.flush()
+        try:
+            line = sys.stdin.readline()
+        except KeyboardInterrupt:
+            say()
+            return default
+        return line.strip() or default if line else default
+
+    return stuck.escalate(found, phase, asker)
+
+
 def _prompt(banner, body, hint):
     # tell, not say: a question is the one thing a run cannot continue without,
     # so it belongs on the stream a reader is guaranteed to be watching.

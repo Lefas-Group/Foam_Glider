@@ -11,7 +11,7 @@ import sys
 from ..config import MAX_CONSULTS, MAX_TURNS, PROBE_POOL
 from ..loop import Terminal, run
 from ..session import Session
-from ..tools.interact import (ask_pool, ask_render_ceiling,
+from ..tools.interact import (ask_pool, ask_render_ceiling, ask_stuck,
                               confirm_assumptions, persist,
                               render_stop)
 from ..preflight import check as preflight
@@ -138,7 +138,8 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
         try:
             run(contents, make_config(), handlers,
                 transcript=notebook.transcript_path, max_turns=MAX_TURNS,
-                on_turn=on_turn)
+                on_turn=on_turn,
+                on_stuck=lambda found: ask_stuck(found, "ask"))
         except Terminal as t:
             return t.payload
         return None

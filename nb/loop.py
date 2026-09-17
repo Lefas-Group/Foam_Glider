@@ -27,6 +27,7 @@ import json
 from .client import complete
 from .config import MAX_TURNS
 from .log import thought
+from .stuck import Detector
 
 
 class Refactor(Exception):
@@ -94,12 +95,18 @@ def _log(path, turn, extra=None):
 
 
 def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
-        on_turn=None):
+        on_turn=None, on_stuck=None):
     """
     Drive the loop until the model stops calling tools, or a Terminal fires.
 
     Returns (response, contents, terminal_payload). `terminal_payload` is None
     when the model simply stopped.
+
+    `on_stuck(found)` is called when the run has gone `stuck.BARREN_LIMIT` turns
+    without writing or measuring anything, and returns text to put to the model
+    (or raises to end the run). It lives here rather than in either phase
+    because this is the only place both phases share, and because a detector
+    that only runs while somebody has the board open is not a detector.
     """
     from google.genai import types
 
@@ -110,6 +117,7 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
     # than the wall. Once, at 70%, because a countdown every turn becomes
     # wallpaper and costs cache on each append.
     warn_at = int(max_turns * 0.7)
+    detector = Detector()
     for n in range(max_turns):
         if n == warn_at:
             contents.append({"role": "user", "parts": [{"text":
@@ -135,6 +143,14 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
         calls = [p.function_call for p in (turn.parts or []) if p.function_call]
         if not calls:
             return resp, contents, None
+
+        # DETECTED here, DELIVERED below. The calls still run and are still
+        # answered: an unanswered function_call is a 400 on the next request, so
+        # the nudge cannot go between a call and its response. It lands right
+        # after, which is also the better place for it -- the model gets its
+        # answers and the outside view together, and can change course rather
+        # than re-ask what it just asked.
+        found = detector.turn(calls) if on_stuck else None
 
         parts = []
         for c in calls:
@@ -167,5 +183,10 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
 
         # All responses in ONE turn. Splitting them degrades parallel calling.
         contents.append(types.Content(role="user", parts=parts))
+
+        if found:
+            nudge = on_stuck(found)
+            if nudge:
+                contents.append({"role": "user", "parts": [{"text": nudge}]})
 
     raise RuntimeError(f"max turns ({max_turns}) exceeded without a proposal")

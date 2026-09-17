@@ -22,6 +22,7 @@ from ..schema import Proposal
 from ..session import Session
 from ..preflight import check as preflight
 from ..tools import guards, verifiers
+from ..tools.interact import ask_stuck
 from ..tools.scaffold import create_chapter
 from .. import metrics
 from . import verify as verify_phase
@@ -582,7 +583,8 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         def loop_once():
             run(contents, make_config(), handlers,
                 transcript=notebook.transcript_path, max_turns=MAX_TURNS,
-                on_turn=on_turn)
+                on_turn=on_turn,
+                on_stuck=lambda found: ask_stuck(found, "write"))
 
         # --- lint, which is mandatory whatever the loop believes ------------
         # ASKED BEFORE THE LOOP, not after. A resumed run often has nothing for

@@ -40,9 +40,14 @@ class Mailbox:
         self.answers = dict(answers or {})
         self.wait = wait
 
-    def ask(self, kind, name, why="", options="", default=None):
+    def ask(self, kind, name, why="", options="", default=None, wait=None):
         """
         Put a question and block until answered, or until `wait` expires.
+
+        `wait` overrides the mailbox's own deadline for one question. An hour is
+        right for a budget the run cannot proceed without; it is wrong for "you
+        look stuck, shall I carry on?", where the safe answer is yes and an hour
+        of silence would cost more than the thing being asked about.
 
         Returns the answer as a string, or `default` on timeout when there is
         one -- budgets and assumption confirmations have safe defaults and must
@@ -59,7 +64,7 @@ class Mailbox:
         self.notebook.question_path.write_text(json.dumps(q, indent=1) + "\n")
         runstate.write(self.notebook, waiting_on=name)
 
-        deadline = time.time() + self.wait
+        deadline = time.time() + (self.wait if wait is None else wait)
         try:
             while time.time() < deadline:
                 try:
@@ -78,7 +83,8 @@ class Mailbox:
         if default is not None:
             return str(default)
         raise SystemExit(
-            f"\n  no answer to {name!r} after {self.wait / 60:.0f} min. The "
+            f"\n  no answer to {name!r} after "
+            f"{(self.wait if wait is None else wait) / 60:.0f} min. The "
             f"question is at\n  {self.notebook.question_path}\n"
             f"  Answer it and resume with `nb write {self.notebook.root.name}`.")
 

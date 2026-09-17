@@ -55,6 +55,17 @@ are files in `_scratch/runs/<id>/`, so killing the board leaves the agent
 waiting, and `nb answer` works from anywhere. `--answers file.json` pre-empts
 the routine questions.
 
+## When a run wedges
+
+Eight turns without writing or measuring anything and the run asks you whether
+to continue — `stop`, or type advice and it goes to the model. Silence for five
+minutes means continue, so a detached run is never stranded by it. Calibrated on
+recorded transcripts: the run that prompted it went 26 barren turns, healthy
+runs peak at 4.
+
+`MAX_TURNS` (60) stays as the backstop. A run that reaches it now means the
+detector missed something — worth opening, not shrugging at.
+
 ## Three checks
 
 **lint** reads the source. **verify** reads the *rendered* page with a fresh

@@ -48,6 +48,7 @@ and that would rot in silence.
 - the render lock, so two concurrent renders will fail on `_freeze/site_libs/`
 - `ipopt.max_wall_time` confined to probes, so a busy machine can kill a solve
   mid-render and present it to the model as a bug to fix
+- the stuck detector, so a run that wedges burns every turn it has left
 
 Everything else — the 32 rules, the two stops, budgets in the footer,
 `verify`, `check`, the manifest — is the same.
