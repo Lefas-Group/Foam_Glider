@@ -41,6 +41,17 @@ class Refactor(Exception):
     """
 
 
+class Stopped(Exception):
+    """
+    Someone asked this run to stop -- `nb stop`, or a coordinator.
+
+    Raised rather than returned so it unwinds through the same `finally` that
+    every other ending uses, and caught by the phases so the stop is RECORDED.
+    A run that vanishes without an outcome is indistinguishable from one that
+    crashed, and telling those apart is most of what the board is for.
+    """
+
+
 class Terminal(Exception):
     """A handler that ends the loop -- `propose`. Carries its result."""
 
@@ -95,7 +106,7 @@ def _log(path, turn, extra=None):
 
 
 def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
-        on_turn=None, on_stuck=None):
+        on_turn=None, on_stuck=None, should_stop=None):
     """
     Drive the loop until the model stops calling tools, or a Terminal fires.
 
@@ -119,6 +130,10 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
     warn_at = int(max_turns * 0.7)
     detector = Detector()
     for n in range(max_turns):
+        # Checked before spending a request, not after: the point of stopping a
+        # run is to stop paying for it.
+        if should_stop and should_stop():
+            raise Stopped(f"stopped after {n} turns")
         if n == warn_at:
             contents.append({"role": "user", "parts": [{"text":
                 f"{max_turns - n} of your {max_turns} turns remain. Finish with "

@@ -9,7 +9,7 @@ there is no pause the process did not choose.
 import sys
 
 from ..config import MAX_CONSULTS, MAX_TURNS, PROBE_POOL
-from ..loop import Terminal, run
+from ..loop import Stopped, Terminal, run
 from ..session import Session
 from ..tools.interact import (ask_pool, ask_render_ceiling, ask_stuck,
                               confirm_assumptions, persist,
@@ -143,7 +143,8 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
             run(contents, make_config(), handlers,
                 transcript=notebook.transcript_path, max_turns=MAX_TURNS,
                 on_turn=on_turn,
-                on_stuck=lambda found: ask_stuck(found, "ask"))
+                on_stuck=lambda found: ask_stuck(found, "ask"),
+                should_stop=lambda: runstate.stop_requested(notebook))
         except Terminal as t:
             return t.payload
         return None
@@ -220,6 +221,10 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
                 tell(render_stop(proposal, notebook))
                 return 0
             gate = proposal
+        except Stopped as e:
+            run_metrics.close("stopped")
+            tell(f"\n  {e}. Nothing was written.")
+            return 1
         except RuntimeError as e:
             run_metrics.close("max_turns")
             tell(f"\n  {e}. Nothing was written.")

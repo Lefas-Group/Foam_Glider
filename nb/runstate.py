@@ -57,6 +57,37 @@ def read(notebook_or_dir):
         return {}
 
 
+def request_stop(notebook, why="", by="user"):
+    """
+    Ask a run to stop, by leaving a file it will find.
+
+    A SIGNAL was the obvious alternative and is worse. SIGTERM's default handler
+    ends the process where it stands: no `finally`, so the MCP server is not shut
+    down, no metrics row, and no `outcome` -- which means the board would render
+    a deliberate stop as `died`, the one state it exists to distinguish. A file
+    the run notices leaves it to exit through its own door, recording what
+    happened on the way out.
+
+    The cost is that it is COOPERATIVE: a run inside a long probe or a render
+    will not notice until that returns. `kill` is still there for a run that has
+    genuinely stopped listening.
+    """
+    d = getattr(notebook, "run", notebook)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "stop.json").write_text(json.dumps(
+        {"why": why, "by": by, "asked_at": time.time()}, indent=1) + "\n")
+    return d / "stop.json"
+
+
+def stop_requested(notebook_or_dir):
+    """The stop request for a run, or None."""
+    d = getattr(notebook_or_dir, "run", notebook_or_dir)
+    try:
+        return json.loads((d / "stop.json").read_text())
+    except (OSError, ValueError):
+        return None
+
+
 def alive(state):
     """True if the pid exists, False if not, None if we cannot tell."""
     pid = state.get("pid")

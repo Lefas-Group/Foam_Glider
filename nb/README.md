@@ -13,6 +13,7 @@ uv run --group nb python -m nb write  <notebook>             # resume a stop
 uv run --group nb python -m nb board  <notebook>             # N agents, one terminal
 uv run --group nb python -m nb answer <notebook> [run] "…"   # reply to a waiting run
 uv run --group nb python -m nb watch  <notebook> [run]       # follow the detail
+uv run --group nb python -m nb stop   <notebook> [run]       # ask a run to stop
 uv run --group nb python -m nb clean  <notebook> [--yes]     # drop spent runs
 uv run --group nb python -m nb view   <notebook> [--force]   # build the site
 uv run --group nb python -m nb eval   <notebook>             # runs, by model
@@ -52,7 +53,11 @@ uv run --group nb python -m nb board glider-notebook
 
 `--detach` returns a run id and then goes quiet — its conversation is the run
 directory, so nothing of it prints over the board. `board` shows every run and
-prompts you for whichever is asking. It is a **view, not a supervisor**: questions and answers
+prompts you for whichever is asking. `nb stop` asks a run to end: cooperative, checked before each turn and while
+blocked on a question, so it exits through its own door and records `stopped`
+rather than looking like a crash. It reverts nothing.
+
+`board` is a **view, not a supervisor**: questions and answers
 are files in `_scratch/runs/<id>/`, so killing the board leaves the agent
 waiting, and `nb answer` works from anywhere. `--answers file.json` pre-empts
 the routine questions.

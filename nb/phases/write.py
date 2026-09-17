@@ -17,7 +17,7 @@ import time
 
 from ..config import (MAX_LINT_ATTEMPTS, MAX_RENDER_FIXES, MAX_TURNS,
                       MAX_VERIFY_ATTEMPTS, PROBE_POOL, Notebook)
-from ..loop import Refactor, run
+from ..loop import Refactor, Stopped, run
 from ..schema import Proposal
 from ..session import Session
 from ..preflight import check as preflight
@@ -585,7 +585,8 @@ def main(notebook_path, verbose=True, allow_refactor=False,
             run(contents, make_config(), handlers,
                 transcript=notebook.transcript_path, max_turns=MAX_TURNS,
                 on_turn=on_turn,
-                on_stuck=lambda found: ask_stuck(found, "write"))
+                on_stuck=lambda found: ask_stuck(found, "write"),
+                should_stop=lambda: runstate.stop_requested(notebook))
 
         # --- lint, which is mandatory whatever the loop believes ------------
         # ASKED BEFORE THE LOOP, not after. A resumed run often has nothing for
@@ -762,6 +763,13 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                 accepted = moved
             else:
                 tell("  check     clean — the refactor moved nothing")
+    except Stopped as e:
+        # Asked to stop. The entry stays exactly where it is: a stop is "spend
+        # nothing more on this", not "undo it" -- deciding what to keep is the
+        # caller's, and `nb clean` will not touch a run whose chapter is dirty.
+        run_metrics.close("stopped")
+        tell(f"\n  {e}. The entry is on disk at\n  {entry_path}")
+        return 1
     except RuntimeError as e:
         # Out of turns. `ask` has caught this since it was written; `write` did
         # not, so the loop's RuntimeError left the phase with no metrics row, no

@@ -8,6 +8,7 @@
     nb eval  <notebook>                      what each model actually did
     nb board <notebook>                      N agents, one terminal
     nb answer <notebook> [run] "<value>"     reply to a waiting run
+    nb stop  <notebook> [run] ["why"]        ask a run to stop, and record it
     nb watch <notebook> [--all]              follow the detail, live
     nb clean <notebook> [--keep N] [--yes]   drop spent run directories
 
@@ -116,6 +117,13 @@ def main(argv):
             return 2
         from .phases.answer import main as answer
         return answer(rest)
+
+    if cmd == "stop":
+        if not rest:
+            print(USAGE)
+            return 2
+        from .phases.stop import main as stop
+        return stop(rest)
 
     if cmd == "clean":
         if not rest:

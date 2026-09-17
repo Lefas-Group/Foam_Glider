@@ -67,6 +67,13 @@ class Mailbox:
         deadline = time.time() + (self.wait if wait is None else wait)
         try:
             while time.time() < deadline:
+                # Blocked on a question is where a run spends most of its idle
+                # life, so it is the one place a stop MUST be noticed -- asking
+                # a run to stop and having it sit there for the rest of the hour
+                # would make the command a lie.
+                if runstate.stop_requested(self.notebook):
+                    from .loop import Stopped
+                    raise Stopped(f"stopped while waiting on {name!r}")
                 try:
                     a = json.loads(self.notebook.answer_path.read_text())
                 except (OSError, ValueError):
