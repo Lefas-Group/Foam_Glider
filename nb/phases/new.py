@@ -37,7 +37,13 @@ GITIGNORE = ("/.quarto/\n"
              # a notebook created HERE was fine by accident -- one created in a
              # sibling directory, which `nb new` exists to support, would have
              # committed a directory per run.
-             "/_scratch/\n")
+             # CONTENTS, not the directory: a negation cannot re-include a
+             # file whose parent directory is excluded.
+             "/_scratch/*\n"
+             # Except the vendored probe base. Rule 11 requires it and
+             # preflight refuses to start without it, so a notebook that does
+             # not commit it cannot be run from a fresh clone at all.
+             "!/_scratch/_probe_base.py\n")
 
 # Rule 11: vendored, and checked byte-for-byte. The tuple order is
 # (canonical in vendor/, destination in the new notebook).

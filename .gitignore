@@ -35,7 +35,16 @@ optimised-glider-notebook/.quarto/
 
 # Draft/probe work, never committed. Each notebook has its own; the leading
 # underscore is what keeps Quarto from rendering it as part of the project.
-_scratch/
+# CONTENTS, not the directory: git cannot re-include a file whose parent
+# directory is excluded, so `_scratch/` plus a negation silently does nothing.
+# And `**/` because a slash anywhere but the end anchors a pattern to this
+# file's directory -- `_scratch/*` would match only at the repo root.
+**/_scratch/*
+# ...except the vendored probe base, which rule 11 REQUIRES and preflight
+# refuses to start without. Ignoring it meant no notebook was reproducible from
+# git: a fresh clone could not run `nb ask` on anything until the file was
+# restored by hand. Found by checking out an old commit and watching it fail.
+!**/_scratch/_probe_base.py
 
 # macOS
 .DS_Store
