@@ -54,6 +54,10 @@ def _runs(notebook):
     return live + done[:max(0, SHOWN - len(live))]
 
 
+def _ago(seconds):
+    return f"{seconds / 60:.0f}m" if seconds >= 60 else f"{seconds:.0f}s"
+
+
 def _table(runs):
     from rich.table import Table
     t = Table(box=None, pad_edge=False, expand=True)
@@ -62,6 +66,7 @@ def _table(runs):
                                 ("phase", "", "left"),
                                 ("turn", "", "right"),
                                 ("for", "grey50", "right"),
+                                ("waited", "grey50", "right"),
                                 ("state", "", "left")):
         t.add_column(col, style=style or None, justify=justify)
     for r in runs:
@@ -78,9 +83,18 @@ def _table(runs):
         else:
             state = "[green]running[/green]"
         since = time.time() - (r.get("updated") or r.get("started") or time.time())
+        # `for` is time since the run last did ANYTHING; `waited` is time since
+        # the question was put. They are usually the same number while a run is
+        # blocked, and they stop being the same the moment they matter: a run
+        # that answered one question and is now asking another shows a fresh
+        # `waited` against a long `for`. The question carries its own asked_at,
+        # so this is the real figure rather than an inference from the last
+        # state write.
+        q = r.get("question") or {}
+        asked = q.get("asked_at")
         t.add_row(r.get("run", "?"), r.get("chapter") or "—",
                   r.get("phase", "?"), str(r.get("turn", "")),
-                  f"{since / 60:.0f}m" if since >= 60 else f"{since:.0f}s",
+                  _ago(since), _ago(time.time() - asked) if asked else "",
                   state)
     return t
 
