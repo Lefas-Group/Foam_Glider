@@ -28,7 +28,7 @@ from .. import metrics
 from . import verify as verify_phase
 from .view import site
 from .common import setup, report, spoken_calls
-from ..log import open_log, say, tell
+from ..log import detach_output, open_log, say, tell
 from .. import runstate
 
 BRIEF = """\
@@ -459,6 +459,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         from ..mailbox import Mailbox
         from ..tools.interact import use_mailbox
         use_mailbox(Mailbox(notebook, answers=answers))
+        detach_output()
     # Before open_log, deliberately: there is no run to log against, and the
     # log's separator wants a title that only the proposal can supply.
     if not notebook.proposal_path.exists():

@@ -144,15 +144,7 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
         if not calls:
             return resp, contents, None
 
-        # DETECTED here, DELIVERED below. The calls still run and are still
-        # answered: an unanswered function_call is a 400 on the next request, so
-        # the nudge cannot go between a call and its response. It lands right
-        # after, which is also the better place for it -- the model gets its
-        # answers and the outside view together, and can change course rather
-        # than re-ask what it just asked.
-        found = detector.turn(calls) if on_stuck else None
-
-        parts = []
+        parts, results = [], []
         for c in calls:
             try:
                 out = handlers[c.name](**dict(c.args))
@@ -166,6 +158,7 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
                 # Every call gets an answer, including a failed one: an
                 # unanswered function_call is an error on the next request.
                 out = {"error": f"{type(e).__name__}: {e}"}
+            results.append((c, out))
             if isinstance(out, dict) and "_image" in out:
                 # An image has to arrive as an inline part; put through a
                 # function_response it is just a base64 string the model cannot
@@ -184,6 +177,11 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
         # All responses in ONE turn. Splitting them degrades parallel calling.
         contents.append(types.Content(role="user", parts=parts))
 
+        # AFTER the responses, never between a call and its answer: an
+        # unanswered function_call is a 400 on the next request. It also needs
+        # the outputs, since a productive tool that ERRORED is not progress --
+        # so the check cannot happen before the handlers run.
+        found = detector.turn(results) if on_stuck else None
         if found:
             nudge = on_stuck(found)
             if nudge:

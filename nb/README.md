@@ -13,6 +13,7 @@ uv run --group nb python -m nb write  <notebook>             # resume a stop
 uv run --group nb python -m nb board  <notebook>             # N agents, one terminal
 uv run --group nb python -m nb answer <notebook> [run] "…"   # reply to a waiting run
 uv run --group nb python -m nb watch  <notebook> [run]       # follow the detail
+uv run --group nb python -m nb clean  <notebook> [--yes]     # drop spent runs
 uv run --group nb python -m nb view   <notebook> [--force]   # build the site
 uv run --group nb python -m nb eval   <notebook>             # runs, by model
 ```
@@ -49,8 +50,9 @@ uv run --group nb python -m nb ask glider-notebook "<question>" --detach &
 uv run --group nb python -m nb board glider-notebook
 ```
 
-`--detach` returns a run id at once. `board` shows every run and prompts you for
-whichever is asking. It is a **view, not a supervisor**: questions and answers
+`--detach` returns a run id and then goes quiet — its conversation is the run
+directory, so nothing of it prints over the board. `board` shows every run and
+prompts you for whichever is asking. It is a **view, not a supervisor**: questions and answers
 are files in `_scratch/runs/<id>/`, so killing the board leaves the agent
 waiting, and `nb answer` works from anywhere. `--answers file.json` pre-empts
 the routine questions.
@@ -62,6 +64,9 @@ to continue — `stop`, or type advice and it goes to the model. Silence for fiv
 minutes means continue, so a detached run is never stranded by it. Calibrated on
 recorded transcripts: the run that prompted it went 26 barren turns, healthy
 runs peak at 4.
+
+A productive tool that keeps *failing* counts as no progress either, so a
+`propose` the model cannot satisfy trips it at eight rather than sixty.
 
 `MAX_TURNS` (60) stays as the backstop. A run that reaches it now means the
 detector missed something — worth opening, not shrugging at.

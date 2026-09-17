@@ -29,6 +29,24 @@ import sys
 import time
 
 _log = None
+_detached = False
+
+
+def detach_output():
+    """
+    Stop `tell()` reaching stdout, for a run with nobody in front of it.
+
+    `--detach` means the conversation happens through the run directory: the
+    board reads `run.json`, questions go to `question.json`, and the detail is
+    in `status.log` either way. stdout is then not a terminal anyone is reading
+    -- it is the SAME terminal the board is drawing on, and a banner printed
+    into a `rich` Live region corrupts it. Two agents and it is unreadable.
+
+    The log still gets everything, stamped, so nothing is lost: `nb watch` and
+    a coordinator read the file, which is what they read anyway.
+    """
+    global _detached
+    _detached = True
 
 
 def open_log(notebook, phase="", question=""):
@@ -115,9 +133,11 @@ def tell(*args, **kw):
     Stamped in the LOG but not on the terminal: the log is read by a watcher
     working out whether anything is still happening, and a half-stamped file
     makes that arithmetic guesswork. The terminal has a human in front of it
-    who does not need the time on every line.
+    who does not need the time on every line. Detached, there is no such human
+    and nothing goes to stdout at all -- see `detach_output`.
     """
-    print(*args, **kw)
+    if not _detached:
+        print(*args, **kw)
     if _log is not None:
         print(*_stamped(args), file=_log, **kw)
         _log.flush()

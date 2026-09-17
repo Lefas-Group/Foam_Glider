@@ -17,7 +17,7 @@ from ..tools.interact import (ask_pool, ask_render_ceiling, ask_stuck,
 from ..preflight import check as preflight
 from .. import metrics
 from .common import setup, report, spoken_calls
-from ..log import open_log, say, tell
+from ..log import detach_output, open_log, say, tell
 from .. import runstate
 
 BRIEF = """\
@@ -96,7 +96,11 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
         from ..mailbox import Mailbox
         from ..tools.interact import use_mailbox
         use_mailbox(Mailbox(notebook, answers=answers))
+        # The run id goes to the terminal FIRST -- it is the one thing the
+        # caller needs and the only way to address this run afterwards -- and
+        # then stdout closes for good.
         tell(f"  run       {notebook.run_id}")
+        detach_output()
     open_log(notebook, "ask", question)
     run_metrics = metrics.Run(notebook, "ask", question)
     # Asked only at the head of a chain. A queued follow-on, and the write

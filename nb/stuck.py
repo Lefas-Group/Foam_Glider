@@ -59,6 +59,13 @@ hundred turns to finish.
 # searching and shelling are how an agent ORIENTS -- all legitimate, none of them
 # evidence that the run is advancing. `lint` and `render` are deliberately absent
 # for the same reason: re-linting unchanged source is the loop, not the exit.
+#
+# AND IT MUST HAVE WORKED. `loop.py` turns every handler exception into
+# `{"error": ...}` and hands it straight back, so a tool that fails persistently
+# -- a schema the model cannot satisfy, a bug in a verifier -- is called every
+# turn, resets the counter every turn, and burns the whole cap. A call that
+# errored produced nothing; counting it as progress is how a detector goes blind
+# to exactly the failure it was built for, wearing a different tool's name.
 PRODUCTIVE = frozenset({
     "write_file", "edit_file", "create_chapter",     # the entry moved
     "probe",                                         # something was measured
@@ -67,6 +74,21 @@ PRODUCTIVE = frozenset({
 })
 
 BARREN_LIMIT = 8
+
+
+def failed(out):
+    """
+    Did this tool call come back empty-handed?
+
+    Three shapes, because three layers produce them: the loop's catch-all wraps
+    an exception as {"error": ...}; a tool can answer with one itself; and
+    `bash` answers a disallowed command with a plain "rejected:" string rather
+    than raising, since that is guidance rather than a fault.
+    """
+    if isinstance(out, dict):
+        return "error" in out
+    text = str(out or "")
+    return text.startswith("rejected:") or text.startswith("error:")
 
 
 class Stuck:
@@ -116,14 +138,24 @@ class Detector:
         self.barren = 0
         self.calls = []
 
-    def turn(self, calls):
-        names = {c.name for c in calls}
-        if not names or (PRODUCTIVE & names):
+    def turn(self, results):
+        """
+        `results` is [(call, output)] for the turn, in call order.
+
+        Progress is one productive call that did NOT come back an error. An
+        errored call still goes into the evidence, because "propose failed eight
+        times" is precisely what the person answering needs to see.
+        """
+        advanced = any(c.name in PRODUCTIVE and not failed(out)
+                       for c, out in results)
+        if not results or advanced:
             self.barren = 0
             self.calls = []
             return None
         self.barren += 1
-        self.calls.extend((c.name, _arg_summary(c)) for c in calls)
+        self.calls.extend(
+            (c.name + (" !" if failed(out) else ""), _arg_summary(c))
+            for c, out in results)
         if self.barren < self.limit:
             return None
         found = Stuck(self.barren, list(self.calls))

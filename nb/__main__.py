@@ -9,6 +9,7 @@
     nb board <notebook>                      N agents, one terminal
     nb answer <notebook> [run] "<value>"     reply to a waiting run
     nb watch <notebook> [--all]              follow the detail, live
+    nb clean <notebook> [--keep N] [--yes]   drop spent run directories
 
 The terminal carries the conversation only -- the questions, the milestones, the
 finished entry. Every turn, the model's reasoning and the probe budgets go to
@@ -115,6 +116,13 @@ def main(argv):
             return 2
         from .phases.answer import main as answer
         return answer(rest)
+
+    if cmd == "clean":
+        if not rest:
+            print(USAGE)
+            return 2
+        from .phases.clean import main as clean
+        return clean(rest)
 
     if cmd == "eval":
         if not rest:
