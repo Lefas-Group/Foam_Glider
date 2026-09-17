@@ -1,0 +1,42 @@
+---
+title: "What is the penalty for constraining the wings to sweep backwards?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 120.0
+SOLVE_BUDGET = 30.0
+PROBE_POOL = 30.0
+PROBE_SPENT = 17.2
+
+res = optimize_full_glider(verbose=False, min_sweep=0)
+sink_rate = res["sol"].value(res["sink_rate"])
+sweep = res["sol"].value(res["sweep"])
+
+sink_rate_baseline = 0.277 # from 2026-09-16-01-what-sink-rate-is-achieved-when-all-geometry-parameters-are-optimized.qmd
+```
+
+::: {.hero-pair}
+[`{python} f"{sink_rate_baseline:.3f}"`]{.hero-value}
+[unconstrained sink rate (m/s)]{.hero-label}
+
+[`{python} f"{sink_rate:.3f}"`]{.hero-value}
+[constrained sink rate (m/s)]{.hero-label}
+:::
+
+**Answer.** Constraining the leading edge sweep to be positive results in an optimal sweep that hits the bound exactly at `{python} f"{sweep:.1f}"`°. The sink rate increases only slightly, from `{python} f"{sink_rate_baseline:.3f}"` m/s in [the unconstrained optimization](2026-09-16-01-what-sink-rate-is-achieved-when-all-geometry-parameters-are-optimized.qmd) to `{python} f"{sink_rate:.3f}"` m/s.
+
+::: {.callout-tip}
+## Specified
+Asked of the user, 2026-09-16:
+
+1. **Sweep direction**: min_sweep=0, backwards only.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_full_glider)
+
+```

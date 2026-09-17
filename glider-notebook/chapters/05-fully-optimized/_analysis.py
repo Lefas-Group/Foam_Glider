@@ -1,11 +1,11 @@
-def optimize_full_glider(verbose=False):
+def optimize_full_glider(verbose=False, min_sweep=-45, init_sweep=0):
     import aerosandbox as asb
     import aerosandbox.numpy as np
 
     opti = asb.Opti()
     c_root = opti.variable(init_guess=0.08, lower_bound=0.01, upper_bound=0.15)
     taper = opti.variable(init_guess=0.5, lower_bound=0.1, upper_bound=1.0)
-    sweep = opti.variable(init_guess=0, lower_bound=-45, upper_bound=45)
+    sweep = opti.variable(init_guess=init_sweep, lower_bound=min_sweep, upper_bound=45)
     dihedral = opti.variable(init_guess=5, lower_bound=0, upper_bound=20)
 
     h_span = opti.variable(init_guess=0.1, lower_bound=0.02, upper_bound=0.3)

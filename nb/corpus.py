@@ -36,12 +36,11 @@ EXPECTED = {
     # 0.36`, taken from 01-foam-glider and rendered as an authority. It is the
     # only one, and it is real -- the design-constant false positives went when
     # the check started ignoring values the chapter's own model already holds.
-    # 3 warnings: the transcription check on `old_sink = 0.36`, plus two
-    # chapter-05 entries at 11-12 s against a 20 s ceiling. That second pair is
-    # rule 17 reporting the same thin headroom that made `ipopt.max_wall_time`
-    # worth confining to probes -- a render at 60% of its ceiling is one busy
-    # machine away from being killed and handed to the model as a bug.
-    "glider-notebook": (0, 3),
+    # One warning: the transcription check on `old_sink = 0.36`. The two
+    # chapter-05 entries that were at 11-12 s against a 20 s ceiling now render
+    # in 9.4 and 9.9 s, so rule 17 stops flagging them -- the entries got
+    # faster, which is the only reason a count should ever fall.
+    "glider-notebook": (0, 1),
     "aircraft-notebook": (27, 28),
     # +3 blocking from rule 31: its four chapters hold four copies of one
     # _model.py, three of them byte-identical to an earlier chapter and
