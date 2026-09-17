@@ -759,6 +759,23 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                 accepted = moved
             else:
                 tell("  check     clean — the refactor moved nothing")
+    except RuntimeError as e:
+        # Out of turns. `ask` has caught this since it was written; `write` did
+        # not, so the loop's RuntimeError left the phase with no metrics row, no
+        # message, and a `run.json` whose last write said turn 40 -- which the
+        # board rendered as `done`. Measured on a run that spent thirty turns
+        # chasing a tool it did not have.
+        #
+        # Unlike `ask`, the entry IS on disk here, and it is often nearly
+        # finished. So this says where it is rather than "nothing was written".
+        run_metrics.close("max_turns")
+        tell(f"\n  {'─' * 70}\n  OUT OF TURNS — nothing committed\n"
+             f"  {'─' * 70}\n"
+             f"  {e}\n"
+             f"  entry     {entry_path}\n\n"
+             f"  It is on disk and unlinted. To pick it up:\n"
+             f"    uv run --group nb python -m nb write {notebook.root.name}\n")
+        return 1
     except Refactor as r:
         # The agent tried to change the vehicle, was refused, and said why.
         # Ending here is the point: re-proving a chapter is minutes of solves,

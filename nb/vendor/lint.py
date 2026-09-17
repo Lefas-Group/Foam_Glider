@@ -1017,8 +1017,9 @@ def _stale_freeze(root, chapters):
                 root / "chapters" / c / touched[0],
                 f"modified, but the freeze is not — {len(frozen)} frozen "
                 f"page(s) are serving values the current model may not produce. "
-                f"Run check.py, which discards what this edit can have "
-                f"invalidated and renders"))
+                f"Nothing for an agent to run: the write phase re-proves the "
+                f"chapter itself before it commits. From a shell it is "
+                f"`uv run python nb/vendor/check.py <notebook> {c}`"))
     return found
 
 

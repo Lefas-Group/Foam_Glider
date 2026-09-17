@@ -14,6 +14,8 @@ import sqlite3
 import sys
 import time
 
+from . import runstate
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
     id                     INTEGER PRIMARY KEY,
@@ -102,6 +104,14 @@ class Run:
         self.row.update(kw)
 
     def close(self, outcome):
+        # The same word goes to two places. The db is history; `run.json` is
+        # what `nb board` and a coordinator read, and without this every ending
+        # looked identical there -- a clean commit, a stop at a gate and a run
+        # that died on max turns all rendered as `done`, because the board had
+        # nothing to go on but a missing pid. A run that never reaches here
+        # leaves no outcome at all, which is how `died` stays distinguishable
+        # from every ending the system chose.
+        runstate.write(self.notebook, outcome=outcome)
         self.row["outcome"] = outcome
         self.row["duration_s"] = round(time.time() - self.t0, 1)
         cols = ", ".join(self.row)

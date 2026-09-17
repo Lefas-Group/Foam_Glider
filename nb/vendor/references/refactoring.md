@@ -51,7 +51,10 @@ uv run --group nb python nb/vendor/check.py <notebook> [chapter ...]
 ```
 
 `check.py` lints, deletes the freeze, renders and diffs in one call, and names
-the figures whose bytes moved so only those need reading. `freezediff.py` alone
+the figures whose bytes moved so only those need reading. **That command is for
+a person at a shell, not for you** — re-proving a chapter re-solves every entry
+in it, which is minutes, and the write phase already runs it for you when a
+function body actually moved. There is no `check` tool for the same reason. `freezediff.py` alone
 does the last step if the render is already done.
 
 **Verify the instrument before believing it.** On an unchanged tree the diff must

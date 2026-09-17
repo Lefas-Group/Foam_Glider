@@ -66,7 +66,13 @@ def _table(runs):
         t.add_column(col, style=style or None, justify=justify)
     for r in runs:
         if r["alive"] is False:
-            state = "[dim]done[/dim]"
+            # `outcome` is written by metrics.close(), so its absence means the
+            # run never reached an ending the system chose: it crashed, was
+            # killed, or the machine slept through its deadline. That is the one
+            # state worth a colour, and it used to be indistinguishable from a
+            # clean commit.
+            out = r.get("outcome")
+            state = (f"[dim]{out}[/dim]" if out else "[red]died[/red]")
         elif r.get("question"):
             state = "[bold yellow]waiting[/bold yellow]"
         else:
@@ -102,15 +108,26 @@ def follow(notebook):
             while True:
                 runs = _runs(notebook)
                 asking = [r for r in runs if r.get("question")]
-                live.update(_table(runs))
+
+                # The panel is part of the LIVE RENDERABLE, not printed beneath
+                # it. Printing it separately and then restarting the display put
+                # the table's region over the panel's body, so every question
+                # arrived showing its title and nothing else -- you answered
+                # `PROBE TIME POOL` without seeing the units, the default or the
+                # options. Inside the group it is drawn by the same refresh that
+                # draws the table, and cannot be overdrawn by it.
+                group = _table(runs)
+                if asking:
+                    from rich.console import Group
+                    group = Group(group, "", _question_panel(asking[0]))
+                live.update(group, refresh=True)
 
                 if asking:
-                    # Stop the Live display before prompting. A refreshing
-                    # region repaints over the line being typed into, so the
-                    # input has to happen with the display parked.
+                    # Park the display before prompting: a refreshing region
+                    # repaints over the line being typed into. `transient=False`
+                    # leaves the table and panel on screen while input is taken.
                     run = asking[0]
                     live.stop()
-                    console.print(_question_panel(run))
                     try:
                         reply = console.input(
                             f"  [{len(asking)} waiting] > ")
