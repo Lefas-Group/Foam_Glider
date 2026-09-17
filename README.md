@@ -118,7 +118,9 @@ it and the agent is still waiting, or answer from anywhere with `nb answer`.
 That is also the seam a coordinating agent will step into, writing the same
 files while you keep watching the same board.
 
-[`nb/README.md`](nb/README.md) covers the rest.
+[`nb/README.md`](nb/README.md) covers the rest, and
+[`DEPRECATED-single-agent.md`](DEPRECATED-single-agent.md) preserves the
+one-agent version that came before it, as a working checkout.
 
 ## Using the skill with Claude
 
