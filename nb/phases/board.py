@@ -58,6 +58,19 @@ def _ago(seconds):
     return f"{seconds / 60:.0f}m" if seconds >= 60 else f"{seconds:.0f}s"
 
 
+def _asking(runs):
+    """
+    The runs actually waiting on an answer -- LIVE ones only.
+
+    A question file outlives the process that wrote it: the run deletes it when
+    it reads the answer, so a run that died mid-question leaves one behind
+    forever. Prompting for that never ends -- answering writes a file nothing
+    will ever read, the question is still there on the next pass, and the board
+    asks again -- and the answer is silently addressed to a corpse.
+    """
+    return [r for r in runs if r.get("question") and r["alive"] is not False]
+
+
 def _table(runs):
     from rich.table import Table
     t = Table(box=None, pad_edge=False, expand=True)
@@ -117,45 +130,74 @@ def follow(notebook):
     from rich.live import Live
 
     console = Console()
-    with Live(console=console, refresh_per_second=4, transient=False) as live:
+    if not console.is_terminal:
+        # A Live region needs a cursor to move. Piped or redirected there is
+        # none, so every refresh prints the whole table again and the output
+        # grows by a table a second. Fall back to printing only when something
+        # actually changes -- useful for a log, and it cannot scroll the thing
+        # you are reading off the top.
+        return _follow_plain(notebook, console)
+
+    # TRANSIENT. The table is the current state, not a record of it: left
+    # behind, every question pushes another copy of it into the scrollback and
+    # the history becomes unreadable at exactly the point there are enough
+    # agents to need it. Erased on stop, the scrollback holds the CONVERSATION
+    # -- each question, each answer, in order -- and the table lives at the
+    # bottom of the screen where it belongs.
+    with Live(console=console, refresh_per_second=4, transient=True) as live:
         try:
             while True:
                 runs = _runs(notebook)
-                asking = [r for r in runs if r.get("question")]
-
-                # The panel is part of the LIVE RENDERABLE, not printed beneath
-                # it. Printing it separately and then restarting the display put
-                # the table's region over the panel's body, so every question
-                # arrived showing its title and nothing else -- you answered
-                # `PROBE TIME POOL` without seeing the units, the default or the
-                # options. Inside the group it is drawn by the same refresh that
-                # draws the table, and cannot be overdrawn by it.
-                group = _table(runs)
-                if asking:
-                    from rich.console import Group
-                    group = Group(group, "", _question_panel(asking[0]))
-                live.update(group, refresh=True)
+                asking = _asking(runs)
+                live.update(_table(runs), refresh=True)
 
                 if asking:
-                    # Park the display before prompting: a refreshing region
-                    # repaints over the line being typed into. `transient=False`
-                    # leaves the table and panel on screen while input is taken.
                     run = asking[0]
+                    # Stop first (which erases the table), THEN print. The panel
+                    # is written at a clean cursor with nothing live below it,
+                    # so it cannot be overdrawn -- which is what happened when
+                    # the display was restarted over the top of it.
                     live.stop()
+                    console.print(_question_panel(run))
                     try:
-                        reply = console.input(
-                            f"  [{len(asking)} waiting] > ")
+                        reply = console.input(f"  [{len(asking)} waiting] > ")
                     except (EOFError, KeyboardInterrupt):
                         console.print("  left unanswered")
                         return 0
                     mailbox.answer(Notebook(notebook.root, run_id=run["run"]),
                                    reply)
+                    # The permanent record of what you said, since the panel
+                    # above it is permanent too and an answer without its
+                    # question is no use when you scroll back.
+                    console.print(f"  [grey50]{run['run']} ←[/grey50] {reply}\n")
                     live.start()
                     continue
 
                 time.sleep(REFRESH)
         except KeyboardInterrupt:
             return 0
+
+
+def _follow_plain(notebook, console):
+    """No cursor to steer: print the table only when a row changes."""
+    last = None
+    try:
+        while True:
+            runs = _runs(notebook)
+            key = [(r.get("run"), r.get("phase"), r.get("turn"),
+                    r.get("outcome"), bool(r.get("question"))) for r in runs]
+            if key != last:
+                console.print(_table(runs))
+                for r in _asking(runs):
+                    if True:
+                        console.print(_question_panel(r))
+                        console.print(
+                            f"  answer with: nb answer {notebook.root.name} "
+                            f"{r['run']} \"<value>\"")
+                last = key
+            time.sleep(REFRESH)
+    except KeyboardInterrupt:
+        return 0
 
 
 def main(argv):
