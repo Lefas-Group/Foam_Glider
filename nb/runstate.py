@@ -88,6 +88,17 @@ def stop_requested(notebook_or_dir):
         return None
 
 
+def _stat(pid):
+    """The process's `ps` STAT letters, or "" if it is not there."""
+    import subprocess
+    try:
+        r = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)],
+                           capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return r.stdout.strip()
+
+
 def stopped(state):
     """
     True if the process exists but is SUSPENDED (`STAT` T), False if running.
@@ -104,13 +115,7 @@ def stopped(state):
     pid = state.get("pid")
     if not pid:
         return None
-    import subprocess
-    try:
-        r = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)],
-                           capture_output=True, text=True, timeout=5)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    st = r.stdout.strip()
+    st = _stat(pid)
     return st.startswith("T") if st else None
 
 
@@ -121,7 +126,13 @@ def alive(state):
         return None
     try:
         os.kill(pid, 0)
-        return True
+        # A ZOMBIE answers os.kill exactly as a live process does, and is not
+        # alive in any sense that matters: it has exited, and it lingers only
+        # until its parent shell reaps it. Seen straight after killing a
+        # suspended run -- the process was <defunct> and the board would have
+        # gone on calling it `running`. Checked only on the path that would
+        # otherwise say yes, so the cheap test still carries the common case.
+        return not _stat(pid).startswith("Z")
     except ProcessLookupError:
         return False
     except PermissionError:

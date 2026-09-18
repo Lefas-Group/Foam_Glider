@@ -22,6 +22,7 @@ output here is usually the LIST -- "which of these dead runs left something
 behind" -- and not the deletion.
 """
 
+import re
 import shutil
 import subprocess
 import sys
@@ -31,6 +32,9 @@ from ..log import tell
 from .. import runstate
 
 KEEP = 5
+# A run id is a timestamp and a suffix; anything shaped like one was MEANT as
+# one, so a near miss is an error rather than a silently ignored argument.
+RUN_ID = re.compile(r"\d{8}-[0-9a-f]")
 
 
 def _dirty_chapters(notebook):
@@ -73,8 +77,25 @@ def main(argv):
             return 2
     commit = "--yes" in argv
 
+    # NAMING ONE RUN. Without this the only way to drop a specific run is to
+    # pick a --keep that happens to exclude it, which drops whatever else falls
+    # below the line -- done once by accident, on a run nobody had asked about.
+    named = None
+    for a in argv[1:]:
+        if a.startswith("--") or a == str(keep):
+            continue
+        if not RUN_ID.match(a):
+            continue
+        named = a
+
     dirty = _dirty_chapters(notebook)
     runs = notebook.runs()                      # newest first
+    if named is not None:
+        runs = [d for d in runs if d.name == named]
+        if not runs:
+            tell(f"  no such run: {named}")
+            return 1
+        keep = 0                                # the named one is the candidate
     if not runs:
         tell(f"  no runs under {notebook.scratch / 'runs'}")
         return 0

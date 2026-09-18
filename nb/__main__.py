@@ -11,7 +11,8 @@
     nb answer <notebook> [run] "<value>"     reply to a waiting run
     nb stop  <notebook> [run] ["why"]        ask a run to stop, and record it
     nb watch <notebook> [--all]              follow the detail, live
-    nb clean <notebook> [--keep N] [--yes]   drop spent run directories
+    nb clean <notebook> [run] [--keep N]     drop spent run directories
+             [--yes]                          …a named run, or all but the last N
 
 The terminal carries the conversation only -- the questions, the milestones, the
 finished entry. Every turn, the model's reasoning and the probe budgets go to
