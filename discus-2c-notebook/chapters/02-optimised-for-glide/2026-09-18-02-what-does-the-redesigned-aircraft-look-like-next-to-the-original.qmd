@@ -6,13 +6,9 @@ title: "What does the redesigned aircraft look like next to the original?"
 
 ```{python}
 #| code-summary: "Show code"
-setup = baseline_setup()
-reynolds_floor = float(STATION_C[-1] * setup["speed"] / KINEMATIC_VISCOSITY)
-
 # The constrained design, not the unconstrained one: it is the only one of the
 # two that is a credible shape, and it is what "the redesign" means here.
-redesign = optimise(setup["limits"], washout_monotone=True,
-                    reynolds_floor=reynolds_floor, mass_model=True)
+redesign = constrained_redesign()
 
 
 def planform(span, chords):
@@ -101,5 +97,5 @@ plt.show()
 ```{python}
 #| echo: false
 #| output: asis
-footer(baseline_setup)
+footer(constrained_redesign)
 ```

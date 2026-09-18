@@ -243,3 +243,25 @@ def baseline_setup():
         "L_over_D": reference["L_over_D"],
         "limits": baseline_limits(offset),
     }
+
+
+def constrained_redesign(setup=None):
+    """
+    The redesign that cannot exploit the model, built the same way every time.
+
+    Promoted once a third entry wanted it. The three constraints it applies are
+    the ones the unconstrained optimum was found to be abusing: twist that
+    oscillated to its bound, a tip chord that collapsed into a Reynolds regime
+    the section data does not cover, and span bought without paying for the spar
+    that carries it.
+
+    The Reynolds floor is the BASELINE's own tip value, not a number invented
+    for the purpose -- the design may not push the section anywhere the real
+    aircraft does not already operate -- and it is returned alongside the design
+    so an entry can assert the constraint actually bound.
+    """
+    setup = baseline_setup() if setup is None else setup
+    floor = float(STATION_C[-1] * setup["speed"] / KINEMATIC_VISCOSITY)
+    design = optimise(setup["limits"], washout_monotone=True,
+                      reynolds_floor=floor, mass_model=True)
+    return {**design, "reynolds_floor": floor}

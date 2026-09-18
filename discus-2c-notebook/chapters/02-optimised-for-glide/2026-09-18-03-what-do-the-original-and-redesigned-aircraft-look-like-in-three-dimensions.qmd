@@ -1,0 +1,74 @@
+---
+title: "What do the original and redesigned aircraft look like in three dimensions?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+#| code-summary: "Show code"
+import aerosandbox.tools.pretty_plots as asbplt
+
+redesign = constrained_redesign()
+redesign_airplane = build_airplane(redesign["span"], redesign["chords"],
+                                   redesign["twists"])
+
+baseline_tip = SPAN / 2
+redesign_tip = redesign["span"] / 2
+
+# A drawing that let each aircraft fill its own panel would show no difference
+# at all, so the shared limits below are the whole point of the figure.
+assert redesign_tip > baseline_tip, "the redesign is not the longer wing"
+```
+
+**Answer.** Complete aircraft, one viewpoint, identical axis limits
+(@fig-three-d). The amber marks stand at the original's wingtip,
+±[`{python} f"{baseline_tip:.2f}"`]{.key} m; the redesign runs past them to
+±[`{python} f"{redesign_tip:.2f}"`]{.key} m. Fuselage and tail were never design
+variables, so the whole visible difference is span, and the chord moved inboard
+to buy it.
+
+::: {.callout-warning}
+## A rendering of the model, not a drawing of an aircraft
+
+The surfaces come from the same parametric geometry the solver used. Airfoils,
+fuselage shape and tail are reconstructions, so this shows what was computed,
+not what was built.
+:::
+
+```{python}
+#| label: fig-three-d
+#| fig-cap: "The original and the redesign, same viewpoint and same axis limits so the two are directly comparable. Amber marks stand at the original's wingtip on both panels. Vertical scale is compressed relative to span, or a sailplane renders as a line."
+fig, axes = asbplt.figure3d(nrows=1, ncols=2, figsize=(7.2, 2.6),
+                            computed_zorder=False)
+
+half_width = redesign_tip * 1.03
+for axis, airplane, name in [(axes[0], AIRPLANE, "Original"),
+                             (axes[1], redesign_airplane, "Redesign")]:
+    airplane.draw(backend="matplotlib", ax=axis, show=False,
+                  use_preset_view_angle="left_isometric",
+                  set_lims=False, set_equal=False)
+
+    # Identical limits on both panels. Left to itself, draw() autoscales each
+    # axis to its own aircraft, and both wings then fill their panel equally --
+    # which would hide exactly the difference this entry exists to show.
+    axis.set_xlim(-0.3, 7.0)
+    axis.set_ylim(-half_width, half_width)
+    axis.set_zlim(-0.7, 1.5)
+    axis.set_box_aspect((7.3, 2 * half_width, 2.2))
+
+    for side in (1, -1):
+        axis.plot([2.0, 2.0], [side * baseline_tip] * 2, [-0.65, 0.75],
+                  color="#b8860b", lw=1.6, zorder=10)
+
+    axis.set_title(name, fontsize=9, pad=0)
+    axis.set_axis_off()
+
+fig.subplots_adjust(wspace=0.02, left=0.01, right=0.99, top=0.96, bottom=0.02)
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(constrained_redesign)
+```
