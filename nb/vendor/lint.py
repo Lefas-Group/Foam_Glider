@@ -59,6 +59,7 @@ entry can be written compliant rather than corrected afterwards.
     32  no empty callout -- delete it rather than write `None.`
     33  a chapter index declares `order:` and numbers its title
     34  the notebook has a front page that draws its own chapter graph
+    35  a chapter index lists its entries and prints its lineage
 
 Two details the list cannot carry. A value written as an inline expression counts
 as ONE word, so tightening prose is never at odds with computing the numbers in
@@ -1630,6 +1631,43 @@ def _empty_callouts(root, chapters, entries):
     return out
 
 
+def _chapter_index_blocks(root, chapters):
+    """
+    Rule 35. A chapter index keeps the two blocks that orient a reader.
+
+    Both are scaffolded, both are DERIVED, and both are lost the same way rule
+    30's block was lost -- a model rewriting index.qmd with `write_file` rather
+    than editing it. What is left then still renders and still reads fine, which
+    is exactly why nothing notices.
+
+      * the entry listing: without it you land on a chapter index with nothing
+        to click, and navigation falls back to the sidebar;
+      * the lineage cell: the parent is recorded only in `_model.py`'s fork
+        header, inside a collapsed source callout no reader opens.
+
+    Silent on a chapter with no entries: a listing of nothing is furniture, the
+    same judgement rule 32 makes about an empty callout.
+    """
+    out = []
+    for c in chapters:
+        index = root / "chapters" / c / "index.qmd"
+        if not index.exists():
+            continue
+        if not list((root / "chapters" / c).glob("20*.qmd")):
+            continue
+        text = index.read_text()
+        if "id: entries" not in text or "{#entries}" not in text:
+            out.append((index, "has no entry listing — a reader landing here "
+                               "has nothing to click. The scaffold ships the "
+                               "`listing:` block and a `::: {#entries}` div"))
+        if "GENERATED FROM THIS CHAPTER'S OWN" not in text:
+            out.append((index, "does not print its lineage — the parent chapter "
+                               "is recorded only in `_model.py`'s fork header, "
+                               "which no reader opens. The scaffold ships the "
+                               "cell that reads it"))
+    return out
+
+
 def _book_index(root, chapters):
     """
     Rule 34. The notebook has a front page, and it still draws itself.
@@ -1801,6 +1839,7 @@ def check(root, chapters):
     problems += _empty_callouts(root, chapters, entries)
     problems += _index_ordering(root, chapters)
     problems += _book_index(root, chapters)
+    problems += _chapter_index_blocks(root, chapters)
 
     # Rule 13. Scoped to `_analysis.py`: `_model.py` is rendered in full by the
     # chapter index, and `_notebook.py` is deliberately invisible, so requiring
@@ -1888,17 +1927,27 @@ def check(root, chapters):
         # stripping there would find nothing and count each callout's own title
         # as a top-level section. A warning keeps its internal bold lead-ins;
         # what is counted is blocks sitting alongside the answer as peers.
-        top = re.sub(r"^:{3,}\s*\{\.callout-\w+\}.*?^:{3,}\s*$", "", text,
-                     flags=re.S | re.M)
-        top = re.sub(r"```\{python\}.*?```", "", top, flags=re.S)
-        top = re.sub(r"^:{3,}.*$", "", top, flags=re.M)
-        leads = (re.findall(r"^\*\*([^*]+?\.)\*\*", top, re.M)
-                 + re.findall(r"^(#{2,}\s+.+)$", top, re.M))
-        if len(leads) > 1:
-            problems.append(
-                (f, f"{len(leads)} prose sections ({', '.join(l.strip()[:24] for l in leads)})"
-                    f" — an entry has one: the answer. Fold the rest into it, or "
-                    f"into a callout"))
+        #
+        # ENTRIES ONLY, which the message has always said: "an entry has one:
+        # the answer". A chapter index is a different kind of page and has
+        # legitimate structure -- the entry listing, and the collapsed model
+        # source -- so holding it to one section said nothing true about it. It
+        # only ever passed because it happened to carry exactly one heading;
+        # adding the listing collided with a rule that was not aimed at it.
+        # Index quality has its own rules: 24, 30, 32, 33, 34 and 35.
+        if f.name != "index.qmd":
+            top = re.sub(r"^:{3,}\s*\{\.callout-\w+\}.*?^:{3,}\s*$", "", text,
+                         flags=re.S | re.M)
+            top = re.sub(r"```\{python\}.*?```", "", top, flags=re.S)
+            top = re.sub(r"^:{3,}.*$", "", top, flags=re.M)
+            leads = (re.findall(r"^\*\*([^*]+?\.)\*\*", top, re.M)
+                     + re.findall(r"^(#{2,}\s+.+)$", top, re.M))
+            if len(leads) > 1:
+                problems.append(
+                    (f, f"{len(leads)} prose sections "
+                        f"({', '.join(l.strip()[:24] for l in leads)})"
+                        f" — an entry has one: the answer. Fold the rest into "
+                        f"it, or into a callout"))
 
         # Rule 10: a sibling entry named in prose, not linked. Link *labels* are
         # stripped first, so "[the ballast entry](….qmd)" is the fix rather than

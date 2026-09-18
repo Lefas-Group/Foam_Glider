@@ -1,9 +1,40 @@
 ---
 title: "04 · 3 mm foam"
 order: 4
+listing:
+  id: entries
+  contents: "20*.qmd"
+  type: table
+  fields: [title]
+  # By filename, which starts with the date -- entries carry no `date:` of their
+  # own, and within a chapter alphabetical order IS chronological order.
+  sort: "filename"
+  field-display-names:
+    title: "Question"
 ---
 
 {{< include _model.qmd >}}
+
+```{python}
+#| echo: false
+#| output: asis
+# GENERATED FROM THIS CHAPTER'S OWN _model.py (rule 35 keeps this block here).
+# The fork header is the one place the parent is recorded; printing it here means
+# a reader sees the lineage without opening the collapsed source, and it cannot
+# drift from the file it is read out of.
+import pathlib as _pl
+import re as _re
+_hdr = (_pl.Path("chapters/04-thinner-foam/_model.py").read_text()[:2000]
+        if _pl.Path("chapters/04-thinner-foam/_model.py").exists() else "")
+_fk = _re.search(r"^#\s*Forked from chapters/([^/\s]+)/_model\.py", _hdr, _re.M)
+if _fk:
+    _par = _pl.Path("chapters") / _fk.group(1) / "index.qmd"
+    _pt = _re.search(r'^title:\s*"(.+)"\s*$', _par.read_text(), _re.M) \
+        if _par.exists() else None
+    print(f"Forked from [{_pt.group(1) if _pt else _fk.group(1)}]"
+          f"(../{_fk.group(1)}/) — what differs is listed at the top of "
+          f"`_model.py` below.\n")
+```
 
 A redesign of the glider for 3 mm foam instead of 5 mm foam. The foam area density is scaled proportionally, the airfoils are changed to 3% thickness (NACA 4403 and NACA 0003), and the doubled-foam fuselage width is reduced to 6 mm.
 
@@ -28,6 +59,11 @@ Inherited from earlier models:
 1. **Foam density**: scaled linearly from 5 mm foam.
 2. **Tail dimensions**: remain 100×30 mm and 50×30 mm.
 3. **Airfoil thickness**: 3% to match foam.
+:::
+
+## Questions asked here
+
+::: {#entries}
 :::
 
 ## The model

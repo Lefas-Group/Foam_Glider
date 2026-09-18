@@ -1,9 +1,40 @@
 ---
 title: "01 · Foam glider"
 order: 1
+listing:
+  id: entries
+  contents: "20*.qmd"
+  type: table
+  fields: [title]
+  # By filename, which starts with the date -- entries carry no `date:` of their
+  # own, and within a chapter alphabetical order IS chronological order.
+  sort: "filename"
+  field-display-names:
+    title: "Question"
 ---
 
 {{< include _model.qmd >}}
+
+```{python}
+#| echo: false
+#| output: asis
+# GENERATED FROM THIS CHAPTER'S OWN _model.py (rule 35 keeps this block here).
+# The fork header is the one place the parent is recorded; printing it here means
+# a reader sees the lineage without opening the collapsed source, and it cannot
+# drift from the file it is read out of.
+import pathlib as _pl
+import re as _re
+_hdr = (_pl.Path("chapters/01-foam-glider/_model.py").read_text()[:2000]
+        if _pl.Path("chapters/01-foam-glider/_model.py").exists() else "")
+_fk = _re.search(r"^#\s*Forked from chapters/([^/\s]+)/_model\.py", _hdr, _re.M)
+if _fk:
+    _par = _pl.Path("chapters") / _fk.group(1) / "index.qmd"
+    _pt = _re.search(r'^title:\s*"(.+)"\s*$', _par.read_text(), _re.M) \
+        if _par.exists() else None
+    print(f"Forked from [{_pt.group(1) if _pt else _fk.group(1)}]"
+          f"(../{_fk.group(1)}/) — what differs is listed at the top of "
+          f"`_model.py` below.\n")
+```
 
 A 300 mm span glider cut from a single 5 mm foam sheet, sized for minimum sink
 rate in trimmed glide with `AeroBuildup`.
@@ -33,6 +64,11 @@ No owner yet — each is a candidate for its own entry:
 1. **Tail: H 100×30 mm, V 50×30 mm**, fixed.
 2. **Sections NACA4405 and NACA0005**, standing in for foam.
 3. **Fuselage neglected**, both its mass and its drag.
+:::
+
+## Questions asked here
+
+::: {#entries}
 :::
 
 ## The model

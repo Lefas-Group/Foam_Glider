@@ -48,15 +48,16 @@ EXPECTED = {
     # renders in 21 s against the 35 s ceiling it was granted. Recorded because
     # lint reads the working tree, not HEAD.
     "glider-notebook": (0, 3),
-    # +2/+8 from rule 33 and +1/+1 from rule 34 (order:/numbered titles, one and four
-    # chapters at two findings each) and the missing front page. Both notebooks
-    # predate both rules and stay frozen -- the sidebar and front door of a
+    # +2/+8 rule 33, +1/+1 rule 34, +2/+8 rule 35 (order:/numbered titles, one and four
+    # chapters at two findings each) the missing front page, and the chapter
+    # indexes that neither list their entries nor print their lineage. All three
+    # rules postdate both notebooks, which stay frozen -- the sidebar and front door of a
     # notebook nobody opens are not worth unfreezing a corpus for.
-    "aircraft-notebook": (30, 31),
+    "aircraft-notebook": (32, 33),
     # +3 blocking from rule 31: its four chapters hold four copies of one
     # _model.py, three of them byte-identical to an earlier chapter and
     # none carrying a fork header. Correct, and frozen.
-    "optimised-glider-notebook": (68, 94),
+    "optimised-glider-notebook": (76, 102),
 }
 
 
