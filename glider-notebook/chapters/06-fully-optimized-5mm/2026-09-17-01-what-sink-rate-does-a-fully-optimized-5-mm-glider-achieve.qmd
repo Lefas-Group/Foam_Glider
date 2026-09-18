@@ -14,7 +14,9 @@ res = optimize_full_glider(verbose=False)
 sink_rate = res['sol'].value(res['sink_rate'])
 
 # From 02-fuselage-model/2026-09-14-01-how-does-modeling-the-fuselage-change-the-optimized-glider.qmd
-sink_rate_manual = 0.400
+sink_rate_manual = cite("02-fuselage-model",
+                        "2026-09-14-01-how-does-modeling-the-fuselage-change-the-optimized-glider",
+                        label="with fuselage")
 ```
 
 ::: {.hero}
@@ -22,7 +24,7 @@ sink_rate_manual = 0.400
 [minimum sink rate]{.hero-label}
 :::
 
-**Answer.** A fully optimized 5 mm glider achieves a minimum sink rate of `{python} f"{sink_rate:.3f}"` m/s. This is barely an improvement over the `{python} f"{sink_rate_manual:.3f}"` m/s achieved by the [manually sized 5 mm model with a fuselage](../02-fuselage-model/2026-09-14-01-how-does-modeling-the-fuselage-change-the-optimized-glider.qmd), showing that geometry optimization alone cannot overcome the weight penalty of 5 mm foam.
+**Answer.** A fully optimized 5 mm glider achieves a minimum sink rate of `{python} f"{sink_rate:.3f}"` m/s. This is barely an improvement over the `{python} sink_rate_manual` m/s achieved by the [manually sized 5 mm model with a fuselage](../02-fuselage-model/2026-09-14-01-how-does-modeling-the-fuselage-change-the-optimized-glider.qmd), showing that geometry optimization alone cannot overcome the weight penalty of 5 mm foam.
 
 ```{python}
 #| echo: false

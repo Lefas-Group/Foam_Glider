@@ -61,6 +61,7 @@ entry can be written compliant rather than corrected afterwards.
     34  the notebook has a front page that draws its own chapter graph
     35  a chapter index lists its entries and prints its lineage
     36  a chapter's categories come from the notebook's vocabulary
+    37  a `cite()` names an entry that exists and publishes an answer
 
 Two details the list cannot carry. A value written as an inline expression counts
 as ONE word, so tightening prose is never at odds with computing the numbers in
@@ -1632,6 +1633,56 @@ def _empty_callouts(root, chapters, entries):
     return out
 
 
+CITE_CALL = re.compile(
+    r"""cite\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']([^)]*)\)""")
+HERO_PAIR = re.compile(
+    r"\[([^\]]+)\]\{\.hero-value\}[^\[]*\[([^\]]*)\]\{\.hero-label\}")
+
+
+def _citation_targets(root, chapters, entries):
+    """
+    Rule 37. A `cite()` names an entry that exists and publishes a hero value.
+
+    `cite()` reads the cited page's freeze at RENDER time, so a wrong chapter or
+    a mistyped stem is a ValueError several minutes into a run -- after the
+    solves, which is the expensive place to learn it. Every part of it is
+    checkable from source in milliseconds.
+
+    A missing freeze is NOT a finding here: an entry written in the same run as
+    the one it cites has not been rendered yet, and `check` discards freezes on
+    purpose. What must hold is that the target EXISTS and, if it has been
+    rendered, that it published something to quote.
+    """
+    out = []
+    for f in entries:
+        for chapter, stem, rest in CITE_CALL.findall(f.read_text()):
+            target = root / "chapters" / chapter / f"{stem}.qmd"
+            if not target.exists():
+                out.append((f, f"cites {chapter}/{stem}, which does not exist — "
+                               f"a citation resolves at render, so a typo here "
+                               f"costs a whole run"))
+                continue
+            if target.resolve() == f.resolve():
+                out.append((f, "cites itself — quote the value directly"))
+                continue
+            frozen = (root / "_freeze" / "chapters" / chapter / stem
+                      / "execute-results" / "html.json")
+            if not frozen.exists():
+                continue
+            heroes = HERO_PAIR.findall(frozen.read_text())
+            if not heroes:
+                out.append((f, f"cites {chapter}/{stem}, which publishes no hero "
+                               f"value — there is no single answer there to "
+                               f"quote"))
+            elif len(heroes) > 1 and "label" not in rest:
+                out.append((f, f"cites {chapter}/{stem}, which publishes "
+                               f"{len(heroes)} values — pass label= to say which. "
+                               f"Caught here because at render it is a "
+                               f"ValueError after the solves, and the first "
+                               f"version of cite() quietly returned the first"))
+    return out
+
+
 def _category_vocabulary(root, chapters):
     """
     Rule 36. A chapter's categories come from the notebook's own vocabulary.
@@ -1899,6 +1950,7 @@ def check(root, chapters):
     problems += _book_index(root, chapters)
     problems += _chapter_index_blocks(root, chapters)
     problems += _category_vocabulary(root, chapters)
+    problems += _citation_targets(root, chapters, entries)
 
     # Rule 13. Scoped to `_analysis.py`: `_model.py` is rendered in full by the
     # chapter index, and `_notebook.py` is deliberately invisible, so requiring

@@ -139,6 +139,26 @@ def _closure(defs, seed):
     return seen
 
 
+CITE = re.compile(r"""cite\(\s*["']([^"']+)["']\s*,\s*["']([^"']+)["']""")
+
+
+def _citations(root, chapters):
+    """
+    [(citing page, cited chapter, cited entry)] across the notebook.
+
+    Read from source, not from a registry: a citation is a call in a cell, and
+    anything that had to be declared somewhere else could be declared wrongly.
+    """
+    out = []
+    for c in chapters:
+        for page in sorted((root / "chapters" / c).glob("*.qmd")):
+            if page.name.startswith("_"):
+                continue
+            for cited_c, cited_e in CITE.findall(page.read_text()):
+                out.append((page, cited_c, cited_e))
+    return out
+
+
 def _freeze_targets(root, chapters, force_all):
     """
     What to discard before rendering: (whole chapters, individual pages, note).
@@ -207,6 +227,30 @@ def _freeze_targets(root, chapters, force_all):
         pages += hit
         why.append(f"{c}: index, and {len(hit)} page(s) reach "
                    f"{', '.join(sorted(funcs)[:3]) or 'no changed symbol'}")
+
+    # CITATIONS, the one cross-chapter edge in the graph. A page that quotes
+    # another entry's hero value holds a copy of it in its own freeze, so
+    # re-rendering the cited entry without re-rendering the citing one leaves
+    # the quote silently stale -- which is transcription with extra steps, the
+    # exact failure `cite()` exists to end. Everything above this line is
+    # intra-chapter; this is deliberately the only exception, and it is computed
+    # from the calls themselves rather than from anything anyone maintains.
+    #
+    # Chapter granularity on purpose: an entry is discarded when the chapter it
+    # cites is touched at all, without asking whether the specific cited entry
+    # moved. Over-discarding costs a render; under-discarding publishes a wrong
+    # number.
+    touched = set(whole) | {p.split("/")[0] for p in pages}
+    cited_pages = []
+    for page, cited_c, _ in _citations(root, chapters):
+        stem = f"{page.parent.name}/{page.stem}"
+        if (cited_c in touched and page.parent.name not in whole
+                and stem not in pages and stem not in cited_pages):
+            cited_pages.append(stem)
+    if cited_pages:
+        pages += cited_pages
+        why.append(f"{len(cited_pages)} page(s) cite a chapter being re-rendered")
+
     return whole, pages, "; ".join(why) if why else "nothing stale"
 
 
@@ -382,6 +426,37 @@ def main(argv):
         print("\nrender     FAILED")
         return 1
     _discard(root)          # the render rebuilt everything that should exist
+
+    # SECOND PASS, for citations only. `cite()` reads the cited page's freeze,
+    # and this run discarded the freezes it was about to rebuild -- so a citing
+    # page rendered above may have quoted the COMMITTED value while the page it
+    # quotes was being rebuilt beside it. Quarto renders in an order nobody
+    # controls, so that is not a thing to schedule around; it is a thing to
+    # redo once everything cited is current again.
+    #
+    # Cheap: only the citing pages are discarded, everything else is served from
+    # the freeze just written. Skipped entirely when the notebook cites nothing,
+    # which is every notebook until it does.
+    citing = sorted({f"{page.parent.name}/{page.stem}"
+                     for page, _, _ in _citations(root, chapters)})
+    if citing:
+        print(f"cite       re-rendering {len(citing)} citing page(s) now that "
+              f"what they quote is current")
+        _stash(root, citing)
+        try:
+            r2 = lint.render_quarto(root, root)
+        except BaseException:
+            _unstash(root)
+            raise
+        if r2.returncode:
+            blob2 = r2.stdout + r2.stderr
+            keep = [l for l in blob2.splitlines()
+                    if re.search(r"error|Error|ERROR|Traceback|assert", l)]
+            print("\n".join(keep[:30]) or blob2[-2000:])
+            _unstash(root)
+            print("\nrender     FAILED on the citation pass")
+            return 1
+        _discard(root)
     # Count what was actually executed, not Quarto's chatter -- it prints
     # "Output created:" once for the whole project, not once per page.
     pages = sum(len(list((root / "_freeze" / "chapters" / c).glob(

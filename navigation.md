@@ -1,6 +1,6 @@
 # Navigating a notebook that fans out
 
-**Status: plan, not implemented.**
+**Status: implemented.** Stages 1-5 are committed and verified; Stage 6 (`cite()`) is implemented and under final verification. What implementation changed about the plan is recorded in each stage.
 
 The notebook is a DAG of design decisions presented as a numbered list. Six
 chapters, twenty-two entries, and no way to see how any of it relates. This plan
@@ -470,6 +470,31 @@ machinery, not a presentational change.
 
 **Do not start here**, but do it before any further presentational work, because
 three of the four things above are blocked on it.
+
+### What building it changed
+
+The design in this plan was "read the cited page's freeze". Two things only the
+end-to-end test found:
+
+**An entry does not always publish one value.** The first real citation quoted
+`0.36` where `0.40` was meant, because chapter 02's entry carries two `.hero`
+blocks -- a before and an after -- and `cite()` returned the first. A wrong
+number, published silently, which is the whole failure it exists to end.
+Ambiguity is now an error: pass `label=` to name the one you mean, and rule 37
+catches it from source before the solves rather than at render after them.
+
+**`check` discards the freezes it is about to rebuild**, so a citing page very
+often renders while the page it quotes has no freeze at all. The first full check
+died on exactly that. Two changes make it correct:
+
+- `cite()` falls back to the COMMITTED freeze (`git show HEAD:`), which is what
+  "published" means and is always available;
+- `check` renders a **second time** afterwards, discarding only the citing pages,
+  so the answer that ends up committed is the freshly rebuilt one rather than
+  whatever the render order happened to produce.
+
+The second pass is skipped entirely when a notebook cites nothing, which is every
+notebook until it does.
 
 ---
 

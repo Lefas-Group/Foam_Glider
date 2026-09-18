@@ -519,6 +519,100 @@ def superseded_by(stem, reason):
     print(":::\n")
 
 
+def _committed(path):
+    """That file's contents at HEAD, or None. Used only by `cite`."""
+    import subprocess
+    try:
+        r = subprocess.run(["git", "show", f"HEAD:./{path}"],
+                           capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def cite(chapter, entry, label=""):
+    """
+    The answer another entry published, quoted rather than retyped.
+
+    Entries fan out because they compare against each other, and until now
+    comparison meant TRANSCRIPTION: chapter 06 carries `sink_rate_manual = 0.400`
+    hand-assigned from chapter 02, and lint can only warn about it. A transcribed
+    number is correct when it is written and silent when the chapter it came from
+    re-renders.
+
+    What comes back is the cited entry's HERO VALUE, as that page published it --
+    the one value it exists to produce. One citable value per entry is the same
+    grain as one question per entry, and it means there is no second thing to
+    name, register or keep in step.
+
+    Read from the FREEZE, which is committed, so citing costs nothing: no model
+    is imported and no solve runs. A string, not a float, because quoting is what
+    this is for -- the units and the precision are the cited page's decision, and
+    reformatting them here would let two pages disagree about the same number.
+
+        prev = cite("02-fuselage-model", "2026-09-14-01-how-does-modeling-…")
+        # -> "0.400 m/s"
+
+    Raises rather than returning a placeholder. A citation that cannot resolve is
+    a page about to publish a claim it cannot support, and the render is the last
+    place anyone is looking.
+
+    INVALIDATION IS check.py'S JOB: discarding a chapter's freeze also discards
+    every page citing it, so a re-render of the cited entry forces a re-render
+    here. Without that this would be transcription with extra steps.
+    """
+    import json
+
+    frozen = (pathlib.Path("_freeze/chapters") / chapter / entry
+              / "execute-results" / "html.json")
+    blob = frozen.read_text() if frozen.exists() else _committed(frozen)
+    # The fallback is not belt-and-braces, it is the common case under `check`:
+    # check DISCARDS the freezes it is about to rebuild, so a citing page very
+    # often renders while the page it quotes has no working-tree freeze at all.
+    # The committed copy is what "published" means, and `check` renders a second
+    # time afterwards so the final answer is the freshly rebuilt one.
+    if blob is None:
+        raise ValueError(
+            f"cite({chapter!r}, {entry!r}): nothing frozen at {frozen}, and "
+            f"nothing committed there either. Check the chapter and entry stem "
+            f"-- a citation can only quote a page that has already published "
+            f"its answer.")
+    try:
+        md = json.loads(blob)["result"]["markdown"]
+    except (ValueError, KeyError) as e:
+        raise ValueError(f"cite({chapter!r}, {entry!r}): unreadable freeze "
+                         f"({type(e).__name__})") from None
+    # value/label pairs, in page order. An entry USUALLY publishes one -- one
+    # question, one answer -- but a before/after comparison legitimately
+    # publishes two, and the first version of this returned whichever came
+    # first. On the first real citation that was 0.36 where 0.40 was meant: a
+    # wrong number, published silently, which is the whole failure `cite()`
+    # exists to end. So ambiguity is an error, never a guess.
+    unescape = lambda t: t.replace("\\", "")
+    heroes = [(unescape(v), unescape(l)) for v, l in re.findall(
+        r"\[([^\]]+)\]\{\.hero-value\}\s*\n\[([^\]]*)\]\{\.hero-label\}", md)]
+    if not heroes:
+        raise ValueError(
+            f"cite({chapter!r}, {entry!r}): that entry publishes no hero value, "
+            f"so it has no single answer to quote. Cite an entry whose `.hero` "
+            f"block carries the number you want.")
+    if label:
+        hit = [v for v, l in heroes if l == label]
+        if not hit:
+            raise ValueError(
+                f"cite({chapter!r}, {entry!r}, {label!r}): no hero has that "
+                f"label. It publishes: "
+                + ", ".join(f"{v!r} ({l!r})" for v, l in heroes))
+        return hit[0]
+    if len(heroes) > 1:
+        raise ValueError(
+            f"cite({chapter!r}, {entry!r}): that entry publishes "
+            f"{len(heroes)} values — "
+            + ", ".join(f"{v!r} ({l!r})" for v, l in heroes)
+            + ". Name the one you mean with label=...")
+    return heroes[0][0]
+
+
 def footer(*objs):
     """
     The entry's closing cell: the machinery it called, then what it cost to run.
