@@ -85,7 +85,15 @@ class Proposal(BaseModel):
         default_factory=list,
         description=(
             "Caption per intended visual, 50 words each. ONE visual or none -- "
-            "a table counts as a figure. Prefer none, then a table, then a plot."))
+            "a table counts as a figure (rule 14). PREFER A DIAGRAM, then a "
+            "table, then prose: an answer that can be seen should be shown, and "
+            "a paragraph with a number in it is the least interesting form the "
+            "same finding can take. The test is not 'would a plot look good' "
+            "but 'is the visual THE ANSWER'. A figure that repeats what the "
+            "sentence already said is worse than the sentence -- which is what "
+            "this used to read 'prefer none' to prevent, and rules 14 and 15 "
+            "still hold that line. Show a shape, a trend, a comparison or a "
+            "trade; do not illustrate a single number."))
     render_cost_s: float = Field(
         description="Solve seconds from aero_report(), never a guess")
     inputs: list[Input] = Field(default_factory=list)
