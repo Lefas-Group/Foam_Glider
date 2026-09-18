@@ -88,6 +88,18 @@ def _emit(console, text):
 def _quiet_note(idle, limit, pid):
     live = _alive(pid)
     mins, secs = divmod(int(idle), 60)
+    if live:
+        # SUSPENDED is not STALLED, and only one of them has an action. A `&`
+        # job halted by Ctrl-Z, or by any terminal signal, answers
+        # `os.kill(pid, 0)` exactly as a working process does -- so this used to
+        # report "alive but not advancing", which is true, useless, and points
+        # at the model or the network rather than at the shell. Seen on a
+        # detached run with 3.9 s of CPU behind 7m20s of clock.
+        from .. import runstate
+        if runstate.stopped({"pid": pid}):
+            return (f"          ⚠ pid {pid} is STOPPED, not stalled — suspended "
+                    f"by a signal, using no CPU.\n"
+                    f"            Resume it: fg, or kill -CONT {pid}")
     who = "" if live is None else (
         f" — pid {pid} alive but not advancing" if live
         else f" — pid {pid} is GONE; the run died without a word")

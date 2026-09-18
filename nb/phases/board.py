@@ -43,6 +43,7 @@ def _runs(notebook):
             continue
         state["dir"] = d
         state["alive"] = runstate.alive(state)
+        state["stopped"] = runstate.stopped(state) if state["alive"] else False
         state["question"] = mailbox.pending(d)
         out.append(state)
     # Live runs first, whatever their age -- a board that scrolls a waiting
@@ -105,6 +106,12 @@ def _table(runs):
             # clean commit.
             out = r.get("outcome")
             state = (f"[dim]{out}[/dim]" if out else "[red]died[/red]")
+        elif r.get("stopped"):
+            # Suspended, not working. `os.kill(pid, 0)` cannot tell the
+            # difference, so this used to read `running` while the process
+            # burned no CPU at all -- and the `for` column kept counting up,
+            # which looks exactly like a wedged run.
+            state = "[magenta]stopped[/magenta]"
         elif r.get("question"):
             state = "[bold yellow]waiting[/bold yellow]"
         else:

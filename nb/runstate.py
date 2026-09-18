@@ -88,6 +88,32 @@ def stop_requested(notebook_or_dir):
         return None
 
 
+def stopped(state):
+    """
+    True if the process exists but is SUSPENDED (`STAT` T), False if running.
+
+    `os.kill(pid, 0)` cannot tell these apart -- a stopped process answers it
+    exactly as a running one does -- so without this a job halted by Ctrl-Z, or
+    by any terminal signal reaching a `&` job, shows as `running` on the board
+    and as a stall in `nb watch`, which is the one diagnosis that leads nowhere.
+    Observed: a detached run at 3.9 s of CPU over 7m20s elapsed, reported as a
+    deadline overrun.
+
+    `ps` rather than /proc, because this is a mac. None when it cannot be told.
+    """
+    pid = state.get("pid")
+    if not pid:
+        return None
+    import subprocess
+    try:
+        r = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)],
+                           capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    st = r.stdout.strip()
+    return st.startswith("T") if st else None
+
+
 def alive(state):
     """True if the pid exists, False if not, None if we cannot tell."""
     pid = state.get("pid")
