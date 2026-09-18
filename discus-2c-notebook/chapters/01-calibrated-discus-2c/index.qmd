@@ -10,20 +10,20 @@ aliases:
 {{< include _model.qmd >}}
 
 A Discus-2c reconstructed from published span, area and mass, analysed with
-AeroBuildup, corrected by one drag increment fitted to best glide.
+AeroBuildup and corrected by one fitted drag increment.
 
 - **AeroBuildup**, NeuralFoil section polars.
-- **Reconstructed planform**, four stations scaled to published area.
-- **Wortmann FX sections**, 16.4% root to 12.6% tip.
-- **One calibrated scalar**, a signed drag increment.
+- **Reconstructed planform**, scaled to published area.
+- **Wortmann FX sections**, 16.4% to 12.6%.
 - **Sea level, 400 kg unballasted**, held fixed throughout.
 
 ::: {.callout-warning}
-## Not the published geometry
+## What "calibrated" means here
 
-Only span, area and mass are published. Planform, twist, dihedral, sections,
-fuselage and tail are reconstructed. Absolute numbers carry that error, which
-minimum sink — held back — tests.
+Only span, area and mass are published; planform, sections, fuselage and tail
+are guesses. So one drag increment is fitted until best glide matches the
+published `{python} f"{LD_MAX_PUBLISHED:.0f}"`. Minimum sink is never fitted, so
+it is the only test the model could fail.
 :::
 
 ::: {.callout-tip}

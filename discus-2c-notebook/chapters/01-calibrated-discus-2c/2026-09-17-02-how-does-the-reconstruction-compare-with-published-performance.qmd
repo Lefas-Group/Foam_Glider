@@ -52,7 +52,7 @@ evidence; the residual sits where a laminar polar is hardest to predict.
 
 ```{python}
 #| label: fig-calibration
-#| fig-cap: "Best glide ratio and minimum sink before and after the single-scalar drag calibration, against the published figures. Best glide is what the scalar was fitted to; minimum sink was held out of the fit, so the gap remaining on the right is the test."
+#| fig-cap: "Best glide ratio and minimum sink, before and after one drag increment is fitted to the published best glide. The left panel matches by construction — it is what was fitted. The right panel was never fitted, so the gap remaining there is the model's real error."
 fig, (ax_glide, ax_sink) = plt.subplots(1, 2, figsize=(7.0, 3.0))
 
 # Dots rather than bars, on an axis that does not start at zero. Bars from zero
@@ -76,7 +76,8 @@ for axis, values, published, ylabel, fmt in [
     axis.set_ylim(low - pad, high + pad)
     axis.set_xlim(-0.55, 1.55)
     axis.set_xticks([0, 1])
-    axis.set_xticklabels(["uncalibrated", "calibrated"], fontsize=8)
+    axis.set_xticklabels(["uncalibrated\n(model alone)",
+                          "calibrated\n(fitted to published)"], fontsize=8)
     axis.set_ylabel(ylabel)
     axis.grid(axis="y", alpha=0.3)
 
