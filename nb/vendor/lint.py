@@ -1029,9 +1029,11 @@ def _stale_freeze(root, chapters):
                 root / "chapters" / c / touched[0],
                 f"modified, but the freeze is not — {len(frozen)} frozen "
                 f"page(s) are serving values the current model may not produce. "
-                f"Nothing for an agent to run: the write phase re-proves the "
-                f"chapter itself before it commits. From a shell it is "
-                f"`uv run python nb/vendor/check.py <notebook> {c}`"))
+                f"NOT YOURS TO FIX — the write phase re-proves the chapter "
+                f"itself, after lint and verify pass, and will show you any "
+                f"answer that moved. Do not run a checker by hand: it re-"
+                f"renders the notebook, costs two to three minutes a call, and "
+                f"changes nothing the run was not going to do anyway."))
     return found
 
 
@@ -1125,7 +1127,14 @@ RENDER_INDEX = 15.0         # a page that executes definitions but never a solve
 
 
 def unfrozen(root, chapters):
-    """Pages with no freeze -- the ones a render will actually EXECUTE."""
+    """
+    Pages with no freeze at all.
+
+    NOT the same as "what a render will execute" -- see `will_execute`, which
+    is what every deadline and every progress line should be counting. This
+    answers only the narrower question `check` asks after it has deleted the
+    freezes it invalidated.
+    """
     out = []
     for c in chapters:
         d = root / "chapters" / c
@@ -1141,6 +1150,43 @@ def unfrozen(root, chapters):
     return out
 
 
+def will_execute(root, target=None):
+    """
+    The pages `quarto render <target>` will actually RUN, freeze included.
+
+    Quarto honours `freeze` on a PROJECT render only. Name a target -- a
+    chapter directory or a single `.qmd` -- and every page under it executes,
+    whatever `_freeze/` holds.
+
+    Measured on 2026-09-18, this notebook, nothing else running:
+
+        quarto render chapters/01-foam-glider   5 kernels, 110 s, twice running
+        quarto render                           0 kernels, every page cached
+
+    with `unfrozen()` reporting an empty list throughout. Everything that sized
+    itself on the freeze was therefore sizing a targeted render at zero work:
+    the write phase announced "0 page(s) to execute" and then killed its own
+    render on a 40 s deadline, on a chapter whose pages needed minutes. That
+    reads exactly like a wedged kernel, and was handed to the model as a bug in
+    an entry that built perfectly well.
+    """
+    root = pathlib.Path(root)
+    target = root if target is None else pathlib.Path(target)
+    chapters = sorted(d.name for d in (root / "chapters").iterdir() if d.is_dir())
+    pages = [q for c in chapters
+             for q in sorted((root / "chapters" / c).glob("*.qmd"))
+             if not q.name.startswith("_")]
+    if target.is_file():
+        pages = [q for q in pages if q == target]
+    elif target != root:
+        pages = [q for q in pages if target in q.parents]
+    else:
+        # The one case where the freeze counts.
+        frozen = set(pages) - set(unfrozen(root, chapters))
+        return [q for q in pages if q not in frozen]
+    return pages
+
+
 def render_deadline(root, target=None):
     """
     Seconds a `quarto render` of `target` may take before it is killed.
@@ -1151,9 +1197,9 @@ def render_deadline(root, target=None):
     the number had nothing to do with the page being built.
 
     `target` is a path -- the notebook root, a chapter directory, or one .qmd --
-    or None for the whole project. A frozen page executes nothing and costs
-    nothing but pandoc: `check` deletes the freezes it invalidates BEFORE
-    rendering, which makes the unfrozen set exactly the work list.
+    or None for the whole project. What executes under it comes from
+    `will_execute`, which knows the thing this function used to get wrong: the
+    freeze only spares a page on a PROJECT render.
 
     An entry contributes the ENTRY_CEILING it declares, which is the number the
     user granted at the prompt. Anything else that executes -- an index -- takes
@@ -1174,10 +1220,10 @@ def render_deadline(root, target=None):
     elif target != root:
         pages = [q for q in pages if target in q.parents]
 
-    frozen = {q for q in pages} - set(unfrozen(root, chapters))
+    executing = set(will_execute(root, target))
     total = RENDER_FLOOR + RENDER_PER_PAGE * len(pages)
     for page in pages:
-        if page in frozen:
+        if page not in executing:
             continue
         if ENTRY_FILE.match(page.name):
             _, ceiling = limits_of(root, page)
@@ -1213,9 +1259,14 @@ def render_quarto(target, root, cwd=None):
         # Quarto's `[n/N] path` progress lines are the best answer, but it
         # BLOCK-BUFFERS to a pipe, so a killed render usually leaves stdout
         # empty -- measured. The work list is the fallback and is often exact:
-        # a render with one unfrozen page can only have been stuck on it.
-        todo = unfrozen(root, sorted(d.name for d in (root / "chapters").iterdir()
-                                     if d.is_dir()))
+        # a render with one page to execute can only have been stuck on it.
+        #
+        # SCOPED TO THE TARGET, and from the same call the deadline came from.
+        # Project-wide `unfrozen` named pages the render was never going to
+        # touch: one killed render reported "3 page(s) awaiting execution"
+        # against a deadline sized for one, which is not a near miss but two
+        # different questions printed as one answer.
+        todo = will_execute(root, target)
         n = len(todo)
         seen = re.findall(r"\[\d+/\d+\][^\n]*", blob)
         if seen:
@@ -1232,7 +1283,7 @@ def render_quarto(target, root, cwd=None):
             t.cmd, 124, blob,
             f"render killed after {deadline:.0f} s{where}\n"
             f"  ({RENDER_FLOOR:.0f} s floor + {RENDER_PER_PAGE:.0f} s/page "
-            f"+ the ENTRY_CEILING each of {n} unfrozen page(s) declares)\n"
+            f"+ the ENTRY_CEILING each of {n} executing page(s) declares)\n"
             f"  Nothing was advancing. The ceiling is what was granted at the "
             f"prompt and it governs directly -- ask for more there if the work "
             f"is genuinely this expensive.")

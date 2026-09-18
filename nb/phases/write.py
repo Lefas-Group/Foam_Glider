@@ -590,6 +590,36 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         raw["chapter"] = proposal.chapter
         notebook.proposal_path.write_text(json.dumps(raw, indent=2))
 
+    # ONE WRITER PER CHAPTER, claimed as soon as the name is settled and held
+    # until this process exits -- which is why there is no `with` here: the
+    # claim has to outlive the try/finally below, because the commit happens
+    # after it. See `locks.claim_chapter` for the run this is named after.
+    #
+    # Refused rather than queued, and refused HERE, before a turn is spent: the
+    # proposal is sealed on disk, so the answer is to resume when the other run
+    # is done, and a run that waited half an hour for a lock would look exactly
+    # like the wedge the stuck detector exists to catch.
+    from ..locks import claim_chapter
+    holder = claim_chapter(notebook, proposal.chapter)
+    if holder:
+        tell(f"\n  {'─' * 70}\n  CHAPTER IS BEING WRITTEN — nothing started\n"
+             f"  {'─' * 70}\n"
+             f"  chapter   {proposal.chapter}\n"
+             f"  held by   pid {holder}\n\n"
+             f"  Two agents in one chapter edit the same _analysis.py and the "
+             f"refactor gate\n  then blames whichever asks first. The proposal "
+             f"is on disk; when that run ends:\n"
+             f"    uv run --group nb python -m nb resume {notebook.root.name} "
+             f"{notebook.run_id}\n")
+        # Its own row, built here because the phase's `run_metrics` does not
+        # exist yet -- the claim deliberately comes before `_stem`, which
+        # allocates this entry's number by counting the chapter's files and
+        # would otherwise count them while another run was adding one.
+        refused = metrics.Run(notebook, "write", proposal.title)
+        refused.set(chapter=proposal.chapter)
+        refused.close("chapter_locked")
+        return 2
+
     today = datetime.date.today().isoformat()
     stem = _stem(notebook, proposal.chapter, proposal.title, today)
     # title, not question: on a split ask the model keeps the whole original

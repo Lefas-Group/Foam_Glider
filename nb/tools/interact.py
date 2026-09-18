@@ -249,6 +249,20 @@ def confirm_assumptions(proposal):
         say("  answered   (accepted as stated)")
         return []
 
+    # A reply that names no assumption at all is APPROVAL, not a malformed
+    # correction. "Enter accepts" is what the prompt says, and people type the
+    # word instead: `happy` was answered on 2026-09-18 and logged as
+    # `ignored 'happy' — expected "N: value"`. The outcome was right by
+    # accident -- nothing parsed, so nothing was corrected -- but the run
+    # recorded a rejection of an approval, which is the one thing a record of
+    # what the user agreed to must never do. Only a reply that looks like it is
+    # TRYING to correct something is held to the format, so a typo in "1: 12mm"
+    # is still caught rather than silently read as consent.
+    if not any(part.partition(":")[0].strip().isdigit()
+               for part in answer.split(";")):
+        say(f"  answered   (accepted as stated — {answer!r})")
+        return []
+
     corrected = []
     for part in answer.split(";"):
         head, _, value = part.partition(":")

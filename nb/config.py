@@ -84,10 +84,18 @@ MAX_VERIFY_ATTEMPTS = 2  # write -> render -> verify -> write
 # write -> render -> write, on a page that does not BUILD. Its own budget, not a
 # slice of the verify one: the page has to render before verify has anything to
 # read, so charging a build error to verify leaves the entry a round short of
-# fixing whatever verify then finds. One is enough for the failure this exists
-# for -- a traceback naming the line -- and a second usually means the model is
-# guessing rather than reading it.
-MAX_RENDER_FIXES = 1
+# fixing whatever verify then finds.
+#
+# 2, up from 1. The argument for 1 was that a traceback naming the line takes
+# one turn to fix and a second attempt means the model is guessing -- true of a
+# traceback, and the fault it missed is the OTHER kind. A render can also fail
+# for a reason the entry did not cause: exit 124, killed on a deadline sized as
+# if the freeze would spare its pages, which a TARGETED render never does. Two
+# runs died that way on 2026-09-18, one of them ending `verify_failed` having
+# never verified anything. `lint.will_execute` removes that cause; this makes
+# the next one survivable rather than terminal, at the price of one extra turn
+# on the rare genuine guess.
+MAX_RENDER_FIXES = 2
 
 # Every handler truncates its own output. Tracebacks keep the tail, listings the
 # head; the cap is the same either way.

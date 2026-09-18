@@ -110,13 +110,20 @@ def render(notebook, target=""):
     # here once, it announced a project-sized number for a one-page render --
     # 90 s against the 60 s actually enforced, which is worse than saying
     # nothing, since `nb watch` sizes its staleness warning on this line.
-    deadline = lint.render_deadline(notebook.root, path)
-    todo = [q for q in lint.unfrozen(
-                notebook.root,
-                sorted(d.name for d in (notebook.root / "chapters").iterdir()
-                       if d.is_dir()))
-            if path == notebook.root or q == path or path in q.parents]
-    say(f"  render    deadline {deadline:.0f} s ({len(todo)} page(s) to execute)")
+    def _announce():
+        # SIZED INSIDE THE LOCK, immediately before the render it describes,
+        # and from `will_execute` -- the SAME call `render_quarto` deadlines on.
+        # This line used to count `unfrozen` and say "0 page(s) to execute"
+        # against a render that then died naming three. Two faults, both found
+        # on 2026-09-18: a targeted render ignores the freeze, so nothing under
+        # it is ever spared; and the kill message counted the whole project
+        # while this counted only the target. Two questions, one answer
+        # printed. Both sides now ask `will_execute`, which is also what
+        # `render_quarto` deadlines on.
+        deadline = lint.render_deadline(notebook.root, path)
+        todo = lint.will_execute(notebook.root, path)
+        say(f"  render    deadline {deadline:.0f} s "
+            f"({len(todo)} page(s) to execute)")
 
     # UNDER A LOCK, and retried once. Two renders on one project fail four
     # trials out of four, on `_freeze/site_libs/`, which the Quarto project
@@ -135,6 +142,7 @@ def render(notebook, target=""):
             if not got:
                 say("  render    proceeding without the lock — timed out "
                     "waiting for another render")
+            _announce()
             r = lint.render_quarto(path, notebook.root, cwd=notebook.root)
         out = (r.stdout or "") + (r.stderr or "")
         if r.returncode == 0:

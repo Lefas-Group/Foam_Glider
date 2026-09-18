@@ -35,13 +35,16 @@ vendored. It imports the other two rather than reimplementing either.
 """
 import ast
 import contextlib
+import fcntl
 import io
 import json
+import os
 import pathlib
 import re
 import shutil
 import subprocess
 import sys
+import time
 
 import freezediff
 import lint
@@ -53,6 +56,84 @@ import lint
 # freeze on its own content -- so changing it already invalidates exactly the one
 # page it can affect, with no chapter-wide rule needed to arrange it.
 MODEL_FILES = ("_model.py", "_analysis.py", "_model.qmd")
+
+
+# The render lock, held from the moment the freezes are moved until `main`
+# returns. `nb/locks.py` owns the same file and explains the race:
+# `_freeze/site_libs/` belongs to the Quarto project, so two renders on one
+# notebook fail four trials out of four.
+#
+# check.py took NO lock until 2026-09-18, which is worse than an unlocked
+# render: this is the one process that MOVES freeze trees aside and puts them
+# back, so another agent rendering through that window sees pages appear and
+# disappear under it. Observed once and unambiguously: a check running
+# 13:22:09-13:25:22 straight through another agent's locked render at 13:24:15,
+# which hit the site_libs race the lock exists to prevent and survived only on
+# its retry.
+#
+# Duplicated rather than imported: check.py is vendored beside the notebook and
+# runs with no `nb` on the path. Five lines of `fcntl` is the cheaper of the
+# two wrongs; the file path is the contract between them.
+_LOCK_FH = None
+
+
+def _take_render_lock(root, timeout=900):
+    """
+    Block until the notebook's render lock is free, then hold it.
+
+    Proceeds WITHOUT it on timeout, following `nb/locks.py`: a check refused
+    outright leaves the caller with no verdict, while a check that races loses
+    a render it can retry. Released by `_drop_render_lock` in `main`'s
+    `finally`; the kernel dropping it on death is the backstop, and `_unstash`
+    already recovers the stash a killed check leaves behind.
+    """
+    global _LOCK_FH
+    # IDEMPOTENT, and that is not cosmetic: `flock` is per open file
+    # description, so a second `open` + `LOCK_EX` from THIS process would wait
+    # on the fd this process already holds and never be woken. Both call sites
+    # below can fire in one run -- a recovery unstash, then the render.
+    if _LOCK_FH is not None:
+        return True
+    path = root / "_scratch" / "render.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fh = open(path, "a+")
+    deadline = time.time() + timeout
+    while True:
+        try:
+            fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except OSError:
+            if time.time() >= deadline:
+                print("freeze     proceeding without the render lock — "
+                      "timed out waiting for another render")
+                fh.close()
+                return False
+            time.sleep(0.25)
+    fh.seek(0)
+    fh.truncate()
+    fh.write(f"{os.getpid()}\n")
+    fh.flush()
+    _LOCK_FH = fh          # kept alive on purpose: closing it drops the lock
+    return True
+
+
+def _drop_render_lock():
+    """
+    Release it at the end of `main`, not at process exit.
+
+    The kernel would do it on exit anyway, and that backstop is what makes a
+    killed check safe. But check.py is IMPORTED and called in-process by the
+    write phase, which renders under the same lock through `nb/locks.py` -- and
+    `flock` blocks a second fd in the same process as readily as another
+    process's. Holding to exit would deadlock `nb write` against itself the
+    first time anything rendered after a check.
+    """
+    global _LOCK_FH
+    if _LOCK_FH is not None:
+        fh, _LOCK_FH = _LOCK_FH, None
+        with contextlib.suppress(OSError):
+            fcntl.flock(fh, fcntl.LOCK_UN)
+        fh.close()
 
 
 def _run(fn, argv):
@@ -338,6 +419,13 @@ def _unstash(root):
 
 
 def main(argv):
+    try:
+        return _main(argv)
+    finally:
+        _drop_render_lock()
+
+
+def _main(argv):
     if not argv:
         print(__doc__.strip().split("\n\n")[1].strip())
         return 2
@@ -365,6 +453,14 @@ def main(argv):
     # slept. Neither the failure branch nor the `except` above got to run, so
     # recovery has to happen the next time anyone looks. Before the lint, since
     # rule 12 reads the freeze.
+    #
+    # Under the lock when there IS something to recover, and not otherwise: this
+    # moves freeze trees back, which is as disruptive to another render as the
+    # stash itself, but it happens only after a killed check -- so taking the
+    # lock unconditionally here would serialise every cheap `--no-render` pass
+    # for a branch that almost never runs.
+    if (root / FREEZE_STASH).exists():
+        _take_render_lock(root)
     recovered = _unstash(root)
     if recovered:
         print(f"freeze     restored {len(recovered)} tree(s) left by an "
@@ -396,6 +492,10 @@ def main(argv):
     # Quarto's own freeze then re-executes the pages whose .qmd changed, which
     # is the new or edited entry, so nothing here needs to handle that case.
     whole, pages, why = _freeze_targets(root, chapters, force_all)
+    # BEFORE the stash, and held past the citation pass below: the window that
+    # has to be exclusive is the whole time the freeze is not where it belongs,
+    # not just the two render calls inside it.
+    _take_render_lock(root)
     _stash(root, list(whole) + list(pages))
     served = [c for c in chapters if c not in whole]
     print(f"freeze     set aside {len(whole)} chapter(s), {len(pages)} page(s)"
