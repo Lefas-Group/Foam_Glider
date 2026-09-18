@@ -214,6 +214,14 @@ def create_chapter(notebook, name, title, defines="", claim=True,
         (target / "_model.py").write_text((SCAFFOLD / "_model.py.tmpl").read_text())
         (target / "_analysis.py").write_text("")
 
+    # The book index draws the chapter graph from these files, and rule 12
+    # cannot protect it: rule 12 fires on a dirty `_model.py` against THAT
+    # chapter's freeze, and the root index belongs to no chapter. So a new
+    # chapter would leave the front page serving an N-1 node diagram from its
+    # own freeze, silently. Deleting the freeze here makes the next render
+    # rebuild it, by construction rather than by a rule.
+    shutil.rmtree(notebook.root / "_freeze" / "index", ignore_errors=True)
+
     what = (f"claimed the empty scaffold chapters/{stub}/ as chapters/{name}/"
             if stub else f"created chapters/{name}/")
     return name, (

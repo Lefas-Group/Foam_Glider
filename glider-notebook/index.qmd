@@ -1,0 +1,76 @@
+---
+title: "Optimised Glider II"
+---
+
+A chronological record of questions asked about a 300 mm span foam glider optimised for minimum sink rate in trimmed glide. Each **chapter**
+is one model — a vehicle, a fidelity, a method — and each **entry** is one
+question asked of it, answered by code that runs when the page renders.
+
+## How the chapters relate
+
+Chapters are numbered in the order they were written, which is not the order they
+depend on each other. A chapter whose model was copied from an earlier one says
+so at the top of its `_model.py`, and that is what this is drawn from — so the
+picture cannot disagree with the models.
+
+```{python}
+#| echo: false
+#| output: asis
+# GENERATED FROM THE MODELS, never drawn by hand (rule 34 keeps this block here).
+#
+# Reads source, executes none of it: no chapter model is imported or solved, so
+# this page stays free to render and has no cross-chapter value dependency.
+# `create_chapter` deletes this page's freeze when it scaffolds a chapter,
+# because rule 12 cannot -- the root index belongs to no chapter, so nothing
+# else would notice a seventh node was missing.
+import pathlib
+import re
+
+_FORK = re.compile(r"^#\s*Forked from chapters/([^/\s]+)/_model\.py", re.M)
+_TITLE = re.compile(r'^title:\s*"(.+)"\s*$', re.M)
+
+_chapters = sorted(p for p in pathlib.Path("chapters").iterdir() if p.is_dir())
+_titles, _parent = {}, {}
+for _c in _chapters:
+    _index = _c / "index.qmd"
+    _m = _TITLE.search(_index.read_text()) if _index.exists() else None
+    _titles[_c.name] = _m.group(1) if _m else _c.name
+    _model = _c / "_model.py"
+    # Only the header, and only a parent that still exists: a fork line naming a
+    # renamed chapter should leave a root node rather than a dangling edge.
+    _f = _FORK.search(_model.read_text()[:2000]) if _model.exists() else None
+    if _f and (pathlib.Path("chapters") / _f.group(1)).is_dir():
+        _parent[_c.name] = _f.group(1)
+
+_id = lambda s: "c" + re.sub(r"[^0-9A-Za-z]", "", s)
+print("```{mermaid}")
+print("graph TD")
+for _c in _chapters:
+    print(f'  {_id(_c.name)}["{_titles[_c.name]}"]')
+    print(f"  click {_id(_c.name)} \"chapters/{_c.name}/index.html\"")
+for _c in _chapters:
+    if _c.name in _parent:
+        print(f"  {_id(_parent[_c.name])} --> {_id(_c.name)}")
+print("```")
+```
+
+## The chapters
+
+```{python}
+#| echo: false
+#| output: asis
+# Same source, as a table: what each chapter is, and what it came from.
+print("| chapter | questions asked | forked from |")
+print("|---|---|---|")
+for _c in _chapters:
+    _n = len(list(_c.glob("20*.qmd")))
+    _from = (f"[{_titles[_parent[_c.name]]}](chapters/{_parent[_c.name]}/)"
+             if _c.name in _parent else "—")
+    print(f"| [{_titles[_c.name]}](chapters/{_c.name}/) | {_n} | {_from} |")
+```
+
+## Where to start
+
+The first chapter for the whole story in order, the last for where the design
+reached. Any entry stands on its own: it states its question, computes its
+answer, and says what it assumed.

@@ -58,6 +58,7 @@ entry can be written compliant rather than corrected afterwards.
     31  a forked `_model.py` names its parent chapter, commit and differences
     32  no empty callout -- delete it rather than write `None.`
     33  a chapter index declares `order:` and numbers its title
+    34  the notebook has a front page that draws its own chapter graph
 
 Two details the list cannot carry. A value written as an inline expression counts
 as ONE word, so tightening prose is never at odds with computing the numbers in
@@ -1629,6 +1630,38 @@ def _empty_callouts(root, chapters, entries):
     return out
 
 
+def _book_index(root, chapters):
+    """
+    Rule 34. The notebook has a front page, and it still draws itself.
+
+    Quarto synthesises an `_site/index.html` when a website has no root page, so
+    the absence is not a 404 -- it is a site whose front door says nothing about
+    what the aircraft is or how the chapters relate. Three notebooks were built
+    without one and nobody noticed, because nothing was broken.
+
+    The generated-block check is the same guard rule 30 makes for a chapter
+    index, for the same reason and against the same failure: the scaffold ships
+    a cell that draws the chapter graph FROM the models, and a model that
+    rewrites the page with `write_file` rather than editing it replaces a
+    derived diagram with a hand-drawn one that is correct exactly once.
+
+    Only when the notebook has chapters -- a graph of nothing is not a finding.
+    """
+    if not chapters:
+        return []
+    index = root / "index.qmd"
+    if not index.exists():
+        return [(index, "the notebook has no front page — every chapter is "
+                        "reachable only from the sidebar, and nothing says how "
+                        "they relate. `nb new` scaffolds one")]
+    if "GENERATED FROM THE MODELS" not in index.read_text():
+        return [(index, "the chapter graph is not the generated one — it is "
+                        "drawn from each `_model.py`'s fork header so it cannot "
+                        "disagree with the models. A hand-drawn diagram is "
+                        "correct once")]
+    return []
+
+
 def _index_ordering(root, chapters):
     """
     Rule 33. A chapter index declares `order:`, and its title carries the number.
@@ -1767,6 +1800,7 @@ def check(root, chapters):
     problems += _fork_provenance(root, chapters, entries)
     problems += _empty_callouts(root, chapters, entries)
     problems += _index_ordering(root, chapters)
+    problems += _book_index(root, chapters)
 
     # Rule 13. Scoped to `_analysis.py`: `_model.py` is rendered in full by the
     # chapter index, and `_notebook.py` is deliberately invisible, so requiring

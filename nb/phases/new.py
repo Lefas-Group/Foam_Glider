@@ -87,7 +87,11 @@ def main(path, title=None, subject=None, chapter="01-first-chapter",
     # used was never read by this system. A person who wants to probe by hand
     # writes a file beside `_probe_base.py`, which is what the agent does.
     for tmpl, dest in (("_quarto.yml.tmpl", "_quarto.yml"),
-                       ("styles.css.tmpl", "styles.css")):
+                       ("styles.css.tmpl", "styles.css"),
+                       # The site's front page. Without it Quarto serves a
+                       # synthesised stub -- not a 404, but nothing that says
+                       # what the aircraft is or how the chapters relate.
+                       ("book-index.qmd.tmpl", "index.qmd")):
         (root / dest).write_text(
             _render((SCAFFOLD / tmpl).read_text(), title, subject, chapter))
 
