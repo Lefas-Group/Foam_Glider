@@ -48,7 +48,9 @@ EXPECTED = {
     # renders in 21 s against the 35 s ceiling it was granted. Recorded because
     # lint reads the working tree, not HEAD.
     "glider-notebook": (0, 3),
-    # +2/+8 rule 33, +1/+1 rule 34, +2/+8 rule 35 (order:/numbered titles, one and four
+    # +2/+8 rule 33, +1/+1 rule 34, +2/+8 rule 35. Rule 36 is silent on
+    # both: neither has a `_categories.yml`, and a notebook that has not
+    # decided its axes is not thereby wrong (order:/numbered titles, one and four
     # chapters at two findings each) the missing front page, and the chapter
     # indexes that neither list their entries nor print their lineage. All three
     # rules postdate both notebooks, which stay frozen -- the sidebar and front door of a

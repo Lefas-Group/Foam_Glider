@@ -1,5 +1,15 @@
 ---
 title: "<Project>"
+listing:
+  id: chapters
+  contents: "chapters/*/index.qmd"
+  type: table
+  fields: [title, categories]
+  sort: "filename"
+  categories: true
+  field-display-names:
+    title: "Chapter"
+    categories: "What varies"
 ---
 
 A chronological record of questions asked about <the aircraft>. Each **chapter**
@@ -56,18 +66,12 @@ print("```")
 
 ## The chapters
 
-```{python}
-#| echo: false
-#| output: asis
-# Same source, as a table: what each chapter is, and what it came from.
-print("| chapter | questions asked | forked from |")
-print("|---|---|---|")
-for _c in _chapters:
-    _n = len(list(_c.glob("20*.qmd")))
-    _from = (f"[{_titles[_parent[_c.name]]}](chapters/{_parent[_c.name]}/)"
-             if _c.name in _parent else "—")
-    print(f"| [{_titles[_c.name]}](chapters/{_c.name}/) | {_n} | {_from} |")
-```
+Tagged by what varies between them — the material, how the geometry was arrived
+at, and what the model carries. Click a tag to see only those chapters; the
+vocabulary is `_categories.yml` and rule 36 holds every chapter to it.
+
+::: {#chapters}
+:::
 
 ## Where to start
 

@@ -142,7 +142,7 @@ def _fork_sources(notebook, parent):
 
 
 def create_chapter(notebook, name, title, defines="", claim=True,
-                   number=None, fork_from=""):
+                   number=None, fork_from="", categories=()):
     """
     Create `chapters/<name>/` with index.qmd, _model.qmd, _model.py, _analysis.py.
 
@@ -182,9 +182,15 @@ def create_chapter(notebook, name, title, defines="", claim=True,
     # the text, where a mis-sorted sidebar cannot hide it.
     n = int(name[:2])
     numbered = title if " · " in title else f"{n:02d} · {title}"
+    # Written as a YAML list on one line. An empty list is written as `[]` and
+    # NOT omitted: a chapter with no axes is a claim -- that it varies nothing
+    # its neighbours do not -- and an absent key is indistinguishable from one
+    # that was forgotten.
+    cats = "[" + ", ".join(f'"{c}"' for c in categories) + "]"
     sub = lambda s: (s.replace("__CHAPTER__", name)
                       .replace("__TITLE__", numbered)
                       .replace("__ORDER__", str(n))
+                      .replace("__CATEGORIES__", cats)
                       .replace("__WHAT_DEFINES_THE_CHAPTER__", defines or PLACEHOLDER))
 
     (target / "_model.qmd").write_text(sub((SCAFFOLD / "_model.qmd.tmpl").read_text()))

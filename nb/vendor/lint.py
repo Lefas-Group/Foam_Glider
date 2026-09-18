@@ -60,6 +60,7 @@ entry can be written compliant rather than corrected afterwards.
     33  a chapter index declares `order:` and numbers its title
     34  the notebook has a front page that draws its own chapter graph
     35  a chapter index lists its entries and prints its lineage
+    36  a chapter's categories come from the notebook's vocabulary
 
 Two details the list cannot carry. A value written as an inline expression counts
 as ONE word, so tightening prose is never at odds with computing the numbers in
@@ -1631,6 +1632,63 @@ def _empty_callouts(root, chapters, entries):
     return out
 
 
+def _category_vocabulary(root, chapters):
+    """
+    Rule 36. A chapter's categories come from the notebook's own vocabulary.
+
+    Categories are a flat, multi-valued tag set, which is what makes a grouping
+    nobody predicted purely additive -- tag the chapters it applies to and the
+    listing picks it up, with no hierarchy to restructure. The cost of that
+    flexibility is drift: "5mm", "5 mm" and "5 mm foam" become three tags, each
+    matching a third of the chapters, and the grouping stops working without
+    ever failing.
+
+    So the terms are held in `_categories.yml` IN THE NOTEBOOK. An axis is
+    something a notebook notices about itself, usually several chapters in --
+    chapter 01 could not know foam thickness would become an axis. Keeping the
+    vocabulary in the notebook makes adding a term one line there rather than a
+    change to `nb`, which would put the tool between a notebook and a fact about
+    itself.
+
+    Silent when there is no vocabulary file: a notebook that has not decided its
+    axes is not thereby wrong, and `nb new` ships the file full of prompts
+    rather than terms.
+    """
+    vocab_file = root / "_categories.yml"
+    if not vocab_file.exists():
+        return []
+    # Deliberately not a YAML parse: lint imports nothing outside the stdlib,
+    # and the shape here is one term per list item. A term with a leading `<` is
+    # a scaffold prompt, not a term.
+    allowed = set()
+    for line in vocab_file.read_text().splitlines():
+        m = re.match(r"^\s*-\s*(.+?)\s*$", line)
+        if m and not m.group(1).startswith("<"):
+            allowed.add(m.group(1).strip().strip('"').strip("'"))
+    if not allowed:
+        return []
+
+    out = []
+    for c in chapters:
+        index = root / "chapters" / c / "index.qmd"
+        if not index.exists():
+            continue
+        m = re.search(r"^categories:\s*\[(.*?)\]\s*$", index.read_text(), re.M)
+        if not m:
+            out.append((index, f"declares no `categories:` — what this chapter "
+                               f"varies is how it is grouped with its "
+                               f"neighbours. Terms come from _categories.yml"))
+            continue
+        for term in re.findall(r'"([^"]+)"|\'([^\']+)\'', m.group(1)):
+            t = (term[0] or term[1]).strip()
+            if t not in allowed:
+                out.append((index, f"category {t!r} is not in _categories.yml — "
+                                   f"a term that is nearly right is a tag that "
+                                   f"matches nothing. Use an existing term, or "
+                                   f"add it there deliberately"))
+    return out
+
+
 def _chapter_index_blocks(root, chapters):
     """
     Rule 35. A chapter index keeps the two blocks that orient a reader.
@@ -1840,6 +1898,7 @@ def check(root, chapters):
     problems += _index_ordering(root, chapters)
     problems += _book_index(root, chapters)
     problems += _chapter_index_blocks(root, chapters)
+    problems += _category_vocabulary(root, chapters)
 
     # Rule 13. Scoped to `_analysis.py`: `_model.py` is rendered in full by the
     # chapter index, and `_notebook.py` is deliberately invisible, so requiring

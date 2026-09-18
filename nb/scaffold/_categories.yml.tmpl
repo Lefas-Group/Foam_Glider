@@ -1,0 +1,29 @@
+# The axes this notebook explores.
+#
+# A chapter index tags itself with `categories:` drawn from this file, and rule
+# 36 refuses anything that is not here. That is the whole drift protection:
+# without it you get "5mm", "5 mm" and "5 mm foam" as three separate tags and the
+# grouping quietly stops working.
+#
+# IT LIVES IN THE NOTEBOOK, not in `nb`, on purpose. An axis is something a
+# notebook notices about ITSELF, usually after several chapters exist -- the
+# chapter that first varies the foam thickness cannot know that thickness will
+# become an axis. So adding a term is one line here, not a change to the tool,
+# and retrofitting a new axis across the existing chapters is a frontmatter edit
+# per chapter. Keep those edits cheap: nothing on a chapter index should execute.
+#
+# The axis names are for readers of this file. Rule 36 checks membership in the
+# flattened set of values, so a term may sit under any axis.
+
+axes:
+  # What the aircraft is made of, or how big it is -- the vehicle itself.
+  vehicle:
+    - <a material, a size, a configuration>
+
+  # How it was sized: by hand, by optimiser, by what objective.
+  method:
+    - <how the numbers were arrived at>
+
+  # What the model includes and leaves out.
+  fidelity:
+    - <a component modelled, or a constraint imposed>
