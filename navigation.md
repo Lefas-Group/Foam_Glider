@@ -1,6 +1,9 @@
 # Navigating a notebook that fans out
 
-**Status: implemented.** Stages 1-5 are committed and verified; Stage 6 (`cite()`) is implemented and under final verification. What implementation changed about the plan is recorded in each stage.
+**Status: implemented and verified**, all six stages. What implementation
+changed about the plan is recorded in the stage it changed — the two findings
+under Stage 6 are the ones worth reading, because both were wrong in a way only
+an end-to-end render showed.
 
 The notebook is a DAG of design decisions presented as a numbered list. Six
 chapters, twenty-two entries, and no way to see how any of it relates. This plan
