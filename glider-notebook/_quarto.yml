@@ -17,6 +17,12 @@ website:
   sidebar:
     style: docked
     contents:
+      # The front page, named explicitly. Quarto links the sidebar TITLE to the
+      # site root, which is the only way back from a chapter and not a thing a
+      # reader guesses -- and the breadcrumb's "Chapters" is a section label
+      # with no href, so it looks like the way home and is not.
+      - text: "Overview"
+        href: index.qmd
       # Subdirectories become sections. WITHIN a chapter, entry filenames start
       # with their date, so alphabetical order is chronological order.
       #
