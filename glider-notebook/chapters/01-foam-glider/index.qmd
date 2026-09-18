@@ -1,5 +1,6 @@
 ---
-title: "Foam glider"
+title: "01 · Foam glider"
+order: 1
 ---
 
 {{< include _model.qmd >}}

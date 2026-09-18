@@ -1,5 +1,6 @@
 ---
-title: "3 mm foam"
+title: "04 · 3 mm foam"
+order: 4
 ---
 
 {{< include _model.qmd >}}

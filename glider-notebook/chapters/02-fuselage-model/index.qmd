@@ -1,5 +1,6 @@
 ---
-title: "Fuselage model"
+title: "02 · Fuselage model"
+order: 2
 ---
 
 {{< include _model.qmd >}}

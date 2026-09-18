@@ -1,5 +1,6 @@
 ---
-title: "Fully optimized 5 mm glider"
+title: "06 · Fully optimized 5 mm glider"
+order: 6
 ---
 
 {{< include _model.qmd >}}

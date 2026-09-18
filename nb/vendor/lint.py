@@ -51,6 +51,13 @@ entry can be written compliant rather than corrected afterwards.
     24  a chapter with an entry has no unfilled index placeholder
     25  no sentence enumerates more than five computed values — table it
     26  the title is ONE question, at most 18 words
+    27  never assign to a name `_notebook.py` owns at cell top level
+    28  every entry declares ENTRY_CEILING and SOLVE_BUDGET
+    29  never import `_model`, `_analysis` or `_notebook` -- already in scope
+    30  a chapter index renders its own `_model.py`
+    31  a forked `_model.py` names its parent chapter, commit and differences
+    32  no empty callout -- delete it rather than write `None.`
+    33  a chapter index declares `order:` and numbers its title
 
 Two details the list cannot carry. A value written as an inline expression counts
 as ONE word, so tightening prose is never at odds with computing the numbers in
@@ -1622,6 +1629,58 @@ def _empty_callouts(root, chapters, entries):
     return out
 
 
+def _index_ordering(root, chapters):
+    """
+    Rule 33. A chapter index declares `order:`, and its title carries the number.
+
+    The sidebar is built by `- auto: "chapters"`. With no `order:` in a
+    chapter's index, Quarto does not sort the sections at all -- it emits them
+    in readdir order, which on APFS is a hash of the directory names. Measured
+    on this notebook: the directories are 01..06 and the sidebar read
+    03, 01, 06, 04, 02, 05, matching `ls -f` exactly.
+
+    Two things follow, and the second is worse than the mess:
+
+      * the `NN-` prefixes that encode the whole design lineage are invisible;
+      * `page-navigation: true` walks the chapters in that same hash order, so
+        "read straight through" takes you 03 -> 01 -> 06.
+
+    And it is UNSTABLE: the hash changes as names are added, so a seventh
+    chapter can reshuffle the six above it.
+
+    The numbered TITLE is checked too, because it is the half that survives
+    everything. A sidebar can be mis-sorted by a Quarto change or a stray file;
+    a title reading "04 · 3 mm foam" still tells a reader where they are.
+
+    `create_chapter` writes both, so this rule exists for the case rule 30 was
+    written for -- a model that rewrites index.qmd with `write_file` instead of
+    editing it drops whatever the scaffold put there, and nothing notices.
+    """
+    out = []
+    for c in chapters:
+        index = root / "chapters" / c / "index.qmd"
+        if not index.exists() or not c[:2].isdigit():
+            continue
+        text = index.read_text()
+        n = int(c[:2])
+        m = re.search(r"^order:\s*(\d+)\s*$", text, re.M)
+        if not m:
+            out.append((index, f"declares no `order:` — without it Quarto does "
+                               f"not sort the sidebar at all, it uses readdir "
+                               f"order. Add `order: {n}` under the title"))
+        elif int(m.group(1)) != n:
+            out.append((index, f"declares `order: {m.group(1)}` but is chapter "
+                               f"{n} — the sidebar would disagree with the "
+                               f"directory names"))
+        t = ENTRY_TITLE.search(text)
+        if t and not t.group(1).startswith(f"{n:02d} · "):
+            out.append((index, f'title is {t.group(1)!r} — a chapter title '
+                               f'carries its number, as "{n:02d} · '
+                               f'{t.group(1)}", so the sequence is legible '
+                               f'wherever the title appears'))
+    return out
+
+
 def _fork_provenance(root, chapters, entries):
     """
     Rule 31. A copied `_model.py` says what it was copied from.
@@ -1707,6 +1766,7 @@ def check(root, chapters):
     problems += _transcribed(root, chapters, entries)
     problems += _fork_provenance(root, chapters, entries)
     problems += _empty_callouts(root, chapters, entries)
+    problems += _index_ordering(root, chapters)
 
     # Rule 13. Scoped to `_analysis.py`: `_model.py` is rendered in full by the
     # chapter index, and `_notebook.py` is deliberately invisible, so requiring

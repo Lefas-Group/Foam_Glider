@@ -1,5 +1,8 @@
 ---
 title: "__TITLE__"
+# The sidebar's `auto:` does not sort without this -- it falls back to readdir
+# order, which is a hash of the directory names (rule 33).
+order: __ORDER__
 ---
 
 {{< include _model.qmd >}}

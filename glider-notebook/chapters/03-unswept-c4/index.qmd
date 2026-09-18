@@ -1,5 +1,6 @@
 ---
-title: "Unswept quarter chord"
+title: "03 · Unswept quarter chord"
+order: 3
 ---
 
 {{< include _model.qmd >}}

@@ -9,12 +9,23 @@ website:
   title: "<Project> Notebook"
   description: "A chronological record of questions asked about <the aircraft>."
   # Next/Previous links in each page footer, so entries read straight through.
+  # Only true once the chapters are ordered -- see the sidebar note below.
   page-navigation: true
+  # Entries live two levels deep (chapters/<chapter>/<entry>.qmd), which is what
+  # bread-crumbs needs: every entry page then names the chapter it belongs to.
+  bread-crumbs: true
   sidebar:
     style: docked
     contents:
-      # Subdirectories become sections. Entry filenames start with their date,
-      # so alphabetical order is chronological order.
+      # Subdirectories become sections. WITHIN a chapter, entry filenames start
+      # with their date, so alphabetical order is chronological order.
+      #
+      # ACROSS chapters that is not true and `auto` does not sort at all: with
+      # no `order:` in a chapter's index.qmd it emits sections in readdir order,
+      # which on APFS is a hash of the names. Measured: 03, 01, 06, 04, 02, 05.
+      # So every chapter index carries `order:` (rule 33), and `create_chapter`
+      # writes it. Without it the sidebar is scrambled AND page-navigation below
+      # walks the chapters in hash order.
       #
       # `auto` REQUIRES a non-empty chapters/ -- on an empty one it dies with
       # "TypeError: Cannot convert undefined or null to object". That is why
@@ -25,8 +36,11 @@ website:
 
 format:
   html:
-    toc: true
-    toc-depth: 3
+    # No table of contents. One entry answers one question, so 22 of 28 pages
+    # have no `##` heading at all and the "On this page" column renders empty or
+    # with a single item. Removing it also widens the content column, which is
+    # what a figure wants.
+    toc: false
     # Scales matplotlib output down to the content column so pages never scroll
     # sideways.
     css: styles.css

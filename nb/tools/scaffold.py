@@ -174,8 +174,18 @@ def create_chapter(notebook, name, title, defines="", claim=True,
     if not NAME.match(name):
         return name, f"rejected: {name!r} is not NN-kebab-case"
 
-    sub = lambda s: s.replace("__CHAPTER__", name).replace("__TITLE__", title) \
-        .replace("__WHAT_DEFINES_THE_CHAPTER__", defines or PLACEHOLDER)
+    # The number is the chapter's place in the sidebar and the front of its
+    # title, so both are derived from the directory name that allocation just
+    # settled -- never from the caller's guess, which `_allocate` may have
+    # walked past. `order` is what stops the sidebar falling back to readdir
+    # order (rule 33); the numbered title is what makes the sequence legible in
+    # the text, where a mis-sorted sidebar cannot hide it.
+    n = int(name[:2])
+    numbered = title if " · " in title else f"{n:02d} · {title}"
+    sub = lambda s: (s.replace("__CHAPTER__", name)
+                      .replace("__TITLE__", numbered)
+                      .replace("__ORDER__", str(n))
+                      .replace("__WHAT_DEFINES_THE_CHAPTER__", defines or PLACEHOLDER))
 
     (target / "_model.qmd").write_text(sub((SCAFFOLD / "_model.qmd.tmpl").read_text()))
     (target / "index.qmd").write_text(sub((SCAFFOLD / "index.qmd.tmpl").read_text()))

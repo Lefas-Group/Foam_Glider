@@ -44,12 +44,19 @@ EXPECTED = {
     # Back to two with chapter 06 (7a8c0c1): its entry renders in 11 s against
     # the same 20 s ceiling, so rule 17 flags it exactly as it flagged those.
     # A new chapter raising the count is the rule working, not drifting.
-    "glider-notebook": (0, 2),
-    "aircraft-notebook": (27, 28),
+    # Third warning is the uncommitted biplane entry in the working tree, which
+    # renders in 21 s against the 35 s ceiling it was granted. Recorded because
+    # lint reads the working tree, not HEAD.
+    "glider-notebook": (0, 3),
+    # +2 and +8 from rule 33 (a chapter index declares `order:` and numbers its
+    # title): 1 chapter and 4 chapters, two findings each. Both notebooks predate
+    # the rule and stay frozen -- the sidebar of a notebook nobody opens is not
+    # worth unfreezing a corpus for.
+    "aircraft-notebook": (29, 30),
     # +3 blocking from rule 31: its four chapters hold four copies of one
     # _model.py, three of them byte-identical to an earlier chapter and
     # none carrying a fork header. Correct, and frozen.
-    "optimised-glider-notebook": (59, 85),
+    "optimised-glider-notebook": (67, 93),
 }
 
 
