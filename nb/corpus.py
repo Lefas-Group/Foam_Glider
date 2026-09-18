@@ -70,9 +70,36 @@ def counts(root):
     return len(blocking), len(problems)
 
 
+def _imports():
+    """
+    Every module imports. Two lines, and it catches what nothing else does.
+
+    The corpus sweep lints notebooks; it never imported the code doing the
+    linting, so a syntax error in a phase module passed every check here and
+    surfaced only when somebody ran that command by hand. That happened twice in
+    one session -- a heredoc edit that ran off the end of a string literal in
+    `new.py`, which `nb new` alone would have caught, several commits later.
+    """
+    import importlib
+    import pkgutil
+
+    broken = []
+    for mod in pkgutil.walk_packages([str(pathlib.Path(__file__).parent)], "nb."):
+        if mod.name.endswith(".corpus"):
+            continue
+        try:
+            importlib.import_module(mod.name)
+        except Exception as e:                       # noqa: BLE001 -- report all
+            broken.append(f"{mod.name}: {type(e).__name__}: {e}")
+    return broken
+
+
 def main(argv=()):
     repo = pathlib.Path(__file__).resolve().parent.parent
     bad = []
+    broken = _imports()
+    for b in broken:
+        print(f"  IMPORT FAILED  {b}")
     for name, expected in EXPECTED.items():
         root = repo / name
         if not root.is_dir():
@@ -85,6 +112,9 @@ def main(argv=()):
         if not ok:
             bad.append((name, expected, got))
 
+    if broken:
+        print(f"\n{len(broken)} module(s) do not import — fix those first.")
+        return 1
     if not bad:
         print("\ncorpus unchanged.")
         return 0

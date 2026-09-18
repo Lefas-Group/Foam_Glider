@@ -62,6 +62,7 @@ entry can be written compliant rather than corrected afterwards.
     35  a chapter index lists its entries and prints its lineage
     36  a chapter's categories come from the notebook's vocabulary
     37  a `cite()` names an entry that exists and publishes an answer
+    38  every chapter is named in the sidebar
 
 Two details the list cannot carry. A value written as an inline expression counts
 as ONE word, so tightening prose is never at odds with computing the numbers in
@@ -1639,6 +1640,30 @@ HERO_PAIR = re.compile(
     r"\[([^\]]+)\]\{\.hero-value\}[^\[]*\[([^\]]*)\]\{\.hero-label\}")
 
 
+def _sidebar_lists_chapters(root, chapters):
+    """
+    Rule 38. Every chapter is named in the sidebar.
+
+    The sidebar names each chapter rather than using `- auto: "chapters"`. That
+    drops a redundant "Chapters" heading wrapping the whole notebook, and the
+    price is a list somebody has to maintain -- `create_chapter` does, but a
+    chapter created any other way, or a rename, leaves a chapter that renders
+    perfectly and appears in no navigation. Nothing else would ever say so:
+    the page is there, the links work, and only a reader looking for it notices.
+    """
+    cfg = root / "_quarto.yml"
+    if not cfg.exists():
+        return []
+    text = cfg.read_text()
+    if re.search(r'^\s*-\s*auto:\s*["\']?chapters["\']?\s*$', text, re.M):
+        return []          # the wrapper form: nothing to maintain, nothing to check
+    listed = set(re.findall(r'-\s*auto:\s*["\']chapters/([^"\']+)["\']', text))
+    return [(cfg, f"chapter {c!r} is in no sidebar entry — it renders and links "
+                  f"correctly and appears in no navigation, which only a reader "
+                  f"looking for it would notice")
+            for c in chapters if c not in listed]
+
+
 def _citation_targets(root, chapters, entries):
     """
     Rule 37. A `cite()` names an entry that exists and publishes a hero value.
@@ -1951,6 +1976,7 @@ def check(root, chapters):
     problems += _chapter_index_blocks(root, chapters)
     problems += _category_vocabulary(root, chapters)
     problems += _citation_targets(root, chapters, entries)
+    problems += _sidebar_lists_chapters(root, chapters)
 
     # Rule 13. Scoped to `_analysis.py`: `_model.py` is rendered in full by the
     # chapter index, and `_notebook.py` is deliberately invisible, so requiring

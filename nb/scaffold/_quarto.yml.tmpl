@@ -23,22 +23,12 @@ website:
       # with no href, so it looks like the way home and is not.
       - text: "Overview"
         href: index.qmd
-      # Subdirectories become sections. WITHIN a chapter, entry filenames start
-      # with their date, so alphabetical order is chronological order.
-      #
-      # ACROSS chapters that is not true and `auto` does not sort at all: with
-      # no `order:` in a chapter's index.qmd it emits sections in readdir order,
-      # which on APFS is a hash of the names. Measured: 03, 01, 06, 04, 02, 05.
-      # So every chapter index carries `order:` (rule 33), and `create_chapter`
-      # writes it. Without it the sidebar is scrambled AND page-navigation below
-      # walks the chapters in hash order.
-      #
-      # `auto` REQUIRES a non-empty chapters/ -- on an empty one it dies with
-      # "TypeError: Cannot convert undefined or null to object". That is why
-      # `nb new` always scaffolds a first chapter, and why the first entry that
-      # needs a new chapter CLAIMS that scaffold rather than adding a sibling
-      # beside it (Notebook.claimable_stub).
-      - auto: "chapters"
+      # ONE LINE PER CHAPTER, kept sorted, written by `create_chapter` and
+      # checked by rule 38. `- auto: "chapters"` would need no maintenance, but
+      # it wraps everything in a redundant "Chapters" heading -- the whole
+      # notebook is chapters -- and `auto: "chapters/*"` crashes Quarto's
+      # navigation. So each chapter is named, and the rule makes a chapter
+      # missing from here loud rather than invisible.
 
 format:
   html:

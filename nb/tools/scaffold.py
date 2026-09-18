@@ -141,6 +141,51 @@ def _fork_sources(notebook, parent):
     return ref, out
 
 
+def _sidebar_add(notebook, name):
+    """
+    Name the new chapter in `_quarto.yml`'s sidebar, keeping the list sorted.
+
+    The sidebar names each chapter rather than using `- auto: "chapters"`,
+    which would need no maintenance but wraps every chapter in a redundant
+    "Chapters" heading. The cost is this function, and the risk it carries is
+    that a chapter missing from the list is INVISIBLE -- so rule 38 checks it,
+    turning a silent omission into a lint failure.
+
+    Rewrites the whole block sorted rather than appending: allocation can walk
+    past a collision, a claimed stub is renamed, and appending would put those
+    out of order. Never raises -- a sidebar line is not worth failing a chapter
+    that has already been created on disk, and rule 38 will say so.
+    """
+    cfg = notebook.root / "_quarto.yml"
+    try:
+        lines = cfg.read_text().splitlines(keepends=True)
+    except OSError:
+        return
+    entry = f'      - auto: "chapters/{name}"\n'
+    if entry in lines:
+        return
+    idx = [i for i, l in enumerate(lines)
+           if l.startswith('      - auto: "chapters/')]
+    if idx:
+        block = sorted(set(lines[i] for i in idx) | {entry})
+        out = [l for i, l in enumerate(lines) if i not in set(idx[1:])]
+        out[out.index(lines[idx[0]])] = "".join(block)
+    else:
+        # First chapter in a fresh notebook: the scaffold leaves the marker
+        # comment and no entries, so anchor on the Overview item above it.
+        anchor = next((i for i, l in enumerate(lines)
+                       if l.strip() == "href: index.qmd"), None)
+        if anchor is None:
+            return
+        while anchor + 1 < len(lines) and lines[anchor + 1].lstrip().startswith("#"):
+            anchor += 1
+        out = lines[:anchor + 1] + [entry] + lines[anchor + 1:]
+    try:
+        cfg.write_text("".join(out))
+    except OSError:
+        pass
+
+
 def create_chapter(notebook, name, title, defines="", claim=True,
                    number=None, fork_from="", categories=()):
     """
@@ -227,6 +272,7 @@ def create_chapter(notebook, name, title, defines="", claim=True,
     # own freeze, silently. Deleting the freeze here makes the next render
     # rebuild it, by construction rather than by a rule.
     shutil.rmtree(notebook.root / "_freeze" / "index", ignore_errors=True)
+    _sidebar_add(notebook, name)
 
     what = (f"claimed the empty scaffold chapters/{stub}/ as chapters/{name}/"
             if stub else f"created chapters/{name}/")

@@ -31,10 +31,10 @@ from ..log import say, tell
 GITIGNORE = ("/.quarto/\n"
              "**/*.quarto_ipynb\n"
              "/_site/\n"
-             "/_freeze/site_libs/
-# Quarto writes a <page>-listing.json beside every page carrying a
-# listing. Build output, regenerated on every render, and it churns.
-**/*-listing.json\n"
+             "/_freeze/site_libs/\n"
+             # Quarto writes a <page>-listing.json beside every page carrying a
+             # listing: build output, regenerated on every render, and it churns.
+             "**/*-listing.json\n"
              # Per-run working state: probe scripts, logs, proposals, the
              # render lock. This repo's root .gitignore already covers it, so
              # a notebook created HERE was fine by accident -- one created in a
