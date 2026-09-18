@@ -6,7 +6,14 @@ listing:
   type: table
   fields: [title, categories]
   sort: "filename"
-  categories: true
+  categories: numbered
+  # The category list in the margin is the ONLY filter. Quarto renders it there
+  # by design -- "display item categories from this listing in the margin" --
+  # with no inline option, so the way to stop it feeling like a stray column is
+  # to remove what it was competing with: a free-text box that searched the same
+  # six rows, and a sort control for a list whose order IS the design lineage.
+  filter-ui: false
+  sort-ui: false
   field-display-names:
     title: "Chapter"
     categories: "What varies"
