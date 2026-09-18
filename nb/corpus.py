@@ -40,7 +40,11 @@ EXPECTED = {
     # chapter-05 entries that were at 11-12 s against a 20 s ceiling now render
     # in 9.4 and 9.9 s, so rule 17 stops flagging them -- the entries got
     # faster, which is the only reason a count should ever fall.
-    "glider-notebook": (0, 1),
+    #
+    # Back to two with chapter 06 (7a8c0c1): its entry renders in 11 s against
+    # the same 20 s ceiling, so rule 17 flags it exactly as it flagged those.
+    # A new chapter raising the count is the rule working, not drifting.
+    "glider-notebook": (0, 2),
     "aircraft-notebook": (27, 28),
     # +3 blocking from rule 31: its four chapters hold four copies of one
     # _model.py, three of them byte-identical to an earlier chapter and

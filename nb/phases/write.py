@@ -1,5 +1,5 @@
 """
-`nb write` -- turn an approved proposal into a committed entry.
+`nb resume` (`nb write`) -- turn an approved proposal into a committed entry.
 
 Lint is both a tool and a mandatory step. The tool lets the loop fix violations
 in place; the step after the loop is the guarantee, because without it the model
@@ -8,6 +8,7 @@ can simply decline to call the tool and declare itself done.
 
 import datetime
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -444,6 +445,51 @@ def _commit(notebook, chapter, stem, entry_path, title, extra_paths=()):
     return sha, ", ".join(paths)
 
 
+def _resolve(notebook_path, run_id):
+    """
+    (notebook, refusal) -- which run this resumes, or why it will not guess.
+
+    With no id, `Notebook` picks the most recently TOUCHED run directory, which
+    is exactly right for one agent ("the run I was just in") and a coin toss for
+    several: the freshest directory may belong to an agent still working, and
+    resuming into it means two processes writing one run's log and state.
+
+    So the same rule `nb answer` and `nb stop` already follow -- name the run
+    when more than one is live -- plus a flat refusal to resume a run that is
+    still going, however it was chosen. Guessing here is silent, and the thing
+    it corrupts is the telemetry you would use to notice.
+    """
+    notebook = Notebook(notebook_path, run_id=run_id)
+    live = []
+    for d in notebook.runs():
+        state = runstate.read(d)
+        # OUR OWN pid is not someone else's run. `ask` continues into `write`
+        # inside one process, handing it the run id it has been writing all
+        # along -- so without this the phase would refuse to run the moment it
+        # was reached the normal way.
+        if (state and runstate.alive(state) is True
+                and state.get("pid") != os.getpid()):
+            live.append((d.name, state))
+
+    if run_id is None and len(live) > 1:
+        lines = [f"  {len(live)} runs are live — name the one to resume:"]
+        lines += [f"    {name}  {st.get('chapter') or '—'}  "
+                  f"{st.get('phase', '?')} turn {st.get('turn', '?')}"
+                  for name, st in live]
+        return notebook, lines
+
+    if run_id is not None and run_id not in {d.name for d in notebook.runs()}:
+        return notebook, [f"  no such run: {run_id}"]
+
+    if any(name == notebook.run_id for name, _ in live):
+        return notebook, [
+            f"  {notebook.run_id} is still running — resuming it would put two "
+            f"processes in one run.",
+            f"  Wait for it, or stop it: nb stop {notebook.root.name} "
+            f"{notebook.run_id}"]
+    return notebook, None
+
+
 def main(notebook_path, verbose=True, allow_refactor=False,
          accept_refactor=False, header=True, run_id=None,
          detach=False, answers=None):
@@ -453,7 +499,11 @@ def main(notebook_path, verbose=True, allow_refactor=False,
             tell(f"  {b}")
         return 1
 
-    notebook = Notebook(notebook_path, run_id=run_id)
+    notebook, refuse = _resolve(notebook_path, run_id)
+    if refuse:
+        for line in refuse:
+            tell(line)
+        return 2
     runstate.write(notebook, phase="write")
     if detach:
         from ..mailbox import Mailbox
@@ -756,7 +806,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                          f"Either the change is wrong, or the entries it moved\n"
                          f"  need superseding rather than silently updating. If "
                          f"the diff is presentation only and you have read it:\n"
-                         f"    uv run --group nb python -m nb write "
+                         f"    uv run --group nb python -m nb resume "
                          f"{notebook.root.name} --accept-refactor\n")
                     run_metrics.close("refactor_moved_answers")
                     return 1
@@ -785,7 +835,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
              f"  {e}\n"
              f"  entry     {entry_path}\n\n"
              f"  It is on disk and unlinted. To pick it up:\n"
-             f"    uv run --group nb python -m nb write {notebook.root.name}\n")
+             f"    uv run --group nb python -m nb resume {notebook.root.name}\n")
         return 1
     except Refactor as r:
         # The agent tried to change the vehicle, was refused, and said why.
@@ -797,7 +847,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
              f"  chapter   {r.chapter}  ({r.entries} entr"
              f"{'y' if r.entries == 1 else 'ies'} would be re-proved)\n"
              f"  why       {r.why}\n\n  If that is right:\n"
-             f"    uv run --group nb python -m nb write "
+             f"    uv run --group nb python -m nb resume "
              f"{notebook.root.name} --allow-refactor\n")
         return 2
     finally:

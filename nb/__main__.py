@@ -2,8 +2,9 @@
     nb new   <notebook> [title]              scaffold a notebook, then prove it
     nb ask   <notebook> "<question>"         probe, write, render, commit
              [--detach] [--answers f.json]    …detached, answered via the board
-    nb write <notebook> [--allow-refactor]   resume from an approved proposal
-             [--accept-refactor]             …and commit a diff you have read
+    nb resume <notebook> [run]               resume: a gate, a refactor, a
+             [--allow-refactor]               …run that died with work on disk
+             [--accept-refactor]              …committing a diff you have read
     nb view  <notebook> [--force]            render the whole site
     nb eval  <notebook>                      what each model actually did
     nb board <notebook>                      N agents, one terminal
@@ -87,12 +88,18 @@ def main(argv):
                  if not r.startswith("--") and not r.endswith(".json")]
         return ask(rest[0], " ".join(words), detach=detach, answers=answers)
 
-    if cmd == "write":
+    # `resume` is what every one of its four uses is -- a gate approved, a
+    # refactor allowed, a diff accepted, or a run that died with its entry
+    # finished. `write` is the phase's name internally and stays as an alias,
+    # since it is in old logs, old commit messages and muscle memory.
+    if cmd in ("resume", "write"):
         if not rest:
             print(USAGE)
             return 2
         from .phases.write import main as write
+        args = [r for r in rest[1:] if not r.startswith("--")]
         return write(rest[0],
+                     run_id=args[0] if args else None,
                      allow_refactor="--allow-refactor" in rest,
                      accept_refactor="--accept-refactor" in rest,
                      detach="--detach" in rest)

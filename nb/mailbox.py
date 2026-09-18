@@ -93,7 +93,7 @@ class Mailbox:
             f"\n  no answer to {name!r} after "
             f"{(self.wait if wait is None else wait) / 60:.0f} min. The "
             f"question is at\n  {self.notebook.question_path}\n"
-            f"  Answer it and resume with `nb write {self.notebook.root.name}`.")
+            f"  Answer it and resume with `nb resume {self.notebook.root.name}`.")
 
 
 def answer(notebook, value, by="user"):

@@ -9,7 +9,7 @@ Runs on Gemini; needs `GEMINI_API_KEY`, and `quarto`, `git`, `npx` on `PATH`.
 ```bash
 uv run --group nb python -m nb new    <notebook> [title]     # once per aircraft
 uv run --group nb python -m nb ask    <notebook> "<q>"       # the main one
-uv run --group nb python -m nb write  <notebook>             # resume a stop
+uv run --group nb python -m nb resume <notebook> [run]       # resume a stop
 uv run --group nb python -m nb board  <notebook>             # N agents, one terminal
 uv run --group nb python -m nb answer <notebook> [run] "…"   # reply to a waiting run
 uv run --group nb python -m nb watch  <notebook> [run]       # follow the detail
@@ -24,7 +24,7 @@ uv run --group nb python -m nb eval   <notebook>             # runs, by model
 It asks you for two budgets, for any **Specified** input — one where a different
 answer changes what is being built — and once to confirm its assumptions. It
 stops and writes `proposal.json` for a **new chapter** or a **refused
-refactor**, both being commitments later entries depend on; `nb write` resumes
+refactor**, both being commitments later entries depend on; `nb resume` resumes
 either.
 
 ## Budgets
