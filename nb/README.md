@@ -76,6 +76,15 @@ A productive tool that keeps *failing* counts as no progress either, so a
 `MAX_TURNS` (60) stays as the backstop. A run that reaches it now means the
 detector missed something — worth opening, not shrugging at.
 
+## The shape of a notebook
+
+A front page draws the chapter graph from each `_model.py`'s fork header, so it
+cannot disagree with the models. Each chapter index carries `order:` (the sidebar
+does not sort without it), `categories:` from the notebook's own
+`_categories.yml`, its lineage, and a listing of its questions. Rules 33-37 keep
+all of that from decaying — the scaffold ships it, and a model that rewrites an
+index with `write_file` would otherwise drop it silently.
+
 ## Three checks
 
 **lint** reads the source. **verify** reads the *rendered* page with a fresh
@@ -102,7 +111,9 @@ command.
   entries serving stale values; that is what `check` and rule 12 are for.
 - **Chapters are exec'd, never imported.** `from _analysis import …` raises
   `ModuleNotFoundError` at render (rule 29) — the names are already in scope.
-- **A cited number is transcribed, not computed.** No `cite()`; lint warns, and
-  nothing detects drift once the cited chapter re-renders.
+- **Quote another chapter with `cite()`, never by retyping.** It returns that
+  entry's hero value from its freeze, and `check` re-renders every page citing a
+  chapter it rebuilds — the one cross-chapter edge in the graph. An entry with
+  two hero blocks needs `label=` to say which.
 - **A run does not survive the lid closing.** Asleep looks exactly like wedged,
   and no timeout helps — the process is not running to observe it.
