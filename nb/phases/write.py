@@ -445,6 +445,20 @@ def _commit(notebook, chapter, stem, entry_path, title, extra_paths=()):
     return sha, ", ".join(paths)
 
 
+def _seal(notebook, sha, stem):
+    """Record on the proposal that it has been spent, and on what."""
+    try:
+        raw = json.loads(notebook.proposal_path.read_text())
+        raw["committed"] = {"sha": sha, "entry": stem,
+                            "at": datetime.datetime.now().isoformat(timespec="seconds")}
+        notebook.proposal_path.write_text(json.dumps(raw, indent=2))
+    except (OSError, ValueError):
+        # A proposal that cannot be sealed is not worth failing a commit that
+        # has already happened. The worst case is the duplicate this prevents,
+        # which is visible and revertible; losing the commit is neither.
+        pass
+
+
 def _resolve(notebook_path, run_id):
     """
     (notebook, refusal) -- which run this resumes, or why it will not guess.
@@ -516,6 +530,16 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         tell(f"  no proposal at {notebook.proposal_path}. Run `nb ask` first.")
         return 1
     raw = json.loads(notebook.proposal_path.read_text())
+    if raw.get("committed"):
+        done = raw["committed"]
+        tell(f"  {notebook.run_id} is already committed as {done['sha']} "
+             f"({done.get('at', '')}).")
+        tell("  Resuming would write a second copy of the same entry under "
+             "today's date.")
+        tell(f"  To ask something else:  nb ask {notebook.root.name} "
+             f'"<question>"')
+        tell(f"  To undo it:             git revert {done['sha']}")
+        return 2
     # What `ask` had left of the pool when it stopped. Read out BEFORE
     # validation so they never become Proposal fields, and so never appear in
     # the `propose` tool schema as something the model is invited to fill in.
@@ -894,6 +918,14 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     # Held back until AFTER the entry prints. On its own above the block it
     # read as a stray line with nothing to attach to; below it, beside the page
     # path, it is the provenance of the thing just read.
+    # SEAL THE PROPOSAL. It stays on disk -- it is the record of what was
+    # approved, and a coordinator reads it -- but it is now spent, and
+    # `nb resume` refuses a spent one. Unsealed, resuming a finished run
+    # re-executed the whole entry and wrote a SECOND copy of it under today's
+    # date: a duplicate that lints, renders and would have committed. Every
+    # other ending leaves the proposal unsealed, which is what makes them
+    # resumable.
+    _seal(notebook, sha, stem)
     n_paths = len(detail.split(", "))
     committed = f"  commit    {sha} · {n_paths} file{'s' if n_paths != 1 else ''}"
     say(f"  commit    {sha}  ({detail})")
