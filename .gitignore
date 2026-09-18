@@ -16,6 +16,8 @@ aircraft-notebook/_site/
 aircraft-notebook/.quarto/
 optimised-glider-notebook/_site/
 optimised-glider-notebook/.quarto/
+discus-2c-notebook/_site/
+discus-2c-notebook/.quarto/
 
 # Rendered pages and their assets. These land NEXT TO the source rather than in
 # _site/ when a page is rendered on its own, so the _site/ rules above miss them

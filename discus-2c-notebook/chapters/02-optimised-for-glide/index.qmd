@@ -1,0 +1,53 @@
+---
+title: "Optimised for best glide"
+---
+
+{{< include _model.qmd >}}
+
+The reconstructed Discus-2c with its span, chords and twists set free, maximised
+for trimmed glide ratio inside the baseline aircraft's own structural and
+stability limits.
+
+- **Forked from chapter 1**, whose aircraft is the baseline and stays valid.
+- **AeroBuildup in the solver**, with stability derivatives each iteration.
+- **Nine design variables**, span plus four chords and four twists.
+- **One gradient solve** from the real geometry — a local optimum, not the global one.
+- **The drag calibration is carried across** unchanged from the baseline.
+
+::: {.callout-tip}
+## Specified
+
+Asked of the user, 2026-09-17:
+
+1. **Objective**: maximise best glide ratio.
+2. **Free**: span, station chords, station twists.
+3. **Constraints**: bending, stall, buildability, static margin.
+4. **Solve budget**: `{python} f"{solve_budget():.0f}"` s per solve.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **Drag offset**: the baseline's, treated as build quality.
+2. **Bending proxy**: additional loading proportional to chord.
+3. **Stall constraint**: imposed as wing area ≥ baseline.
+4. **Mass**: 400 kg, held however long the span grows.
+5. **Stations**: fixed fractions of semi-span.
+:::
+
+````{python}
+#| echo: false
+#| output: asis
+# Read off disk rather than copied, so this listing cannot drift from what the
+# entries actually run.
+import pathlib
+
+for _f in ("_model.py", "_analysis.py", "_budget.py"):
+    code = pathlib.Path(f"chapters/02-optimised-for-glide/{_f}").read_text()
+    print('::: {.callout-note collapse="true"}')
+    print(f"## `{_f}`\n")
+    print("```python")
+    print(code.strip())
+    print("```")
+    print(":::\n")
+````

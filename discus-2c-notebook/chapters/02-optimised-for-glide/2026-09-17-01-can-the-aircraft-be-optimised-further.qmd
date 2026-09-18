@@ -1,0 +1,90 @@
+---
+title: "Can the aircraft be optimised further?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+#| code-summary: "Show code"
+setup = baseline_setup()
+design = optimise(setup["limits"])
+optimised = build_airplane(design["span"], design["chords"], design["twists"])
+
+
+verdicts = []
+for label, analysis, offset, options in [
+    ("AeroBuildup", asb.AeroBuildup, setup["drag_offset"], {}),
+    ("LiftingLine", asb.LiftingLine, 0.0, dict(spanwise_resolution=8)),
+]:
+    verdicts.append((
+        label,
+        best_glide(analysis, AIRPLANE, setup["speed"], offset, **options),
+        best_glide(analysis, optimised, design["speed"], offset, **options),
+    ))
+
+gains = [(after / before - 1) * 100 for _, before, after in verdicts]
+tip_reynolds = (design["chords"][-1] * design["speed"]
+                / asb.Atmosphere(altitude=0.0).kinematic_viscosity())
+
+# The structural constraint is only as good as the proxy that enforced it, and
+# the proxy was never checked on a planform this different from the baseline.
+# Both are measured against the real vortex-lattice integration here, so a proxy
+# that stopped being honest on the new shape fails the render.
+for airplane, span, chords in [(AIRPLANE, SPAN, list(STATION_C)),
+                               (optimised, design["span"], design["chords"])]:
+    load = spanwise_load(LIMIT_LOAD_FACTOR * MASS * GRAVITY / 2,
+                         airplane=airplane, speed=45.0, alpha=6.0)
+    shear = np.cumsum(load["strip_force"][::-1])[::-1]
+    true_moment = float(np.cumsum((shear * load["width"])[::-1])[::-1][0])
+    proxy = float(root_bending_proxy(span, chords))
+    assert abs(proxy / true_moment - 1) < 0.05, \
+        f"bending proxy is {proxy / true_moment:.3f} of the real moment"
+
+# The finding IS the disagreement, so it is asserted rather than described.
+assert gains[0] > 0 > gains[1], "the two methods no longer disagree in sign"
+```
+
+::: {.hero-pair}
+::: {}
+[`{python} f"{gains[0]:+.1f}"`%]{.hero-value}
+[AeroBuildup, the model optimised]{.hero-label}
+:::
+::: {}
+[`{python} f"{gains[1]:+.1f}"`%]{.hero-value .hero-ref}
+[LiftingLine, on the same design]{.hero-label}
+:::
+:::
+
+**Answer.** Not credibly. The optimiser gains
+[`{python} f"{gains[0]:.1f}"`]{.key}% by its own model's reckoning, stretching
+span to [`{python} f"{design['span']:.2f}"`]{.key} m until bending binds — but
+LiftingLine judges that same design [`{python} f"{abs(gains[1]):.1f}"`]{.key}%
+*worse* (@tbl-verdict). The sign disagreement makes the gain a model artefact.
+It is bought where that model is weakest: tip chord
+[`{python} f"{design['chords'][-1]:.3f}"`]{.key} m, halving tip Reynolds to
+[`{python} f"{tip_reynolds:.2e}"`]{.key}.
+
+::: {.callout-warning}
+## The design never pays for its span
+
+Mass is held at `{python} f"{MASS:.0f}"` kg however far the wing grows, so span
+costs bending moment but never weight. Twist also ran to its bound.
+:::
+
+```{python}
+#| label: tbl-verdict
+#| tbl-cap: "Best glide ratio of the baseline and the optimised design, judged by each method on its own terms. AeroBuildup carries the calibration it was fitted with; LiftingLine is read raw, so only the relative change is comparable between rows."
+#| echo: false
+#| output: asis
+md_table(
+    ["", "baseline", "optimised", "change"],
+    [[label, f"{before:.2f}", f"{after:.2f}", f"{(after / before - 1) * 100:+.1f}%"]
+     for label, before, after in verdicts],
+)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(baseline_setup, spanwise_load, best_glide)
+```

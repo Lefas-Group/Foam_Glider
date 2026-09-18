@@ -1,0 +1,67 @@
+---
+title: "Reconstructed Discus-2c"
+# There is no notebook title page, so Quarto redirects the site root to whatever
+# it rendered first. Claim that redirect for the chapter instead. FIRST CHAPTER
+# ONLY.
+aliases:
+  - /index.html
+---
+
+{{< include _model.qmd >}}
+
+A Discus-2c reconstructed from published span, area and mass, analysed with
+AeroBuildup, corrected by one drag increment fitted to best glide.
+
+- **AeroBuildup**, NeuralFoil section polars.
+- **Reconstructed planform**, four stations scaled to published area.
+- **Wortmann FX sections**, 16.4% root to 12.6% tip.
+- **One calibrated scalar**, a signed drag increment.
+- **Sea level, 400 kg unballasted**, held fixed throughout.
+
+::: {.callout-warning}
+## Not the published geometry
+
+Only span, area and mass are published. Planform, twist, dihedral, sections,
+fuselage and tail are reconstructed. Absolute numbers carry that error, which
+minimum sink — held back — tests.
+:::
+
+::: {.callout-tip}
+## Specified
+
+Asked of the user, 2026-09-17:
+
+1. **Flight mass**: 400 kg, unballasted solo.
+2. **Geometry**: reconstruct, then calibrate against published performance.
+3. **Calibration target**: best glide ratio 45.
+4. **Solve budget**: `{python} f"{solve_budget():.0f}"` s per solve.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **Chord distribution**: four stations, scaled to published area.
+2. **Sections**: Wortmann FX pairing, 16.4% root to 12.6%.
+3. **Twist**: 2° washout, linear to the tip.
+4. **Dihedral**: 2.5°, constant along the span.
+5. **Fuselage**: body of revolution, equivalent cross-sectional area.
+6. **Tail**: T-tail, typical 18 m Class proportions.
+7. **Centre of gravity**: 30% of mean aerodynamic chord.
+:::
+
+````{python}
+#| echo: false
+#| output: asis
+# Read off disk rather than copied, so this listing cannot drift from what the
+# entries actually run.
+import pathlib
+
+for _f in ("_model.py", "_analysis.py"):
+    code = pathlib.Path(f"chapters/01-calibrated-discus-2c/{_f}").read_text()
+    print('::: {.callout-note collapse="true"}')
+    print(f"## `{_f}`\n")
+    print("```python")
+    print(code.strip())
+    print("```")
+    print(":::\n")
+````

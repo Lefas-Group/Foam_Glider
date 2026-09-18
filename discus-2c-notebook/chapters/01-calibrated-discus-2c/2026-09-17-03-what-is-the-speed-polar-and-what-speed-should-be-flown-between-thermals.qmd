@@ -1,0 +1,69 @@
+---
+title: "What is the speed polar, and what speed should be flown between thermals?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+#| code-summary: "Show code"
+speeds = np.linspace(21.0, 55.0, 120)
+polar = calibrated_polar(speeds)
+
+settings = np.array([0.0, 1.0, 2.0, 3.0])
+stf = speed_to_fly(polar, settings)
+sink_at_stf = np.interp(stf["speed_to_fly"], speeds, polar["sink"])
+
+best_glide = speeds[int(np.argmax(polar["L_over_D"]))]
+min_sink_speed = speeds[int(np.argmin(polar["sink"]))]
+min_sink = float(np.min(polar["sink"]))
+
+# MacCready zero must reproduce the best-glide speed exactly -- if it does not,
+# the tangent construction and the polar have come apart.
+assert abs(stf["speed_to_fly"][0] - best_glide) < 1e-9, "MC=0 is not best glide"
+mc2 = 2
+```
+
+::: {.hero}
+[`{python} f"{stf['speed_to_fly'][mc2] * 3.6:.0f}"`]{.hero-value}
+[km/h between thermals, on a `{python} f"{settings[mc2]:.0f}"` m/s day]{.hero-label}
+:::
+
+**Answer.** Minimum sink of [`{python} f"{min_sink:.3f}"`]{.key} m/s comes at
+`{python} f"{min_sink_speed * 3.6:.0f}"` km/h and best glide at
+[`{python} f"{best_glide * 3.6:.0f}"`]{.key} km/h — but neither is the speed to
+cross country in. Against a `{python} f"{settings[mc2]:.0f}"` m/s climb the
+optimum is [`{python} f"{stf['speed_to_fly'][mc2] * 3.6:.0f}"`]{.key} km/h,
+achieving [`{python} f"{stf['cross_country'][mc2] * 3.6:.0f}"`]{.key} km/h over
+the ground. @fig-polar shows why: the optimum is where a line from the expected
+climb touches the polar, so a stronger day always pushes the speed up.
+
+```{python}
+#| label: fig-polar
+#| fig-cap: "Sink rate against airspeed at 400 kg, with the MacCready tangent construction for climb rates of 0 to 3 m/s. Each line runs from its climb rate on the vertical axis to its tangency point, marked."
+fig, ax = plt.subplots(figsize=(7.0, 3.6))
+ax.plot(speeds * 3.6, -polar["sink"], label="Sink polar", zorder=3)
+
+for setting, v_stf, w_stf in zip(settings, stf["speed_to_fly"], sink_at_stf):
+    ax.plot([0, v_stf * 3.6], [setting, -w_stf], lw=1.0, ls="--",
+            color="C2", zorder=2)
+    ax.plot(v_stf * 3.6, -w_stf, "o", ms=4, color="C1", zorder=4)
+    # Labelled at the tangency point, not at the line's origin on the axis:
+    # there it collided with the y tick labels and rendered "00", "11", "22".
+    ax.annotate(f"{setting:.0f} m/s", xy=(v_stf * 3.6, -w_stf), xytext=(0, 9),
+                textcoords="offset points", ha="center", fontsize=7)
+
+ax.set_xlim(0, 210)
+ax.set_ylim(-2.6, 3.4)
+ax.axhline(0, color="C2", lw=0.6)
+ax.set_xlabel("Airspeed [km/h]")
+ax.set_ylabel("Sink rate [m/s]")
+ax.grid(alpha=0.3)
+ax.legend(loc="lower left")
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(calibrated_polar, speed_to_fly)
+```

@@ -1,0 +1,75 @@
+---
+title: "How does the reconstruction compare with published performance?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+#| code-summary: "Show code"
+speeds = np.linspace(21.0, 55.0, 120)
+calibrated = calibrated_polar(speeds)
+
+# The same trimmed polar read with no calibration applied -- glide() takes the
+# offset as an argument, so this costs no further aero.
+uncalibrated = glide(calibrated, 0.0)
+
+best_raw = int(np.argmax(uncalibrated["L_over_D"]))
+best_cal = int(np.argmax(calibrated["L_over_D"]))
+sink_raw = float(np.min(uncalibrated["sink"]))
+sink_cal = float(np.min(calibrated["sink"]))
+offset = calibrated["drag_offset"]
+
+drag_excess = -offset / (calibrated["CD"][best_cal] + offset) * 100
+sink_error = (sink_cal - SINK_MIN_PUBLISHED) / SINK_MIN_PUBLISHED * 100
+
+# The calibration is only meaningful if it actually hit its target, and the
+# sign of the offset is the entry's finding -- so both are asserted rather
+# than described.
+assert abs(calibrated["L_over_D"][best_cal] - LD_MAX_PUBLISHED) < 0.01
+assert offset < 0, "offset is positive; the finding below is wrong"
+```
+
+::: {.hero-pair}
+::: {}
+[`{python} f"{sink_cal:.3f}"`]{.hero-value}
+[model minimum sink, m/s]{.hero-label}
+:::
+::: {}
+[`{python} f"{SINK_MIN_PUBLISHED:.3f}"`]{.hero-value .hero-ref}
+[published, m/s]{.hero-label}
+:::
+:::
+
+**Answer.** The reconstruction is draggier than the real aircraft, not cleaner:
+uncalibrated it glides at [`{python} f"{uncalibrated['L_over_D'][best_raw]:.2f}"`]{.key}
+against a published `{python} f"{LD_MAX_PUBLISHED:.0f}"`. Matching best glide
+needs a *negative* drag increment of [`{python} f"{offset:+.5f}"`]{.key} — the
+build-up over-predicts drag by [`{python} f"{drag_excess:.0f}"`]{.key}%. Minimum
+sink was held out of the fit and lands within
+[`{python} f"{sink_error:.1f}"`]{.key}% (@tbl-calibration), at a different speed,
+lift coefficient and Reynolds number. One scalar transferring that far is the
+evidence; the residual sits where a laminar polar is hardest to predict.
+
+```{python}
+#| label: tbl-calibration
+#| tbl-cap: "Best glide ratio and minimum sink, before and after the single-scalar drag calibration, against published figures. Best glide is the fitted quantity; minimum sink is not."
+#| echo: false
+#| output: asis
+md_table(
+    ["", "uncalibrated", "calibrated", "published"],
+    [
+        ["Best L/D",
+         f"{uncalibrated['L_over_D'][best_raw]:.2f}",
+         f"{calibrated['L_over_D'][best_cal]:.2f}",
+         f"{LD_MAX_PUBLISHED:.0f}"],
+        ["Min sink, m/s",
+         f"{sink_raw:.3f}", f"{sink_cal:.3f}", f"{SINK_MIN_PUBLISHED:.2f}"],
+    ],
+)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(calibrated_polar)
+```

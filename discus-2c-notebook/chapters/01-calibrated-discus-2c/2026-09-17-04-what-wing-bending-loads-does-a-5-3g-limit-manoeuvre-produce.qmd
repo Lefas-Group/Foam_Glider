@@ -1,0 +1,100 @@
+---
+title: "What wing bending loads does a +5.3 g limit manoeuvre produce?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+#| code-summary: "Show code"
+N_LIMIT = 5.3          # CS-22 limit manoeuvring load factor
+CL_MAX = 1.45          # assumed; see the callout below
+limit_load = N_LIMIT * MASS * GRAVITY
+
+# The manoeuvre corner: the slowest speed at which the limit load factor can be
+# reached without stalling.
+density = asb.Atmosphere(altitude=0.0).density()
+corner_speed = np.sqrt(2 * limit_load / (density * WING_AREA * CL_MAX))
+
+loads = spanwise_load(limit_load / 2, speed=corner_speed, alpha=8.0)
+station_y = loads["station_y"]
+station_width = loads["width"]
+load_per_metre = loads["load_per_metre"]
+
+# Shear and bending moment by integrating inboard from the tip.
+shear = np.cumsum(loads["strip_force"][::-1])[::-1]
+moment = np.cumsum((shear * station_width)[::-1])[::-1]
+
+spar = wing_spar(station_y, load_per_metre)
+
+root_moment = float(moment[0])
+root_shear = float(shear[0])
+tip_deflection = float(spar.u[-1])
+shear_gap = abs(float(spar.shear_force[0]) - root_shear) / root_shear * 100
+
+# Two independent integrations of the same load. Agreement is the check that
+# earns the beam's deflection any credibility at all.
+assert shear_gap < 1.0, f"beam and hand integration disagree by {shear_gap:.1f}%"
+```
+
+::: {.hero}
+[`{python} f"{root_moment / 1e3:.1f}"`]{.hero-value}
+[kN·m of bending moment at the wing root]{.hero-label}
+:::
+
+**Answer.** At limit load the wing carries
+`{python} f"{limit_load / 1e3:.1f}"` kN; the root sees
+[`{python} f"{root_moment / 1e3:.1f}"`]{.key} kN·m of bending moment and
+[`{python} f"{root_shear / 1e3:.2f}"`]{.key} kN of shear (@fig-loads). The
+library's beam, integrated independently, agrees on root shear to
+[`{python} f"{shear_gap:.2f}"`]{.key}%. The loads are the robust part — they
+follow from the lift distribution and the total load alone. Tip deflection of
+[`{python} f"{tip_deflection:.2f}"`]{.key} m is not: it is only as good as the
+invented spar.
+
+::: {.callout-tip}
+## Specified
+Asked of the user, 2026-09-17:
+
+1. **Load case**: limit manoeuvre, n = +5.3.
+:::
+
+::: {.callout-note}
+## Assumed
+1. **Maximum lift coefficient**: `{python} f"{CL_MAX:.2f}"`, flaps up.
+2. **Spar depth**: `{python} f"{SPAR_DEPTH_FRACTION:.2f}"` of section thickness.
+3. **Wall thickness**: `{python} f"{SPAR_WALL_ROOT * 1e3:.0f}"` mm root, tapering.
+4. **Elastic modulus**: `{python} f"{SPAR_MODULUS / 1e9:.0f}"` GPa carbon.
+5. **Tail load**: none; wing carries the whole limit load.
+:::
+
+::: {.callout-warning}
+## Tail carries nothing here
+
+A trimmed pull-up puts a download on the tailplane, so the real wing carries
+somewhat more than this.
+:::
+
+```{python}
+#| label: fig-loads
+#| fig-cap: "Spanwise airload and the resulting bending moment on one wing at n = +5.3. Load is normalized so the pair of wings carries exactly the limit load; the moment is integrated inboard from the tip."
+fig, (ax_load, ax_moment) = plt.subplots(2, 1, figsize=(7.0, 4.2), sharex=True)
+
+ax_load.plot(station_y, load_per_metre)
+ax_load.fill_between(station_y, 0, load_per_metre, alpha=0.15)
+ax_load.set_ylabel("Airload [N/m]")
+ax_load.grid(alpha=0.3)
+
+ax_moment.plot(station_y, moment / 1e3, color="C1")
+ax_moment.set_ylabel("Bending moment [kN·m]")
+ax_moment.set_xlabel("Distance from centreline [m]")
+ax_moment.grid(alpha=0.3)
+ax_moment.set_xlim(0, SPAN / 2)
+
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(spanwise_load)
+```

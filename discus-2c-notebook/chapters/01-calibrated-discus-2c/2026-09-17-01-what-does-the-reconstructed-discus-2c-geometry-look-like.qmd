@@ -1,0 +1,57 @@
+---
+title: "What does the reconstructed Discus-2c geometry look like?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+#| code-summary: "Show code"
+import aerosandbox.tools.pretty_plots as asbplt
+
+aspect_ratio = WING.aspect_ratio()
+taper = STATION_C[-1] / STATION_C[0]
+tail_arm = 5.80 + 0.25 * 0.50 - XYZ_REF[0]
+arms_per_chord = tail_arm / MAC
+
+# The planform was scaled to hit the published reference area exactly, so this
+# is a real check on the scaling rather than a restatement of an input.
+assert abs(WING.area() - WING_AREA) / WING_AREA < 0.01, "planform area drifted"
+assert abs(aspect_ratio - SPAN**2 / WING_AREA) < 0.1, "aspect ratio inconsistent"
+```
+
+**Answer.** An `{python} f"{SPAN:.1f}"` m span wing of aspect ratio
+[`{python} f"{aspect_ratio:.2f}"`]{.key} on a slender fuselage with a T-tail
+(@fig-three-view). The root chord of `{python} f"{STATION_C[0]:.3f}"` m tapers
+to `{python} f"{STATION_C[-1]:.3f}"` m, a taper ratio of
+[`{python} f"{taper:.2f}"`]{.key}, for a mean aerodynamic chord of
+`{python} f"{MAC:.3f}"` m. The tail sits [`{python} f"{arms_per_chord:.1f}"`]{.key}
+mean chords aft of the centre of gravity.
+
+::: {.callout-warning}
+## The shape is inferred, not published
+
+Span and area are published and the planform is scaled to match them exactly.
+Everything you can see here — how chord is distributed, the fuselage section,
+the tail — is chosen, not known.
+:::
+
+```{python}
+#| label: fig-three-view
+#| fig-cap: "Three views and an isometric of the reconstructed Discus-2c. Top view shows the four-station planform; front view shows 2.5° dihedral. Drawn from the same geometry every entry in this chapter runs."
+fig, axs = asbplt.figure3d(nrows=2, ncols=2, figsize=(7.0, 5.2),
+                           computed_zorder=False)
+AIRPLANE.draw_three_view(axs=axs, show=False)
+
+# draw_three_view() leaves matplotlib's default tick density on axes this
+# narrow, and at 18 m span the x labels run into each other.
+for ax in axs.flat:
+    ax.locator_params(nbins=4)
+
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```

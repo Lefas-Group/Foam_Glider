@@ -1,0 +1,121 @@
+---
+title: "Does the 1 g static deflection change the lift-to-drag ratio?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+#| code-summary: "Show code"
+ALPHAS = np.array([1.0, 2.33, 3.67, 5.0])
+
+reference = reference_point()
+cl_ref, glide_speed = reference["CL"], reference["speed"]
+
+# The 1 g airload at best glide, and the shape it bends the spar into.
+loads = spanwise_load(MASS * GRAVITY / 2, speed=glide_speed, alpha=3.0)
+spar = wing_spar(loads["station_y"], loads["load_per_metre"])
+deflection, spar_y = np.array(spar.u), np.array(spar.y)
+slope = np.gradient(deflection, spar_y)
+
+tip_rise = float(deflection[-1])
+tip_rise_fraction = tip_rise / (SPAN / 2) * 100
+
+# The spar is inextensible, so bending up also draws the tip INBOARD: projected
+# span is the arc integrated with its own slope, not the undeformed station.
+# Leaving this out would let the wing gain span by bending, which is the part
+# that would actually have changed the induced drag.
+projected_y = np.concatenate([[0.0], np.cumsum(
+    np.cos(np.arctan(slope[:-1])) * np.diff(spar_y))])
+span_lost = (SPAN / 2 - projected_y[-1]) * 1e3
+
+
+def deflected_airplane():
+    """The same aircraft with its wing moved onto the 1 g deflected shape."""
+    xsecs = []
+    for xsec in WING.xsecs:
+        station = float(xsec.xyz_le[1])
+        xsecs.append(asb.WingXSec(
+            xyz_le=[float(xsec.xyz_le[0]),
+                    float(np.interp(station, spar_y, projected_y)),
+                    float(xsec.xyz_le[2]) + float(np.interp(station, spar_y, deflection))],
+            chord=xsec.chord, twist=xsec.twist, airfoil=xsec.airfoil))
+    return asb.Airplane(
+        name="Discus-2c (1 g deflected)", xyz_ref=XYZ_REF,
+        wings=[asb.Wing(name="Wing", symmetric=True, xsecs=xsecs), *AIRPLANE.wings[1:]],
+        fuselages=AIRPLANE.fuselages, s_ref=WING_AREA, c_ref=MAC, b_ref=SPAN)
+
+
+flexible = deflected_airplane()
+
+
+def compare(build):
+    """Drag at the reference CL, rigid and deflected, from the same analysis."""
+    rigid_cd = drag_at_reference(lambda a: build(AIRPLANE, a), cl_ref, ALPHAS)
+    flex_cd = drag_at_reference(lambda a: build(flexible, a), cl_ref, ALPHAS)
+    return cl_ref / rigid_cd, cl_ref / flex_cd
+
+
+def point(alpha):
+    return asb.OperatingPoint(velocity=glide_speed, alpha=alpha)
+
+
+results = [
+    ("AeroBuildup", *compare(lambda ap, a: asb.AeroBuildup(
+        airplane=ap, op_point=point(a), xyz_ref=XYZ_REF).run())),
+    ("LiftingLine", *compare(lambda ap, a: asb.LiftingLine(
+        airplane=ap, op_point=point(a), xyz_ref=XYZ_REF,
+        spanwise_resolution=8).run())),
+]
+
+worst = max(abs(flex - rigid) / rigid * 100 for _, rigid, flex in results)
+hero = next(r for r in results if r[0] == "LiftingLine")
+
+# Deflecting a wing cannot reduce its induced drag at fixed lift, so a gain here
+# would mean the geometry was rebuilt wrong rather than that flexibility helps.
+assert all(flex <= rigid + 1e-9 for _, rigid, flex in results), \
+    "deflection improved L/D; the deflected geometry is suspect"
+```
+
+::: {.hero-pair}
+::: {}
+[`{python} f"{hero[1]:.2f}"`]{.hero-value}
+[rigid wing]{.hero-label}
+:::
+::: {}
+[`{python} f"{hero[2]:.2f}"`]{.hero-value .hero-ref}
+[on the 1 g deflected shape]{.hero-label}
+:::
+:::
+
+**Answer.** No. At 1 g the tip rises [`{python} f"{tip_rise:.3f}"`]{.key} m,
+`{python} f"{tip_rise_fraction:.1f}"`% of semi-span, and the inextensible spar
+draws it inboard by only [`{python} f"{span_lost:.1f}"`]{.key} mm — so projected
+span barely moves. Glide ratio falls by at most
+[`{python} f"{worst:.2f}"`]{.key}% (@tbl-deflection), a twentieth of a glide
+point. That is far below the disagreement between aerodynamic
+methods, so flexibility is not what limits confidence here.
+
+::: {.callout-warning}
+## Bending only — there is no torsion
+
+The spar carries bending stiffness only, so aeroelastic washout — the static
+effect that redistributes span loading — cannot appear.
+:::
+
+```{python}
+#| label: tbl-deflection
+#| tbl-cap: "Glide ratio at the reference lift coefficient on the rigid geometry and on the 1 g deflected shape, for the two viscous methods available in-process."
+#| echo: false
+#| output: asis
+md_table(
+    ["", "rigid", "deflected", "change"],
+    [[name, f"{rigid:.2f}", f"{flex:.2f}", f"{(flex - rigid) / rigid * 100:+.2f}%"]
+     for name, rigid, flex in results],
+)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(reference_point, spanwise_load, drag_at_reference)
+```

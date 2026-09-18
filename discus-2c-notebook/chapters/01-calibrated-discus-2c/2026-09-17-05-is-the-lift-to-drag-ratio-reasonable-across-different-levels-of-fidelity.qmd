@@ -1,0 +1,125 @@
+---
+title: "Is the lift-to-drag ratio reasonable across different levels of fidelity?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+#| code-summary: "Show code"
+REFERENCE_SPEED = 29.2
+ALPHAS = np.array([1.0, 2.33, 3.67, 5.0])
+FORM_FACTOR = 1.25          # lumped, for the analytic level only
+HAND_SPAN_EFFICIENCY = 0.95  # what you would assume without a solver
+
+# The comparison point: the chapter's own best-glide lift coefficient. Comparing
+# at a common CL rather than a common alpha is the whole point -- the methods
+# disagree on lift-curve slope by nearly 20%, so a fixed alpha would compare
+# four different flight conditions and call the difference "drag".
+cl_ref = reference_point()["CL"]
+cd_published = cl_ref / LD_MAX_PUBLISHED
+
+
+def at(alpha):
+    return asb.OperatingPoint(velocity=REFERENCE_SPEED, alpha=alpha)
+
+
+def measure(build):
+    """This entry's four sweeps differ only in which analysis they build."""
+    return drag_at_reference(build, cl_ref, ALPHAS)
+
+
+# Inviscid: induced drag alone, and so the floor no viscous method can beat.
+cd_induced = measure(lambda a: asb.VortexLatticeMethod(
+    airplane=AIRPLANE, op_point=at(a), xyz_ref=XYZ_REF,
+    spanwise_resolution=12, chordwise_resolution=6).run())
+
+cd_buildup = measure(lambda a: asb.AeroBuildup(
+    airplane=AIRPLANE, op_point=at(a), xyz_ref=XYZ_REF).run())
+
+cd_lifting_line = measure(lambda a: asb.LiftingLine(
+    airplane=AIRPLANE, op_point=at(a), xyz_ref=XYZ_REF,
+    spanwise_resolution=8).run())
+
+# Resolution 3 rather than 8: measured, this quantity moves 1.3% between the two
+# while the cost moves 6x, so the coarse grid is converged for what is asked.
+cd_nonlinear = measure(lambda a: asb.NonlinearLiftingLine(
+    airplane=AIRPLANE, op_point=at(a), xyz_ref=XYZ_REF,
+    spanwise_resolution=3).run())
+
+# Analytic: turbulent flat-plate friction over the wetted area, plus elliptic
+# induced drag on an assumed span efficiency. Areas come from the library rather
+# than a guess, so only the physics is low-fidelity.
+wetted_area = (sum(wing.area("wetted") for wing in AIRPLANE.wings)
+               + AIRPLANE.fuselages[0].area_wetted())
+reynolds = REFERENCE_SPEED * MAC / asb.Atmosphere(altitude=0.0).kinematic_viscosity()
+skin_friction = 0.455 / np.log10(reynolds) ** 2.58
+cd_analytic = (skin_friction * FORM_FACTOR * wetted_area / WING_AREA
+               + cl_ref ** 2 / (np.pi * WING.aspect_ratio() * HAND_SPAN_EFFICIENCY))
+
+induced_share = cd_induced / cd_published * 100
+buildup_error = (cd_buildup - cd_published) / cd_published * 100
+
+methods = [("Analytic", cd_analytic), ("AeroBuildup", cd_buildup),
+           ("LiftingLine", cd_lifting_line), ("Nonlinear\nLiftingLine", cd_nonlinear)]
+ratios = [cl_ref / cd for _, cd in methods]
+
+assert min(ratios) < LD_MAX_PUBLISHED < max(ratios), "published value not bracketed"
+```
+
+**Answer.** Yes. At a common lift coefficient of [`{python} f"{cl_ref:.3f}"`]{.key}
+the methods span L/D [`{python} f"{min(ratios):.1f}"`]{.key} to
+[`{python} f"{max(ratios):.1f}"`]{.key}, and the published
+`{python} f"{LD_MAX_PUBLISHED:.0f}"` sits inside that band (@fig-fidelity).
+AeroBuildup is [`{python} f"{buildup_error:.0f}"`]{.key}% draggier than
+published — the shortfall the calibration found independently. The analytic level fails worst
+because flat-plate friction assumes fully turbulent flow on an aircraft built
+for laminar run. Induced drag is only [`{python} f"{induced_share:.0f}"`]{.key}%
+of the total, so the entire spread lives in profile drag.
+
+::: {.callout-note}
+## Assumed
+1. **Reference point**: the chapter's own best-glide lift coefficient.
+2. **Analytic friction**: flat plate, form factor `{python} f"{FORM_FACTOR:.2f}"`.
+3. **Analytic span efficiency**: `{python} f"{HAND_SPAN_EFFICIENCY:.2f}"`, a hand value.
+4. **Nonlinear lifting-line resolution**: 3 stations, measured converged.
+:::
+
+::: {.callout-warning}
+## Which method is right is unknown
+
+The spread is the finding, not a ranking. This entry cannot say whether
+NonlinearLiftingLine is optimistic or the others pessimistic.
+:::
+
+```{python}
+#| label: fig-fidelity
+#| fig-cap: "Drag coefficient at the reference lift coefficient, by method, annotated with the resulting glide ratio. The inviscid floor is vortex-lattice induced drag alone; the published line is the drag implied by a glide ratio of 45 at this lift coefficient."
+fig, ax = plt.subplots(figsize=(7.0, 3.2))
+
+positions = np.arange(len(methods))
+ax.barh(positions, [cd for _, cd in methods], height=0.6, color="C0", zorder=3)
+ax.set_yticks(positions)
+ax.set_yticklabels([name for name, _ in methods])
+ax.invert_yaxis()
+
+for pos, (_, cd), ratio in zip(positions, methods, ratios):
+    ax.annotate(f"L/D {ratio:.1f}", xy=(cd, pos), xytext=(6, 0),
+                textcoords="offset points", va="center", fontsize=8, zorder=4)
+
+ax.axvline(cd_published, color="C1", lw=1.4, zorder=5,
+           label=f"Published (L/D {LD_MAX_PUBLISHED:.0f})")
+ax.axvline(cd_induced, color="C2", lw=1.2, ls="--", zorder=5,
+           label="Inviscid induced-drag floor")
+
+ax.set_xlim(0, max(cd for _, cd in methods) * 1.28)
+ax.set_xlabel("Drag coefficient at the reference lift coefficient")
+ax.grid(axis="x", alpha=0.3)
+ax.legend(loc="lower right", fontsize=8)
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(reference_point, drag_at_reference)
+```
