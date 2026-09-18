@@ -91,7 +91,7 @@ assert all(flex <= rigid + 1e-9 for _, rigid, flex in results), \
 `{python} f"{tip_rise_fraction:.1f}"`% of semi-span, and the inextensible spar
 draws it inboard by only [`{python} f"{span_lost:.1f}"`]{.key} mm — so projected
 span barely moves. Glide ratio falls by at most
-[`{python} f"{worst:.2f}"`]{.key}% (@tbl-deflection), a twentieth of a glide
+[`{python} f"{worst:.2f}"`]{.key}% (@fig-deflection), a twentieth of a glide
 point. That is far below the disagreement between aerodynamic
 methods, so flexibility is not what limits confidence here.
 
@@ -103,15 +103,26 @@ effect that redistributes span loading — cannot appear.
 :::
 
 ```{python}
-#| label: tbl-deflection
-#| tbl-cap: "Glide ratio at the reference lift coefficient on the rigid geometry and on the 1 g deflected shape, for the two viscous methods available in-process."
-#| echo: false
-#| output: asis
-md_table(
-    ["", "rigid", "deflected", "change"],
-    [[name, f"{rigid:.2f}", f"{flex:.2f}", f"{(flex - rigid) / rigid * 100:+.2f}%"]
-     for name, rigid, flex in results],
-)
+#| label: fig-deflection
+#| fig-cap: "Change in glide ratio from moving the wing onto its 1 g deflected shape, for the two viscous methods available in-process. The axis is drawn to one percent so the size of the effect can be read against a scale that matters, rather than filling the panel."
+fig, ax = plt.subplots(figsize=(7.0, 2.4))
+
+labels = [name for name, _, _ in results]
+changes = [(flex - rigid) / rigid * 100 for _, rigid, flex in results]
+
+bars = ax.barh(labels, changes, height=0.45, color="C0", zorder=3)
+for bar, change in zip(bars, changes):
+    ax.annotate(f"{change:+.3f}%",
+                xy=(change, bar.get_y() + bar.get_height() / 2),
+                xytext=(-8, 0), textcoords="offset points",
+                ha="right", va="center", fontsize=9)
+
+ax.axvline(0, color="C2", lw=0.9, zorder=4)
+ax.set_xlim(-1.0, 0.25)
+ax.set_xlabel("Change in glide ratio from 1 g deflection [%]")
+ax.grid(axis="x", alpha=0.3)
+ax.invert_yaxis()
+plt.show()
 ```
 
 ```{python}

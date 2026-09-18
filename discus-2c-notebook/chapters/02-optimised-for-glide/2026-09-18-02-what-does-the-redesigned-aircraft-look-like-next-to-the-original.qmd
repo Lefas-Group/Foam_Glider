@@ -1,0 +1,105 @@
+---
+title: "What does the redesigned aircraft look like next to the original?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+#| code-summary: "Show code"
+setup = baseline_setup()
+reynolds_floor = float(STATION_C[-1] * setup["speed"] / KINEMATIC_VISCOSITY)
+
+# The constrained design, not the unconstrained one: it is the only one of the
+# two that is a credible shape, and it is what "the redesign" means here.
+redesign = optimise(setup["limits"], washout_monotone=True,
+                    reynolds_floor=reynolds_floor, mass_model=True)
+
+
+def planform(span, chords):
+    """Station, leading edge and trailing edge for the quarter-chord-straight wing."""
+    stations = np.array([float(f) * span / 2 for f in STATION_FRACTION])
+    chords = np.array([float(c) for c in chords])
+    leading = WING_LE_X + 0.25 * (chords[0] - chords)
+    return stations, leading, leading + chords
+
+
+def outline(stations, leading, trailing):
+    """One semi-span as a closed loop: out along the leading edge, back along the trailing."""
+    span_wise = np.concatenate([stations, stations[::-1], stations[:1]])
+    stream_wise = np.concatenate([leading, trailing[::-1], leading[:1]])
+    return span_wise, stream_wise
+
+
+baseline_geometry = planform(SPAN, STATION_C)
+redesign_geometry = planform(redesign["span"], redesign["chords"])
+
+baseline_ratio = SPAN ** 2 / float(WING.area())
+outer_fraction = (1.0 - STATION_FRACTION[-2]) * 100
+
+# The comparison is only meaningful if area really is held: a longer wing that
+# also grew would be a different aeroplane, not a redesign of this one.
+assert abs(redesign["area"] / float(WING.area()) - 1) < 0.01, "wing area moved"
+```
+
+**Answer.** Same area, longer and sharper (@fig-geometry). Span grows
+`{python} f"{SPAN:.2f}"` → [`{python} f"{redesign['span']:.2f}"`]{.key} m and
+aspect ratio `{python} f"{baseline_ratio:.1f}"` →
+[`{python} f"{redesign['aspect_ratio']:.1f}"`]{.key}, bought by moving chord
+inboard: the root widens to [`{python} f"{redesign['chords'][0]:.3f}"`]{.key} m
+while the outer `{python} f"{outer_fraction:.0f}"`% of span holds a constant
+[`{python} f"{redesign['chords'][-1]:.3f}"`]{.key} m, because the Reynolds floor
+pins the tip. Washout covers a similar range but sits nose-up inboard and flat
+outboard.
+
+::: {.callout-warning}
+## Chordwise scale is exaggerated
+
+At true proportions an 18 m wing of 0.7 m mean chord is a line. The spanwise and
+chordwise axes are scaled differently so the planform change can be seen at all.
+:::
+
+```{python}
+#| label: fig-geometry
+#| fig-cap: "The original wing and the redesign, overlaid. Above, planform with both semi-spans; the original is filled, the redesign outlined. Below, twist against distance from the centreline. Fuselage and tail are unchanged and are not drawn."
+fig, (ax_plan, ax_twist) = plt.subplots(
+    2, 1, figsize=(7.0, 4.6), height_ratios=[2.1, 1.0])
+
+for (stations, leading, trailing), label, colour, filled in [
+    (baseline_geometry, "Original", "C2", True),
+    (redesign_geometry, "Redesign", "C0", False),
+]:
+    span_wise, stream_wise = outline(stations, leading, trailing)
+    for side in (1, -1):
+        if filled:
+            ax_plan.fill(side * span_wise, stream_wise, color=colour,
+                         alpha=0.20, zorder=2)
+        ax_plan.plot(side * span_wise, stream_wise, color=colour, lw=1.6,
+                     zorder=3, label=label if side == 1 else None)
+
+ax_plan.invert_yaxis()
+ax_plan.set_ylabel("Streamwise [m]")
+ax_plan.set_xlabel("Distance from centreline [m]")
+ax_plan.grid(alpha=0.3)
+ax_plan.legend(loc="lower right")
+
+for stations, twists, label, colour in [
+    (baseline_geometry[0], STATION_TWIST, "Original", "C2"),
+    (redesign_geometry[0], redesign["twists"], "Redesign", "C0"),
+]:
+    ax_twist.plot(stations, [float(t) for t in twists], "-o", ms=4,
+                  color=colour, label=label, zorder=3)
+
+ax_twist.axhline(0, color="C2", lw=0.7, zorder=2)
+ax_twist.set_ylabel("Twist [deg]")
+ax_twist.set_xlabel("Distance from centreline [m]")
+ax_twist.grid(alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(baseline_setup)
+```

@@ -46,26 +46,43 @@ against a published `{python} f"{LD_MAX_PUBLISHED:.0f}"`. Matching best glide
 needs a *negative* drag increment of [`{python} f"{offset:+.5f}"`]{.key} — the
 build-up over-predicts drag by [`{python} f"{drag_excess:.0f}"`]{.key}%. Minimum
 sink was held out of the fit and lands within
-[`{python} f"{sink_error:.1f}"`]{.key}% (@tbl-calibration), at a different speed,
+[`{python} f"{sink_error:.1f}"`]{.key}% (@fig-calibration), at a different speed,
 lift coefficient and Reynolds number. One scalar transferring that far is the
 evidence; the residual sits where a laminar polar is hardest to predict.
 
 ```{python}
-#| label: tbl-calibration
-#| tbl-cap: "Best glide ratio and minimum sink, before and after the single-scalar drag calibration, against published figures. Best glide is the fitted quantity; minimum sink is not."
-#| echo: false
-#| output: asis
-md_table(
-    ["", "uncalibrated", "calibrated", "published"],
-    [
-        ["Best L/D",
-         f"{uncalibrated['L_over_D'][best_raw]:.2f}",
-         f"{calibrated['L_over_D'][best_cal]:.2f}",
-         f"{LD_MAX_PUBLISHED:.0f}"],
-        ["Min sink, m/s",
-         f"{sink_raw:.3f}", f"{sink_cal:.3f}", f"{SINK_MIN_PUBLISHED:.2f}"],
-    ],
-)
+#| label: fig-calibration
+#| fig-cap: "Best glide ratio and minimum sink before and after the single-scalar drag calibration, against the published figures. Best glide is what the scalar was fitted to; minimum sink was held out of the fit, so the gap remaining on the right is the test."
+fig, (ax_glide, ax_sink) = plt.subplots(1, 2, figsize=(7.0, 3.0))
+
+# Dots rather than bars, on an axis that does not start at zero. Bars from zero
+# compressed 41.7 against 45.0 into the same height and hid the entire finding;
+# a dot encodes no magnitude by length, so a zoomed axis misleads nobody.
+for axis, values, published, ylabel, fmt in [
+    (ax_glide,
+     [uncalibrated["L_over_D"][best_raw], calibrated["L_over_D"][best_cal]],
+     LD_MAX_PUBLISHED, "Best glide ratio", "{:.2f}"),
+    (ax_sink, [sink_raw, sink_cal], SINK_MIN_PUBLISHED, "Minimum sink [m/s]", "{:.3f}"),
+]:
+    axis.axhline(published, color="C1", lw=1.6, zorder=3, label="published")
+    axis.plot([0, 1], values, "-o", ms=9, lw=1.2, color="C0", zorder=4)
+    for position, value in enumerate(values):
+        axis.annotate(fmt.format(value), xy=(position, value), xytext=(0, 11),
+                      textcoords="offset points", ha="center", fontsize=8)
+
+    low = min(values + [published])
+    high = max(values + [published])
+    pad = (high - low) * 0.45
+    axis.set_ylim(low - pad, high + pad)
+    axis.set_xlim(-0.55, 1.55)
+    axis.set_xticks([0, 1])
+    axis.set_xticklabels(["uncalibrated", "calibrated"], fontsize=8)
+    axis.set_ylabel(ylabel)
+    axis.grid(axis="y", alpha=0.3)
+
+ax_glide.legend(loc="lower right", fontsize=8)
+plt.tight_layout()
+plt.show()
 ```
 
 ```{python}

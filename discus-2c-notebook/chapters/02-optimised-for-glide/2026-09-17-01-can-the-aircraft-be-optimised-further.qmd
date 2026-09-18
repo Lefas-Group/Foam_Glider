@@ -59,7 +59,7 @@ assert gains[0] > 0 > gains[1], "the two methods no longer disagree in sign"
 [`{python} f"{gains[0]:.1f}"`]{.key}% by its own model's reckoning, stretching
 span to [`{python} f"{design['span']:.2f}"`]{.key} m until bending binds — but
 LiftingLine judges that same design [`{python} f"{abs(gains[1]):.1f}"`]{.key}%
-*worse* (@tbl-verdict). The sign disagreement makes the gain a model artefact.
+*worse* (@fig-verdict). The sign disagreement makes the gain a model artefact.
 It is bought where that model is weakest: tip chord
 [`{python} f"{design['chords'][-1]:.3f}"`]{.key} m, halving tip Reynolds to
 [`{python} f"{tip_reynolds:.2e}"`]{.key}.
@@ -72,15 +72,23 @@ costs bending moment but never weight. Twist also ran to its bound.
 :::
 
 ```{python}
-#| label: tbl-verdict
-#| tbl-cap: "Best glide ratio of the baseline and the optimised design, judged by each method on its own terms. AeroBuildup carries the calibration it was fitted with; LiftingLine is read raw, so only the relative change is comparable between rows."
-#| echo: false
-#| output: asis
-md_table(
-    ["", "baseline", "optimised", "change"],
-    [[label, f"{before:.2f}", f"{after:.2f}", f"{(after / before - 1) * 100:+.1f}%"]
-     for label, before, after in verdicts],
-)
+#| label: fig-verdict
+#| fig-cap: "Best glide ratio of the baseline and the optimised design, with each method judged on its own terms. AeroBuildup carries the calibration fitted to it; LiftingLine is read raw, so it is the direction and size of each change that compares between them, not the absolute heights."
+fig, ax = plt.subplots(figsize=(7.0, 3.2))
+
+for (label, before, after), colour in zip(verdicts, ["C0", "C1"]):
+    ax.plot([0, 1], [before, after], "-o", color=colour, ms=7, label=label, zorder=3)
+    ax.annotate(f"{(after / before - 1) * 100:+.1f}%", xy=(1, after), xytext=(10, 0),
+                textcoords="offset points", va="center", color=colour,
+                fontsize=10, fontweight="bold")
+
+ax.set_xticks([0, 1])
+ax.set_xticklabels(["baseline", "optimised"])
+ax.set_xlim(-0.12, 1.30)
+ax.set_ylabel("Best glide ratio")
+ax.grid(axis="y", alpha=0.3)
+ax.legend(loc="lower left")
+plt.show()
 ```
 
 ```{python}
