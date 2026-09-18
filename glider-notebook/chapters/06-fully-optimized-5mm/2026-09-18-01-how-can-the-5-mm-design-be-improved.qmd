@@ -1,0 +1,36 @@
+---
+title: "How can the 5 mm design be improved?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 120.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 120.0      # s granted for the probe
+PROBE_SPENT = 99.6      # s the probe actually used
+
+res = optimize_full_glider(verbose=False)
+sol = res["sol"]
+
+d_prof = sol.value(res["aero1"]["D_profile"])
+d_tot = sol.value(res["aero1"]["D"])
+prof_ratio = d_prof / d_tot * 100
+
+fuse_mass = sol.value(res["fuse_mass"])
+tot_mass = sol.value(res["mass"])
+fuse_ratio = fuse_mass / tot_mass * 100
+
+taper_val = sol.value(res["taper"])
+h_chord_val = sol.value(res["h_chord"])
+```
+
+**Answer.** Profile drag dominates, making up `{python} f"{prof_ratio:.0f}%"` of total drag. The optimizer fights this by shrinking wetted area until it hits geometric lower bounds (taper ratio at `{python} f"{taper_val:.1f}"`, tail chords at `{python} f"{h_chord_val * 1000:.0f} mm"`). The fuselage also adds a penalty, accounting for `{python} f"{fuse_ratio:.0f}%"` of the total mass. 
+
+Suggested improvements for the 5 mm model: replace the foam fuselage with a carbon boom, allow smaller chords if constructible, or relax the fixed 300 mm span limit.
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_full_glider)
+```

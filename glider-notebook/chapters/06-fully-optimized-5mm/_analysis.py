@@ -64,10 +64,14 @@ def optimize_full_glider(verbose=False, min_sweep=-45, init_sweep=0):
         "sol": sol,
         "airplane": airplane,
         "mass": mass,
+        "fuse_mass": fuse_mass,
         "sink_rate": sink_rate,
         "sweep": sweep,
         "dihedral": dihedral,
         "h_span": h_span,
         "h_chord": h_chord,
-        "boom_len": boom_len
+        "boom_len": boom_len,
+        "aero1": aero1,
+        "taper": taper,
+        "v_chord": v_chord
     }
