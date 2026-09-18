@@ -1,0 +1,41 @@
+---
+title: "Does a biplane design make sense for 3 mm foam?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 35.0
+SOLVE_BUDGET = 25.0
+PROBE_POOL = 120.0
+PROBE_SPENT = 36.7
+
+# 0.277 m/s from 2026-09-16-01-what-sink-rate-is-achieved-when-all-geometry-parameters-are-optimized.qmd
+monoplane_sink = 0.277
+
+biplane_sink = evaluate_biplane(verbose=False)
+```
+
+::: {.hero-pair}
+[`{python} f"{biplane_sink:.3f}"`]{.hero-value}
+[biplane sink rate (m/s)]{.hero-label}
+
+[`{python} f"{monoplane_sink:.3f}"`]{.hero-value}
+[monoplane sink rate (m/s)]{.hero-label}
+:::
+
+**Answer.** No. The fully optimized biplane achieves a sink rate of `{python} f"{biplane_sink:.3f}"` m/s, which is worse than the `{python} f"{monoplane_sink:.3f}"` m/s achieved by the [monoplane](2026-09-16-01-what-sink-rate-is-achieved-when-all-geometry-parameters-are-optimized.qmd). Because 3 mm foam already withstands 1g flight loads easily, the structural bracing advantage of a biplane is not needed, and the aerodynamic penalty of increased wetted area and interference drag dominates.
+
+::: {.callout-tip}
+## Specified
+
+Asked of the user, 2026-09-18:
+
+1. **Biplane chapter**: skip.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+footer(evaluate_biplane)
+```
