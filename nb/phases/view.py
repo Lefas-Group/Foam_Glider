@@ -64,7 +64,32 @@ def site(notebook, force=False, verbose=True, page=None,
         return None
 
     import lint
-    r = lint.render_quarto(notebook.root, notebook.root, cwd=notebook.root)
+    # UNDER THE LOCK, and retried once, exactly as `verifiers.render` is. This
+    # was the last render in the system taking no lock, and it is a PROJECT
+    # render -- the widest one there is -- fired after every commit. Two runs
+    # on two different chapters finishing within a minute of each other is the
+    # normal case, not an edge one, and they would meet on
+    # `_freeze/site_libs/`: the very race that made `nb view` necessary.
+    #
+    # It fails softly (the entry is already committed) so nothing was ever lost
+    # to it. What was lost is the site rebuild, silently, on whichever run came
+    # second -- leaving the notebook's index and sidebar stale and no obvious
+    # reason why.
+    from ..locks import render_lock
+    for attempt in (1, 2):
+        with render_lock(notebook) as got:
+            if not got:
+                say("  site      proceeding without the lock — timed out "
+                    "waiting for another render")
+            r = lint.render_quarto(notebook.root, notebook.root,
+                                   cwd=notebook.root)
+        if r.returncode == 0:
+            break
+        if attempt == 1 and "site_libs" in (r.stdout or "") + (r.stderr or ""):
+            say("  site      site_libs race — retrying once (the freeze "
+                "survives, so this is a cache hit)")
+            continue
+        break
     if r.returncode != 0:
         tail = (r.stdout + r.stderr).strip().splitlines()[-3:]
         tell("  site      render FAILED — the entry is committed either way")
