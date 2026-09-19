@@ -72,6 +72,65 @@ def optimize_full_glider(verbose=False, min_sweep=-45, init_sweep=0):
         "boom_len": boom_len
     }
 
+def evaluate_stability_fix(fix_param, verbose=False):
+    import aerosandbox as asb
+    import aerosandbox.numpy as np
+
+    opti = asb.Opti()
+    area_density = 0.10464
+    
+    c_root = opti.variable(init_guess=0.08, lower_bound=0.01, upper_bound=0.15)
+    taper = opti.variable(init_guess=0.5, lower_bound=0.1, upper_bound=1.0)
+    cg_x = opti.variable(init_guess=0.03, lower_bound=-0.05, upper_bound=0.15)
+    
+    sweep = 0.0
+    dihedral = 5.0
+    h_span = 0.1
+    h_chord = 0.03
+    v_span = 0.05
+    v_chord = 0.03
+    boom_len = 0.126
+    h_inc = 0.0
+    
+    if fix_param == "sweep":
+        sweep = opti.variable(init_guess=0, lower_bound=-45, upper_bound=45)
+    elif fix_param == "boom_len":
+        boom_len = opti.variable(init_guess=0.15, lower_bound=0.05, upper_bound=0.4)
+    elif fix_param == "h_tail":
+        h_span = opti.variable(init_guess=0.1, lower_bound=0.02, upper_bound=0.3)
+        h_chord = opti.variable(init_guess=0.01, lower_bound=0.01, upper_bound=0.1)
+    
+    alpha = opti.variable(init_guess=5, lower_bound=-5, upper_bound=15)
+    V = opti.variable(init_guess=3, lower_bound=1, upper_bound=20)
+    gamma = opti.variable(init_guess=-5, lower_bound=-45, upper_bound=45)
+    
+    airplane = make_full_glider(c_root, taper, sweep, dihedral, h_span, h_chord, v_span, v_chord, boom_len, h_inc, cg_x)
+    
+    op1 = asb.OperatingPoint(velocity=V, alpha=alpha, beta=0)
+    op2 = asb.OperatingPoint(velocity=V, alpha=alpha+1, beta=0)
+    
+    aero1 = asb.AeroBuildup(airplane=airplane, op_point=op1).run()
+    aero2 = asb.AeroBuildup(airplane=airplane, op_point=op2).run()
+    
+    wings_area = sum(w.area() for w in airplane.wings)
+    fuse_length = (boom_len + 0.05) if type(boom_len) != float else 0.176
+    fuse_mass = fuse_length * 0.015 * 2 * area_density
+    mass = wings_area * area_density + fuse_mass
+    weight = mass * 9.81
+    
+    opti.subject_to([
+        aero1["L"] == weight * np.cosd(gamma),
+        aero1["D"] == weight * np.sind(-gamma),
+        aero1["Cm"] == 0,
+        -(aero2['Cm'] - aero1['Cm']) / (aero2['CL'] - aero1['CL']) >= 0.10
+    ])
+    
+    sink_rate = V * np.sind(-gamma)
+    opti.minimize(sink_rate)
+    sol = opti.solve(verbose=verbose)
+    
+    return sol.value(sink_rate)
+
 def _make_biplane(c_root, taper, sweep, dihedral, h_span, h_chord, v_span, v_chord, boom_len, h_inc, cg_x, gap, stagger):
     import aerosandbox as asb
     import aerosandbox.numpy as np

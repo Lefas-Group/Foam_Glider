@@ -1,0 +1,36 @@
+---
+title: "What geometry should change to fix the 3 mm glider's pitch stability?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 60.0   # s for this render, granted by the user
+SOLVE_BUDGET = 20.0     # s for any one solve
+PROBE_POOL = 300.0        # s granted for the probe
+PROBE_SPENT = 183.0      # s the probe actually used
+
+sr_tail = evaluate_stability_fix("h_tail")
+sr_boom = evaluate_stability_fix("boom_len")
+sr_sweep = evaluate_stability_fix("sweep")
+```
+
+::: {.hero}
+[`{python} f"{sr_tail:.3f} m/s"`]{.hero-value}
+[sink rate when freeing horizontal tail area]{.hero-label}
+:::
+
+**Answer.** To fix the pitch stability of the 3 mm glider while minimizing the sink rate penalty, we should increase the horizontal tail area. Enforcing the 10% minimum static margin raises the sink rate to `{python} f"{sr_tail:.3f}"` m/s when freeing the tail area, compared to `{python} f"{sr_boom:.3f}"` m/s when lengthening the tail boom and `{python} f"{sr_sweep:.3f}"` m/s when adding wing sweep.
+
+::: {.callout-tip}
+## Specified
+Asked of the user, 2026-09-19:
+
+1. **Fix mechanism**: free one geometry parameter at a time.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+footer(evaluate_stability_fix)
+```
