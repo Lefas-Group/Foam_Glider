@@ -14,7 +14,9 @@ import scipy.optimize as opt_sci
 import aerosandbox as asb
 
 opt = optimize_glider_3mm(verbose=False)
-c_root, taper, cg_x = get_base_3mm_params(opt)
+c_root = float(opt["c_root"])
+taper = float(opt["taper"])
+cg_x = float(opt["cg_x"])
 alpha = float(opt["alpha"])
 mass = float(opt["mass"])
 weight = mass * 9.81
@@ -42,5 +44,5 @@ clb = float(derivs['Clb'][0])
 ```{python}
 #| echo: false
 #| output: asis
-footer(optimize_glider_3mm, get_base_3mm_params)
+footer(optimize_glider_3mm)
 ```
