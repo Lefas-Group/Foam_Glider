@@ -1,0 +1,115 @@
+---
+title: "How could we more accurately model a throw?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 60.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 300.0        # s granted for the probe
+PROBE_SPENT = 7.4      # s the probe actually used
+
+import aerosandbox as asb
+import aerosandbox.numpy as np
+import scipy.integrate as spi
+from scipy.interpolate import RegularGridInterpolator
+import matplotlib.pyplot as plt
+
+sol = optimize_glider_3mm(verbose=False)
+airplane = make_glider_3mm(sol['c_root'], sol['taper'], sol['cg_x'])
+
+mass = sol['mass']
+# Treat roughly as a uniform disc of 100mm diameter for Iyy
+Iyy = mass * (0.05**2) 
+
+# Build vectorized surrogate
+V_grid = np.linspace(1, 15, 15)
+alpha_grid = np.linspace(-15, 25, 20)
+VV, AA = np.meshgrid(V_grid, alpha_grid)
+
+op = asb.OperatingPoint(velocity=VV.flatten(), alpha=AA.flatten())
+aero = asb.AeroBuildup(airplane=airplane, op_point=op).run()
+
+L_grid = aero["L"].reshape(VV.shape)
+D_grid = aero["D"].reshape(VV.shape)
+M_grid = aero["m_b"].reshape(VV.shape)
+
+interp_L = RegularGridInterpolator((alpha_grid, V_grid), L_grid)
+interp_D = RegularGridInterpolator((alpha_grid, V_grid), D_grid)
+interp_M = RegularGridInterpolator((alpha_grid, V_grid), M_grid)
+
+# Estimate pitch damping derivative
+op0 = asb.OperatingPoint(velocity=5, alpha=5, q=0)
+op1 = asb.OperatingPoint(velocity=5, alpha=5, q=1)
+Mq_over_V = (asb.AeroBuildup(airplane=airplane, op_point=op1).run()["m_b"][0] - 
+             asb.AeroBuildup(airplane=airplane, op_point=op0).run()["m_b"][0]) / 5.0
+
+def dynamics_3dof(t, state):
+    x, z, u, w, theta, q = state
+    V = np.sqrt(u**2 + w**2)
+    if V < 0.1: return [0, 0, 0, 0, 0, 0]
+    
+    alpha_rad = np.arctan2(w, u)
+    a_deg = np.degrees(alpha_rad)
+    
+    pts = np.array([[np.clip(a_deg, -15, 25), np.clip(V, 1, 15)]])
+    
+    L = interp_L(pts)[0]
+    D = interp_D(pts)[0]
+    M = interp_M(pts)[0] + Mq_over_V * V * q
+    
+    Fx_aero = L * np.sin(alpha_rad) - D * np.cos(alpha_rad)
+    Fz_aero = -L * np.cos(alpha_rad) - D * np.sin(alpha_rad)
+    
+    Fx_grav = -mass * 9.81 * np.sin(theta)
+    Fz_grav = mass * 9.81 * np.cos(theta)
+    
+    u_dot = (Fx_aero + Fx_grav) / mass - q * w
+    w_dot = (Fz_aero + Fz_grav) / mass + q * u
+    
+    return [
+        V * np.cos(theta - alpha_rad),
+        -V * np.sin(theta - alpha_rad),
+        u_dot,
+        w_dot,
+        q,
+        M / Iyy
+    ]
+
+# 8 m/s throw, level (alpha = 0)
+u0 = 8.0
+w0 = 0.0
+res = spi.solve_ivp(dynamics_3dof, [0, 2.0], [0, -1.5, u0, w0, 0.0, 0.0], max_step=0.01)
+
+t = res.t
+alpha_hist = np.degrees(np.arctan2(res.y[3], res.y[2]))
+theta_hist = np.degrees(res.y[4])
+```
+
+**Answer.** A 3-DOF rigid body simulation captures the glider's true trajectory, revealing that an 8 m/s level throw results in a continuous dive rather than settling. By evaluating a vectorized aerodynamic surrogate over velocity and angle of attack, the simulation models off-trim forces immediately after release rather than assuming instant trim, as shown in (@fig-pitch-transient).
+
+::: {.callout-note}
+## Assumed
+1. **Pitch moment of inertia**: estimated as 100 mm disc.
+:::
+
+```{python}
+#| label: fig-pitch-transient
+#| fig-cap: "A 3-DOF simulation shows the glider pitching into a continuous dive when thrown at 8 m/s level. The earlier 2-DOF point-mass model assumed the glider instantly adopted its trimmed angle of attack."
+
+fig, ax = plt.subplots(figsize=(6, 4))
+ax.plot(t, alpha_hist, label="Angle of attack")
+ax.plot(t, theta_hist, label="Pitch angle")
+ax.set_xlabel("Time (s)")
+ax.set_ylabel("Angle (°)")
+ax.legend()
+ax.grid(True)
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_glider_3mm)
+```
