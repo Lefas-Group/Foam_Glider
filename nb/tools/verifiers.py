@@ -15,17 +15,44 @@ from ..text import tail
 from ..log import say
 
 
-def _problems(root, chapters):
+# Rule 12's message, identified the only way lint's output allows. check.py
+# matches the same substring for the same reason, and says it plainly:
+#
+#   "it is a complaint that the render about to happen is exactly the fix, so
+#    gating the render on it deadlocks."
+#
+# That is precisely what happened here. Rule 12 is blocking, the write phase's
+# lint gate demands zero blocking problems, and the render that would clear it
+# does not run until lint passes. For a while the deadlock was hidden: the
+# message used to name `check.py`, and running it re-rendered and rewrote the
+# freeze -- so the model was not wasting thirteen minutes on a checker out of
+# confusion, it was using the only lever that cleared a blocking gate. Take the
+# command away without taking the gate away and the model reasons, correctly,
+# "the prompt demands that I fix something that I can't", stops, and the run
+# dies on `lint_failed`. Observed, three attempts in a row.
+#
+# So it is filtered out BEFORE the render rather than rewritten. It is still
+# enforced afterwards, by check.py's own post-render pass and by `nb lint`; and
+# the phase's render refreshes the chapter's freeze, which is what actually
+# resolves it.
+FREEZE_STALE = "but the freeze is not"
+
+
+def _problems(root, chapters, pre_render=True):
     """
     (blocking, warnings) as message strings.
 
     There is no rule number anywhere in lint's output -- the message string IS
     the unit, and `"(warning)"` is an in-string marker rather than a field, so
     severity is split exactly the way check.py splits it.
+
+    `pre_render` drops rule 12, which no edit can satisfy. See `FREEZE_STALE`.
     """
     import lint
     blocking, warnings = [], []
     for where, msg in lint.check(root, chapters):
+        if pre_render and FREEZE_STALE in msg:
+            continue
         label = "" if where is None else f"{where.name}: "
         (warnings if "(warning)" in msg else blocking).append(f"{label}{msg}")
     return blocking, warnings
