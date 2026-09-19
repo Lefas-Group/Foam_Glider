@@ -26,6 +26,12 @@ class Session:
         # else -- leaving the user to run `git diff` to judge it.
         self.refactor_notes = {}
         self.consults = 0
+        # Which phase owns this session. Set by `phases.common.setup`, and read
+        # by anything whose MESSAGE differs between the two -- the probe pool
+        # running out tells the ask phase to propose, and there is no `propose`
+        # in the write phase, so saying it there sends the model looking for a
+        # tool it does not have. That exact shape has cost this system two runs.
+        self.phase = None
         self.solves = 0
         self.solve_seconds = 0.0
         # Probe wall clock: a pool the agent spends from, not a per-probe cap.

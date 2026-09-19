@@ -892,6 +892,21 @@ def main(notebook_path, verbose=True, allow_refactor=False,
              f"  It is on disk and unlinted. To pick it up:\n"
              f"    uv run --group nb python -m nb resume {notebook.root.name}\n")
         return 1
+    except SystemExit:
+        # A prompt that hit EOF, or a mailbox question that went an hour
+        # unanswered. `ask` has recorded this since it was written; `write` did
+        # not, so a detached run nobody answered exited with no metrics row and
+        # no `outcome` -- which the board draws as `died`, the one state it
+        # exists to keep separate from an ending the system chose. The entry is
+        # usually on disk by here, so say where, as OUT OF TURNS does.
+        run_metrics.close("no_answer")
+        tell(f"\n  {'─' * 70}\n  NO ANSWER — nothing committed\n"
+             f"  {'─' * 70}\n"
+             f"  entry     {entry_path}\n\n"
+             f"  Answer the question in the run directory, then:\n"
+             f"    uv run --group nb python -m nb resume {notebook.root.name} "
+             f"{notebook.run_id}\n")
+        raise
     except Refactor as r:
         # The agent tried to change the vehicle, was refused, and said why.
         # Ending here is the point: re-proving a chapter is minutes of solves,

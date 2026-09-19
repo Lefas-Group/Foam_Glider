@@ -34,6 +34,7 @@ def setup(session, verbose=True, phase=None):
     The caller must stop the filesystem when done -- it owns a subprocess.
     """
     notebook = session.notebook
+    session.phase = phase
     text = prefix_mod.build(notebook)
     fs = FileSystem(notebook.chapters_dir).start()
     tools, handlers = build_tools(session, fs, phase=phase)

@@ -14,7 +14,6 @@ already written to be read, and anything this added would be a second way of
 rendering the same lines, to be kept in step with the first.
 """
 
-import os
 import re
 import sys
 import time
@@ -41,18 +40,19 @@ DEADLINE = re.compile(r"deadline (\d+(?:\.\d+)?) s")
 
 
 def _alive(pid):
-    """True if the process exists, False if not, None if we cannot tell."""
+    """
+    True if the process exists, False if not, None if we cannot tell.
+
+    DELEGATED to `runstate.alive` rather than reimplemented. This was a second
+    copy of the same `os.kill(pid, 0)`, and it went stale the moment the first
+    learned that a ZOMBIE answers that call exactly as a live process does --
+    so `nb watch` would still say "alive but not advancing" about a process
+    that had already exited. One implementation, one place to teach.
+    """
     if pid is None:
         return None
-    try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True          # exists, owned by someone else
-    except OSError:
-        return None
+    from .. import runstate
+    return runstate.alive({"pid": pid})
 
 
 def _console():

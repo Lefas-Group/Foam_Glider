@@ -53,8 +53,22 @@ def main(argv):
     else:
         run_id, value = pend[0][0], argv[1]
 
-    q = next(q for r, q, _ in pend if r == run_id)
-    path = mailbox.answer(Notebook(notebook.root, run_id=run_id), value)
+    q, st = next((q, st) for r, q, st in pend if r == run_id)
+    # A question file OUTLIVES the process that wrote it: the run deletes it
+    # only when it reads the answer, so a run that died mid-question leaves one
+    # on disk for ever. `nb board` learned to skip those; this did not, and
+    # answered them cheerfully -- writing a file nothing will ever read and
+    # reporting success for it. Refused rather than warned: the reply is
+    # addressed to a corpse either way, and a warning that scrolls past is how
+    # you come back an hour later to find the run never moved.
+    if runstate.alive(st) is False:
+        tell(f"  run {run_id} is not running — its question outlived it.")
+        tell("  Nothing would read the answer. Drop the run with:")
+        tell(f"    uv run --group nb python -m nb clean {notebook.root.name} "
+             f"{run_id}")
+        return 1
+    path = mailbox.answer(Notebook(notebook.root, run_id=run_id), value,
+                          replying_to=q.get("asked_at"))
     tell(f"  answered  {q.get('name','')} -> {value}")
     tell(f"            {path}")
     return 0

@@ -46,16 +46,18 @@ code blocks, Quarto's per-render random cell ids, and figure UUIDs. `freezediff`
 normalises all four while **keeping the solve count**, which matters: masking the
 whole runtime line once hid a real 18 → 2.
 
-```bash
-uv run --group nb python nb/vendor/check.py <notebook> [chapter ...]
-```
+**There is nothing here for you to run.** The write phase re-proves the chapter
+itself, once, after lint and verify pass, and shows you every answer that moved.
+Re-proving re-solves every entry in the chapter — minutes — so doing it from a
+turn buys nothing and costs the run. There is no `check` tool for that reason,
+and `bash` refuses the checkers by name; one run called `check.py` five times
+and spent thirteen minutes of its twenty-seven on it, learning nothing the
+phase was not about to tell it.
 
-`check.py` lints, deletes the freeze, renders and diffs in one call, and names
-the figures whose bytes moved so only those need reading. **That command is for
-a person at a shell, not for you** — re-proving a chapter re-solves every entry
-in it, which is minutes, and the write phase already runs it for you when a
-function body actually moved. There is no `check` tool for the same reason. `freezediff.py` alone
-does the last step if the render is already done.
+What the phase runs, so you know what you are being judged against: it lints,
+deletes the freeze for whatever your edit can have invalidated, renders, and
+diffs the values and figures against git — naming the figures whose bytes moved,
+so only those need reading.
 
 **Verify the instrument before believing it.** On an unchanged tree the diff must
 come back empty and the PNGs byte-identical. If it reports noise, the filters

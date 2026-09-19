@@ -161,14 +161,33 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
 
         parts, results = [], []
         for c in calls:
+            # LOOKED UP OUTSIDE the try, so only a missing NAME can produce
+            # "no such tool". Inside it, any KeyError raised by the handler's
+            # own body -- a dict miss deep in `probe`, say -- was reported as
+            # the tool not existing, and a model told its tool does not exist
+            # stops using it and starts looking for another. That is the
+            # shape of the worst run this system has had.
             try:
-                out = handlers[c.name](**dict(c.args))
+                fn = handlers[c.name]
+            except KeyError:
+                results.append((c, {"error": f"no such tool: {c.name}"}))
+                parts.append(types.Part.from_function_response(
+                    name=c.name, response={"error": f"no such tool: {c.name}"}))
+                continue
+            try:
+                out = fn(**dict(c.args))
             except Terminal:
                 raise                  # must not be swallowed by the catch below
             except Refactor:
                 raise                  # a declared stop, not a tool failure
-            except KeyError:
-                out = {"error": f"no such tool: {c.name}"}
+            except Stopped:
+                # Someone asked this run to stop, from inside a tool -- the
+                # mailbox raises it when a question is waiting and `nb stop`
+                # arrives. Swallowed, it became a tool ERROR the model tried to
+                # work around, and the run carried on until the `should_stop`
+                # check at the top of the next iteration: one more request
+                # bought and paid for after the stop was asked for.
+                raise
             except Exception as e:
                 # Every call gets an answer, including a failed one: an
                 # unanswered function_call is an error on the next request.

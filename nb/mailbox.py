@@ -5,7 +5,10 @@ N agents cannot share one stdin, so a detached run writes its question to a file
 and waits for a file in reply:
 
     _scratch/runs/<id>/question.json   {kind, name, why, options, asked_at}
-    _scratch/runs/<id>/answer.json     {value, answered_at, by}
+    _scratch/runs/<id>/answer.json     {value, answered_at, by, replying_to}
+
+`replying_to` carries the question's `asked_at`, so a reply cannot be taken as
+the answer to a question it was not written for.
 
 Files rather than a pipe or a socket, for a reason that is not convenience: a
 question answered over a transport leaves no trace, and the whole point is that
@@ -79,6 +82,24 @@ class Mailbox:
                 except (OSError, ValueError):
                     time.sleep(POLL)
                     continue
+                # An answer says WHICH question it answers, and one that names
+                # a different question is not ours to take. Deleting
+                # `answer.json` before asking is nearly enough, and the gap it
+                # leaves is the dangerous one: a reply written for the previous
+                # question, landing in the instant between that delete and this
+                # read, is consumed as the answer to THIS one -- a value the
+                # user never gave, attributed to them, in a system whose whole
+                # point is that the record of what they said is true. `nb
+                # board` guards its own half by remembering what it answered;
+                # this guards every other writer, including a coordinator and
+                # a second board.
+                #
+                # A missing `replying_to` is ACCEPTED: a hand-written
+                # `answer.json` is a supported escape hatch and must keep
+                # working. Everything written through `answer()` carries one.
+                if "replying_to" in a and a["replying_to"] != q["asked_at"]:
+                    time.sleep(POLL)
+                    continue
                 self.notebook.question_path.unlink(missing_ok=True)
                 return str(a.get("value", ""))
         finally:
@@ -96,12 +117,27 @@ class Mailbox:
             f"  Answer it and resume with `nb resume {self.notebook.root.name}`.")
 
 
-def answer(notebook, value, by="user"):
-    """Write the reply for whichever run this notebook points at."""
+def answer(notebook, value, by="user", replying_to=None):
+    """
+    Write the reply for whichever run this notebook points at.
+
+    Stamped with the `asked_at` of the question on disk, so the run can refuse
+    a reply meant for a question it has already moved past -- see `Mailbox.ask`.
+    Read here rather than required from the caller: every caller would look it
+    up the same way, and one that forgot would silently reopen the hole.
+    """
     notebook.run.mkdir(parents=True, exist_ok=True)
-    notebook.answer_path.write_text(
-        json.dumps({"value": value, "answered_at": time.time(), "by": by},
-                   indent=1) + "\n")
+    if replying_to is None:
+        replying_to = (pending(notebook) or {}).get("asked_at")
+    body = {"value": value, "answered_at": time.time(), "by": by}
+    # OMITTED, not written as null, when there is no question to point at. A
+    # null would be a `replying_to` that matches nothing, so the run would
+    # ignore the answer for ever -- and "nothing is pending right now" is
+    # exactly the case where a caller is racing the run and the permissive old
+    # behaviour is the safe one.
+    if replying_to is not None:
+        body["replying_to"] = replying_to
+    notebook.answer_path.write_text(json.dumps(body, indent=1) + "\n")
     return notebook.answer_path
 
 

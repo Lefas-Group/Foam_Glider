@@ -186,9 +186,14 @@ def follow(notebook):
                     except (EOFError, KeyboardInterrupt):
                         console.print("  left unanswered")
                         return 0
-                    answered.add((run["run"], run["question"].get("asked_at")))
+                    asked_at = run["question"].get("asked_at")
+                    answered.add((run["run"], asked_at))
+                    # Stamped with the question ON SCREEN, not with whatever is
+                    # on disk by the time the write lands -- the run may have
+                    # moved on while the reply was being typed, and that is the
+                    # case `replying_to` exists for.
                     mailbox.answer(Notebook(notebook.root, run_id=run["run"]),
-                                   reply)
+                                   reply, replying_to=asked_at)
                     # The permanent record of what you said, since the panel
                     # above it is permanent too and an answer without its
                     # question is no use when you scroll back.
@@ -212,11 +217,10 @@ def _follow_plain(notebook, console):
             if key != last:
                 console.print(_table(runs))
                 for r in _asking(runs):
-                    if True:
-                        console.print(_question_panel(r))
-                        console.print(
-                            f"  answer with: nb answer {notebook.root.name} "
-                            f"{r['run']} \"<value>\"")
+                    console.print(_question_panel(r))
+                    console.print(
+                        f"  answer with: nb answer {notebook.root.name} "
+                        f"{r['run']} \"<value>\"")
                 last = key
             time.sleep(REFRESH)
     except KeyboardInterrupt:

@@ -71,8 +71,23 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
     if session is not None:
         granted, left = session.take_probe_budget(budget_s)
         if granted is not None and left is not None and left <= 0:
+            # PHASE-SPECIFIC, because the way out differs and naming the wrong
+            # one is worse than naming none. "Propose now" in the write phase
+            # points at a tool that does not exist there -- seen in a run whose
+            # write phase inherited 13 s of pool, exhausted it on the second
+            # probe, and was told twice to do something it could not.
+            writing = getattr(session, "phase", None) == "write"
             say(f"  budget    probe pool EXHAUSTED — "
-                f"{session.probe_pool:.0f} s spent; forcing a proposal")
+                f"{session.probe_pool:.0f} s spent; "
+                f"{'no more probing' if writing else 'forcing a proposal'}")
+            if writing:
+                return ("probe pool exhausted -- the whole question's probe "
+                        "wall clock is spent, and the write phase shares one "
+                        "pool with the probe that preceded it. There is no "
+                        "more probing to be had. Work from the entry, the "
+                        "chapter's files and the render output; if you "
+                        "genuinely cannot proceed without measuring something, "
+                        "say so with `ask_specified`.")
             return ("probe pool exhausted -- this run has spent all the probe "
                     "wall clock it was given. Propose now with what you have, "
                     "and say in `rationale` what you did not get to.")
