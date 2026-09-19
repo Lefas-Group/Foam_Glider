@@ -22,13 +22,6 @@ sr_sweep = evaluate_stability_fix("sweep")
 
 **Answer.** To fix the pitch stability of the 3 mm glider while minimizing the sink rate penalty, we should increase the horizontal tail area. Enforcing the 10% minimum static margin raises the sink rate to `{python} f"{sr_tail:.3f}"` m/s when freeing the tail area, compared to `{python} f"{sr_boom:.3f}"` m/s when lengthening the tail boom and `{python} f"{sr_sweep:.3f}"` m/s when adding wing sweep.
 
-::: {.callout-tip}
-## Specified
-Asked of the user, 2026-09-19:
-
-1. **Fix mechanism**: free one geometry parameter at a time.
-:::
-
 ```{python}
 #| echo: false
 #| output: asis
