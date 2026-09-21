@@ -1,7 +1,6 @@
 ---
 title: "Fuselage model"
 order: 2
-categories: ["5 mm foam", "manual sizing", "fuselage"]
 listing:
   id: entries
   contents: "20*.qmd"

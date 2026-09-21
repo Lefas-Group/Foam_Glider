@@ -94,11 +94,7 @@ def main(path, title=None, subject=None, chapter="01-first-chapter",
                        # The site's front page. Without it Quarto serves a
                        # synthesised stub -- not a 404, but nothing that says
                        # what the aircraft is or how the chapters relate.
-                       ("book-index.qmd.tmpl", "index.qmd"),
-                       # The category vocabulary. Starts as prompts rather than
-                       # terms: the axes are a claim about what the notebook
-                       # explores, and nobody knows them at chapter one.
-                       ("_categories.yml.tmpl", "_categories.yml")):
+                       ("book-index.qmd.tmpl", "index.qmd")):
         (root / dest).write_text(
             _render((SCAFFOLD / tmpl).read_text(), title, subject, chapter))
 

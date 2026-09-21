@@ -1,7 +1,6 @@
 ---
 title: "Fully optimized geometry"
 order: 5
-categories: ["3 mm foam", "full optimisation", "fuselage", "unswept quarter chord"]
 listing:
   id: entries
   contents: "20*.qmd"

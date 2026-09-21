@@ -4,19 +4,16 @@ listing:
   id: chapters
   contents: "chapters/*/index.qmd"
   type: table
-  fields: [title, categories]
+  fields: [title]
   sort: "filename"
-  categories: numbered
-  # The category list in the margin is the ONLY filter. Quarto renders it there
-  # by design -- "display item categories from this listing in the margin" --
-  # with no inline option, so the way to stop it feeling like a stray column is
-  # to remove what it was competing with: a free-text box that searched the same
-  # six rows, and a sort control for a list whose order IS the design lineage.
+  # No filter and no sort control. The order IS the design lineage, and a
+  # free-text box over six rows that fit on one screen is furniture -- the
+  # sidebar's search covers every entry in the notebook, which is what anyone
+  # is actually looking for.
   filter-ui: false
   sort-ui: false
   field-display-names:
     title: "Chapter"
-    categories: "What varies"
 ---
 
 A chronological record of questions asked about <the aircraft>. Each **chapter**
@@ -42,9 +39,8 @@ as the notebook level; a new chapter with no parent inherits from here.
 
 Chapters are numbered in the order they were written, which is not the order they
 depend on each other. A chapter whose model was copied from an earlier one
-declares it in its own `_fork.yml`, and that is what this is drawn from. The
-label on each arrow is the axis the fork changed, taken from the two chapters'
-`categories:`.
+declares where its design came from in its own `_fork.yml`, and that is what
+this is drawn from. Read it left to right: each arrow is one deliberate change.
 
 ```{python}
 #| echo: false
@@ -112,9 +108,8 @@ print("```")
 
 ## The chapters
 
-Tagged by what varies between them — the material, how the geometry was arrived
-at, and what the model carries. Click a tag to see only those chapters; the
-vocabulary is `_categories.yml` and rule 36 holds every chapter to it.
+In the order they were written. The tree above is how they relate; this is how
+to reach them.
 
 ::: {#chapters}
 :::

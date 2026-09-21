@@ -60,7 +60,6 @@ entry can be written compliant rather than corrected afterwards.
     33  a chapter index declares `order:` matching its directory
     34  the notebook has a front page that draws its own chapter graph
     35  a chapter index lists its entries and prints its lineage
-    36  a chapter's categories come from the notebook's vocabulary
     37  a `cite()` names an entry that exists and publishes an answer
     38  every chapter is named in the sidebar
 
@@ -1791,63 +1790,6 @@ def _citation_targets(root, chapters, entries):
     return out
 
 
-def _category_vocabulary(root, chapters):
-    """
-    Rule 36. A chapter's categories come from the notebook's own vocabulary.
-
-    Categories are a flat, multi-valued tag set, which is what makes a grouping
-    nobody predicted purely additive -- tag the chapters it applies to and the
-    listing picks it up, with no hierarchy to restructure. The cost of that
-    flexibility is drift: "5mm", "5 mm" and "5 mm foam" become three tags, each
-    matching a third of the chapters, and the grouping stops working without
-    ever failing.
-
-    So the terms are held in `_categories.yml` IN THE NOTEBOOK. An axis is
-    something a notebook notices about itself, usually several chapters in --
-    chapter 01 could not know foam thickness would become an axis. Keeping the
-    vocabulary in the notebook makes adding a term one line there rather than a
-    change to `nb`, which would put the tool between a notebook and a fact about
-    itself.
-
-    Silent when there is no vocabulary file: a notebook that has not decided its
-    axes is not thereby wrong, and `nb new` ships the file full of prompts
-    rather than terms.
-    """
-    vocab_file = root / "_categories.yml"
-    if not vocab_file.exists():
-        return []
-    # Deliberately not a YAML parse: lint imports nothing outside the stdlib,
-    # and the shape here is one term per list item. A term with a leading `<` is
-    # a scaffold prompt, not a term.
-    allowed = set()
-    for line in vocab_file.read_text().splitlines():
-        m = re.match(r"^\s*-\s*(.+?)\s*$", line)
-        if m and not m.group(1).startswith("<"):
-            allowed.add(m.group(1).strip().strip('"').strip("'"))
-    if not allowed:
-        return []
-
-    out = []
-    for c in chapters:
-        index = root / "chapters" / c / "index.qmd"
-        if not index.exists():
-            continue
-        m = re.search(r"^categories:\s*\[(.*?)\]\s*$", index.read_text(), re.M)
-        if not m:
-            out.append((index, f"declares no `categories:` — what this chapter "
-                               f"varies is how it is grouped with its "
-                               f"neighbours. Terms come from _categories.yml"))
-            continue
-        for term in re.findall(r'"([^"]+)"|\'([^\']+)\'', m.group(1)):
-            t = (term[0] or term[1]).strip()
-            if t not in allowed:
-                out.append((index, f"category {t!r} is not in _categories.yml — "
-                                   f"a term that is nearly right is a tag that "
-                                   f"matches nothing. Use an existing term, or "
-                                   f"add it there deliberately"))
-    return out
-
-
 def _chapter_index_blocks(root, chapters):
     """
     Rule 35. A chapter index keeps the two blocks that orient a reader.
@@ -1911,10 +1853,9 @@ def _book_index(root, chapters):
                         "they relate. `nb new` scaffolds one")]
     if "GENERATED FROM THE CHAPTERS" not in index.read_text():
         return [(index, "the chapter graph is not the generated one — the nodes "
-                        "come from each `_fork.yml` and the arrow labels from "
-                        "how the two chapters' `categories:` differ, so it "
-                        "cannot disagree with the chapters. A hand-drawn "
-                        "diagram is correct once")]
+                        "and the arrow labels both come from each "
+                        "`_fork.yml`, so it cannot disagree with the chapters. "
+                        "A hand-drawn diagram is correct once")]
     return []
 
 
@@ -2077,19 +2018,6 @@ def read_fork(root, chapter):
     return out
 
 
-def categories_of(root, chapter):
-    """The `categories:` list from a chapter index, as a set."""
-    try:
-        text = (root / "chapters" / chapter / "index.qmd").read_text()
-    except OSError:
-        return set()
-    m = re.search(r"^categories:\s*\[(.+?)\]\s*$", text, re.M)
-    if not m:
-        return set()
-    return {x.strip().strip('"').strip("'") for x in m.group(1).split(",")
-            if x.strip()}
-
-
 def _plausible_parent(root, chapter, parent):
     """
     A declared parent must exist and be EARLIER. It need not be the most
@@ -2127,14 +2055,10 @@ def _fork_provenance(root, chapters, entries):
     checked. So the lineage arrows could not be labelled, and a later edit to a
     forked model left the header describing a fork that no longer existed.
 
-    Two checks now:
+    One check, with four parts:
 
       31   a fork has a `_fork.yml` naming its parent, the commit, a summary
            and what it changed
-      31c  its categories differ from its parent's -- a fork that varies
-           nothing the notebook has a word for is either not a chapter or the
-           vocabulary is missing an axis
-
     A THIRD was designed and did not survive calibration: comparing the
     declared list against a real `git diff` of the two models. Measured both
     ways on the four forks here. Against `_code_only` the model collapses to
@@ -2205,16 +2129,6 @@ def _fork_provenance(root, chapters, entries):
                 f"lists no changes, but chapters/{c}/_model.py is "
                 f"{100 - ratio * 100:.0f}% different from its parent. One line "
                 f"per deliberate difference — the differences ARE the chapter")))
-        # 31c. The arrow on the lineage diagram is drawn from this delta, so an
-        # empty one is a fork with no label as well as a fork with no reason.
-        delta = categories_of(root, c) - categories_of(root, parent)
-        if categories_of(root, c) and not delta:
-            out.append((where, (
-                f"varies nothing the notebook has a word for: its categories "
-                f"are identical to chapters/{parent}/'s. Either it is not a "
-                f"separate chapter, or _categories.yml is missing the axis it "
-                f"explores — and adding an axis is a decision about what the "
-                f"notebook is exploring")))
     return out
 
 
@@ -2252,7 +2166,6 @@ def check(root, chapters):
     problems += _index_shape(root, chapters, entries)
     problems += _book_index(root, chapters)
     problems += _chapter_index_blocks(root, chapters)
-    problems += _category_vocabulary(root, chapters)
     problems += _citation_targets(root, chapters, entries)
     problems += _sidebar_lists_chapters(root, chapters)
 

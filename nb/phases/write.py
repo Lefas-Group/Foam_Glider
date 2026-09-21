@@ -596,8 +596,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         proposal.chapter, chapter_msg = create_chapter(
             notebook, proposal.chapter,
             proposal.chapter_title or proposal.title, proposal.chapter_defines,
-            fork_from=proposal.forked_from,
-            categories=proposal.chapter_categories)
+            fork_from=proposal.forked_from)
         tell(f"  chapter   {chapter_msg.splitlines()[0]}")
         if chapter_msg.startswith("rejected"):
             return 1

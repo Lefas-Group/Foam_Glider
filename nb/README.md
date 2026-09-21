@@ -132,8 +132,8 @@ detector missed something — worth opening, not shrugging at.
 
 A front page draws the chapter graph from each `_model.py`'s fork header, so it
 cannot disagree with the models. Each chapter index carries `order:` (the sidebar
-does not sort without it), `categories:` from the notebook's own
-`_categories.yml`, its lineage, and a listing of its questions. Rules 33-38 keep
+does not sort without it), its lineage from `_fork.yml`, and a listing of its
+questions. Rules 33-39 keep
 all of that from decaying — the scaffold ships it, and a model that rewrites an
 index with `write_file` would otherwise drop it silently.
 

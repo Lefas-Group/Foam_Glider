@@ -1,7 +1,6 @@
 ---
 title: "Unswept quarter chord"
 order: 3
-categories: ["5 mm foam", "manual sizing", "fuselage", "unswept quarter chord"]
 listing:
   id: entries
   contents: "20*.qmd"

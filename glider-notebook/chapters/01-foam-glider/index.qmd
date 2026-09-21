@@ -1,7 +1,6 @@
 ---
 title: "Foam glider"
 order: 1
-categories: ["5 mm foam", "manual sizing", "wing only"]
 listing:
   id: entries
   contents: "20*.qmd"

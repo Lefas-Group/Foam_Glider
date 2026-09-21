@@ -1,7 +1,6 @@
 ---
 title: "Fully optimized 5 mm glider"
 order: 6
-categories: ["5 mm foam", "full optimisation", "fuselage", "unswept quarter chord"]
 listing:
   id: entries
   contents: "20*.qmd"

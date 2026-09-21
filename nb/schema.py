@@ -141,18 +141,6 @@ class Proposal(BaseModel):
             "the last commit rather than the working tree, with the header "
             "rule 31 requires already written. Leave empty for a genuinely new "
             "aircraft."))
-    chapter_categories: list[str] = Field(
-        default_factory=list,
-        description=(
-            "Only for route='new_chapter'. What this chapter VARIES, drawn from "
-            "the notebook's `_categories.yml` -- read it first, and use its "
-            "terms exactly (rule 36 refuses anything else, because 5mm/5 mm/"
-            "5 mm foam as three tags is how a grouping stops working). Tag what "
-            "distinguishes this chapter from its neighbours, not everything "
-            "true of it: a constraint every chapter shares is not an axis. If "
-            "the chapter varies something the file has no term for, say so in "
-            "the proposal rather than inventing one -- adding an axis is a "
-            "decision about what the notebook is exploring."))
     chapter_defines: str = Field(
         default="",
         description=(

@@ -188,7 +188,7 @@ def _sidebar_add(notebook, name):
 
 
 def create_chapter(notebook, name, title, defines="", claim=True,
-                   number=None, fork_from="", categories=()):
+                   number=None, fork_from=""):
     """
     Create `chapters/<name>/` with index.qmd, _model.qmd, _model.py, _analysis.py.
 
@@ -231,15 +231,9 @@ def create_chapter(notebook, name, title, defines="", claim=True,
     # so an agent copying an older one does not reintroduce it.
     n = int(name[:2])
     numbered = title.split(" · ", 1)[1] if " · " in title else title
-    # Written as a YAML list on one line. An empty list is written as `[]` and
-    # NOT omitted: a chapter with no axes is a claim -- that it varies nothing
-    # its neighbours do not -- and an absent key is indistinguishable from one
-    # that was forgotten.
-    cats = "[" + ", ".join(f'"{c}"' for c in categories) + "]"
     sub = lambda s: (s.replace("__CHAPTER__", name)
                       .replace("__TITLE__", numbered)
                       .replace("__ORDER__", str(n))
-                      .replace("__CATEGORIES__", cats)
                       .replace("__WHAT_DEFINES_THE_CHAPTER__", defines or PLACEHOLDER))
 
     (target / "_model.qmd").write_text(sub((SCAFFOLD / "_model.qmd.tmpl").read_text()))
@@ -271,9 +265,8 @@ def create_chapter(notebook, name, title, defines="", claim=True,
                       f"TODO line with one line per deliberate difference as "
                       f"you make them, and change nothing you did not mean to. "
                       f"Rule 31 reads that file, and the arrow on the book "
-                      f"index is drawn from how your `categories:` differ from "
-                      f"the parent's -- so a fork that varies nothing the "
-                      f"vocabulary names is a fork with no label.")
+                      f"index is labelled with your `summary:` -- three to "
+                      f"six words for what this chapter changed.")
     if not forked:
         (target / "_model.py").write_text((SCAFFOLD / "_model.py.tmpl").read_text())
         (target / "_analysis.py").write_text("")
