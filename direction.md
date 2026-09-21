@@ -1,9 +1,9 @@
 # Directing a run
 
-**Status: Stages 1-4 done.** `b81da9a` render scope, `cc5f348` `consult`,
+**Status: Stages 1-5 done.** `b81da9a` render scope, `cc5f348` `consult`,
 `faa1c01` `verify`, `e719253` always-detached, `82aaae7` budgets, `97ac681`
-visuals — on branch `nb-render-scope`. Stages 5-7 unstarted; Stage 8 scoped and
-not recommended yet. Every number was measured on
+visuals, `81e613b` declaration — on branch `nb-render-scope`. Stages 6-7
+unstarted; Stage 8 scoped and not recommended yet. Every number was measured on
 2026-09-21 against the three notebooks, the eight run directories in
 `glider-notebook/_scratch/runs/`, and the 65 rows in their metrics databases;
 re-measure before starting, because two stages are calibrated against counts that
@@ -605,6 +605,14 @@ first; if the count moves, read the entries rather than raising the threshold.
 ---
 
 # Stage 5 — Make the declaration happen
+
+**Done — `81e613b`.** The parser was already written: `inputs.py`, the module
+wired to nothing, already reads the Specified/Assumed callouts, so the notice
+needed one function over it rather than a second parser. The correction loop was
+exercised for the first time and all three of its answers behave — silence
+accepts without stranding the run, `"1: 2.5e-4"` rewrites the input to
+specified/user, and `"happy"` reads as approval rather than a malformed
+correction.
 
 Both gates for assumptions are built and both are empty. This stage gives them
 something to iterate over; Stage 7 makes what they iterate over structured. The
