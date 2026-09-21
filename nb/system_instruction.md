@@ -251,9 +251,15 @@ Order: hero → `**Answer.**` → callouts → evidence → `footer(...)`.
   decided, so it is not wrong. One line of attribution, then a numbered list.
 - **Both callouts say NEW.** They list only what this page introduced. What it
   inherits is stated once, at the level that introduced it — the chapter index
-  for a chapter's decisions, the notebook's front page for the aircraft's — and
-  `nb inputs` is what aggregates all three. A page restating what it inherited
-  is the mistake; an empty callout is deleted, not filled (rule 32).
+  for a chapter's decisions, and the notebook's front page, whose callouts say
+  INITIAL because everything inherits them. `nb inputs` aggregates all three. A
+  page restating what it inherited is the mistake; an empty callout is deleted,
+  not filled (rule 32).
+- **A chapter index carries no standing description.** What a chapter IS is its
+  title, the parent it links to, and what it newly specified. Prose above the
+  callouts restated one of those — measured across six chapters it restated the
+  fork in half of them and the front page in the other half, and on one chapter
+  the same fact appeared five times over.
 - **Assumptions sit at the level they belong to.** What defines the chapter is
   stated once in `index.qmd`. Do not repeat it in entry prose. Each input you
   declare carries a `scope`: `new` if this entry introduced it — the only kind

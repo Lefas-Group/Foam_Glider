@@ -23,10 +23,23 @@ import sys
 
 from .config import Notebook
 
+# Every heading these callouts have gone by. The notebook front page says
+# INITIAL -- it is what everything inherits; a chapter or entry says NEW -- it
+# lists only what that page introduced; and the two frozen notebooks still say
+# Specified/Assumed. All three are read, and the kind is normalised, because a
+# parser that knew one vocabulary would silently return nothing for the others
+# and the inheritance gate would offer an empty list.
 CALLOUT = re.compile(
-    r"^::: *\{\.callout-[a-z]+\}\s*\n##\s*(Specified|Assumed)\s*\n(.*?)^:::",
-    re.S | re.M)
+    r"^::: *\{\.callout-[a-z]+\}\s*\n##\s*"
+    r"(?:New |Initial )?(specifications?|user specifications|assumptions|"
+    r"Specified|Assumed)\s*\n(.*?)^:::",
+    re.S | re.M | re.I)
 ITEM = re.compile(r"^\s*\d+\.\s*(.+?)\s*$", re.M)
+
+
+def _kind(heading):
+    """`Specified` or `Assumed`, whichever vocabulary said it."""
+    return "Assumed" if "assum" in heading.lower() else "Specified"
 
 
 def _unescape(s):
@@ -60,7 +73,7 @@ def collect(notebook):
                     continue
             for kind, body in CALLOUT.findall(md):
                 for item in ITEM.findall(body):
-                    out.append((chapter, stem, kind, _unescape(item)))
+                    out.append((chapter, stem, _kind(kind), _unescape(item)))
     return out
 
 
@@ -82,7 +95,7 @@ def declared(notebook, chapter):
     spec = asm = 0
     for kind, body in CALLOUT.findall(md):
         n = len(ITEM.findall(body))
-        if kind == "Specified":
+        if _kind(kind) == "Specified":
             spec += n
         else:
             asm += n
@@ -145,7 +158,7 @@ def inherited(notebook, chapter):
         return out
     for kind, body in CALLOUT.findall(md):
         for item in ITEM.findall(body):
-            out.append((kind, _unescape(item), notebook.root.name))
+            out.append((_kind(kind), _unescape(item), notebook.root.name))
     return out
 
 
@@ -155,7 +168,7 @@ def _declared_items(notebook, chapter):
         md = (notebook.chapters_dir / chapter / "index.qmd").read_text()
     except OSError:
         return []
-    return [(kind, _unescape(i)) for kind, body in CALLOUT.findall(md)
+    return [(_kind(kind), _unescape(i)) for kind, body in CALLOUT.findall(md)
             for i in ITEM.findall(body)]
 
 

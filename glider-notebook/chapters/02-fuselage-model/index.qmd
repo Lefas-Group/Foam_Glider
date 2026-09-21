@@ -23,47 +23,26 @@ listing:
 #| echo: false
 #| output: asis
 # GENERATED FROM THIS CHAPTER'S OWN _fork.yml (rule 35 keeps this block here).
-# One source, three readers: rule 31 checks this file, the book index draws the
-# lineage from it, and this prints what the fork actually changed.
 #
-# In a CALLOUT, like the Specified and Assumed it sits above. As a bare
-# paragraph and a bare list it was the one un-styled region on the page, and it
-# read as a mistake rather than as a section. One change renders as a sentence;
-# a single-item bullet list is heavier than the sentence it replaced.
+# The PARENT only. `changes:` used to print here too, and on a chapter whose
+# whole point is one decision it was the third copy of that decision on the
+# page -- 03 said "the quarter chord is unswept" in the fork list, in its
+# prose, and in its specifications, under a title and an arrow that said it
+# twice more. `changes:` stays in `_fork.yml`, which is where rule 31 reads it
+# and where a `diff` against the parent is reviewed. What CHANGED, for a
+# reader, is the arrow on the front page and the specification below.
 import pathlib
 import re
 _fk = pathlib.Path("chapters/02-fuselage-model/_fork.yml")
 if _fk.exists():
-    _t = _fk.read_text()
-    _p = re.search(r"^parent:\s*(.+?)\s*$", _t, re.M)
-    _items, _in = [], False
-    for _l in _t.splitlines():
-        if _l.startswith("#") or not _l.strip():
-            continue
-        if re.match(r"^\w+:", _l):
-            _in = _l.startswith("changes:")
-            continue
-        if _in and _l.lstrip().startswith("-"):
-            _items.append(_l.lstrip()[1:].strip())
-        elif _in and _items and _l.startswith(" "):
-            _items[-1] += " " + _l.strip()
+    _p = re.search(r"^parent:\s*(.+?)\s*$", _fk.read_text(), re.M)
     if _p:
         _par = pathlib.Path("chapters") / _p.group(1) / "index.qmd"
         _pt = re.search(r'^title:\s*"(.+)"\s*$', _par.read_text(), re.M) \
             if _par.exists() else None
-        _name = _pt.group(1) if _pt else _p.group(1)
-        print('::: {.callout-note appearance="simple"}')
-        print(f"## Forked from [{_name}](../{_p.group(1)}/)\n")
-        if len(_items) == 1:
-            print(f"{_items[0]}\n")
-        else:
-            for _i in _items:
-                print(f"* {_i}")
-            print()
-        print(":::\n")
+        print(f"Forked from "
+              f"[{_pt.group(1) if _pt else _p.group(1)}](../{_p.group(1)}/).\n")
 ```
-
-Added a 200 mm fuselage made of doubled-up 5 mm foam to `_model.py`. Its mass and drag are now included in the trimmed glide optimization.
 
 ::: {.callout-tip}
 ## New user specifications

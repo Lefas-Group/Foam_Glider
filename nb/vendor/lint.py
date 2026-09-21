@@ -1652,7 +1652,8 @@ FORK_SIMILARITY = 0.85
 # "New ..." came with the rule that a page lists only what IT introduced --
 # what it inherits is stated once, one level up, and aggregated by `nb inputs`.
 INPUT_TITLES = ("Specified", "Assumed",
-                "New user specifications", "New assumptions")
+                "New user specifications", "New assumptions",
+                "Initial user specifications", "Initial assumptions")
 INPUT_CALLOUTS = "|".join(INPUT_TITLES)
 
 # What `forking.md` asks a forked file's header to carry. Checked by substring
@@ -1940,8 +1941,7 @@ INDEX_SECTIONS = ("Specified", "Assumed", "Questions asked here", "The model")
 
 def _index_shape(root, chapters, entries):
     """
-    Rule 39. A chapter index's sections are in the scaffold's order, and its
-    defining prose is above them.
+    Rule 39. A chapter index's sections are in the scaffold's order.
 
     Rules 30, 33, 34, 35 and 38 each guard one thing the scaffold puts in an
     index, all for the reason rule 30 states: "a model that rewrites index.qmd
@@ -1951,9 +1951,13 @@ def _index_shape(root, chapters, entries):
     Assumed` with its defining sentence stranded underneath a dump of its own
     source -- which is what made the page look broken, not anything in it.
 
-    The prose check is the other half. An index whose first content is a
-    callout never says what the chapter IS; the sentence that does is what a
-    reader needs before any of the rest means anything.
+    There was a prose check here too, requiring a sentence above the callouts
+    saying what the chapter IS. It is gone, with the prose. Read across the six
+    chapters that prose was doing two different jobs and neither consistently:
+    in 02-04 it restated the fork's `changes:`, and in 05-06 it restated the
+    notebook's own front page. On 03 the same fact appeared in the fork list,
+    the prose, the specifications, the title and the arrow -- five times. What a
+    chapter IS is now its title, its parent link and what it newly specified.
 
     Only chapters with entries, the same exemption as rules 19, 24 and 30: a
     scaffold nobody has filled in is not a finding.
@@ -1976,20 +1980,6 @@ def _index_shape(root, chapters, entries):
                 f"{' → '.join(want)}. What the chapter IS comes before what it "
                 f"was given, which comes before what was asked of it, which "
                 f"comes before the code")))
-        # The prose: anything outside the frontmatter, the generated cells and
-        # the callouts, before the first `##`. Measured on the five correct
-        # chapters, every one has a sentence there and the broken one had none.
-        head = text.split("\n## ", 1)[0]
-        head = re.sub(r"^---.*?^---", "", head, flags=re.S | re.M)
-        head = re.sub(r"^```.*?^```", "", head, flags=re.S | re.M)
-        head = re.sub(r"^::: .*?^:::", "", head, flags=re.S | re.M)
-        head = re.sub(r"\{\{<.*?>\}\}", "", head)
-        if len(head.split()) < 8:
-            out.append((index, (
-                "says nothing about what the chapter IS before its first "
-                "section — a sentence above the callouts, naming what this "
-                "model has that its parent did not. A reader meeting a "
-                "Specified list first has nothing to hang it on")))
     return out
 
 

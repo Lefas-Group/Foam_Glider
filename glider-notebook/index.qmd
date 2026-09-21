@@ -7,7 +7,7 @@ is one model — a vehicle, a fidelity, a method — and each **entry** is one
 question asked of it, answered by code that runs when the page renders.
 
 ::: {.callout-tip}
-## Specified
+## Initial user specifications
 
 True of every chapter, and inherited by any new one:
 
@@ -17,7 +17,7 @@ True of every chapter, and inherited by any new one:
 :::
 
 ::: {.callout-note}
-## Assumed
+## Initial assumptions
 
 1. **Still air**, no thermals and no wind gradient.
 2. **Rigid airframe**, no aeroelastic deflection under load.
