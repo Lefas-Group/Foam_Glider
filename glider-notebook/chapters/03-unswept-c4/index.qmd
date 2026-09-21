@@ -55,25 +55,6 @@ if _fk.exists():
         print()
 ```
 
-## Questions asked here
-
-::: {#entries}
-:::
-
-## The model
-
-```{python}
-#| echo: false
-#| output: asis
-import pathlib
-for _f in ("_model.py", "_analysis.py"):
-    _src = pathlib.Path(f"chapters/03-unswept-c4/{_f}").read_text()
-    print(f'::: {{.callout-note collapse="true"}}')
-    print(f"## `{_f}`\n")
-    print(f"```python\n{_src}\n```")
-    print(":::\n")
-```
-
 The zero-sweep line of the wing is moved from the leading edge to the quarter chord. Otherwise identical to the 02-fuselage-model.
 
 ::: {.callout-tip}
@@ -93,3 +74,22 @@ From the question and inherited, 2026-09-14:
 2. **Sections:** NACA4405 and NACA0005, standing in for foam.
 3. **Fuselage width:** 10 mm, doubled 5 mm foam.
 :::
+
+## Questions asked here
+
+::: {#entries}
+:::
+
+## The model
+
+```{python}
+#| echo: false
+#| output: asis
+import pathlib
+for _f in ("_model.py", "_analysis.py"):
+    _src = pathlib.Path(f"chapters/03-unswept-c4/{_f}").read_text()
+    print(f'::: {{.callout-note collapse="true"}}')
+    print(f"## `{_f}`\n")
+    print(f"```python\n{_src}\n```")
+    print(":::\n")
+```

@@ -1970,6 +1970,67 @@ def _index_ordering(root, chapters):
     return out
 
 
+# The order the scaffold ships a chapter index in, and the order it is read in:
+# what the chapter IS, then what it was given and what it guessed, then what was
+# asked of it, then the code that answers.
+INDEX_SECTIONS = ("Specified", "Assumed", "Questions asked here", "The model")
+
+
+def _index_shape(root, chapters, entries):
+    """
+    Rule 39. A chapter index's sections are in the scaffold's order, and its
+    defining prose is above them.
+
+    Rules 30, 33, 34, 35 and 38 each guard one thing the scaffold puts in an
+    index, all for the reason rule 30 states: "a model that rewrites index.qmd
+    with `write_file` rather than editing it drops the block and nothing
+    noticed". Each of those checks an ITEM. Nothing checked the ORDER, and one
+    chapter of six had been rewritten into `Questions, The model, Specified,
+    Assumed` with its defining sentence stranded underneath a dump of its own
+    source -- which is what made the page look broken, not anything in it.
+
+    The prose check is the other half. An index whose first content is a
+    callout never says what the chapter IS; the sentence that does is what a
+    reader needs before any of the rest means anything.
+
+    Only chapters with entries, the same exemption as rules 19, 24 and 30: a
+    scaffold nobody has filled in is not a finding.
+    """
+    out = []
+    for c in chapters:
+        if not any(e.parent.name == c for e in entries):
+            continue
+        index = root / "chapters" / c / "index.qmd"
+        try:
+            text = index.read_text()
+        except OSError:
+            continue
+        seen = [h for h in re.findall(r"^##\s+(.+?)\s*$", text, re.M)
+                if h in INDEX_SECTIONS]
+        want = [s for s in INDEX_SECTIONS if s in seen]
+        if seen != want:
+            out.append((index, (
+                f"sections run {' → '.join(seen)}; the scaffold's order is "
+                f"{' → '.join(want)}. What the chapter IS comes before what it "
+                f"was given, which comes before what was asked of it, which "
+                f"comes before the code")))
+        # The prose: anything outside the frontmatter, the generated cells and
+        # the callouts, before the first `##`. Measured on the five correct
+        # chapters, every one has a sentence there and the broken one had none.
+        head = text.split("\n## ", 1)[0]
+        head = re.sub(r"^---.*?^---", "", head, flags=re.S | re.M)
+        head = re.sub(r"^```.*?^```", "", head, flags=re.S | re.M)
+        head = re.sub(r"^::: .*?^:::", "", head, flags=re.S | re.M)
+        head = re.sub(r"\{\{<.*?>\}\}", "", head)
+        if len(head.split()) < 8:
+            out.append((index, (
+                "says nothing about what the chapter IS before its first "
+                "section — a sentence above the callouts, naming what this "
+                "model has that its parent did not. A reader meeting a "
+                "Specified list first has nothing to hang it on")))
+    return out
+
+
 def read_fork(root, chapter):
     """
     `chapters/<c>/_fork.yml` as a dict, or None. Flat by design.
@@ -2166,6 +2227,7 @@ def check(root, chapters):
     problems += _fork_provenance(root, chapters, entries)
     problems += _empty_callouts(root, chapters, entries)
     problems += _index_ordering(root, chapters)
+    problems += _index_shape(root, chapters, entries)
     problems += _book_index(root, chapters)
     problems += _chapter_index_blocks(root, chapters)
     problems += _category_vocabulary(root, chapters)
