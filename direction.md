@@ -1,8 +1,8 @@
 # Directing a run
 
-**Status: Stage 1 done, Stage 2 two-thirds done.** `b81da9a` render scope,
-`cc5f348` `consult`, `faa1c01` `verify`, on branch `nb-render-scope`. What
-remains in Stage 2 is always-detached; Stages 3-7 are unstarted. Every number was measured on
+**Status: Stages 1 and 2 done.** `b81da9a` render scope, `cc5f348` `consult`,
+`faa1c01` `verify`, `e719253` always-detached, on branch `nb-render-scope`.
+Stages 3-7 unstarted; Stage 8 scoped and not recommended yet. Every number was measured on
 2026-09-21 against the three notebooks, the eight run directories in
 `glider-notebook/_scratch/runs/`, and the 65 rows in their metrics databases;
 re-measure before starting, because two stages are calibrated against counts that
@@ -456,6 +456,19 @@ model call each.
 
 ## Always detached
 
+**Done — `e719253`.** Two things the plan did not anticipate. The board could
+not be spawned as a side process: `detach_process` exits the original process at
+its first fork, so the board goes THERE, in the one process that still has a
+terminal, while the agent forks away. And testing caught a regression — through
+the mailbox every question waited the full hour, so `--quiet` in CI would have
+hung for an hour per budget where a piped run previously took its default the
+instant stdin closed. Questions now take their deadline from whether they have a
+default: 300 s, matching `stuck.ASK_WAIT`, against the full hour for a Specified
+input that has none.
+
+The `tell`/`say` collapse turned out to be free: `tell` already wrote to the log
+as well as stdout, so detaching does it. `log.py` needed no change.
+
 `nb ask` forks to the mailbox path in every case, and by default immediately
 attaches a board scoped to the run it just started. To the single user nothing
 looks different — a question appears, they answer it — but there is one mechanism
@@ -908,6 +921,77 @@ checking against the chapter index, not trusting.
 
 ---
 
+# Stage 8 — An assert for an unquoted shape claim
+
+**Scoped, and smaller than deleting `verify` made it sound.** Last, and honestly
+optional.
+
+Deleting `verify` left one category wholly uncaught: a claim about a curve's
+*shape* that the curve contradicts. Rule 1 forces the NUMBERS in prose to be
+`{python}` expressions, so a prose number is the rendered value by construction;
+nothing forces a sentence about a shape to match the shape, because such a
+sentence quotes nothing for rule 1 to bite on.
+
+The convention already exists (`nb/system_instruction.md:234`): "A claim the
+prose makes but does not quote gets an `assert`, so the page fails to render
+rather than going quietly stale." **24 of 77 entries carry one**, and
+`lint.py:998` records a problem caught "only because that entry happened to carry
+an assert". It is a convention, not a rule — and Stage 2 made it bite harder,
+since `build_entry` now turns a failed assert into a build failure that refuses
+the commit. The gap is that writing one is optional.
+
+## The broad form does not survive calibration
+
+A keyword rule over comparative words — falls, rises, higher, faster, better,
+converges — fires on **30 of 77 entries**. It is swamped, and the reason is
+mechanical rather than a matter of taste: `lint.prose_of` strips the inline
+expressions, so "structure mass falls from [] g to [] g" reads as a sentence
+quoting nothing when it quotes two things. The rest are shape words used about
+something that is not a curve — "liable to drop a wing", "very nearly a
+drop-in", "the optimizer converges on a forward-swept wing".
+
+## The narrow form is viable, as a warning
+
+Restricted to vocabulary that can only describe a curve — `linear`, `monotonic`,
+`crosses`, `peaks`, `plateaus`, `flattens`, `asymptotic`, `steeply`,
+`scales with`, `diverges` — measured across all 77 entries:
+
+```
+match the vocabulary in prose        8 entries
+  ... already carry an assert        4
+  ... do not  ->  rule fires         4   (2 of them artefacts of sentence splitting)
+```
+
+So roughly **two genuine unguarded shape claims in the whole corpus history**.
+
+| change | where |
+|---|---|
+| rule 39, WARNING severity: a shape word with no `assert` in the entry | `nb/vendor/lint.py` |
+| split sentences with lint's own prose extraction, not a naive regex | same |
+| recalibrate the corpus counts | `nb/corpus.py` |
+
+**Warning, not blocking**, and that is the whole design. Blocking on a
+2-in-77 phenomenon with a measurable false-positive rate trains an author to
+route around the rule, which is worse than not having it. `lint` already splits
+severity on an in-string `"(warning)"` marker, so this needs no new machinery.
+
+**Pros.** It is the only proposal that touches the category `verify` actually
+guarded, and it does so deterministically — no model call, no figure reading.
+It turns an existing convention into something that is at least counted.
+
+**Cons.** A base rate of ~3% is thin justification for lint surface. The rule
+cannot tell a true claim from a false one — it only asks whether the author
+bothered to assert — so it is a prompt for rigour rather than a check on truth.
+And two of its four fires today are artefacts, which will need the sentence
+extraction fixed before the count means anything.
+
+**Risk.** `nb.corpus` moves by the entries that warn, which is 4 today and must
+be recalibrated across all three notebooks first. **This is the one stage whose
+honest recommendation is "probably not yet"** — the loss it addresses is real,
+and it is two entries in a year of work.
+
+---
+
 # Four surfaces
 
 Every stage lands in up to five places. Fixing `glider-notebook` fixes what
@@ -923,6 +1007,7 @@ chapter are born correct.
 | **5** declaration | — | — | — | `schema.py`, first-probe notice | — |
 | **6** fork provenance | 4 × `_fork.yml`, root + 4 chapter `index.qmd` | `index.qmd.tmpl` | write `_fork.yml` | `schema.py` | rule 31 rewritten + 2 checks |
 | **7** structured inputs | re-declare 6 chapters' inputs | — | — | `system_instruction.md`, `schema.py` | — |
+| **8** shape asserts | — | — | — | `system_instruction.md` | rule 39, warning |
 
 Stages 1–5 land in one or two places each and need no guard. Stage 6 lands in all
 five.
@@ -943,6 +1028,8 @@ five.
    something correct to check against.
 7. **Stage 7 — structured inputs.** After Stage 6, which names the parent that
    inheritance is computed from.
+8. **Stage 8 — shape asserts.** Optional, and calibrated at two genuine cases in
+   the whole corpus. Do it if the category bites after Stage 2, not before.
 
 Splitting inputs across 5 and 7 is what makes the dependency run forwards. An
 earlier draft had one inputs stage that depended on a fork stage placed after it.
