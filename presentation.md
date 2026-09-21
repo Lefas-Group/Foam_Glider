@@ -1,6 +1,19 @@
 # The notebook as a thing to look at
 
-**Status: proposed, nothing implemented.** Measured on 2026-09-21 against
+**Status: all five stages implemented.** `1fbd623` index shape, `3042d39` fork
+callout + titles + sidebar, `02632ed` the tree, `0aeed39` categories retired —
+on branch `nb-render-scope`, nothing pushed.
+
+Two corrections to what is written below. Chapter 03 did have defining prose; it
+was stranded under a dump of its own source, so misfiled rather than missing.
+And the numbered-title check did NOT fire zero times — zero on
+`glider-notebook`, but once on `aircraft-notebook` and four times on
+`optimised-glider-notebook`, both of which carry unnumbered titles. Measuring a
+rule change on the notebook being worked on is the exact mistake `nb.corpus`
+exists to catch, and it caught it; the counts moved down and are recorded with
+that reason.
+
+**Originally: proposed, nothing implemented.** Measured on 2026-09-21 against
 `glider-notebook` as it stands after `direction.md`'s Stages 1-7. Raised from
 reading the rendered site rather than the code, which is why several of these
 were invisible to every check that exists.
