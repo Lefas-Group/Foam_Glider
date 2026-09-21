@@ -1,0 +1,102 @@
+---
+title: "Does the optimised aircraft change if there are more control points to play with?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+#| code-summary: "Show code"
+SUBDIVISIONS = [1, 2, 3, 4]
+
+setup = baseline_setup()
+designs = [constrained_redesign(setup, subdivisions=n) for n in SUBDIVISIONS]
+station_counts = [d["stations"] for d in designs]
+
+verdicts = method_verdicts(designs, setup)
+
+coarse, fine = designs[0], designs[-1]
+on_bound = sum(1 for c in fine["chords"] if c > CHORD_MAX - 1e-6)
+span_settled = abs(designs[-1]["span"] - designs[-2]["span"]) / designs[-2]["span"] * 100
+spread = [a - b for a, b in zip(verdicts["AeroBuildup"], verdicts["LiftingLine"])]
+
+# The finding is that refinement widens the gap between the methods while the
+# geometry stops moving. Both halves are asserted: if a future change made the
+# shape keep drifting, or the gap stop widening, this entry would be describing
+# an experiment it no longer ran.
+assert spread[-1] > spread[0], "refinement did not widen the disagreement"
+assert span_settled < 1.0, "span has not settled by the finest grid"
+```
+
+::: {.hero-pair}
+::: {}
+[`{python} f"{verdicts['LiftingLine'][0]:+.1f}"`%]{.hero-value}
+[LiftingLine's verdict, four stations]{.hero-label}
+:::
+::: {}
+[`{python} f"{verdicts['LiftingLine'][-1]:+.1f}"`%]{.hero-value .hero-ref}
+[the same, at thirteen]{.hero-label}
+:::
+:::
+
+**Answer.** Yes, and worse. Refining four stations to
+`{python} f"{station_counts[-1]:.0f}"` moves span
+[`{python} f"{coarse['span']:.2f}"`]{.key} →
+[`{python} f"{fine['span']:.2f}"`]{.key} m and raises the optimiser's claimed
+gain to [`{python} f"{verdicts['AeroBuildup'][-1]:.1f}"`]{.key}%, while
+LiftingLine's verdict falls to
+[`{python} f"{verdicts['LiftingLine'][-1]:.1f}"`]{.key}% (@fig-stations). The
+shape converges — span moves `{python} f"{span_settled:.2f}"`% over the last
+refinement — while the disagreement doubles. Freedom buys exploitation,
+not aircraft.
+
+::: {.callout-tip}
+## Specified
+Asked of the user, 2026-09-21:
+
+1. **Refinement study**: more control points, up to thirteen.
+:::
+
+::: {.callout-warning}
+## The finest designs rest on a bound
+
+At thirteen stations `{python} f"{on_bound:.0f}"` inboard chords sit on their
+upper limit, so refinement partly buys more places to press against a
+buildability bound that was chosen, not derived.
+:::
+
+```{python}
+#| label: fig-stations
+#| fig-cap: "Left: change in best glide ratio against the baseline, by station count, judged by each method on its own terms. Right: the chord distribution at the coarsest and finest grids, with the buildability bound the inboard stations run into."
+fig, (ax_trend, ax_chord) = plt.subplots(1, 2, figsize=(7.0, 3.0))
+
+for (label, colour) in zip(["AeroBuildup", "LiftingLine"], ["C0", "C1"]):
+    ax_trend.plot(station_counts, verdicts[label], "-o", ms=5,
+                  color=colour, label=label, zorder=3)
+ax_trend.axhline(0, color="C2", lw=0.8, zorder=2)
+ax_trend.set_xticks(station_counts)
+ax_trend.set_xlabel("Station count")
+ax_trend.set_ylabel("Change in best glide ratio [%]")
+ax_trend.grid(alpha=0.3)
+ax_trend.legend(loc="center right", fontsize=8)
+
+for design, label, colour in [(coarse, f"{coarse['stations']} stations", "C2"),
+                              (fine, f"{fine['stations']} stations", "C0")]:
+    ax_chord.plot(design["fractions"] * design["span"] / 2, design["chords"],
+                  "-o", ms=4, color=colour, label=label, zorder=3)
+ax_chord.axhline(CHORD_MAX, color="C1", lw=1.4, ls="--", zorder=4,
+                 label="buildability bound")
+ax_chord.set_xlabel("Distance from centreline [m]")
+ax_chord.set_ylabel("Chord [m]")
+ax_chord.set_ylim(0, CHORD_MAX * 1.15)
+ax_chord.grid(alpha=0.3)
+ax_chord.legend(loc="center right", fontsize=7)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(baseline_setup, constrained_redesign, method_verdicts)
+```

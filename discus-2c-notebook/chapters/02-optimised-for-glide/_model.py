@@ -342,6 +342,8 @@ def calibrate(polar, target_LD=LD_MAX_PUBLISHED, tol=1e-9, max_passes=60):
 # planform rather than letting four break points slide around independently --
 # nine variables that mean something, rather than thirteen that overlap.
 LIMIT_LOAD_FACTOR = 5.3   # CS-22 limit manoeuvre, the structural constraint case
+CHORD_MAX = 1.30          # m, buildability bound on any station chord
+CHORD_MIN = 0.12          # m
 STATION_FRACTION = STATION_Y / (SPAN / 2)
 
 
@@ -357,7 +359,33 @@ def _as_float(value):
     return float(array.reshape(-1)[0]) if array.ndim else float(array)
 
 
-def build_airplane(span, chords, twists):
+def station_grid(subdivisions=1):
+    """
+    Station fractions of semi-span, with the baseline planform sampled onto them.
+
+    Each baseline PANEL is subdivided rather than a uniform grid being laid down,
+    so `subdivisions=1` returns exactly the chapter's four stations and the
+    sequence 4, 7, 10, 13 always contains the coarse grid as a subset. A uniform
+    grid would move the break points as well as adding freedom, and the two
+    effects could not then be told apart.
+    """
+    fractions = []
+    for i in range(len(STATION_FRACTION) - 1):
+        for step in range(subdivisions):
+            fractions.append(
+                STATION_FRACTION[i]
+                + (STATION_FRACTION[i + 1] - STATION_FRACTION[i]) * step / subdivisions)
+    fractions.append(STATION_FRACTION[-1])
+    fractions = np.array(fractions)
+    return {
+        "fractions": fractions,
+        "chords": np.interp(fractions, STATION_FRACTION, STATION_C),
+        "twists": np.interp(fractions, STATION_FRACTION, STATION_TWIST),
+        "thickness": np.interp(fractions, STATION_FRACTION, STATION_TC),
+    }
+
+
+def build_airplane(span, chords, twists, fractions=None):
     """
     The aircraft with a parametric wing, on numbers or on CasADi variables alike.
 
@@ -365,16 +393,17 @@ def build_airplane(span, chords, twists):
     they are not design variables here, and reconstructing them inside an
     optimizer loop would cost geometry construction on every iteration.
     """
-    stations = [float(fraction) * span / 2 for fraction in STATION_FRACTION]
+    fractions = STATION_FRACTION if fractions is None else fractions
+    stations = [float(fraction) * span / 2 for fraction in fractions]
     xsecs = [
         asb.WingXSec(
             xyz_le=[WING_LE_X + 0.25 * (chords[0] - chords[i]),
                     stations[i], stations[i] * np.tand(DIHEDRAL_DEG)],
             chord=chords[i],
             twist=twists[i],
-            airfoil=AIRFOIL_ROOT if STATION_FRACTION[i] < 0.45 else AIRFOIL_TIP,
+            airfoil=AIRFOIL_ROOT if fractions[i] < 0.45 else AIRFOIL_TIP,
         )
-        for i in range(len(STATION_FRACTION))
+        for i in range(len(fractions))
     ]
     wing = asb.Wing(name="Wing", symmetric=True, xsecs=xsecs)
     return asb.Airplane(
@@ -384,7 +413,7 @@ def build_airplane(span, chords, twists):
     )
 
 
-def root_bending_proxy(span, chords, mass=None):
+def root_bending_proxy(span, chords, mass=None, fractions=None):
     """
     Limit-load root bending moment as a smooth, cheap function of the planform.
 
@@ -400,7 +429,8 @@ def root_bending_proxy(span, chords, mass=None):
     optimized design with the real calculation, which is the only thing that can
     catch the proxy being wrong in a way that does not cancel.
     """
-    stations = [float(fraction) * span / 2 for fraction in STATION_FRACTION]
+    fractions = STATION_FRACTION if fractions is None else fractions
+    stations = [float(fraction) * span / 2 for fraction in fractions]
     area, moment = 0.0, 0.0
     for i in range(len(stations) - 1):
         width = stations[i + 1] - stations[i]
@@ -443,7 +473,7 @@ def baseline_limits(drag_offset):
 
 
 def optimise(limits, washout_monotone=False, reynolds_floor=None,
-             mass_model=False, verbose=False):
+             mass_model=False, subdivisions=1, verbose=False):
     """
     Maximize trimmed glide ratio over span, chord and twist, inside the baseline's limits.
 
@@ -462,12 +492,20 @@ def optimise(limits, washout_monotone=False, reynolds_floor=None,
     differ by four orders of magnitude and IPOPT's convergence test stops meaning
     the same thing for both.
     """
+    # `subdivisions` refines the station grid without moving the break points, so
+    # a coarser run is always a subset of a finer one. Default 1 is the chapter's
+    # own four stations, so every entry written before this argument existed is
+    # untouched by it.
+    grid = station_grid(subdivisions)
+    fractions = grid["fractions"]
+
     opti = asb.Opti()
     span = opti.variable(init_guess=SPAN, lower_bound=10.0, upper_bound=32.0)
-    chords = [opti.variable(init_guess=float(c), lower_bound=0.12, upper_bound=1.30)
-              for c in STATION_C]
+    chords = [opti.variable(init_guess=float(c), lower_bound=CHORD_MIN,
+                            upper_bound=CHORD_MAX)
+              for c in grid["chords"]]
     twists = [opti.variable(init_guess=float(t), lower_bound=-8.0, upper_bound=4.0)
-              for t in STATION_TWIST]
+              for t in grid["twists"]]
     alpha = opti.variable(init_guess=3.0, lower_bound=-4.0, upper_bound=10.0)
     speed = opti.variable(init_guess=30.0, lower_bound=18.0, upper_bound=65.0)
 
@@ -483,7 +521,7 @@ def optimise(limits, washout_monotone=False, reynolds_floor=None,
         for i in range(len(twists) - 1):
             opti.subject_to(twists[i] >= twists[i + 1])
 
-    airplane = build_airplane(span, chords, twists)
+    airplane = build_airplane(span, chords, twists, fractions)
     area = airplane.s_ref
     op_point = asb.OperatingPoint(
         atmosphere=asb.Atmosphere(altitude=0.0), velocity=speed, alpha=alpha)
@@ -501,7 +539,8 @@ def optimise(limits, washout_monotone=False, reynolds_floor=None,
         mass = opti.variable(init_guess=MASS, lower_bound=0.5 * MASS,
                              upper_bound=3.0 * MASS)
         opti.subject_to(
-            mass / (NON_WING_MASS + wing_structural_mass(span, chords, mass)) == 1)
+            mass / (NON_WING_MASS + wing_structural_mass(
+                span, chords, mass, fractions, grid["thickness"])) == 1)
     else:
         mass = MASS
     weight = mass * GRAVITY
@@ -509,7 +548,7 @@ def optimise(limits, washout_monotone=False, reynolds_floor=None,
     opti.subject_to([
         op_point.dynamic_pressure() * area * lift_coeff / weight == 1,
         area / limits["area"] >= 1,
-        root_bending_proxy(span, chords, mass) / limits["bending"] <= 1,
+        root_bending_proxy(span, chords, mass, fractions) / limits["bending"] <= 1,
         -result["Cma"] / result["CLa"] >= limits["static_margin"],
     ])
 
@@ -541,9 +580,12 @@ def optimise(limits, washout_monotone=False, reynolds_floor=None,
         "CD": _as_float(sol(drag_coeff)),
         "L_over_D": _as_float(sol(lift_coeff / drag_coeff)),
         "static_margin": _as_float(sol(-result["Cma"] / result["CLa"])),
-        "bending": _as_float(sol(root_bending_proxy(span, chords, mass))),
+        "bending": _as_float(sol(root_bending_proxy(span, chords, mass, fractions))),
+        "fractions": fractions,
+        "stations": len(fractions),
         "mass": _as_float(sol(mass)) if mass_model else MASS,
-        "spar_mass": _as_float(sol(wing_structural_mass(span, chords, mass))),
+        "spar_mass": _as_float(sol(wing_structural_mass(
+            span, chords, mass, fractions, grid["thickness"]))),
         "tip_reynolds": _as_float(sol(chords[-1] * speed / KINEMATIC_VISCOSITY)),
     }
 
@@ -567,19 +609,24 @@ KINEMATIC_VISCOSITY = 1.4607e-5   # m^2/s at sea level
 # weights are constants and the integration below stays smooth in the design
 # variables. np.interp with a symbolic grid would not be.
 _MASS_GRID = np.linspace(0.0, 1.0, 41)
-_PANEL = []
-for _eta in _MASS_GRID:
-    _i = min(max(int(np.sum(STATION_FRACTION <= _eta)) - 1, 0), len(STATION_FRACTION) - 2)
-    _span_frac = STATION_FRACTION[_i + 1] - STATION_FRACTION[_i]
-    _PANEL.append((_i, float((_eta - STATION_FRACTION[_i]) / _span_frac)))
 
 
-def _on_grid(values):
+def _panel_weights(fractions):
+    """Which panel each grid point falls in, and how far along it."""
+    weights = []
+    for eta in _MASS_GRID:
+        i = min(max(int(np.sum(fractions <= eta)) - 1, 0), len(fractions) - 2)
+        width = fractions[i + 1] - fractions[i]
+        weights.append((i, float((eta - fractions[i]) / width)))
+    return weights
+
+
+def _on_grid(values, weights):
     """Interpolate a per-station quantity onto the fixed semi-span grid."""
-    return [(1 - w) * values[i] + w * values[i + 1] for i, w in _PANEL]
+    return [(1 - w) * values[i] + w * values[i + 1] for i, w in weights]
 
 
-def wing_structural_mass(span, chords, mass):
+def wing_structural_mass(span, chords, mass, fractions=None, thickness=None):
     """
     Mass of a stress-sized spar carrying the limit load, for both wings.
 
@@ -591,10 +638,14 @@ def wing_structural_mass(span, chords, mass):
     makes this implicit: the caller closes the loop by constraining total mass to
     equal the structure plus everything else.
     """
+    fractions = STATION_FRACTION if fractions is None else fractions
+    thickness = STATION_TC if thickness is None else thickness
+    weights = _panel_weights(fractions)
+
     semi_span = span / 2
     step = semi_span / (len(_MASS_GRID) - 1)
-    chord = _on_grid(chords)
-    thickness = _on_grid([float(t) for t in STATION_TC])
+    chord = _on_grid(chords, weights)
+    thickness = _on_grid([float(v) for v in thickness], weights)
 
     # Load proportional to chord, normalized to the limit load on one wing.
     chord_integral = sum(c * step for c in chord)

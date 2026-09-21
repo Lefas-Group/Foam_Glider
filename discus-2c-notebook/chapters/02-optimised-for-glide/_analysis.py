@@ -245,7 +245,7 @@ def baseline_setup():
     }
 
 
-def constrained_redesign(setup=None):
+def constrained_redesign(setup=None, subdivisions=1):
     """
     The redesign that cannot exploit the model, built the same way every time.
 
@@ -263,5 +263,37 @@ def constrained_redesign(setup=None):
     setup = baseline_setup() if setup is None else setup
     floor = float(STATION_C[-1] * setup["speed"] / KINEMATIC_VISCOSITY)
     design = optimise(setup["limits"], washout_monotone=True,
-                      reynolds_floor=floor, mass_model=True)
+                      reynolds_floor=floor, mass_model=True,
+                      subdivisions=subdivisions)
     return {**design, "reynolds_floor": floor}
+
+
+def method_verdicts(designs, setup):
+    """
+    Each aerodynamic method's verdict on each design, against the baseline aircraft.
+
+    Promoted when a second entry compared the same two methods over a list of
+    designs. Bundling it also fixes the pairing: every verdict is measured
+    against the SAME baseline, computed by the same method that judges the
+    design, which is the only way percentages from different rows mean anything.
+
+    AeroBuildup carries the drag offset fitted to it; LiftingLine is read raw,
+    because that offset corrects an error LiftingLine does not make. So compare
+    changes between rows, never absolute heights.
+
+    Costs one alpha sweep per method per design, plus one per method for the
+    baseline.
+    """
+    methods = [("AeroBuildup", asb.AeroBuildup, setup["drag_offset"], {}),
+               ("LiftingLine", asb.LiftingLine, 0.0, dict(spanwise_resolution=8))]
+    verdicts = {}
+    for label, analysis, offset, options in methods:
+        before = best_glide(analysis, AIRPLANE, setup["speed"], offset, **options)
+        verdicts[label] = [
+            (best_glide(analysis,
+                        build_airplane(design["span"], design["chords"],
+                                       design["twists"], design["fractions"]),
+                        design["speed"], offset, **options) / before - 1) * 100
+            for design in designs
+        ]
+    return verdicts
