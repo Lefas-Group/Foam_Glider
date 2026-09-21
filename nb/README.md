@@ -108,6 +108,29 @@ model, catching prose written from what the model believed rather than what came
 out. **check** deletes invalidated freezes, re-renders, and diffs values and
 figure bytes against git — what a refactor must pass.
 
+## What a render actually executes
+
+Quarto honours `freeze` on a **whole-notebook render only**. Name a target and
+every page under it executes, whatever `_freeze/` holds — so a chapter target is
+routinely *more* expensive than rendering everything. Measured on
+`glider-notebook`:
+
+```
+quarto render chapters/01-foam-glider   5 pages executed
+quarto render                           0 pages executed, all 32 cached
+```
+
+Every render says which it is doing, and why:
+
+```
+render    entry · 1 page · deadline 60 s · targeted, so the freeze is ignored · the agent asked
+render    project · 0 pages · deadline 195 s · 32 served from cache · rebuilding the site
+```
+
+`nb watch` follows those lines; `nb eval`'s `rndrs` and `pages` columns carry the
+same counts per run, because the cost of a render is the pages it executes and
+not the call.
+
 ## Testing a change
 
 `python -m nb.corpus` lints all three notebooks against recorded counts. Every

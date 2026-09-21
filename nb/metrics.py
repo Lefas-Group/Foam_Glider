@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS runs (
     solve_seconds          REAL,
     first_pass_violations  INTEGER,  -- write only; the eval
     lint_calls             INTEGER,  -- times the model asked lint before stopping
+    renders                INTEGER,  -- quarto renders this phase asked for
+    pages_rendered         INTEGER,  -- pages those renders actually executed
     verify_findings        INTEGER,  -- write only
     outcome                TEXT,
     duration_s             REAL
@@ -46,7 +48,28 @@ CREATE TABLE IF NOT EXISTS runs (
 # notebook's db is missing the column and every INSERT fails with `no such
 # column`. Additive only -- old rows read NULL, which is the truth: nobody
 # counted.
-ADDED = (("lint_calls", "INTEGER"),)
+ADDED = (("lint_calls", "INTEGER"),
+         ("renders", "INTEGER"),
+         ("pages_rendered", "INTEGER"))
+
+
+def migrate(con):
+    """
+    Bring an existing db up to the current column list. Idempotent.
+
+    Shared with READERS, not just writers. `nb eval` opened the db directly and
+    selected the current columns, so a notebook whose last run predated a column
+    failed with `no such column` -- the additive scheme protects the INSERT and
+    left the SELECT to find out. A reader that adds a column it is about to read
+    as NULL is doing the same thing the writer does, one step earlier.
+    """
+    con.execute(SCHEMA)
+    for col, typ in ADDED:
+        try:
+            con.execute(f"ALTER TABLE runs ADD COLUMN {col} {typ}")
+        except sqlite3.OperationalError:
+            pass                      # already there
+    return con
 
 
 def _db(notebook):
@@ -58,13 +81,7 @@ def _db(notebook):
     # `database is locked`. Both are per-connection and idempotent.
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA busy_timeout=5000")
-    con.execute(SCHEMA)
-    for col, typ in ADDED:
-        try:
-            con.execute(f"ALTER TABLE runs ADD COLUMN {col} {typ}")
-        except sqlite3.OperationalError:
-            pass                      # already there
-    return con
+    return migrate(con)
 
 
 class Run:
@@ -79,7 +96,7 @@ class Run:
             question=question, chapter="", entry_stem="", turns=0,
             prompt_tokens=0, cached_tokens=0, output_tokens=0, solves=0,
             solve_seconds=0.0, first_pass_violations=None, lint_calls=0,
-            verify_findings=None,
+            renders=0, pages_rendered=0, verify_findings=None,
             outcome="incomplete", duration_s=0.0)
 
     def turn(self, resp):

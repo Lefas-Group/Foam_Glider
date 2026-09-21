@@ -71,7 +71,9 @@ def check(notebook, chapter, stem, entry_path=None, render_first=True):
     from google.genai import types
 
     if render_first and entry_path:
-        out = verifiers.render(notebook, str(entry_path.relative_to(notebook.root)))
+        out = verifiers.render(
+            notebook, str(entry_path.relative_to(notebook.root)),
+            why="verify reads the freeze, so it must be current")
         if "FAILED" in out:
             # RENDER_FAILED, not a bare note: the caller retries this one and
             # not the other skip. A page that does not build is a code error the

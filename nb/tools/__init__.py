@@ -69,9 +69,17 @@ def native_declarations():
               {"chapter": S}, ["chapter"]),
 
         _decl("render",
-              "quarto render. Target a single entry path while iterating; the "
-              "whole notebook is slow.",
-              {"target": dict(S, description="Path relative to the notebook root")}),
+              "quarto render. Target the ONE entry you are iterating on. A "
+              "target is not a filter over the freeze -- quarto honours the "
+              "freeze on a whole-notebook render ONLY, so naming a CHAPTER "
+              "re-executes every page in it, which is usually slower than "
+              "rendering the whole notebook. Measured: `render "
+              "chapters/01-foam-glider` ran 5 pages in 110 s; `render` with no "
+              "target ran none, all cached.",
+              {"target": dict(S, description=(
+                  "Path relative to the notebook root. One .qmd while "
+                  "iterating; empty for the whole notebook. A chapter "
+                  "directory is almost never what you want"))}),
 
         _decl("check",
               "The full gate: lint, discard invalidated freezes, render, lint "
@@ -191,7 +199,8 @@ def build(session, fs, phase=None):
         "probe": lambda question, chapter=None, budget_s=None: probe.run_probe(
             nb, chapter or session.chapter, question, session, budget_s),
         "lint": lambda chapter: verifiers.lint_chapter(nb, chapter, session),
-        "render": lambda target="": verifiers.render(nb, target),
+        "render": lambda target="": verifiers.render(
+            nb, target, why="the agent asked", session=session),
         "check": lambda chapter="", force_all=False: verifiers.check(
             nb, chapter, force_all),
         "api_search": lambda query, kind="all": api.api_search(query, kind),

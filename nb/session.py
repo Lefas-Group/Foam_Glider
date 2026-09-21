@@ -34,6 +34,11 @@ class Session:
         self.phase = None
         self.solves = 0
         self.solve_seconds = 0.0
+        # Renders, and the pages they actually executed. Counted because the
+        # cost of a render is the pages, not the call: a chapter target and an
+        # entry target are one render each and sixteen pages against one.
+        self.renders = 0
+        self.pages_rendered = 0
         # Probe wall clock: a pool the agent spends from, not a per-probe cap.
         self.probe_pool = probe_pool
         self.probe_spent = 0.0
@@ -58,6 +63,13 @@ class Session:
 
     def record_probe(self, seconds):
         self.probe_spent += seconds
+
+    def record_render(self, pages):
+        self.renders += 1
+        self.pages_rendered += pages
+        if self.metrics is not None:
+            self.metrics.set(renders=self.renders,
+                             pages_rendered=self.pages_rendered)
 
     @property
     def probe_left(self):

@@ -76,11 +76,19 @@ def site(notebook, force=False, verbose=True, page=None,
     # second -- leaving the notebook's index and sidebar stale and no obvious
     # reason why.
     from ..locks import render_lock
+    from ..tools.verifiers import pages, render_plan
     for attempt in (1, 2):
         with render_lock(notebook) as got:
             if not got:
                 say("  site      proceeding without the lock — timed out "
                     "waiting for another render")
+            # The same announce `verifiers.render` makes, for the same reason:
+            # this is the WIDEST render in the system and was the only one that
+            # said nothing at all about what it was about to do.
+            scope, todo, deadline, plan_why = render_plan(notebook.root,
+                                                          notebook.root)
+            say(f"  site      {scope} · {pages(len(todo))} · "
+                f"deadline {deadline:.0f} s · {plan_why} · rebuilding the site")
             r = lint.render_quarto(notebook.root, notebook.root,
                                    cwd=notebook.root)
         if r.returncode == 0:

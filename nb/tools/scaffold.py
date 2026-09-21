@@ -14,6 +14,7 @@ import re
 import shutil
 
 from ..config import SCAFFOLD
+from ..log import say
 
 NAME = re.compile(r"^\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$")
 
@@ -271,7 +272,14 @@ def create_chapter(notebook, name, title, defines="", claim=True,
     # chapter would leave the front page serving an N-1 node diagram from its
     # own freeze, silently. Deleting the freeze here makes the next render
     # rebuild it, by construction rather than by a rule.
-    shutil.rmtree(notebook.root / "_freeze" / "index", ignore_errors=True)
+    _index_freeze = notebook.root / "_freeze" / "index"
+    _had = _index_freeze.exists()
+    shutil.rmtree(_index_freeze, ignore_errors=True)
+    # Said out loud, because a deleted freeze is work the NEXT render pays for
+    # and nothing connected the two: the book index re-executing was the one
+    # unexplained page in a later render's count.
+    say(f"  freeze    _freeze/index/ {'deleted' if _had else 'absent'} — "
+        f"create_chapter; the book index re-executes on the next render")
     _sidebar_add(notebook, name)
 
     what = (f"claimed the empty scaffold chapters/{stub}/ as chapters/{name}/"

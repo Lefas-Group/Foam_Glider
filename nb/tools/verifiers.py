@@ -115,7 +115,64 @@ def is_clean(notebook, chapter):
     return not blocking, blocking
 
 
-def render(notebook, target=""):
+def pages(n):
+    """`1 page` / `5 pages`. A count the reader trips over is a count reread."""
+    return f"{n} page" if n == 1 else f"{n} pages"
+
+
+def pages_of(root):
+    """
+    Every page a render can execute, by the same rule `lint` enumerates them:
+    `chapters/*/*.qmd`, minus the leading-underscore includes.
+
+    Here rather than in `lint` so the vendored checker keeps its own copy of
+    this rule and nothing has to stay in step with an import.
+    """
+    chapters = sorted(d for d in (root / "chapters").iterdir() if d.is_dir())
+    return [q for c in chapters for q in sorted(c.glob("*.qmd"))
+            if not q.name.startswith("_")]
+
+
+def render_plan(root, path):
+    """
+    (scope, pages, deadline, why) -- what this render will do, and why.
+
+    Everything about the TARGET comes from `will_execute(root, path)` and
+    `render_deadline(root, path)`, both pure functions of the same two
+    arguments, and `render_quarto` calls the second again with those same
+    arguments under the same lock -- so the deadline announced is the deadline
+    enforced, by construction rather than by agreement. This line has been wrong
+    twice, both times by answering one question with another question's number,
+    and that is the failure the constraint exists to prevent.
+
+    The project comparison IS a second call, deliberately. It answers a
+    different question -- "what would a project render have executed?" -- and is
+    reported as its own clause rather than folded into the target's count.
+    """
+    import lint
+    todo = lint.will_execute(root, path)
+    deadline = lint.render_deadline(root, path)
+    if path == root:
+        # The one case where the freeze counts, which is why the reason here is
+        # about what was SPARED rather than about what is being re-run.
+        cached = len(pages_of(root)) - len(todo)
+        why = f"{cached} served from cache" if cached else "nothing frozen yet"
+        return "project", todo, deadline, why
+
+    # Quarto honours `freeze` on a PROJECT render only. Name a target and every
+    # page under it executes, whatever `_freeze/` holds -- so a chapter target
+    # is routinely more expensive than rendering the whole notebook, which is
+    # the opposite of the intuition and invisible from the count alone.
+    scope = "entry" if path.is_file() else "chapter"
+    why = "targeted, so the freeze is ignored"
+    project = len(lint.will_execute(root, root))
+    if len(todo) > project:
+        why += (" — a whole-notebook render would execute "
+                + (f"{project}" if project else "nothing"))
+    return scope, todo, deadline, why
+
+
+def render(notebook, target="", why="", session=None):
     """
     `quarto render`. Target may be a chapter or a single entry path; empty
     renders the whole notebook.
@@ -123,6 +180,16 @@ def render(notebook, target=""):
     Quarto's freeze tracks the page, not its includes, so this alone will happily
     serve a cached result for an entry whose `_model.py` changed underneath it.
     That is what `check` is for.
+
+    `why` is the CALLER's reason, printed beside the scope. `check.py` has
+    reported both since it was written ("set aside 2 chapter(s) … —
+    _analysis.py changed") and every other render path reported neither, so a
+    reader watching a run go quiet for 110 s could not tell an honest page from
+    a needless chapter.
+
+    `session` is optional and only counts: renders, and the pages they actually
+    executed. The pages are the cost, not the call -- a chapter target and an
+    entry target are one render each, and sixteen pages against one.
     """
     path = notebook.root if not target else notebook.root / target
     # Deadlined: a wedged Jupyter kernel used to hang here forever, the same
@@ -138,19 +205,18 @@ def render(notebook, target=""):
     # 90 s against the 60 s actually enforced, which is worse than saying
     # nothing, since `nb watch` sizes its staleness warning on this line.
     def _announce():
-        # SIZED INSIDE THE LOCK, immediately before the render it describes,
-        # and from `will_execute` -- the SAME call `render_quarto` deadlines on.
+        # SIZED INSIDE THE LOCK, immediately before the render it describes.
         # This line used to count `unfrozen` and say "0 page(s) to execute"
         # against a render that then died naming three. Two faults, both found
         # on 2026-09-18: a targeted render ignores the freeze, so nothing under
         # it is ever spared; and the kill message counted the whole project
         # while this counted only the target. Two questions, one answer
-        # printed. Both sides now ask `will_execute`, which is also what
-        # `render_quarto` deadlines on.
-        deadline = lint.render_deadline(notebook.root, path)
-        todo = lint.will_execute(notebook.root, path)
-        say(f"  render    deadline {deadline:.0f} s "
-            f"({len(todo)} page(s) to execute)")
+        # printed. See `render_plan` for what keeps them one question now.
+        scope, todo, deadline, plan_why = render_plan(notebook.root, path)
+        reason = f"{plan_why} · {why}" if why else plan_why
+        say(f"  render    {scope} · {pages(len(todo))} · "
+            f"deadline {deadline:.0f} s · {reason}")
+        return len(todo)
 
     # UNDER A LOCK, and retried once. Two renders on one project fail four
     # trials out of four, on `_freeze/site_libs/`, which the Quarto project
@@ -169,8 +235,10 @@ def render(notebook, target=""):
             if not got:
                 say("  render    proceeding without the lock — timed out "
                     "waiting for another render")
-            _announce()
+            executed = _announce()
             r = lint.render_quarto(path, notebook.root, cwd=notebook.root)
+        if session is not None:
+            session.record_render(executed)
         out = (r.stdout or "") + (r.stderr or "")
         if r.returncode == 0:
             return tail(f"render ok.\n{out}", 2000)
