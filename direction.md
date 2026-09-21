@@ -1,9 +1,10 @@
 # Directing a run
 
-**Status: Stages 1-6 done.** `b81da9a` render scope, `cc5f348` `consult`,
+**Status: Stages 1-7 done.** `b81da9a` render scope, `cc5f348` `consult`,
 `faa1c01` `verify`, `e719253` always-detached, `82aaae7` budgets, `97ac681`
-visuals, `81e613b` declaration, `b2866db` fork provenance — on branch
-`nb-render-scope`. Stage 7 unstarted; Stage 8 scoped and not recommended yet. Every number was measured on
+visuals, `81e613b` declaration, `b2866db` fork provenance, `f4ac433` structured
+inputs — on branch `nb-render-scope`, nothing pushed. Stage 8 is scoped and
+**not recommended yet**; rule 31b was designed and dropped (see Stage 6). Every number was measured on
 2026-09-21 against the three notebooks, the eight run directories in
 `glider-notebook/_scratch/runs/`, and the 65 rows in their metrics databases;
 re-measure before starting, because two stages are calibrated against counts that
@@ -871,6 +872,22 @@ rereading the comment.
 ---
 
 # Stage 7 — Structured inputs, and inheritance computed from them
+
+**Done — `f4ac433`.** The notebook front page had to declare its own level
+first: it stated what the aircraft is in prose, so notebook-scope inheritance
+found nothing and an unforked chapter inherited zero items where it should
+inherit five. The scaffold ships those callouts now.
+
+`nb inputs` has no "true of every chapter" section. The intersection is empty
+because the same decision is worded differently in each index — "Span 300 mm,
+fixed tip to tip" against "**Span**: 300 mm, fixed tip to tip" — and matching
+loosely would be a guess printed as a fact. Wording them identically where they
+ARE identical is what would make that section possible, and is the remaining
+half of this stage's retrofit.
+
+The worked case came out exactly as designed: forking the 3 mm chapter back to
+5 mm inherits "Foam thickness: 3 mm" from its parent, which is precisely wrong
+and precisely what the human strikes at the gate.
 
 After Stage 6, because computed inheritance reads the parent's declared set and
 the parent is named by `_fork.yml`. Stage 5 made declarations happen; this makes
