@@ -27,7 +27,7 @@ biplane_sink = evaluate_biplane(verbose=False)
 **Answer.** No. The fully optimized biplane achieves a sink rate of `{python} f"{biplane_sink:.3f}"` m/s, which is worse than the `{python} f"{monoplane_sink:.3f}"` m/s achieved by the [monoplane](2026-09-16-01-what-sink-rate-is-achieved-when-all-geometry-parameters-are-optimized.qmd). Because 3 mm foam already withstands 1g flight loads easily, the structural bracing advantage of a biplane is not needed, and the aerodynamic penalty of increased wetted area and interference drag dominates.
 
 ::: {.callout-tip}
-## Specified
+## New user specifications
 
 Asked of the user, 2026-09-18:
 

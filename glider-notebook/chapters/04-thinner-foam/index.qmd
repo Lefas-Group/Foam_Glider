@@ -66,26 +66,16 @@ if _fk.exists():
 A redesign of the glider for 3 mm foam instead of 5 mm foam. The foam area density is scaled proportionally, the airfoils are changed to 3% thickness (NACA 4403 and NACA 0003), and the doubled-foam fuselage width is reduced to 6 mm.
 
 ::: {.callout-tip}
-## Specified
-
-Asked of the user, 2026-09-15:
+## New user specifications
 
 1. **Foam thickness**: 3 mm.
-
-Inherited from earlier models:
-
-2. **Span 300 mm**, fixed tip to tip.
-3. **Objective**: minimum sink rate in trimmed glide.
-4. **Fuselage**: 200 mm long, 15 mm high, doubled.
-5. **Wing sweep**: constant quarter chord.
 :::
 
 ::: {.callout-note}
-## Assumed
+## New assumptions
 
 1. **Foam density**: scaled linearly from 5 mm foam.
-2. **Tail dimensions**: remain 100×30 mm and 50×30 mm.
-3. **Airfoil thickness**: 3% to match foam.
+2. **Airfoil thickness**: 3% to match foam.
 :::
 
 ## Questions asked here

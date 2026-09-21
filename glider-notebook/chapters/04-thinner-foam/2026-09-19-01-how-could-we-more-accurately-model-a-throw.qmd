@@ -90,7 +90,7 @@ theta_hist = np.degrees(res.y[4])
 **Answer.** A 3-DOF rigid body simulation captures the glider's true trajectory, revealing that an 8 m/s level throw results in a continuous dive rather than settling. By evaluating a vectorized aerodynamic surrogate over velocity and angle of attack, the simulation models off-trim forces immediately after release rather than assuming instant trim, as shown in (@fig-pitch-transient).
 
 ::: {.callout-note}
-## Assumed
+## New assumptions
 1. **Pitch moment of inertia**: estimated as 100 mm disc.
 :::
 

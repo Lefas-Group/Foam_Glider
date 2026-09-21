@@ -74,19 +74,13 @@ rate in trimmed glide with `AeroBuildup`.
 - **Held fixed:** the tail, the sections, and the sheet it is all cut from.
 
 ::: {.callout-tip}
-## Specified
+## New user specifications
 
-Asked of the user, 2026-09-13:
-
-1. **Span 300 mm**, fixed tip to tip.
-2. **Foam 5 mm, 174.4 g/m²** sheet throughout.
-3. **Objective: minimum sink rate** in trimmed glide.
+1. **Foam 5 mm, 174.4 g/m²** sheet throughout.
 :::
 
 ::: {.callout-note}
-## Assumed
-
-No owner yet — each is a candidate for its own entry:
+## New assumptions
 
 1. **Tail: H 100×30 mm, V 50×30 mm**, fixed.
 2. **Sections NACA4405 and NACA0005**, standing in for foam.

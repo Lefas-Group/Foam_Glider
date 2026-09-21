@@ -36,6 +36,10 @@ True of every chapter, and inherited by any new one:
 # because rule 12 cannot -- the root index belongs to no chapter, so nothing
 # else would notice a seventh node was missing.
 #
+# `flowchart`, not `graph`: the same diagram, laid out by the current engine
+# rather than the legacy one, which routes edges and packs nodes better and is
+# what mermaid's own docs use now.
+#
 # TOP DOWN. Sideways was tried and the lineage is currently a straight line --
 # six chapters, no branching -- so LR drew a 1900px strip that shrank the text
 # to nothing and scrolled the page sideways, which `styles.css` exists to
@@ -93,7 +97,7 @@ _id = lambda s: "c" + re.sub(r"[^0-9A-Za-z]", "", s)
 # and the reason the "Where to start" paragraph could go -- the picture says it.
 _leaves = {c.name for c in _chapters} - set(_parent.values())
 print("```{mermaid}")
-print("graph TD")
+print("flowchart TD")
 print("  classDef node fill:#fff,stroke:#9aa0a6,stroke-width:2px")
 print("  classDef head fill:#e8f0fe,stroke:#4285f4,stroke-width:3px")
 for _c in _chapters:

@@ -42,7 +42,7 @@ safety_factor = yield_stress / max_stress
 **Answer.** The 3 mm wing easily survives the 1g flight loads of an ideal launch. The root bending stress is about [`{python} f"{max_stress / 1000:.1f}"`]{.key} kPa, providing a safety factor over [`{python} f"{safety_factor:.0f}"`]{.key} against the foam's assumed yield strength.
 
 ::: {.callout-note}
-## Assumed
+## New assumptions
 1. **Foam yield stress: 300 kPa**, determines safety factor.
 :::
 

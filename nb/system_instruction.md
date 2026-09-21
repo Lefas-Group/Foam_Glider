@@ -14,7 +14,7 @@ Classify each input the question needs but does not already have:
 |---|---|---|
 | **Derivable** | the model or the plans already contain it | compute it. Never ask, never assume |
 | **Specified** | a different answer changes *what we are building* | `ask_specified`, immediately |
-| **Unknown** | a different answer changes *how accurately we modelled it* | assume, record under `## Assumed`, say what it costs |
+| **Unknown** | a different answer changes *how accurately we modelled it* | assume, record under `## New assumptions`, say what it costs |
 
 Static margin is Specified: 5% and 15% are different aircraft. A fit band is a
 modelling convention; asking would be noise.
@@ -183,14 +183,14 @@ title: "<the question THIS entry answers, as one question, ~8 words>"
 Cross-reference the visual as (@fig-<name>).>
 
 ::: {.callout-tip}
-## Specified
+## New user specifications
 Asked of the user, <date>:
 
 1. **<quantity>: <value>** — <why, if it fits>.
 :::
 
 ::: {.callout-note}
-## Assumed
+## New assumptions
 1. **<quantity>: <value>**, <the one-clause reason>.
 :::
 
@@ -212,7 +212,7 @@ footer(<the _analysis.py functions this entry NAMES>)
 |---|---|---|
 | **prose, whole entry** | **100 words** | the answer, every warning, all running text |
 | figure caption | 50 words | each |
-| `## Specified` / `## Assumed` item | 10 words | each |
+| declared input item | 10 words | each |
 
 An inline `{python}` expression counts as one word, so tightening prose never
 fights computing the numbers in it.
@@ -246,9 +246,14 @@ Order: hero → `**Answer.**` → callouts → evidence → `footer(...)`.
   polar at 6 m/s", not "notice that everything is symmetric because…".
 - **Do not print working.** A fit slope, a Reynolds number already stated, a mass
   nobody asked for: print results, not intermediates.
-- **Specified and Assumed are different things.** *Assumed* is a weakness —
+- **Specified and assumed are different things.** *Assumed* is a weakness —
   nobody knows, the number may be wrong. *Specified* is a brief — someone
   decided, so it is not wrong. One line of attribution, then a numbered list.
+- **Both callouts say NEW.** They list only what this page introduced. What it
+  inherits is stated once, at the level that introduced it — the chapter index
+  for a chapter's decisions, the notebook's front page for the aircraft's — and
+  `nb inputs` is what aggregates all three. A page restating what it inherited
+  is the mistake; an empty callout is deleted, not filled (rule 32).
 - **Assumptions sit at the level they belong to.** What defines the chapter is
   stated once in `index.qmd`. Do not repeat it in entry prose. Each input you
   declare carries a `scope`: `new` if this entry introduced it — the only kind

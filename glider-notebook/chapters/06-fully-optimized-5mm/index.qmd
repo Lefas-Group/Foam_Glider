@@ -66,25 +66,16 @@ if _fk.exists():
 A 300 mm span glider cut from 5 mm foam where almost all geometry (sweep, dihedral, tail area, boom length, tail incidence) is optimized for minimum sink rate in trimmed glide. Adds stability constraints: 10% minimum static margin, plus lateral and directional stability.
 
 ::: {.callout-tip}
-## Specified
-
-Asked of the user, 2026-09-17:
+## New user specifications
 
 1. **Foam thickness**: 5 mm.
-
-Inherited from earlier models:
-
-2. **Minimum static margin**: 10%, to size the tail.
-3. **Span**: 300 mm, fixed tip to tip.
-4. **Objective**: minimum sink rate in trimmed glide.
 :::
 
 ::: {.callout-note}
-## Assumed
+## New assumptions
 
-1. **Directional and lateral stability bounds**: `0.0005`, for IPOPT.
-2. **Foam density**: 174.4 g/m² for 5 mm foam.
-3. **Airfoil thickness**: 5% to match foam.
+1. **Foam density**: 174.4 g/m² for 5 mm foam.
+2. **Airfoil thickness**: 5% to match foam.
 :::
 
 ## Questions asked here

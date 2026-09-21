@@ -22,7 +22,7 @@ distance = opt_v * np.cosd(opt_gamma) * flight_time
 **Answer.** From a launch height of `{python} f"{h:.0f}"` m, the optimised glider flies for `{python} f"{flight_time:.2f}"` s and covers `{python} f"{distance:.2f}"` m horizontally. The comparison to the previous design is omitted because the unoptimised initial guess does not achieve trimmed flight.
 
 ::: {.callout-note}
-## Assumed
+## New assumptions
 1. **Launch height: `{python} f"{h:.0f}"` m**, needs starting altitude.
 :::
 

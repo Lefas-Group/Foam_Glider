@@ -66,21 +66,9 @@ if _fk.exists():
 The zero-sweep line of the wing is moved from the leading edge to the quarter chord. Otherwise identical to the 02-fuselage-model.
 
 ::: {.callout-tip}
-## Specified
-
-From the question and inherited, 2026-09-14:
+## New user specifications
 
 1. **Wing sweep:** zero at the quarter chord.
-2. **Fuselage:** 5 mm foam, doubled, 15x200 mm.
-3. **Objective:** minimum sink rate in trimmed glide.
-:::
-
-::: {.callout-note}
-## Assumed
-
-1. **Tail:** H 100×30 mm, V 50×30 mm, fixed.
-2. **Sections:** NACA4405 and NACA0005, standing in for foam.
-3. **Fuselage width:** 10 mm, doubled 5 mm foam.
 :::
 
 ## Questions asked here

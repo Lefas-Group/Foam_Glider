@@ -28,7 +28,7 @@ sink_rate_baseline = 0.277 # from 2026-09-16-01-what-sink-rate-is-achieved-when-
 **Answer.** Constraining the leading edge sweep to be positive results in an optimal sweep that hits the bound exactly at `{python} f"{sweep:.1f}"`°. The sink rate increases only slightly, from `{python} f"{sink_rate_baseline:.3f}"` m/s in [the unconstrained optimization](2026-09-16-01-what-sink-rate-is-achieved-when-all-geometry-parameters-are-optimized.qmd) to `{python} f"{sink_rate:.3f}"` m/s.
 
 ::: {.callout-tip}
-## Specified
+## New user specifications
 Asked of the user, 2026-09-16:
 
 1. **Sweep direction**: min_sweep=0, backwards only.

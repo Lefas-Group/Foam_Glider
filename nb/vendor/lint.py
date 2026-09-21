@@ -32,7 +32,7 @@ entry can be written compliant rather than corrected afterwards.
      5  no `for … in range(…)` around an aero solve
      6  prose <= 100 words for the whole entry, warnings included
      7  figure caption <= 50 words
-     8  each Specified / Assumed item <= 10 words
+     8  each declared input item <= 10 words
      9  one prose section -- no second `**Heading.**` or `##`
     10  a sibling entry is linked, never named in bare prose
     11  `_notebook.py` and `_probe_base.py` byte-match the skill's copies
@@ -380,15 +380,20 @@ def body_prose(text):
     """
     Everything the reader reads straight through, across the whole entry.
 
-    Only `## Specified` and `## Assumed` are removed -- they are an index of
-    inputs with their own per-item budget. A `callout-warning` stays in: it is
+    Only the two INPUT callouts are removed -- they are an index of inputs with
+    their own per-item budget. Two vocabularies are recognised because the
+    corpus holds two: `Specified`/`Assumed` in the notebooks written before the
+    headings were renamed, and `New user specifications`/`New assumptions`
+    after. The frozen notebooks keep theirs, so a checker that reads only the
+    new names would stop stripping their callouts and charge every word of
+    them to rule 6. A `callout-warning` stays in: it is
     addressed to the reader in sentences, and putting a caveat in a coloured box
     does not make it shorter. Hero blocks stay in too; a headline is words.
     """
     t = re.sub(r"^---\n.*?\n---\n", "", text, flags=re.S)
     # Drop only the two input callouts, by title, leaving warnings in place.
     t = re.sub(
-        r"^:{3,}\s*\{\.callout-\w+\}\s*\n\s*##\s*(?:Specified|Assumed)\b"
+        r"^:{3,}\s*\{\.callout-\w+\}\s*\n\s*##\s*(?:" + INPUT_CALLOUTS + r")\b"
         r".*?^:{3,}\s*$", "", t, flags=re.S | re.M)
     t = re.sub(r"```\{python\}.*?```", "", t, flags=re.S)
     t = re.sub(r"\{\{<[^>]*>\}\}", "", t)
@@ -1176,6 +1181,19 @@ def unfrozen(root, chapters):
                  / "execute-results" / "html.json")
             if not f.exists():
                 out.append(page)
+                continue
+            # A freeze OLDER than the page it froze is stale, and Quarto
+            # re-executes it. Checking only for absence sized a project render
+            # at "nothing to execute" right after seven entries were edited,
+            # and the render was killed at 200 s having re-run all of them.
+            # Same fault as the one this function's docstring already records:
+            # answering "is there a freeze" when the question is "will this
+            # page run".
+            try:
+                if page.stat().st_mtime > f.stat().st_mtime:
+                    out.append(page)
+            except OSError:
+                out.append(page)
     return out
 
 
@@ -1384,7 +1402,7 @@ def _budget_rules(root, chapters, entries):
         # design. `footer()` prints them now, from the declarations themselves,
         # so the page still shows them and the callout is free again.
         spec = "".join(body for title, body in callouts_of(e.read_text())
-                       if title == "Specified")
+                       if title in ("Specified", "New user specifications"))
         named = sorted(n for n in BUDGET_NAMES if n in spec)
         if named:
             problems.append(
@@ -1630,6 +1648,13 @@ def _transcribed(root, chapters, entries):
 # chapters sit near 66%. The threshold only has to separate those.
 FORK_SIMILARITY = 0.85
 
+# The two input callouts, under both names they have gone by. The rename to
+# "New ..." came with the rule that a page lists only what IT introduced --
+# what it inherits is stated once, one level up, and aggregated by `nb inputs`.
+INPUT_TITLES = ("Specified", "Assumed",
+                "New user specifications", "New assumptions")
+INPUT_CALLOUTS = "|".join(INPUT_TITLES)
+
 # What `forking.md` asks a forked file's header to carry. Checked by substring
 # because the header is prose -- the point is that a reader can answer "what
 # was this taken from, and what was meant to change", not that it match a form.
@@ -1705,7 +1730,7 @@ def _empty_callouts(root, chapters, entries):
         except OSError:
             continue
         for title, body in callouts_of(text):
-            if title not in ("Specified", "Assumed"):
+            if title not in INPUT_TITLES:
                 continue
             words = re.sub(r"[^a-z0-9]+", " ", body.lower()).split()
             if words in ([], ["none"]):
@@ -2296,7 +2321,7 @@ def check(root, chapters):
                         f"what is plotted, not what to conclude from it"))
 
         for title, body in callouts_of(text):
-            if title not in ("Specified", "Assumed"):
+            if title not in INPUT_TITLES:
                 continue
             for item in re.findall(r"^\s*\d+\.\s+(.*(?:\n(?!\s*\d+\.).*)*)",
                                    body, re.M):

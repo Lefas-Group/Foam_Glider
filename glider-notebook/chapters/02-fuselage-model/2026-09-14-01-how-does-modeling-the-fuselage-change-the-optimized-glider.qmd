@@ -32,7 +32,7 @@ c_root_bound = 0.15
 **Answer.** Adding the fuselage increases the glider's mass, which drives the wing root chord to its maximum bound to carry the extra weight. This keeps the sink rate penalty to a minimum.
 
 ::: {.callout-tip}
-## Specified
+## New user specifications
 Asked of the user, 2026-09-14:
 
 1. **Fuselage: 5 mm foam**, doubled up.
@@ -40,7 +40,7 @@ Asked of the user, 2026-09-14:
 :::
 
 ::: {.callout-note}
-## Assumed
+## New assumptions
 1. **Fuselage width: 10 mm**, doubled 5 mm foam.
 :::
 
