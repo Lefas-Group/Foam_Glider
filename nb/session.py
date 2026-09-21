@@ -6,7 +6,7 @@ boundary. This exists so the handlers that ask the human, and the handlers that
 spend solve seconds, can agree on what has happened so far.
 """
 
-from .config import MAX_CONSULTS, PROBE_POOL
+from .config import PROBE_POOL
 
 
 class Session:
@@ -25,7 +25,6 @@ class Session:
         # refactor gate, which otherwise names a changed function and nothing
         # else -- leaving the user to run `git diff` to judge it.
         self.refactor_notes = {}
-        self.consults = 0
         # Which phase owns this session. Set by `phases.common.setup`, and read
         # by anything whose MESSAGE differs between the two -- the probe pool
         # running out tells the ask phase to propose, and there is no `propose`
@@ -79,7 +78,3 @@ class Session:
 
     def record_answer(self, name, value):
         self.asked[name] = value
-
-    @property
-    def consults_left(self):
-        return MAX_CONSULTS - self.consults

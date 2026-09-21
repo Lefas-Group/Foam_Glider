@@ -134,11 +134,6 @@ def native_declarations():
                "options": dict(S, description="Plausible values, if that helps")},
               ["name", "why", "kind"]),
 
-        _decl("consult",
-              "Ask the user for open-ended guidance -- not a Specified input and "
-              "not a route decision. Use sparingly.",
-              {"question": S, "why": S}, ["question", "why"]),
-
         _decl("bash",
               "Run an allowlisted command: uv run quarto, uv run python, "
               "git show/status/diff/log. The escape hatch, not the default path.",
@@ -210,7 +205,6 @@ def build(session, fs, phase=None):
             nb, chapter, stem, name),
         "ask_specified": lambda name, why, kind="specified", options="": (
             interact.ask_specified(session, name, why, kind, options)),
-        "consult": lambda question, why: interact.consult(session, question, why),
         "bash": lambda command: shell.bash(nb, command),
         "propose": lambda **kw: interact.propose(session, **kw),
         "request_refactor": lambda chapter, why: interact.request_refactor(

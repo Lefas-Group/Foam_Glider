@@ -78,7 +78,12 @@ INCLUDE_THOUGHTS = True
 # genuinely hard entry or a blind spot in the heuristic, and both are worth
 # opening. `python -m nb eval <notebook>` lists outcomes by run.
 MAX_TURNS = 60          # per agent loop
-MAX_CONSULTS = 3        # open-ended guidance can loop; a Specified input cannot
+# Rounds of "correct an assumption, re-probe, propose again" at the gate. It was
+# MAX_CONSULTS, and bounded two unrelated things: the `consult` tool, which was
+# never once called in 33 recorded ask runs, and this loop. Deleting the tool
+# without renaming would have left the loop uncapped by a constant that no
+# longer described it.
+MAX_CORRECTION_ROUNDS = 3
 MAX_LINT_ATTEMPTS = 3   # write -> lint -> write
 MAX_VERIFY_ATTEMPTS = 2  # write -> render -> verify -> write
 # write -> render -> write, on a page that does not BUILD. Its own budget, not a

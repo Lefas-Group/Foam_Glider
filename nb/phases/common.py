@@ -57,7 +57,7 @@ CALL_ARG = {
     "probe": "question", "bash": "command",
     "api_search": "query", "api_signature": "path",
     "read_reference": "name", "read_figure": "stem",
-    "ask_specified": "name", "consult": "question",
+    "ask_specified": "name",
     "declare_refactor": "function", "request_refactor": "why",
     "propose": "title",
 }

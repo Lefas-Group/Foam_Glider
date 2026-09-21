@@ -8,7 +8,7 @@ there is no pause the process did not choose.
 
 import sys
 
-from ..config import MAX_CONSULTS, MAX_TURNS, PROBE_POOL
+from ..config import MAX_CORRECTION_ROUNDS, MAX_TURNS, PROBE_POOL
 from ..loop import Stopped, Terminal, run
 from ..session import Session
 from ..tools.interact import (ask_pool, ask_render_ceiling, ask_stuck,
@@ -171,7 +171,7 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
             # changed METHOD cannot. Writing from them would launder a rejected
             # assumption into an unchanged answer, which is worse than never
             # having asked.
-            for _ in range(MAX_CONSULTS):
+            for _ in range(MAX_CORRECTION_ROUNDS):
                 corrected = confirm_assumptions(proposal)
                 # ALWAYS, not only when corrected: `propose` wrote the file
                 # before raising, so the accepted-as-stated case still needs

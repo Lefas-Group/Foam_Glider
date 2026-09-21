@@ -1,7 +1,7 @@
 """
 The three tools that talk to the human, and the one that ends the run.
 
-`ask_specified` and `consult` block on stdin. No machinery is needed for that:
+`ask_specified` blocks on stdin. No machinery is needed for that:
 the process is alive and you are at the terminal. This is the dividend from
 having no orchestration framework -- under one, each of these needed its own
 graph node, because a `while` loop containing an interrupt replays prior
@@ -311,17 +311,6 @@ def ask_specified(session, name, why, kind="specified", options=""):
                 "If answering it needs computation, it is a question in its own "
                 "right: probe it, answer it, then come back to the original.")
     return f"The user answered: {answer}"
-
-
-def consult(session, question, why):
-    """Open-ended guidance. Not a Specified input, not a route decision."""
-    if session.consults_left <= 0:
-        return ("Consult budget spent. Decide it yourself and say so in the "
-                "proposal's rationale.")
-    session.consults += 1
-    answer = _prompt("GUIDANCE", f"  {question}\n  ({why})",
-                     f"your view ({session.consults_left} left)")
-    return f"The user said: {answer}"
 
 
 def declare_refactor(session, function, why):
