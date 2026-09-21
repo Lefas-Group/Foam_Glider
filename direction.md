@@ -1,8 +1,8 @@
 # Directing a run
 
-**Status: Stages 1 and 2 done.** `b81da9a` render scope, `cc5f348` `consult`,
-`faa1c01` `verify`, `e719253` always-detached, on branch `nb-render-scope`.
-Stages 3-7 unstarted; Stage 8 scoped and not recommended yet. Every number was measured on
+**Status: Stages 1-3 done.** `b81da9a` render scope, `cc5f348` `consult`,
+`faa1c01` `verify`, `e719253` always-detached, `82aaae7` budgets — on branch
+`nb-render-scope`. Stages 4-7 unstarted; Stage 8 scoped and not recommended yet. Every number was measured on
 2026-09-21 against the three notebooks, the eight run directories in
 `glider-notebook/_scratch/runs/`, and the 65 rows in their metrics databases;
 re-measure before starting, because two stages are calibrated against counts that
@@ -504,6 +504,12 @@ that breaks quietly.
 ---
 
 # Stage 3 — Budgets: show the default, then let it be assigned
+
+**Done — `82aaae7`.** The detached half was worse than the plan described: the
+default was not merely unprinted, it never entered `question.json` at all, so
+the board had nothing to render even if it had wanted to. `--chapter` needed
+enforcement in `propose` as well as the brief — a flag the model can ignore
+reports the wrong chapter about as often as no flag.
 
 Pure friction. No new mechanism, no lint rule, no corpus movement. After Stage 2,
 `ask_budget` has one branch instead of two.
