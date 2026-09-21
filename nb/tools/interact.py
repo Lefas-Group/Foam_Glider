@@ -317,6 +317,28 @@ def propose(session, **fields):
             f"so in the rationale -- moving it is the caller's decision, not "
             f"yours.")
 
+    # An empty `inputs` list is a CLAIM or an omission, and nothing could tell
+    # them apart. Measured: four of eight recorded runs proposed with no inputs
+    # at all, which meant `confirm_assumptions` hit its early exit and the
+    # correction loop behind it -- the one that re-probes rather than writing
+    # from a rejected premise -- never ran. It did not decline to fire; nothing
+    # asked it to.
+    #
+    # Refused the way the claimable-stub check below is refused: a ValueError
+    # the model reads and acts on, not a schema error. The escape is explicit,
+    # because an entry that genuinely inherits everything is common and its
+    # reason belongs on the record.
+    if not proposal.inputs and not proposal.inputs_none_because.strip():
+        raise ValueError(
+            "`inputs` is empty and nothing says why. Every question either "
+            "needed something Specified (a different answer changes WHAT IS "
+            "BEING BUILT -- ask it with ask_specified), assumed something new "
+            "(a different answer changes HOW ACCURATELY it is modelled -- "
+            "record it with kind='unknown', owner='assumed'), or inherited "
+            "everything the chapter already declares. If it is the last, say "
+            "so in `inputs_none_because` in one line. Do not invent an input "
+            "to satisfy this.")
+
     unasked = [i.name for i in proposal.inputs
                if i.kind == "specified" and i.owner == "user"
                and i.name not in session.asked]

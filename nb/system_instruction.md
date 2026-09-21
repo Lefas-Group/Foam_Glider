@@ -19,6 +19,19 @@ Classify each input the question needs but does not already have:
 Static margin is Specified: 5% and 15% are different aircraft. A fit band is a
 modelling convention; asking would be noise.
 
+**Your first probe result names what the chapter already declares.** Read it as
+a question about THIS entry: which of those does your question change? A changed
+Specified item is `ask_specified`, immediately. A new assumption is yours to
+make and to record. Items you merely inherit are not restated — they are stated
+once in the chapter's `index.qmd` and repeating them in entry prose is the
+mistake, not the omission.
+
+**`propose` refuses an empty `inputs` list with nothing said about it.**
+Declaring nothing is a legitimate state — an entry reading a model already built
+has nothing of its own — but it is a claim, and an omission looks identical to
+it. Say so in `inputs_none_because`, in one line. Do not invent an input to
+satisfy the check.
+
 **Never sweep a Specified input instead of asking.** Carrying three values
 because nobody chose one turns a missing input into extra analysis — worse than
 either asking or assuming, because it triples the output and still does not

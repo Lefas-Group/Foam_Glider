@@ -40,6 +40,35 @@ PREAMBLE = (
 )
 
 
+def _inputs_notice(notebook, chapter):
+    """
+    What this chapter has already been given, and the one question about it.
+
+    Asking is voluntary and stopped happening: `ask_specified` fired in 3 of 8
+    recorded runs and half the proposals declared no inputs at all, which meant
+    `confirm_assumptions` returned early and the correction loop behind it never
+    ran. The model is poor at judging WHETHER to ask and fine at reading a list,
+    so this turns the judgement into a lookup and puts it where the lookup is
+    cheap.
+
+    Says nothing when the chapter declares nothing -- two of thirteen chapters
+    written so far, both predating the callouts. A notice with no numbers in it
+    is furniture.
+    """
+    from ..inputs import declared
+    if not chapter:
+        return ""
+    spec, asm = declared(notebook, chapter)
+    if not (spec or asm):
+        return ""
+    return (f"\n[This chapter declares {spec} Specified and {asm} Assumed "
+            f"item(s), in chapters/{chapter}/index.qmd. Which does THIS "
+            f"question change? A changed Specified item is `ask_specified`, "
+            f"now, before the next probe -- not saved for the proposal. A new "
+            f"assumption is yours to make and to record. Neither is a reason "
+            f"to re-state the ones you inherit.]")
+
+
 def run_probe(notebook, chapter, question, session=None, budget_s=None):
     """Execute `question` as Python with the chapter preloaded. Returns stdout."""
     # `_probe_base` falls back to the first chapter alphabetically when
@@ -125,6 +154,18 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
     if session is not None:
         used = time.perf_counter() - started
         session.record_probe(used)
+        # ONCE, after the first probe. Not before probing, where the model has
+        # not loaded the chapter and is being asked to classify inputs at the
+        # moment it knows least; and not at `propose`, where the pool may be
+        # spent and the whole probe already ran against a placeholder. By here
+        # it has loaded the vehicle and run one query against it, and has spent
+        # one probe rather than all of them.
+        #
+        # It costs NO TURN, because it rides a tool result the run was getting
+        # anyway -- the same shape as the ENTRY_CEILING notice below, which
+        # already tells the model to go and ask.
+        if session.probes == 1 and session.phase == "ask":
+            out += _inputs_notice(notebook, chapter or session.chapter)
         left = session.probe_left
         if left is not None:
             # To the MODEL, so the next `budget_s` is informed rather than

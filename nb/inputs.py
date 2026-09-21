@@ -64,6 +64,31 @@ def collect(notebook):
     return out
 
 
+def declared(notebook, chapter):
+    """
+    (specified, assumed) counts for ONE chapter's index.
+
+    The chapter's own declarations, not its entries': what the chapter was
+    given and what it guessed, which is the set an entry inherits rather than
+    restates (`system_instruction.md`, "assumptions sit at the level they
+    belong to"). Zero for a chapter whose index declares nothing -- two of the
+    thirteen written so far, both predating the callouts.
+    """
+    index = notebook.chapters_dir / chapter / "index.qmd"
+    try:
+        md = index.read_text()
+    except OSError:
+        return 0, 0
+    spec = asm = 0
+    for kind, body in CALLOUT.findall(md):
+        n = len(ITEM.findall(body))
+        if kind == "Specified":
+            spec += n
+        else:
+            asm += n
+    return spec, asm
+
+
 def main(argv):
     if not argv:
         print("usage: uv run --group nb python -m nb.inputs <notebook>")

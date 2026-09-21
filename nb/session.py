@@ -41,6 +41,10 @@ class Session:
         # Probe wall clock: a pool the agent spends from, not a per-probe cap.
         self.probe_pool = probe_pool
         self.probe_spent = 0.0
+        # How many probes have run. Only ever compared against 1: the
+        # first-probe notice fires once, and a bracketed block repeated every
+        # probe would be the third competing with two that already matter.
+        self.probes = 0
 
     def record_cost(self, solves, seconds):
         self.solves += solves
@@ -61,6 +65,7 @@ class Session:
         return min(float(asked), left) if asked else left, left
 
     def record_probe(self, seconds):
+        self.probes += 1
         self.probe_spent += seconds
 
     def record_render(self, pages):

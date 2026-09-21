@@ -101,6 +101,15 @@ class Proposal(BaseModel):
     render_cost_s: float = Field(
         description="Solve seconds from aero_report(), never a guess")
     inputs: list[Input] = Field(default_factory=list)
+    inputs_none_because: str = Field(
+        default="",
+        description=(
+            "ONLY when `inputs` is genuinely empty: one line saying why this "
+            "question needed nothing specified and assumed nothing new. A real "
+            "state -- an entry that only reads a model already built has "
+            "nothing of its own -- but it is a CLAIM, and an empty list with "
+            "no claim is an omission. `propose` refuses that. Inheriting "
+            "everything from the chapter is a perfectly good reason; say so."))
     queue: list[str] = Field(
         default_factory=list,
         description=(
