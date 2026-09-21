@@ -37,11 +37,6 @@ as the notebook level; a new chapter with no parent inherits from here.
 
 ## How the chapters relate
 
-Chapters are numbered in the order they were written, which is not the order they
-depend on each other. A chapter whose model was copied from an earlier one
-declares where its design came from in its own `_fork.yml`, and that is what
-this is drawn from. Read it left to right: each arrow is one deliberate change.
-
 ```{python}
 #| echo: false
 #| output: asis
@@ -53,8 +48,11 @@ this is drawn from. Read it left to right: each arrow is one deliberate change.
 # because rule 12 cannot -- the root index belongs to no chapter, so nothing
 # else would notice a seventh node was missing.
 #
-# LEFT TO RIGHT, because that is the shape the content has: chains of chapters
-# read as time. Top-down stacked them into columns and wasted the width.
+# TOP DOWN. Sideways was tried and the lineage is currently a straight line --
+# six chapters, no branching -- so LR drew a 1900px strip that shrank the text
+# to nothing and scrolled the page sideways, which `styles.css` exists to
+# prevent everywhere else. A line reads fine down a page, which already
+# scrolls that way. When a chapter finally branches, LR is worth revisiting.
 #
 # The edge label is `_fork.yml`'s `summary:`. It was derived from the category
 # delta until the categories were retired, which was the better arrangement
@@ -89,11 +87,15 @@ for _c in _chapters:
     _p, _s = _fork(_c)
     if _p and (pathlib.Path("chapters") / _p).is_dir():
         _parent[_c.name] = _p
-        _label[_c.name] = _s
+        # Mermaid reads a quoted edge label as a MARKDOWN string, so a summary
+        # beginning "+ " or "- " renders as the literal text "Unsupported
+        # markdown: list" in place of the label. Seen on the page, not in any
+        # check -- the diagram is generated, so nothing lints it.
+        _label[_c.name] = re.sub(r"^\s*[-+*]\s+", "", _s)
 
 _id = lambda s: "c" + re.sub(r"[^0-9A-Za-z]", "", s)
 print("```{mermaid}")
-print("graph LR")
+print("graph TD")
 for _c in _chapters:
     print(f'  {_id(_c.name)}["{_titles[_c.name]}"]')
     print(f"  click {_id(_c.name)} \"chapters/{_c.name}/index.html\"")
@@ -108,14 +110,5 @@ print("```")
 
 ## The chapters
 
-In the order they were written. The tree above is how they relate; this is how
-to reach them.
-
 ::: {#chapters}
 :::
-
-## Where to start
-
-The first chapter for the whole story in order, the last for where the design
-reached. Any entry stands on its own: it states its question, computes its
-answer, and says what it assumed.
