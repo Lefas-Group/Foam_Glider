@@ -20,7 +20,7 @@ uv run --group nb python -m nb view   <notebook> [--force]   # build the site
 uv run --group nb python -m nb eval   <notebook>             # runs, by model
 ```
 
-`ask` is one command per entry: probe, write, lint, render, verify, commit.
+`ask` is one command per entry: probe, write, lint, render, commit.
 
 It asks you for two budgets, for any **Specified** input — one where a different
 answer changes what is being built — and once to confirm its assumptions. It
@@ -103,10 +103,15 @@ index with `write_file` would otherwise drop it silently.
 
 ## Three checks
 
-**lint** reads the source. **verify** reads the *rendered* page with a fresh
-model, catching prose written from what the model believed rather than what came
-out. **check** deletes invalidated freezes, re-renders, and diffs values and
+**lint** reads the source. **build** renders the entry and refuses to commit a
+page that does not execute — lint has passed by then, and nothing else would
+notice. **check** deletes invalidated freezes, re-renders, and diffs values and
 figure bytes against git — what a refactor must pass.
+
+There used to be a third, `verify`: a second model call that read the rendered
+page and checked the prose against it. It produced zero findings in 32 write
+runs and was deleted. The class of error it guarded — a sentence about a curve's
+*shape* that the curve contradicts — is now uncaught, deliberately.
 
 ## What a render actually executes
 

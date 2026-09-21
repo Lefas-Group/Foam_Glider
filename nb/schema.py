@@ -170,20 +170,3 @@ class Proposal(BaseModel):
         return v
 
 
-class VerifyResult(BaseModel):
-    """
-    The fresh-context check of prose against what actually rendered.
-
-    Deliberately narrow. `verify` is not a second reviewer with opinions about
-    the entry -- lint already owns the rules, and the gate already owned the
-    scope. It answers one question: does the page say anything the rendered
-    output does not support?
-    """
-
-    ok: bool = Field(description="True when the prose is supported by the output")
-    findings: list[str] = Field(
-        default_factory=list,
-        description=(
-            "One per contradiction, each naming the claim and what the output "
-            "actually shows. Empty when ok. Do not report style, wording, rule "
-            "violations, or things you would have done differently."))

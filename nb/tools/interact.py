@@ -168,7 +168,7 @@ def ask_render_ceiling(default):
     instead of two that can disagree.
 
     It is a PER-RENDER ceiling, not a pool: the write phase may render several
-    times behind lint and verify retries, and each attempt gets the same
+    times behind lint and build retries, and each attempt gets the same
     deadline, because the number describes what one render of this entry ought
     to cost. It is also what rule 17 checks against the recorded seconds.
     """

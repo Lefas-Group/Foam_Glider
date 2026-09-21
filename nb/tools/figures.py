@@ -1,9 +1,12 @@
 """
 read_figure -- rendered figures, as images.
 
-`verify` exists to catch prose written from the conversation rather than from
-the output, and that failure is mostly a FIGURE failure: a caption claiming a
-crossover at 6 m/s when the curve crosses at 8 is invisible to a text-only check.
+An entry's prose can claim things about a figure that the figure does not show --
+a caption naming a crossover at 6 m/s when the curve crosses at 8 is invisible
+to every lint rule, because rule 1 forces the NUMBERS in prose to be computed
+and nothing forces a claim about a SHAPE to match the shape. Reading the figure
+back is the only way to check one, and after `verify` was deleted the only
+reader is the agent itself.
 
 Native rather than MCP. The figures live under `_freeze/`, outside the `chapters/`
 allowlist, and the MCP filesystem server has no read-only tier -- adding `_freeze/`

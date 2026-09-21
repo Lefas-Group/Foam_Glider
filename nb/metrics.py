@@ -36,7 +36,10 @@ CREATE TABLE IF NOT EXISTS runs (
     lint_calls             INTEGER,  -- times the model asked lint before stopping
     renders                INTEGER,  -- quarto renders this phase asked for
     pages_rendered         INTEGER,  -- pages those renders actually executed
-    verify_findings        INTEGER,  -- write only
+    -- A whole phase produced zero findings in 32 write runs and was deleted.
+    -- The column stays: old rows recorded a real (zero) measurement, and
+    -- dropping it would rewrite history to say nobody looked.
+    verify_findings        INTEGER,  -- write only; no longer written
     outcome                TEXT,
     duration_s             REAL
 )

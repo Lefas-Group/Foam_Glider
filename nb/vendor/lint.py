@@ -1030,7 +1030,7 @@ def _stale_freeze(root, chapters):
                 f"modified, but the freeze is not — {len(frozen)} frozen "
                 f"page(s) are serving values the current model may not produce. "
                 f"NOT YOURS TO FIX — the write phase re-proves the chapter "
-                f"itself, after lint and verify pass, and will show you any "
+                f"itself, after lint passes and the entry builds, and will show you any "
                 f"answer that moved. Do not run a checker by hand: it re-"
                 f"renders the notebook, costs two to three minutes a call, and "
                 f"changes nothing the run was not going to do anyway."))

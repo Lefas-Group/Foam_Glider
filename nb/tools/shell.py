@@ -47,7 +47,7 @@ def bash(notebook, command):
                 if a.rsplit("/", 1)[-1] in CHECKERS), None)
     if hit:
         return (f"rejected: {hit} is the write phase's job, not a turn's. The "
-                f"phase runs it once, after lint and verify pass, and shows you "
+                f"phase runs it once, after lint passes and the entry builds, and shows you "
                 f"any answer that moved"
                 + (" — and it re-renders the notebook to do so, minutes per "
                    "call" if hit == "check.py" else "")

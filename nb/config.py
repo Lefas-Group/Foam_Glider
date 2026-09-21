@@ -85,11 +85,11 @@ MAX_TURNS = 60          # per agent loop
 # longer described it.
 MAX_CORRECTION_ROUNDS = 3
 MAX_LINT_ATTEMPTS = 3   # write -> lint -> write
-MAX_VERIFY_ATTEMPTS = 2  # write -> render -> verify -> write
-# write -> render -> write, on a page that does not BUILD. Its own budget, not a
-# slice of the verify one: the page has to render before verify has anything to
-# read, so charging a build error to verify leaves the entry a round short of
-# fixing whatever verify then finds.
+# write -> render -> write, on a page that does not BUILD. It used to be
+# deliberately separate from the verify budget, so that a build error could not
+# eat a round the prose check needed. Verify is gone; this is not, because lint
+# has passed by the time it runs and nothing else notices a page that fails to
+# execute.
 #
 # 2, up from 1. The argument for 1 was that a traceback naming the line takes
 # one turn to fix and a second attempt means the model is guessing -- true of a

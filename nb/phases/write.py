@@ -17,7 +17,7 @@ import sys
 import time
 
 from ..config import (MAX_LINT_ATTEMPTS, MAX_RENDER_FIXES, MAX_TURNS,
-                      MAX_VERIFY_ATTEMPTS, PROBE_POOL, Notebook)
+                      PROBE_POOL, Notebook)
 from ..loop import Refactor, Stopped, run
 from ..schema import Proposal
 from ..session import Session
@@ -26,7 +26,6 @@ from ..tools import guards, verifiers
 from ..tools.interact import ask_stuck
 from ..tools.scaffold import create_chapter
 from .. import metrics
-from . import verify as verify_phase
 from .view import site
 from .common import setup, report, spoken_calls
 from ..log import detach_output, open_log, say, tell
@@ -261,8 +260,8 @@ def rendered_prose(notebook, chapter, stem):
     Rule 1 forces the numbers in prose to be `{python} …` expressions, so the
     SOURCE contains none of the entry's actual claims -- they exist only in the
     freeze. This is therefore the one place the finished entry can be read, and
-    until now nothing ever showed it to a human: verify read it, but verify is a
-    model.
+    until now nothing ever showed it to a human: the only reader of the freeze
+    was `verify`, and `verify` was a model.
 
     Code cells stripped, which is most of the bytes and none of the argument:
     measured 5,624 tokens full against 851 without.
@@ -711,7 +710,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         # ran anyway, costing 16 turns to re-read _model.py, _analysis.py and
         # index.qmd and arrive back where it started. Measured on the
         # launch-speed entry. Everything downstream still gates the entry, and
-        # a verify finding re-enters the loop exactly as before.
+        # a build failure re-enters the loop exactly as before.
         entry_path = notebook.chapters_dir / proposal.chapter / f"{stem}.qmd"
         clean, problems = verifiers.is_clean(notebook, proposal.chapter)
         if entry_path.exists() and clean:
@@ -746,70 +745,45 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                 run_metrics.close("lint_failed")
                 return 1
 
-        # --- verify: does the prose match what actually rendered? -----------
+        # --- the entry must BUILD before it is committed --------------------
         _refresh_index_freeze(notebook, proposal.chapter)
-        findings = []
-        # Two budgets, not one. A render failure and a verify finding are
-        # different work, and spending a verify attempt on "the page does not
-        # build" would leave the entry one round short of fixing what verify
-        # then found -- the page has to build before verify has ever run.
-        attempt, renders = 0, 0
-        while attempt < MAX_VERIFY_ATTEMPTS:
-            result, note = verify_phase.check(
-                notebook, proposal.chapter, stem, entry_path=entry_path)
-            if note:
-                # NOT a skip-and-commit either way: both cases mean the entry
-                # could not be checked against its own output, and committing
-                # one would put exactly the thing verify exists to catch into
-                # history. But they are not the same failure. A page that does
-                # not BUILD is a code error with a traceback naming the line,
-                # which the model fixes in a turn -- so it gets the same
-                # treatment lint and verify findings already get. A missing
-                # freeze is nothing it can act on, and still ends the run.
-                buildable = not note.startswith(verify_phase.RENDER_FAILED)
-                if buildable or renders >= MAX_RENDER_FIXES:
-                    tell(f"  verify    could not run — {note}")
-                    run_metrics.close("verify_failed")
-                    return 1
-                renders += 1
-                run_metrics.set(render_fixes=renders)
-                tell(f"  render    FAILED — handing the error back "
-                      f"(attempt {renders} of {MAX_RENDER_FIXES})")
-                say(note)
-                contents.append({"role": "user", "parts": [{"text":
-                    "The page does not build. Quarto reported:\n\n" + note
-                    + "\n\nFix the cause and stop. The chapter's _model.py and "
-                      "_analysis.py are exec'd into the page namespace by "
-                      "_model.qmd, so their names are already in scope — "
-                      "importing them is what raises ModuleNotFoundError."}]})
-                loop_once()
-                clean, problems = verifiers.is_clean(notebook, proposal.chapter)
-                if not clean:
-                    tell(f"  lint      {len(problems)} blocking after the render "
-                          f"fix; stopping. The entry is on disk.")
-                    run_metrics.close("lint_failed")
-                    return 1
-                continue
-            findings = result.findings
-            attempt += 1
-            (say if result.ok else tell)(
-                f"  verify    {'ok' if result.ok else f'{len(findings)} finding(s)'}"
-                f" (attempt {attempt})")
-            for f in findings:
-                tell(f"              {f}")
-            if result.ok or attempt >= MAX_VERIFY_ATTEMPTS:
+        # This was the render half of the verify block. Verify is gone -- 32
+        # write runs, zero findings -- but this is not: lint has passed by here,
+        # and nothing else would notice a page that does not execute. It was
+        # removed on no evidence the first time it was written out of the loop,
+        # which is why it is extracted and proved before the model call it sat
+        # next to was deleted.
+        renders = 0
+        while True:
+            note = verifiers.build_entry(
+                notebook, proposal.chapter, stem, entry_path)
+            if note is None:
                 break
+            # A page that does not BUILD is a code error with a traceback
+            # naming the line, which the model fixes in a turn. A missing
+            # freeze after a successful render is nothing it can act on, and
+            # ends the run.
+            buildable = note.startswith(verifiers.BUILD_FAILED)
+            if not buildable or renders >= MAX_RENDER_FIXES:
+                tell(f"  build     could not run — {note}")
+                run_metrics.close("build_failed")
+                return 1
+            renders += 1
+            run_metrics.set(render_fixes=renders)
+            tell(f"  render    FAILED — handing the error back "
+                  f"(attempt {renders} of {MAX_RENDER_FIXES})")
+            say(note)
             contents.append({"role": "user", "parts": [{"text":
-                "The rendered page contradicts its own prose. A fresh reader "
-                "compared the two and found:\n\n"
-                + "\n".join(f"  {f}" for f in findings)
-                + "\n\nFix the prose to match what the output actually shows — "
-                  "not the other way round — then stop."}]})
+                "The page does not build. Quarto reported:\n\n" + note
+                + "\n\nFix the cause and stop. The chapter's _model.py and "
+                  "_analysis.py are exec'd into the page namespace by "
+                  "_model.qmd, so their names are already in scope — "
+                  "importing them is what raises ModuleNotFoundError."}]})
             loop_once()
             clean, problems = verifiers.is_clean(notebook, proposal.chapter)
             if not clean:
-                tell(f"  lint      {len(problems)} blocking after the verify fix; "
-                      f"stopping. The entry is on disk.")
+                tell(f"  lint      {len(problems)} blocking after the render "
+                      f"fix; stopping. The entry is on disk.")
                 run_metrics.close("lint_failed")
                 return 1
 
@@ -821,12 +795,6 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         if _cost:
             run_metrics.set(solves=_cost[0], solve_seconds=_cost[1])
 
-        run_metrics.set(verify_findings=len(findings))
-        if findings:
-            tell(f"\n  Not committed: {len(findings)} verify finding(s) unresolved "
-                  f"after {MAX_VERIFY_ATTEMPTS} attempts. The entry is on disk.")
-            run_metrics.close("verify_failed")
-            return 1
 
         # --- the chapter's shared machinery moved: prove it moved nothing ---
         # Adding an `_analysis.py` helper is additive and safe; changing the
@@ -1017,7 +985,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
 
     # After the commit, never before: a project render touches every page in the
     # notebook, and an unrelated broken one must not be able to block an entry
-    # that has already passed lint, render and verify on its own terms.
+    # that has already passed lint and built on its own terms.
     site(notebook, page=notebook.root / "_site" / "chapters"
                         / proposal.chapter / f"{stem}.html")
 

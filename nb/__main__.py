@@ -25,7 +25,7 @@ CHAPTER, which later entries build on, and a refused edit to a chapter's
 `_model.py`, which would mean re-solving every sibling to prove the answers did
 not move. `nb write` resumes from `proposal.json` in either case.
 
-There is no gate on the finished entry, because by then lint, render and verify
+There is no gate on the finished entry, because by then lint and the render
 have all passed and an entry that turns out wrong is corrected by the next entry
 -- `superseded_by()` exists for exactly that, and the record is append-only. The
 rendered prose, with its real numbers, is printed when the entry commits.

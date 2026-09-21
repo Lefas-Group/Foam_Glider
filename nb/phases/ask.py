@@ -216,7 +216,7 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
             # harder to undo than an entry, and it is decided BEFORE any of the
             # work it authorises is paid for. Everything else goes straight on
             # to writing -- there is nothing left to approve once lint, render
-            # and verify have passed, and an entry that turns out wrong is
+            # and the build have passed, and an entry that turns out wrong is
             # corrected by the next entry, never by deletion.
             if proposal.route == "new_chapter":
                 # TELEMETRY, not conversation: spend is something to look at,

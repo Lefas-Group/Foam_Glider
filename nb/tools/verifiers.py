@@ -249,6 +249,39 @@ def render(notebook, target="", why="", session=None):
         return tail(f"render FAILED (exit {r.returncode}):\n{out}")
 
 
+# Prefix on the note `build_entry` returns when the page did not BUILD, so the
+# caller can tell it apart from "there is no freeze to read" without parsing a
+# traceback. The two are different failures: a build error names a line and the
+# model fixes it in a turn, a missing freeze is nothing it can act on.
+BUILD_FAILED = "render failed,"
+
+
+def build_entry(notebook, chapter, stem, entry_path):
+    """
+    Render one entry and confirm it left a freeze. Returns a note, or None.
+
+    Extracted from `verify.check`, which rendered before it read because
+    "verifying against a stale freeze is worse than not verifying at all" --
+    so the render and the repair loop around it were entangled with a model
+    call that has now been deleted. They are not the same job: this one is
+    deterministic, it is the last thing standing between a page that does not
+    build and a commit, and lint has already passed by the time it runs.
+
+    It cost a whole run once, on a `from _analysis import …` that no rule then
+    caught.
+    """
+    if entry_path is not None:
+        out = render(notebook, str(entry_path.relative_to(notebook.root)),
+                     why="the entry must build before it is committed")
+        if "FAILED" in out:
+            return f"{BUILD_FAILED} the page did not build:\n{out}"
+    frozen = (notebook.freeze / chapter / stem
+              / "execute-results" / "html.json")
+    if not frozen.exists():
+        return f"no freeze for {chapter}/{stem} after rendering it"
+    return None
+
+
 def check(notebook, chapter="", force_all=False, no_render=False):
     """
     The full gate: lint, discard the invalidated freezes, render, lint again,

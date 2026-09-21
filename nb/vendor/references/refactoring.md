@@ -47,7 +47,8 @@ normalises all four while **keeping the solve count**, which matters: masking th
 whole runtime line once hid a real 18 → 2.
 
 **There is nothing here for you to run.** The write phase re-proves the chapter
-itself, once, after lint and verify pass, and shows you every answer that moved.
+itself, once, after lint passes and the entry builds, and shows you every
+answer that moved.
 Re-proving re-solves every entry in the chapter — minutes — so doing it from a
 turn buys nothing and costs the run. There is no `check` tool for that reason,
 and `bash` refuses the checkers by name; one run called `check.py` five times

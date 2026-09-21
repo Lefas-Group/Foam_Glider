@@ -1,12 +1,13 @@
 """
 `nb view` -- build the browsable site, and refuse to do it the expensive way.
 
-A run renders one entry, because that is all verify needs to read. Quarto writes
+A run renders one entry, because that is all a commit needs to prove. Quarto writes
 that page into `_site/` and regenerates neither `index.html` nor the sidebar, so
 until something renders the PROJECT there is no site to open -- which is exactly
 what happened the first time a notebook was built from scratch.
 
-The reason this is guarded rather than folded into verify is the freeze. A
+The reason this is guarded rather than folded into the write phase is the
+freeze. A
 project render does not fail on a missing freeze, it silently RE-EXECUTES it,
 and an entry's freeze is hundreds of seconds of aero solves. `aircraft-notebook`
 is in that state right now: a commit swept nine chapter-04 freeze files out of
