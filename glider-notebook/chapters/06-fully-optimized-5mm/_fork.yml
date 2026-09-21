@@ -5,6 +5,7 @@
 # is the positive check that says so.
 parent: 05-fully-optimized
 at: e2e92dc
+summary: "3 mm foam → 5 mm"
 changes:
   - airfoils restored to 5 mm stock: naca4405 for the wing, naca0005 for
     the tails

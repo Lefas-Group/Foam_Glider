@@ -2090,6 +2090,26 @@ def categories_of(root, chapter):
             if x.strip()}
 
 
+def _plausible_parent(root, chapter, parent):
+    """
+    A declared parent must exist and be EARLIER. It need not be the most
+    similar chapter, and that is the loosening this function exists for.
+
+    `_fork.yml` records where a design came from; code similarity is only how
+    an UNDECLARED one is detected. The two coincide when a model was copied and
+    diverge when it was rewritten -- 05-fully-optimized is 84% similar to its
+    parent, below the fork threshold, so nothing demanded a declaration, and
+    without one the lineage diagram showed two unconnected trees and the
+    notebook read as two projects.
+
+    So similarity still DEMANDS a declaration from a copy. It no longer
+    contradicts one that is offered.
+    """
+    if not (root / "chapters" / parent).is_dir():
+        return False
+    return parent < chapter
+
+
 def _fork_provenance(root, chapters, entries):
     """
     Rule 31. A copied `_model.py` declares its parent, in `_fork.yml`.
@@ -2109,8 +2129,8 @@ def _fork_provenance(root, chapters, entries):
 
     Two checks now:
 
-      31   a fork has a `_fork.yml` naming its parent and the commit, and
-           listing what it changed
+      31   a fork has a `_fork.yml` naming its parent, the commit, a summary
+           and what it changed
       31c  its categories differ from its parent's -- a fork that varies
            nothing the notebook has a word for is either not a chapter or the
            vocabulary is missing an axis
@@ -2162,18 +2182,24 @@ def _fork_provenance(root, chapters, entries):
                 f"`changes:` list with one line per deliberate difference, so "
                 f"that `diff` between the two files is the review")))
             continue
-        if fork["parent"] != parent:
+        if not _plausible_parent(root, c, fork["parent"]):
             out.append((where, (
-                f"names parent {fork['parent']!r}, but chapters/{c}/_model.py "
-                f"is {ratio:.0%} identical to chapters/{parent}/ and less so to "
-                f"that one — a fork declares the chapter it was actually "
-                f"copied from")))
+                f"names parent {fork['parent']!r}, which is not an earlier "
+                f"chapter of this notebook. A parent is where the design came "
+                f"from, and a design cannot come from a chapter that does not "
+                f"exist or was written afterwards")))
             continue
         if not fork.get("at"):
             out.append((where, (
                 "names a parent but no commit. `at:` is what makes `git show "
                 "<at>:chapters/<parent>/_model.py` the baseline the changes "
                 "are read against, and it is the part that rots first")))
+        if not fork.get("summary"):
+            out.append((where, (
+                "names a parent but no `summary:` — three to six words for the "
+                "arrow on the lineage diagram, which has nothing else to label "
+                "it with. `changes:` is at code granularity and too long to "
+                "read on an edge")))
         if not fork.get("changes"):
             out.append((where, (
                 f"lists no changes, but chapters/{c}/_model.py is "

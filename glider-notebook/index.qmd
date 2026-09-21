@@ -42,12 +42,11 @@ True of every chapter, and inherited by any new one:
 
 ## How the chapters relate
 
-Chapters are numbered in the order they were written, which is not the order they
-depend on each other. A chapter whose model was copied from an earlier one
-declares it in its own `_fork.yml`, and that is what this is drawn from. The
-label on each arrow is the axis the fork changed, taken from the two chapters'
-`categories:` — so the picture cannot disagree with the chapters, and cannot
-name an axis the vocabulary does not have.
+Chapters are numbered in the order they were written, which is not the order
+they depend on each other. Each one declares where its design came from in its
+own `_fork.yml`, and that is what this is drawn from — so the picture cannot
+disagree with the chapters. Read it left to right: each arrow is one deliberate
+change, and the chapter it points at is what that change produced.
 
 ```{python}
 #| echo: false
@@ -60,47 +59,47 @@ name an axis the vocabulary does not have.
 # because rule 12 cannot -- the root index belongs to no chapter, so nothing
 # else would notice a seventh node was missing.
 #
-# The EDGE LABEL is derived, not written. Every fork in this notebook changes
-# exactly one axis of `_categories.yml` -- the file says so itself, "each
-# chapter keeps what its parent modelled and adds one thing" -- so the label is
-# what the child's categories have that the parent's do not. Deriving it means
-# it cannot disagree with the categories, cannot invent a term outside the
-# vocabulary rule 36 polices, and is not a third place to keep the same fact.
+# LEFT TO RIGHT, because that is the shape the content has: chains of chapters
+# read as time. Top-down stacked them into columns and wasted the width.
+#
+# The edge label is `_fork.yml`'s `summary:`. It was derived from the category
+# delta until the categories were retired, which was the better arrangement
+# while it lasted -- a derived label cannot drift. A hand-written one can, and
+# is kept to a few words and checked for presence by rule 31; the `changes:`
+# list beside it is what would contradict it.
 import pathlib
 import re
 
 _TITLE = re.compile(r'^title:\s*"(.+)"\s*$', re.M)
-_CATS = re.compile(r"^categories:\s*\[(.+?)\]\s*$", re.M)
 
 
 def _fork(_d):
-    """`_fork.yml`'s parent, or None. Flat by design -- see lint.read_fork."""
+    """`_fork.yml`'s parent and summary. Flat by design -- see lint.read_fork."""
     _f = _d / "_fork.yml"
     if not _f.exists():
-        return None
-    _m = re.search(r"^parent:\s*(.+?)\s*$", _f.read_text(), re.M)
-    return _m.group(1).strip() if _m else None
+        return None, ""
+    _t = _f.read_text()
+    _p = re.search(r"^parent:\s*(.+?)\s*$", _t, re.M)
+    _s = re.search(r'^summary:\s*"?(.+?)"?\s*$', _t, re.M)
+    return (_p.group(1).strip() if _p else None), (_s.group(1).strip() if _s else "")
 
 
 _chapters = sorted(p for p in pathlib.Path("chapters").iterdir() if p.is_dir())
-_titles, _cats, _parent = {}, {}, {}
+_titles, _parent, _label = {}, {}, {}
 for _c in _chapters:
     _index = _c / "index.qmd"
-    _text = _index.read_text() if _index.exists() else ""
-    _m = _TITLE.search(_text)
+    _m = _TITLE.search(_index.read_text()) if _index.exists() else None
     _titles[_c.name] = _m.group(1) if _m else _c.name
-    _m = _CATS.search(_text)
-    _cats[_c.name] = ({x.strip().strip('"') for x in _m.group(1).split(",")}
-                      if _m else set())
     # Only a parent that still exists: a fork naming a renamed chapter should
     # leave a root node rather than a dangling edge.
-    _p = _fork(_c)
+    _p, _s = _fork(_c)
     if _p and (pathlib.Path("chapters") / _p).is_dir():
         _parent[_c.name] = _p
+        _label[_c.name] = _s
 
 _id = lambda s: "c" + re.sub(r"[^0-9A-Za-z]", "", s)
 print("```{mermaid}")
-print("graph TD")
+print("graph LR")
 for _c in _chapters:
     print(f'  {_id(_c.name)}["{_titles[_c.name]}"]')
     print(f"  click {_id(_c.name)} \"chapters/{_c.name}/index.html\"")
@@ -108,9 +107,8 @@ for _c in _chapters:
     if _c.name not in _parent:
         continue
     _p = _parent[_c.name]
-    _added = sorted(_cats[_c.name] - _cats[_p])
-    _edge = f'-->|"{", ".join(_added)}"|' if _added else "-->"
-    print(f"  {_id(_p)} {_edge} {_id(_c.name)}")
+    _e = f'-->|"{_label[_c.name]}"|' if _label[_c.name] else "-->"
+    print(f"  {_id(_p)} {_e} {_id(_c.name)}")
 print("```")
 ```
 

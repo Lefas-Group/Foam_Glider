@@ -5,6 +5,7 @@
 # else differs.
 parent: 03-unswept-c4
 at: 12794f6
+summary: "5 mm foam → 3 mm"
 changes:
   - wing sections naca4405 → naca4403, tail naca0005 → naca0003, so the
     airfoil thickness tracks the stock it is cut from

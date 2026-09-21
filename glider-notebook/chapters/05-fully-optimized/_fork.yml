@@ -1,0 +1,16 @@
+# What this chapter changed, and from what. Read by rule 31, by the
+# chapter index below it, and by the lineage diagram on the book index.
+#
+# Its _model.py was REWRITTEN rather than copied -- 84% similar to 04's, below
+# rule 31's threshold, so nothing would have demanded this file. The design
+# descends from 04 all the same: 04 is the 3 mm redesign, and this opens that
+# same design to the optimiser. Without it the lineage diagram shows two
+# unconnected trees and the notebook reads as two projects.
+parent: 04-thinner-foam
+at: f450884
+summary: "hand-sized → optimised"
+changes:
+  - every geometry variable is opened to the optimiser at once, where 04 fixed
+    the tail and solved three wing variables
+  - the model is rewritten around that rather than copied, so a diff against
+    04 is not the review here -- the chapters differ everywhere
