@@ -233,6 +233,54 @@ def confirm_assumptions(proposal):
     return corrected
 
 
+def confirm_inherited(proposal, notebook):
+    """
+    Show what a NEW chapter carries forward, and take strikes. Returns the set
+    that survives, as [(kind, item, from_chapter)].
+
+    At the new-chapter stop because that stop already exists and already halts
+    the run: `render_stop` told the user a chapter was being committed to and
+    showed them its name, its title and a resume command -- nothing about what
+    it INHERITS, which is the substance of the commitment.
+
+    The list is COMPUTED (see `inputs.inherited`), so this is a review rather
+    than a question. What the computation cannot know is whether the fork
+    breaks an item: forking the 3 mm chapter back to 5 mm inherits "foam
+    thickness: 3 mm", which is exactly wrong and exactly the thing to strike.
+
+    Batched and defaulted, following `confirm_assumptions` rather than
+    `_prompt`: accepting is the right answer when nobody replies, and a gate
+    that can strand an unattended run is worse than one that occasionally
+    carries an item too many.
+    """
+    from ..inputs import inherited
+    items = inherited(notebook, proposal.chapter)
+    if not items:
+        return []
+    tell(f"\n{'─' * 72}\nINHERITED — strike anything this chapter breaks"
+         f"\n{'─' * 72}")
+    for n, (kind, item, src) in enumerate(items, 1):
+        tell(f"  {n}. [{kind}] {item}   ({src})")
+    tell('\n  Enter keeps all of it. Strike with "3" or "3; 5".')
+    answer = MAILBOX.ask("inherited", "inherited", "\n".join(
+        f"{n}. [{k}] {i}   ({s})" for n, (k, i, s) in enumerate(items, 1)),
+        default="").strip()
+    if not answer:
+        say(f"  answered   (all {len(items)} carried forward)")
+        return items
+    struck = set()
+    for part in answer.replace(",", ";").split(";"):
+        head = part.strip().split(":")[0].strip()
+        if head.isdigit() and 1 <= int(head) <= len(items):
+            struck.add(int(head) - 1)
+        elif part.strip():
+            tell(f"  ignored    {part.strip()!r} — expected a number")
+    kept = [x for n, x in enumerate(items) if n not in struck]
+    for n in sorted(struck):
+        say(f"  answered   struck {items[n][1]}")
+    return kept
+
+
 def ask_specified(session, name, why, kind="specified", options=""):
     """
     A Specified input: a different answer changes WHAT WE ARE BUILDING.
@@ -339,6 +387,23 @@ def propose(session, **fields):
             "so in `inputs_none_because` in one line. Do not invent an input "
             "to satisfy this.")
 
+    # `scope` is checkable, not merely declarable. A claim that an item comes
+    # from the chapter is a claim about a file that is right there, and a
+    # provenance field the model can assert freely is a second thing to be
+    # wrong rather than a guard.
+    if proposal.chapter in session.notebook.chapters():
+        from ..inputs import declared
+        spec, asm = declared(session.notebook, proposal.chapter)
+        if not (spec or asm):
+            for i in proposal.inputs:
+                if i.scope == "chapter":
+                    raise ValueError(
+                        f"'{i.name}' is scope='chapter', but "
+                        f"chapters/{proposal.chapter}/index.qmd declares "
+                        f"nothing. Either it is scope='new' -- this entry "
+                        f"introduced it -- or the chapter index is missing a "
+                        f"declaration it should already carry.")
+
     unasked = [i.name for i in proposal.inputs
                if i.kind == "specified" and i.owner == "user"
                and i.name not in session.asked]
@@ -416,7 +481,7 @@ def propose(session, **fields):
     raise Terminal(proposal)
 
 
-def render_stop(proposal, notebook):
+def render_stop(proposal, notebook, inherited_kept=None):
     """
     Why the run stopped, what saying yes commits to, and how to continue.
 

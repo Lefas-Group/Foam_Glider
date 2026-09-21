@@ -89,9 +89,79 @@ def declared(notebook, chapter):
     return spec, asm
 
 
+def ancestry(notebook, chapter):
+    """
+    `[parent, grandparent, ...]` from the `_fork.yml` chain. Empty for a root.
+
+    Cycles are impossible by construction -- `create_chapter` only ever names
+    an EARLIER chapter -- but a hand-edited file could make one, and a lint run
+    that hangs is worse than one that is wrong. So the walk is bounded by the
+    number of chapters.
+    """
+    out, seen, cur = [], {chapter}, chapter
+    for _ in range(len(notebook.chapters())):
+        f = notebook.chapters_dir / cur / "_fork.yml"
+        try:
+            m = re.search(r"^parent:\s*(.+?)\s*$", f.read_text(), re.M)
+        except OSError:
+            break
+        if not m:
+            break
+        cur = m.group(1).strip()
+        if cur in seen or not (notebook.chapters_dir / cur).is_dir():
+            break
+        seen.add(cur)
+        out.append(cur)
+    return out
+
+
+def inherited(notebook, chapter):
+    """
+    [(kind, item, from_chapter)] a new chapter would carry forward.
+
+    COMPUTED, not asked. With the parent named in `_fork.yml` the candidate set
+    is a lookup -- no model judgement and no turn. What cannot be computed is
+    whether the fork BREAKS an item: forking 5 mm to 3 mm inherits "tail
+    dimensions remain 100x30 mm", and that may or may not survive. So this
+    produces the list and the human strikes what the fork invalidates, which is
+    a review rather than an open question.
+
+    A chapter with no parent inherits from the NOTEBOOK instead -- the front
+    page states what the aircraft is, and a new aircraft in an existing notebook
+    is where the most is open, not the least.
+    """
+    out = []
+    chain = ancestry(notebook, chapter)
+    if chain:
+        for c in chain:
+            for kind, item in _declared_items(notebook, c):
+                if not any(i == item for _, i, _ in out):
+                    out.append((kind, item, c))
+        return out
+    index = notebook.root / "index.qmd"
+    try:
+        md = index.read_text()
+    except OSError:
+        return out
+    for kind, body in CALLOUT.findall(md):
+        for item in ITEM.findall(body):
+            out.append((kind, _unescape(item), notebook.root.name))
+    return out
+
+
+def _declared_items(notebook, chapter):
+    """[(kind, item)] from one chapter's index."""
+    try:
+        md = (notebook.chapters_dir / chapter / "index.qmd").read_text()
+    except OSError:
+        return []
+    return [(kind, _unescape(i)) for kind, body in CALLOUT.findall(md)
+            for i in ITEM.findall(body)]
+
+
 def main(argv):
     if not argv:
-        print("usage: uv run --group nb python -m nb.inputs <notebook>")
+        print("usage: uv run --group nb python -m nb inputs <notebook>")
         return 2
     notebook = Notebook(argv[0])
     rows = collect(notebook)
@@ -99,11 +169,25 @@ def main(argv):
         print("  nothing recorded yet")
         return 0
 
+    # Grouped by LINEAGE, not by page. A flat list of every callout is what
+    # the pages already are; the question this answers is "what have we decided
+    # about this aircraft", and the answer has a shape -- each chapter adds to
+    # what its parent already held.
+    #
+    # There is no "true of every chapter" section, and the reason is a fact
+    # about the notebook rather than a limitation here: the same decision is
+    # worded differently in each index ("Span 300 mm, fixed tip to tip" against
+    # "**Span**: 300 mm, fixed tip to tip"), so the intersection is empty and
+    # matching them loosely would be a guess printed as a fact. Wording them
+    # identically where they ARE identical is what would make that section
+    # possible.
     chapter = None
     for c, where, kind, item in rows:
         if c != chapter:
             chapter = c
-            print(f"\n{c}")
+            parent = ancestry(notebook, c)
+            lineage = f"  (from {parent[0]})" if parent else ""
+            print(f"\n{c}{lineage}")
         label = "SPECIFIED" if kind == "Specified" else "assumed  "
         print(f"  {label}  {item}")
         print(f"             {where}")

@@ -250,7 +250,11 @@ Order: hero → `**Answer.**` → callouts → evidence → `footer(...)`.
   nobody knows, the number may be wrong. *Specified* is a brief — someone
   decided, so it is not wrong. One line of attribution, then a numbered list.
 - **Assumptions sit at the level they belong to.** What defines the chapter is
-  stated once in `index.qmd`. Do not repeat it in entry prose.
+  stated once in `index.qmd`. Do not repeat it in entry prose. Each input you
+  declare carries a `scope`: `new` if this entry introduced it — the only kind
+  an entry's callouts should list — `chapter` or `notebook` if you are relying
+  on something already stated one level up. `nb inputs` aggregates all three
+  into the design state of the aircraft, which is why the level matters.
 - **Every entry ends with one `footer(...)` cell**, passing the shared functions
   it called by name.
 - A claim the prose makes but does not quote gets an `assert`, so the page fails

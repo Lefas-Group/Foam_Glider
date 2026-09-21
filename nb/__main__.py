@@ -9,6 +9,7 @@
              [--accept-refactor]              …committing a diff you have read
     nb view  <notebook> [--force]            render the whole site
     nb eval  <notebook>                      what each model actually did
+    nb inputs <notebook>                     what has been decided, by level
     nb board <notebook>                      N agents, one terminal
     nb answer <notebook> [run] "<value>"     reply to a waiting run
     nb stop  <notebook> [run] ["why"]        ask a run to stop, and record it
@@ -135,6 +136,10 @@ def main(argv):
                      accept_refactor="--accept-refactor" in rest,
                      quiet="--quiet" in rest or "--detach" in rest,
                      answers=_answers(rest))
+
+    if cmd == "inputs":
+        from .inputs import main as inputs
+        return inputs(rest)
 
     if cmd == "watch":
         if not rest:

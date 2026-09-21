@@ -6,12 +6,14 @@ process ends: that is what makes an orchestration framework unnecessary, because
 there is no pause the process did not choose.
 """
 
+import json
 import sys
 
 from ..config import MAX_CORRECTION_ROUNDS, MAX_TURNS, PROBE_POOL
 from ..loop import Stopped, Terminal, run
 from ..session import Session
 from ..tools.interact import (ask_pool, ask_render_ceiling, ask_stuck,
+                              confirm_inherited,
                               confirm_assumptions, persist,
                               render_stop)
 from ..preflight import check as preflight
@@ -266,6 +268,16 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
             # and the build have passed, and an entry that turns out wrong is
             # corrected by the next entry, never by deletion.
             if proposal.route == "new_chapter":
+                # What the new chapter carries forward, reviewed at the stop
+                # that already halts the run. Persisted beside the proposal so
+                # `nb resume` writes the chapter's index from the set the user
+                # actually agreed to, hours later and in another process.
+                kept = confirm_inherited(proposal, notebook)
+                if kept:
+                    raw = json.loads(notebook.proposal_path.read_text())
+                    raw["_inherited"] = [
+                        {"kind": k, "item": i, "from": s} for k, i, s in kept]
+                    notebook.proposal_path.write_text(json.dumps(raw, indent=2))
                 # TELEMETRY, not conversation: spend is something to look at,
                 # never something to act on, and the per-probe lines already go
                 # to the log. Reported here and not on the path that continues
@@ -274,7 +286,7 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
                 if session.probe_pool:
                     say(f"  budget    {session.probe_spent:.0f} s of "
                         f"{session.probe_pool:.0f} s probe pool used")
-                tell(render_stop(proposal, notebook))
+                tell(render_stop(proposal, notebook, kept))
                 return 0
             gate = proposal
         except Stopped as e:

@@ -30,6 +30,16 @@ class Input(BaseModel):
             "say why. assumed: nobody knows -- only valid for kind=unknown."
         ))
     why: str = Field(description="Ten words at most -- lint rule 8 counts them")
+    scope: Literal["new", "chapter", "notebook"] = Field(
+        default="new",
+        description=(
+            "Which LEVEL this item belongs to. new: this entry introduced it, "
+            "and it is the only kind an entry declares. chapter: the chapter's "
+            "index already states it -- you inherit it, you do not restate it. "
+            "notebook: true of the whole aircraft, stated on the front page. "
+            "Declaring an inherited item as 'new' puts words in the entry that "
+            "belong one level up; the instruction's rule is that assumptions "
+            "sit at the level they belong to."))
 
     @model_validator(mode="after")
     def _discipline(self):

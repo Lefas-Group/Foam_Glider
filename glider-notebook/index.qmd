@@ -23,6 +23,23 @@ A chronological record of questions asked about a 300 mm span foam glider optimi
 is one model — a vehicle, a fidelity, a method — and each **entry** is one
 question asked of it, answered by code that runs when the page renders.
 
+::: {.callout-tip}
+## Specified
+
+True of every chapter, and inherited by any new one:
+
+1. **Span**: 300 mm, fixed tip to tip.
+2. **Construction**: flat foam sheet, cut and assembled by hand.
+3. **Objective**: minimum sink rate in trimmed glide.
+:::
+
+::: {.callout-note}
+## Assumed
+
+1. **Still air**, no thermals and no wind gradient.
+2. **Rigid airframe**, no aeroelastic deflection under load.
+:::
+
 ## How the chapters relate
 
 Chapters are numbered in the order they were written, which is not the order they
