@@ -1,0 +1,50 @@
+---
+title: "What is the geometry of the fully optimized 5 mm glider?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 50.0   # s for this render, granted by the user
+SOLVE_BUDGET = 35.0    # s for any one solve
+PROBE_POOL = 130.0     # s granted for the probe
+PROBE_SPENT = 29.7     # s the probe actually used
+
+from IPython.display import Markdown
+
+opt = optimize_full_glider(verbose=False)
+sol = opt['sol']
+
+c_root = sol.value(opt['c_root']) * 1000
+taper = sol.value(opt['taper'])
+sweep = sol.value(opt['sweep'])
+dihedral = sol.value(opt['dihedral'])
+
+h_span = sol.value(opt['h_span']) * 1000
+h_chord = sol.value(opt['h_chord']) * 1000
+h_inc = sol.value(opt['h_inc'])
+
+v_span = sol.value(opt['v_span']) * 1000
+v_chord = sol.value(opt['v_chord']) * 1000
+
+boom_len = sol.value(opt['boom_len']) * 1000
+cg_x = sol.value(opt['cg_x']) * 1000
+
+md = f"""
+| Component | Span / Length | Chord / Taper | Angle |
+|---|---|---|---|
+| **Wing** | 300 mm | $c_{{\\text{{root}}}}$ {c_root:.1f} mm, $\\lambda$ {taper:.2f} | Sweep {sweep:.1f}°, Dihedral {dihedral:.1f}° |
+| **H-stab** | {h_span:.1f} mm | {h_chord:.1f} mm | Incidence {h_inc:.1f}° |
+| **V-stab** | {v_span:.1f} mm | {v_chord:.1f} mm | - |
+| **Fuselage** | Boom {boom_len:.1f} mm | CG $x$ {cg_x:.1f} mm | - |
+"""
+```
+
+**Answer.** The optimizer converges on a forward-swept wing (sweep [`{python} f"{sweep:.1f}"`]°) with strong taper ([`{python} f"{taper:.2f}"`]) and moderate dihedral ([`{python} f"{dihedral:.1f}"`]°). The horizontal tail acts as a lifting surface with a relatively large negative incidence ([`{python} f"{h_inc:.1f}"`]°) to offset the pitching moment of the forward-swept wing, and the boom is [`{python} f"{boom_len:.1f}"`] mm long.
+
+```{python}
+#| echo: false
+#| output: asis
+display(Markdown(md))
+footer(optimize_full_glider)
+```

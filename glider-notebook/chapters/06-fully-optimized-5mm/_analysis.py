@@ -71,6 +71,10 @@ def optimize_full_glider(verbose=False, min_sweep=-45, init_sweep=0):
         "h_span": h_span,
         "h_chord": h_chord,
         "boom_len": boom_len,
+        "h_inc": h_inc,
+        "cg_x": cg_x,
+        "c_root": c_root,
+        "v_span": v_span,
         "aero1": aero1,
         "taper": taper,
         "v_chord": v_chord
