@@ -9,7 +9,7 @@ Runs on Gemini; needs `GEMINI_API_KEY`, and `quarto`, `git`, `npx` on `PATH`.
 ```bash
 uv run --group nb python -m nb new    <notebook> [title]     # once per aircraft
 uv run --group nb python -m nb ask    <notebook> "<q>"       # the main one
-uv run --group nb python -m nb ask    <notebook> "<q>" --detach  # …and walk away
+uv run --group nb python -m nb ask    <notebook> "<q>" --quiet  # …no board
 uv run --group nb python -m nb resume <notebook> [run]       # resume a stop
 uv run --group nb python -m nb board  <notebook>             # N agents, one terminal
 uv run --group nb python -m nb answer <notebook> [run] "…"   # reply to a waiting run
@@ -42,15 +42,33 @@ They belong to the entry, never the chapter, and print in its footer:
 Rendered in 2.3 s (limit 20 s) · 1 aero solve (budget 15 s each) · explored in 55 s (limit 120 s)
 ```
 
+## Every run detaches
+
+`nb ask` forks the agent out of your shell session and draws a board for it on
+the terminal you typed into. Ctrl-C leaves the board; the run carries on, and
+`nb board` or `nb answer` reach it from anywhere. Closing the window no longer
+kills it.
+
+There is no attached mode. There was one — questions on stdin — and it was not a
+second transport for the same behaviour: EOF there killed the run with the
+question recorded nowhere, while a question on disk is answerable from a second
+terminal, a script or a coordinator, and the run resumes either way. One agent is
+now the N=1 case of N agents rather than a mode with its own failure shapes.
+
+`--quiet` skips the board and prints the run id instead — for pipes, scripts and
+CI. A question with a safe default (a budget, an assumption confirmation) takes
+that default after five minutes rather than holding the run for an hour;
+`--answers` supplies them up front and skips the wait entirely.
+
 ## Several at once
 
 ```bash
-uv run --group nb python -m nb ask glider-notebook "<question A>" --detach
-uv run --group nb python -m nb ask glider-notebook "<question B>" --detach
+uv run --group nb python -m nb ask glider-notebook "<question A>" --quiet
+uv run --group nb python -m nb ask glider-notebook "<question B>" --quiet
 uv run --group nb python -m nb board glider-notebook
 ```
 
-**Do not add `&`.** `--detach` prints the run id and the `watch` line, then
+**Do not add `&`.** `--quiet` prints the run id and the `watch` line, then
 double-forks and `setsid`s: its own session, no controlling terminal, reparented
 to init. The prompt returns in about a second, and closing the window leaves the
 run alone. Everything a terminal can do to a process — Ctrl-Z, SIGTTIN on a

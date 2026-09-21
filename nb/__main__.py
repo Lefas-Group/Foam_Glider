@@ -1,7 +1,7 @@
 """
     nb new   <notebook> [title]              scaffold a notebook, then prove it
     nb ask   <notebook> "<question>"         probe, write, render, commit
-             [--detach] [--answers f.json]    …leaves the terminal; board answers
+             [--quiet] [--answers f.json]     …no board on this terminal
     nb resume <notebook> [run]               resume: a gate, a refactor, a
              [--allow-refactor]               …run that died with work on disk
              [--accept-refactor]              …committing a diff you have read
@@ -83,11 +83,14 @@ def main(argv):
             print(USAGE)
             return 2
         from .phases.ask import main as ask
-        detach = "--detach" in rest
+        # `--detach` is kept as an alias: every run detaches now, and what
+        # the flag used to buy -- no board drawn on this terminal -- is what
+        # `--quiet` means. It is in old scripts and old muscle memory.
+        quiet = "--quiet" in rest or "--detach" in rest
         answers = _answers(rest)
         words = [r for r in rest[1:]
                  if not r.startswith("--") and not r.endswith(".json")]
-        return ask(rest[0], " ".join(words), detach=detach, answers=answers)
+        return ask(rest[0], " ".join(words), quiet=quiet, answers=answers)
 
     # `resume` is what every one of its four uses is -- a gate approved, a
     # refactor allowed, a diff accepted, or a run that died with its entry
@@ -103,7 +106,8 @@ def main(argv):
                      run_id=args[0] if args else None,
                      allow_refactor="--allow-refactor" in rest,
                      accept_refactor="--accept-refactor" in rest,
-                     detach="--detach" in rest)
+                     quiet="--quiet" in rest or "--detach" in rest,
+                     answers=_answers(rest))
 
     if cmd == "watch":
         if not rest:

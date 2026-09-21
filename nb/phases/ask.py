@@ -75,7 +75,7 @@ through the notebook for why -- the traceback already says.
 """
 
 def main(notebook_path, question, carry_queue=None, verbose=True,
-         pool=None, ceiling=None, run_id=None, detach=False,
+         pool=None, ceiling=None, run_id=None, quiet=False,
          answers=None):
     bad = preflight(notebook_path)
     if bad:
@@ -90,26 +90,42 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
     notebook = Notebook(notebook_path, run_id=run_id or new_run_id())
     runstate.write(notebook, phase="ask", question=question,
                    chapter=None, turn=0, waiting_on=None)
-    if detach:
-        # Nobody is at this terminal: every question goes to the run directory
-        # and waits there. `nb board` or `nb answer` replies.
-        from ..mailbox import Mailbox
-        from ..tools.interact import use_mailbox
-        use_mailbox(Mailbox(notebook, answers=answers))
-        # The run id goes to the terminal FIRST -- it is the one thing the
-        # caller needs and the only way to address this run afterwards -- and
-        # then stdout closes for good. The watch line goes with it, because
-        # every later `tell` is suppressed and a detached run would otherwise
-        # never say where to follow it.
+    # ALWAYS detached. There used to be two paths -- stdin at a terminal, or
+    # the run directory -- and they differed in behaviour rather than plumbing:
+    # an unanswered Specified input killed the attached run with nothing on
+    # disk, while the detached one leaves the question where `nb answer`, a
+    # second terminal or a coordinator can reach it and the run resumes. The
+    # detached path is better on every such row, `POLL` is 1 s so the latency
+    # is imperceptible, and one agent is the N=1 case of N agents rather than
+    # a mode with its own failure shapes.
+    #
+    # It also collapses `tell` into `say` for free: `tell` already wrote to the
+    # log as well as stdout, and `detach_output` closes the stdout half. The
+    # log is the record either way.
+    from ..mailbox import Mailbox
+    from ..tools.interact import use_mailbox
+    use_mailbox(Mailbox(notebook, answers=answers))
+    if quiet:
+        # Nothing will be drawn over, so say where the run went. Printed BEFORE
+        # detaching, because every later `tell` goes only to the log.
         tell(f"  run       {notebook.run_id}")
         tell(f"  detail    uv run --group nb python -m nb watch "
              f"{notebook.root.name} {notebook.run_id}")
-        # AND THEN LEAVE THE SESSION. Before `setup()`, which starts the MCP
-        # filesystem subprocess, and before the metrics connection: `fork` past
-        # either is how a daemon inherits something it cannot use.
-        from ..detach import detach_process
-        detach_process(notebook)
-        detach_output()
+    # AND THEN LEAVE THE SESSION. Before `setup()`, which starts the MCP
+    # filesystem subprocess, and before the metrics connection: `fork` past
+    # either is how a daemon inherits something it cannot use.
+    #
+    # The board runs in the ORIGINAL process, which is the one still holding
+    # the terminal. To whoever typed the command nothing looks different -- a
+    # question appears, they answer it -- but there is one mechanism
+    # underneath, and closing the window no longer kills the run.
+    from ..detach import detach_process
+    board = None
+    if not quiet:
+        from .board import follow
+        board = lambda: follow(notebook, only=notebook.run_id)
+    detach_process(notebook, parent=board)
+    detach_output()
     open_log(notebook, "ask", question)
     run_metrics = metrics.Run(notebook, "ask", question)
     # Asked only at the head of a chain. A queued follow-on, and the write
@@ -128,7 +144,6 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
     session.render_ceiling = ceiling
 
     say(f"  notebook  {notebook.root.name}")
-    tell(f"  detail    uv run --group nb python -m nb watch {notebook.root.name}")
     fs, handlers, make_config = setup(session, phase="ask")
     gate = None
     notebook.run.mkdir(parents=True, exist_ok=True)
@@ -263,7 +278,7 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
     # header=False: this process already said which notebook and where the
     # telemetry is. Saying it twice made one question look like two runs.
     return write(notebook_path, verbose=verbose, header=False,
-                 run_id=notebook.run_id, detach=detach, answers=answers)
+                 run_id=notebook.run_id, quiet=quiet, answers=answers)
 
 
 if __name__ == "__main__":

@@ -505,7 +505,7 @@ def _resolve(notebook_path, run_id):
 
 def main(notebook_path, verbose=True, allow_refactor=False,
          accept_refactor=False, header=True, run_id=None,
-         detach=False, answers=None):
+         quiet=False, answers=None):
     bad = preflight(notebook_path)
     if bad:
         for b in bad:
@@ -518,22 +518,28 @@ def main(notebook_path, verbose=True, allow_refactor=False,
             tell(line)
         return 2
     runstate.write(notebook, phase="write")
-    if detach:
-        from ..mailbox import Mailbox
-        from ..tools.interact import use_mailbox
-        use_mailbox(Mailbox(notebook, answers=answers))
-        # Only when this process is not ALREADY detached. `ask` calls straight
-        # into here after forking itself, and a second fork would change the
-        # pid mid-question for nothing. A bare `nb resume --detach` reaches
-        # this with `detached()` false and forks properly.
-        from ..log import detached
-        if not detached():
+    # Always through the mailbox, exactly as `ask` is: one conversation
+    # mechanism, and a question that outlives the terminal it was asked from.
+    from ..mailbox import Mailbox
+    from ..tools.interact import use_mailbox
+    use_mailbox(Mailbox(notebook, answers=answers))
+    # Only when this process is not ALREADY detached. `ask` calls straight
+    # into here after forking itself, and a second fork would change the pid
+    # mid-question for nothing. A bare `nb resume` reaches this with
+    # `detached()` false and forks properly.
+    from ..log import detached
+    if not detached():
+        if quiet:
             tell(f"  run       {notebook.run_id}")
             tell(f"  detail    uv run --group nb python -m nb watch "
                  f"{notebook.root.name} {notebook.run_id}")
-            from ..detach import detach_process
-            detach_process(notebook)
-        detach_output()
+        from ..detach import detach_process
+        board = None
+        if not quiet:
+            from .board import follow
+            board = lambda: follow(notebook, only=notebook.run_id)
+        detach_process(notebook, parent=board)
+    detach_output()
     # Before open_log, deliberately: there is no run to log against, and the
     # log's separator wants a title that only the proposal can supply.
     if not notebook.proposal_path.exists():

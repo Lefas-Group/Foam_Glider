@@ -36,7 +36,7 @@ def detach_output():
     """
     Stop `tell()` reaching stdout, for a run with nobody in front of it.
 
-    `--detach` means the conversation happens through the run directory: the
+    Every run detaches, so the conversation happens through the run directory:
     board reads `run.json`, questions go to `question.json`, and the detail is
     in `status.log` either way. stdout is then not a terminal anyone is reading
     -- it is the SAME terminal the board is drawing on, and a banner printed

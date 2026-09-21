@@ -1,5 +1,5 @@
 """
-Leave the terminal for good -- what `--detach` always claimed to do.
+Leave the terminal for good -- what `--detach` used to claim, for every run.
 
 It used to detach only the CONVERSATION: questions went to the run directory
 instead of stdin, and `tell()` stopped reaching stdout. The PROCESS stayed
@@ -35,7 +35,7 @@ import os
 import sys
 
 
-def detach_process(notebook=None):
+def detach_process(notebook=None, parent=None):
     """
     Become a daemon. Returns True in the surviving child; never returns in the
     parents, which `os._exit` without running exit handlers or flushing
@@ -43,6 +43,17 @@ def detach_process(notebook=None):
 
     False means the platform has no `fork` and the caller stays attached --
     degraded, exactly as before, rather than refusing to run.
+
+    `parent`, if given, runs in the ORIGINAL process -- the one still holding
+    the terminal -- instead of exiting immediately, and its return value
+    becomes that process's exit code. That is where the board belongs: the
+    terminal is the one thing the daemon cannot have, and the board is the one
+    thing that needs it. It must not be spawned from the child, which has no
+    terminal and was forked past the point where threads and sockets are safe.
+
+    By the time this is called the run has already published `run.json`
+    (`runstate.write` precedes it in `ask`), so a board starting here always
+    has a run to find.
     """
     if not hasattr(os, "fork"):
         return False
@@ -53,7 +64,11 @@ def detach_process(notebook=None):
     sys.stderr.flush()
 
     if os.fork() > 0:
-        os._exit(0)
+        # The shell (and the `uv run` wrapper between it and us) is waiting on
+        # THIS pid, so whatever happens here is what the user sees. Exiting
+        # hands the prompt straight back; running the board hands it back when
+        # they leave the board.
+        os._exit((parent() or 0) if parent is not None else 0)
     os.setsid()
     if os.fork() > 0:
         os._exit(0)

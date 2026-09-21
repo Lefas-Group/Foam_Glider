@@ -30,11 +30,18 @@ import json
 import time
 
 WAIT = 3600.0          # an hour: a person who steps away should not lose a run
+# A question that can answer ITSELF does not get the hour. Budgets and
+# assumption confirmations carry a safe default, so silence means "take it" --
+# and once every run detaches, silence is the normal case for a piped or
+# scripted one, which previously got its default the instant stdin closed.
+# Holding those for an hour would be a regression dressed as consistency.
+# 300 s matches `stuck.ASK_WAIT`, the other question with a safe answer.
+DEFAULTED_WAIT = 300.0
 POLL = 1.0
 
 
 class Mailbox:
-    """The question/answer pair for one run. `None` means "use stdin"."""
+    """The question/answer pair for one run. Every run has one."""
 
     def __init__(self, notebook, answers=None, wait=WAIT):
         self.notebook = notebook
@@ -47,10 +54,12 @@ class Mailbox:
         """
         Put a question and block until answered, or until `wait` expires.
 
-        `wait` overrides the mailbox's own deadline for one question. An hour is
-        right for a budget the run cannot proceed without; it is wrong for "you
-        look stuck, shall I carry on?", where the safe answer is yes and an hour
-        of silence would cost more than the thing being asked about.
+        `wait` overrides the deadline for one question. Otherwise the deadline
+        follows the question: one with a `default` waits `DEFAULTED_WAIT` and
+        then takes it, one without waits the full hour and then stops with the
+        question still on disk. An hour is right for a Specified input the run
+        cannot proceed without; it is wrong for "you look stuck, shall I carry
+        on?", where the safe answer is yes.
 
         Returns the answer as a string, or `default` on timeout when there is
         one -- budgets and assumption confirmations have safe defaults and must
@@ -67,7 +76,10 @@ class Mailbox:
         self.notebook.question_path.write_text(json.dumps(q, indent=1) + "\n")
         runstate.write(self.notebook, waiting_on=name)
 
-        deadline = time.time() + (self.wait if wait is None else wait)
+        if wait is None:
+            wait = self.wait if default is None else min(self.wait,
+                                                         DEFAULTED_WAIT)
+        deadline = time.time() + wait
         try:
             while time.time() < deadline:
                 # Blocked on a question is where a run spends most of its idle
@@ -112,7 +124,7 @@ class Mailbox:
             return str(default)
         raise SystemExit(
             f"\n  no answer to {name!r} after "
-            f"{(self.wait if wait is None else wait) / 60:.0f} min. The "
+            f"{wait / 60:.0f} min. The "
             f"question is at\n  {self.notebook.question_path}\n"
             f"  Answer it and resume with `nb resume {self.notebook.root.name}`.")
 

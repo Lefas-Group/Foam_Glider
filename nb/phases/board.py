@@ -34,10 +34,18 @@ REFRESH = 0.5
 SHOWN = 10         # rows: live runs always, then the most recent finished ones
 
 
-def _runs(notebook):
-    """Every run, newest first, with its state and whether it is alive."""
+def _runs(notebook, only=None):
+    """
+    Every run, newest first, with its state and whether it is alive.
+
+    `only` narrows to one run id. `nb ask` attaches a board to the run it just
+    started, and a board showing nine other runs there answers a question
+    nobody asked -- the whole table is what `nb board` is for.
+    """
     out = []
     for d in notebook.runs():
+        if only and d.name != only:
+            continue
         state = runstate.read(d)
         if not state:
             continue
@@ -145,7 +153,7 @@ def _question_panel(run):
                  border_style="yellow")
 
 
-def follow(notebook):
+def follow(notebook, only=None):
     """Draw the table, surface questions, and take answers. Ctrl-C to leave."""
     from rich.console import Console
     from rich.live import Live
@@ -157,7 +165,7 @@ def follow(notebook):
         # grows by a table a second. Fall back to printing only when something
         # actually changes -- useful for a log, and it cannot scroll the thing
         # you are reading off the top.
-        return _follow_plain(notebook, console)
+        return _follow_plain(notebook, console, only)
 
     # TRANSIENT. The table is the current state, not a record of it: left
     # behind, every question pushes another copy of it into the scrollback and
@@ -169,7 +177,7 @@ def follow(notebook):
     with Live(console=console, refresh_per_second=4, transient=True) as live:
         try:
             while True:
-                runs = _runs(notebook)
+                runs = _runs(notebook, only)
                 asking = _asking(runs, answered)
                 live.update(_table(runs), refresh=True)
 
@@ -206,12 +214,12 @@ def follow(notebook):
             return 0
 
 
-def _follow_plain(notebook, console):
+def _follow_plain(notebook, console, only=None):
     """No cursor to steer: print the table only when a row changes."""
     last = None
     try:
         while True:
-            runs = _runs(notebook)
+            runs = _runs(notebook, only)
             key = [(r.get("run"), r.get("phase"), r.get("turn"),
                     r.get("outcome"), bool(r.get("question"))) for r in runs]
             if key != last:
@@ -241,7 +249,7 @@ def main(argv):
     if not runs:
         tell(f"  no runs yet under {notebook.scratch / 'runs'}")
         tell(f"  start one with: python -m nb ask {notebook.root.name} "
-             f'"<question>" --detach')
+             f'"<question>"')
         return 1
     return follow(notebook)
 

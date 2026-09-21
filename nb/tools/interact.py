@@ -1,23 +1,27 @@
 """
 The three tools that talk to the human, and the one that ends the run.
 
-`ask_specified` blocks on stdin. No machinery is needed for that:
-the process is alive and you are at the terminal. This is the dividend from
-having no orchestration framework -- under one, each of these needed its own
-graph node, because a `while` loop containing an interrupt replays prior
-iterations exponentially on resume, which also capped how often it was
-reasonable to ask. Here the cap is only good manners.
+Every one of them goes through the MAILBOX: the question is written to the run
+directory and the run waits for a file in reply. There is no stdin path any
+more. It was not a second transport for the same behaviour -- EOF on the
+attached path raised and killed the run with the question recorded nowhere,
+while a question on disk is answerable from the board, a second terminal, a
+script or a coordinator, and the run resumes either way.
+
+No orchestration framework is needed for any of it. Under one, each of these
+needed its own graph node, because a `while` loop containing an interrupt
+replays prior iterations exponentially on resume -- which also capped how often
+it was reasonable to ask. Here the cap is only good manners.
 """
 
 import json
-import sys
 
 from ..loop import Refactor, Terminal
 from ..schema import Input, Proposal
 from ..log import say, tell
 
 
-# Set by `ask`/`write` when `--detach` is passed. None means a person is at the
+# Set by `ask` and `write` before anything can be asked. Every run has one:
 # terminal and nothing below changes -- the single-user path is untouched.
 MAILBOX = None
 
@@ -43,60 +47,30 @@ def ask_stuck(found, phase):
     def asker(why, options, default):
         tell(f"\n{'─' * 72}\nNO PROGRESS — {phase} phase\n{'─' * 72}")
         tell(f"  {why}")
-        if MAILBOX is not None:
-            tell(f"  waiting up to {stuck.ASK_WAIT / 60:.0f} min — "
-                 f"{MAILBOX.notebook.question_path}")
-            return MAILBOX.ask("stuck", "NO PROGRESS", why, options,
-                               default=default, wait=stuck.ASK_WAIT)
-        sys.stdout.write(f"\n  [{options}] > ")
-        sys.stdout.flush()
-        try:
-            line = sys.stdin.readline()
-        except KeyboardInterrupt:
-            say()
-            return default
-        return line.strip() or default if line else default
+        tell(f"  waiting up to {stuck.ASK_WAIT / 60:.0f} min — "
+             f"{MAILBOX.notebook.question_path}")
+        return MAILBOX.ask("stuck", "NO PROGRESS", why, options,
+                           default=default, wait=stuck.ASK_WAIT)
 
     return stuck.escalate(found, phase, asker)
 
 
 def _prompt(banner, body, hint):
-    # tell, not say: a question is the one thing a run cannot continue without,
-    # so it belongs on the stream a reader is guaranteed to be watching.
-    if MAILBOX is not None:
-        # Detached: nobody is here to type. The question goes to disk and this
-        # blocks until `nb board`, `nb answer` or a coordinator replies.
-        tell(f"\n{'─' * 72}\n{banner}\n{'─' * 72}")
-        tell(body)
-        tell(f"  waiting for an answer — {MAILBOX.notebook.question_path}")
-        return MAILBOX.ask("specified", banner, body)
+    """
+    A question with no safe default: it is asked, and the run waits.
 
-    # One rule, one blank line, the question, then the caret with its hint on
-    # the same line -- a hint on a line of its own read as another instruction
-    # to follow rather than as a label for the box you type in.
+    Through the mailbox, always. There used to be a stdin branch for a run at a
+    terminal, and it was not merely a different transport -- EOF there raised,
+    killing the run with the question recorded nowhere. Here the question stays
+    on disk and the run is resumable, which is what makes `nb answer`, a second
+    terminal and a coordinator interchangeable. `hint` is unused now that
+    nobody types at a caret; kept in the signature because the callers read
+    better for saying what they would have hinted.
+    """
     tell(f"\n{'─' * 72}\n{banner}\n{'─' * 72}")
     tell(body)
-    sys.stdout.write(f"\n  [{hint}] > " if hint else "\n  > ")
-    sys.stdout.flush()
-    try:
-        line = sys.stdin.readline()
-    except KeyboardInterrupt:
-        say()
-        raise SystemExit("cancelled at the prompt")
-    if line == "":
-        # EOF. There is deliberately no unattended mode: a Specified input is
-        # asked every time, so with nobody to ask the run stops rather than
-        # assuming. Failing loudly here is the whole point of the rule.
-        say("  answered   (stdin closed)")
-        raise SystemExit(
-            "\n  stdin closed with a question outstanding. `nb ask` needs a "
-            "terminal:\n  a Specified input is asked every time, never assumed.")
-    # The ANSWER, in the log. The question was already there and the answer was
-    # not, so the record showed a run pausing five minutes at a prompt and gave
-    # no way to see what it was told -- which is the half that explains
-    # everything after it.
-    say(f"  answered   {line.strip() or '(default)'}")
-    return line.strip()
+    tell(f"  waiting for an answer — {MAILBOX.notebook.question_path}")
+    return MAILBOX.ask("specified", banner, body)
 
 
 # What counts as handing the decision back. Named because `propose` needs the
@@ -109,42 +83,22 @@ def ask_budget(title, body, default):
     """
     A number the USER grants before the run starts, with a safe default.
 
-    Deliberately NOT `_prompt`, which raises on EOF and on a blank line because
-    "a Specified input is asked every time, never assumed". That rule is about
+    Deliberately NOT `_prompt`, which has no default at all because "a
+    Specified input is asked every time, never assumed". That rule is about
     inputs that change WHAT IS BEING BUILT, where a default would be a silent
     design decision. A budget is not one: it changes only how long a wrong turn
-    may run, it has a defensible default, and a coordinator that pipes a
-    question and nothing else should get that default rather than a dead run.
-    So EOF, Enter and anything unparseable all fall through to `default`.
+    may run, it has a defensible default, and a coordinator that supplies
+    nothing should get that default rather than a dead run. So a timeout, a
+    blank reply and anything unparseable all fall through to `default`.
     """
-    if MAILBOX is not None:
-        tell(f"\n{'─' * 72}\n{title}\n{'─' * 72}")
-        tell(body + "\n")
-        got = MAILBOX.ask("budget", title, body, default=default)
-        try:
-            value = float(str(got).strip())
-        except ValueError:
-            value = 0.0
-        value = value if value > 0 else default
-        say(f"  answered   {value:.0f}")
-        return value
-
     tell(f"\n{'─' * 72}\n{title}\n{'─' * 72}")
     tell(body + "\n")
-    sys.stdout.write(f"  [{default:.0f}] > ")
-    sys.stdout.flush()
+    got = MAILBOX.ask("budget", title, body, default=default)
     try:
-        line = sys.stdin.readline()
-    except KeyboardInterrupt:
-        raise SystemExit("cancelled at the prompt")
-    try:
-        value = float(line.strip())
+        value = float(str(got).strip())
     except ValueError:
-        say(f"  answered   {default:.0f} (default)")
-        return default
-    if value <= 0:
-        say(f"  answered   {default:.0f} (default; {value} is not usable)")
-        return default
+        value = 0.0
+    value = value if value > 0 else default
     say(f"  answered   {value:.0f}")
     return value
 
@@ -230,21 +184,12 @@ def confirm_assumptions(proposal):
     for n, i in enumerate(assumed, 1):
         tell(f"  {n}. {i.name}: {i.value or i.why}")
     tell('\n  Enter accepts. Correct one with "1: 12 mm".')
-    if MAILBOX is not None:
-        # A confirmation with a safe default: accepting is the right answer if
-        # nobody replies, so an unattended run is never stranded by one.
-        answer = MAILBOX.ask("assumptions", "assumptions",
-                             "\n".join(f"{n}. {i.name}: {i.value or i.why}"
-                                        for n, i in enumerate(assumed, 1)),
-                             default="").strip()
-    else:
-        sys.stdout.write("> ")
-        sys.stdout.flush()
-        try:
-            line = sys.stdin.readline()
-        except KeyboardInterrupt:
-            raise SystemExit("cancelled at the prompt")
-        answer = (line or "").strip()
+    # A confirmation with a safe default: accepting is the right answer if
+    # nobody replies, so an unattended run is never stranded by one.
+    answer = MAILBOX.ask("assumptions", "assumptions",
+                         "\n".join(f"{n}. {i.name}: {i.value or i.why}"
+                                    for n, i in enumerate(assumed, 1)),
+                         default="").strip()
     if not answer:
         say("  answered   (accepted as stated)")
         return []
