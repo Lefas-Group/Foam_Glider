@@ -1,8 +1,9 @@
 # Directing a run
 
-**Status: Stages 1-3 done.** `b81da9a` render scope, `cc5f348` `consult`,
-`faa1c01` `verify`, `e719253` always-detached, `82aaae7` budgets — on branch
-`nb-render-scope`. Stages 4-7 unstarted; Stage 8 scoped and not recommended yet. Every number was measured on
+**Status: Stages 1-4 done.** `b81da9a` render scope, `cc5f348` `consult`,
+`faa1c01` `verify`, `e719253` always-detached, `82aaae7` budgets, `97ac681`
+visuals — on branch `nb-render-scope`. Stages 5-7 unstarted; Stage 8 scoped and
+not recommended yet. Every number was measured on
 2026-09-21 against the three notebooks, the eight run directories in
 `glider-notebook/_scratch/runs/`, and the 65 rows in their metrics databases;
 re-measure before starting, because two stages are calibrated against counts that
@@ -551,6 +552,16 @@ become a second source that can disagree with `lint._defaults` — the failure
 ---
 
 # Stage 4 — Make the visual rule see what the entry shows
+
+**Done — `97ac681`.** Widening rule 14 surfaced a second fault the plan did not
+predict: a cell without `echo: false` prints its own source, so an entry
+building a markdown table in an f-string had that f-string counted as a second
+table. Echoed source is now stripped before counting, which is right for rule 15
+as well; one entry of 77 was affected and both its tables were 4×4, so rule 15's
+size check did not move. The corpus held, exactly as required — the new count is
+0 or 1 for all 77 entries. The cap raise is keyed on `draw_three_view` and
+friends, so lint can tell a drawing from a second plot without judging
+"schematic".
 
 Rule 14 first as a correctness fix, then the cap, then the wording. The rule fix
 stands on its own even if the preference again fails to move behaviour.
