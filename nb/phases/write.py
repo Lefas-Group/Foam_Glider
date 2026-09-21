@@ -523,6 +523,17 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         from ..mailbox import Mailbox
         from ..tools.interact import use_mailbox
         use_mailbox(Mailbox(notebook, answers=answers))
+        # Only when this process is not ALREADY detached. `ask` calls straight
+        # into here after forking itself, and a second fork would change the
+        # pid mid-question for nothing. A bare `nb resume --detach` reaches
+        # this with `detached()` false and forks properly.
+        from ..log import detached
+        if not detached():
+            tell(f"  run       {notebook.run_id}")
+            tell(f"  detail    uv run --group nb python -m nb watch "
+                 f"{notebook.root.name} {notebook.run_id}")
+            from ..detach import detach_process
+            detach_process(notebook)
         detach_output()
     # Before open_log, deliberately: there is no run to log against, and the
     # log's separator wants a title that only the proposal can supply.

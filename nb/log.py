@@ -49,6 +49,18 @@ def detach_output():
     _detached = True
 
 
+def detached():
+    """
+    True once `detach_output` has fired.
+
+    Read by the write phase, which `ask` calls IN THE SAME PROCESS after
+    detaching it -- so without this the run would fork a second time, change
+    its pid mid-question for no reason, and orphan whatever the board was
+    watching.
+    """
+    return _detached
+
+
 def open_log(notebook, phase="", question=""):
     """
     Start writing into `<notebook>/_scratch/run/status.log`.

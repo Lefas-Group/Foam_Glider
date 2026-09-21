@@ -98,8 +98,17 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
         use_mailbox(Mailbox(notebook, answers=answers))
         # The run id goes to the terminal FIRST -- it is the one thing the
         # caller needs and the only way to address this run afterwards -- and
-        # then stdout closes for good.
+        # then stdout closes for good. The watch line goes with it, because
+        # every later `tell` is suppressed and a detached run would otherwise
+        # never say where to follow it.
         tell(f"  run       {notebook.run_id}")
+        tell(f"  detail    uv run --group nb python -m nb watch "
+             f"{notebook.root.name} {notebook.run_id}")
+        # AND THEN LEAVE THE SESSION. Before `setup()`, which starts the MCP
+        # filesystem subprocess, and before the metrics connection: `fork` past
+        # either is how a daemon inherits something it cannot use.
+        from ..detach import detach_process
+        detach_process(notebook)
         detach_output()
     open_log(notebook, "ask", question)
     run_metrics = metrics.Run(notebook, "ask", question)

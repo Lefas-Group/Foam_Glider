@@ -1,7 +1,7 @@
 """
     nb new   <notebook> [title]              scaffold a notebook, then prove it
     nb ask   <notebook> "<question>"         probe, write, render, commit
-             [--detach] [--answers f.json]    …detached, answered via the board
+             [--detach] [--answers f.json]    …leaves the terminal; board answers
     nb resume <notebook> [run]               resume: a gate, a refactor, a
              [--allow-refactor]               …run that died with work on disk
              [--accept-refactor]              …committing a diff you have read
