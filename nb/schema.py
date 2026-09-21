@@ -84,16 +84,20 @@ class Proposal(BaseModel):
     figures: list[str] = Field(
         default_factory=list,
         description=(
-            "Caption per intended visual, 50 words each. ONE visual or none -- "
-            "a table counts as a figure (rule 14). PREFER A DIAGRAM, then a "
-            "table, then prose: an answer that can be seen should be shown, and "
-            "a paragraph with a number in it is the least interesting form the "
-            "same finding can take. The test is not 'would a plot look good' "
-            "but 'is the visual THE ANSWER'. A figure that repeats what the "
-            "sentence already said is worse than the sentence -- which is what "
-            "this used to read 'prefer none' to prevent, and rules 14 and 15 "
-            "still hold that line. Show a shape, a trend, a comparison or a "
-            "trade; do not illustrate a single number."))
+            "Caption per intended visual, 50 words each. ONE visual or none, "
+            "and a table counts as one -- including a table built in a string "
+            "and shown with display(Markdown(...)), which rule 14 now counts "
+            "whether or not you labelled it. TWO are allowed when one of them "
+            "DRAWS THE AIRCRAFT: a three-view and a plot are different claims, "
+            "and the drawing no longer has to displace the answer. Match the "
+            "form to the question: a DRAWING when the answer is what something "
+            "IS -- a shape, a layout, a geometry, anything asking what it looks "
+            "like or what its dimensions are; a PLOT when the answer is how it "
+            "BEHAVES -- a trend, a trade, a crossing; a TABLE when quantities "
+            "are being compared side by side and neither of those is the point. "
+            "The test is not 'would a plot look good' but 'is the visual THE "
+            "ANSWER'. A figure that repeats what the sentence already said is "
+            "worse than the sentence."))
     render_cost_s: float = Field(
         description="Solve seconds from aero_report(), never a guess")
     inputs: list[Input] = Field(default_factory=list)

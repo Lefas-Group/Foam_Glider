@@ -38,7 +38,7 @@ entry can be written compliant rather than corrected afterwards.
     11  `_notebook.py` and `_probe_base.py` byte-match the skill's copies
     12  the freeze is not older than the model that froze it
     13  every `_analysis.py` function the entry calls is passed to `footer(…)`
-    14  one visual per entry -- a table counts as a figure
+    14  one visual per entry (two, if one draws the aircraft)
     15  a table is at most 6x4, excluding the header
     16  a budgeted chapter does not override SOLVE_BUDGET at a call site
     17  a frozen entry stays under its chapter's ENTRY_CEILING
@@ -936,28 +936,35 @@ def tables_in(md):
     return found
 
 
+# What makes a figure a DRAWING of the aircraft rather than a plot of its
+# behaviour. Named functions, not a guess: these are what aerosandbox offers and
+# what every three-view in these notebooks is made with.
+DRAWING = re.compile(r"\b(draw_three_view|draw_wireframe|\.draw\s*\()")
+
+
 def _visuals_and_tables(root, chapters, entries):
     """
-    Rules 14 and 15: one visual per entry, and a table small enough to read.
+    Rules 14 and 15: how many visuals an entry shows, and how big a table may be.
 
-    Rule 14 is static -- it counts `fig-` and `tbl-` labels in the .qmd.
+    BOTH now read the RENDERED output, for the reason rule 15 always did: a
+    table produced by `print()` or `display(Markdown(...))` inside a cell is not
+    parseable as a table anywhere in the source. Rule 14 counted `fig-`/`tbl-`
+    cell labels, and the two entries that prompted this change carry neither --
+    one emits its table through `display(Markdown(md))` with no label, the other
+    captions it inline as `{#tbl-plans}`, which is not a cell option. Both were
+    invisible, so "one visual per entry" was unenforced for exactly the form the
+    model had started choosing.
 
-    Rule 15 has to reach the RENDERED output, because a table produced by
-    `print()` inside an `output: asis` cell is not parseable as a table anywhere
-    in the source. The frozen markdown holds it as literal pipe-markdown, so that
-    is where it is measured; a table written by hand into the .qmd is caught
-    there as well, before it has ever been rendered. No freeze means no check,
-    exactly as rule 12 -- and rule 12 is what keeps the freeze honest.
+    Counting figures by label and tables by what rendered cannot double-count:
+    a figure reaches the freeze as an image, never as pipe-markdown.
+
+    No freeze means the source is counted instead, exactly as rule 12 -- and
+    rule 12 is what keeps the freeze honest.
     """
     found = []
     for f in entries:
         text = f.read_text()
-        labels = re.findall(r"^\s*#\|\s*label:\s*((?:fig|tbl)-[\w-]+)", text, re.M)
-        if len(labels) > 1:
-            found.append((f, (
-                f"{len(labels)} visuals ({', '.join(labels)}) — a table counts as "
-                f"a figure, and an entry shows one or none. Delete whichever is "
-                f"not carrying the answer")))
+        figures = re.findall(r"^\s*#\|\s*label:\s*(fig-[\w-]+)", text, re.M)
 
         # Hand-written tables in the .qmd, plus whatever the page rendered.
         seen = tables_in(re.sub(r"```.*?```", "", text, flags=re.S))
@@ -965,9 +972,32 @@ def _visuals_and_tables(root, chapters, entries):
                   / "execute-results" / "html.json")
         if frozen.exists():
             try:
-                seen += tables_in(json.loads(frozen.read_text())["result"]["markdown"])
+                md = json.loads(frozen.read_text())["result"]["markdown"]
+                # ECHOED SOURCE IS NOT A TABLE. A cell without `echo: false`
+                # puts its own text in the output, so an entry building a
+                # markdown table in an f-string had that f-string counted as a
+                # second table -- `{c_root:.1f}` and all. Measured on one entry
+                # of 77; it made the rendered count 2 for a page showing 1.
+                seen += tables_in(re.sub(r"^```.*?^```", "", md, flags=re.S | re.M))
             except (ValueError, KeyError, TypeError):
                 pass
+
+        # The cap is ONE, raised to two when one of the figures is a drawing of
+        # the aircraft rather than a second plot. A schematic and a plot are
+        # different claims -- "what does it look like" and "how does it behave"
+        # -- and the old cap made the second displace the first, which is how
+        # three chapters ended up with no picture of the aeroplane at all.
+        # Lint cannot judge "schematic", but it can see which function drew it.
+        drawn = bool(DRAWING.search(text))
+        cap = 2 if drawn and figures else 1
+        n = len(figures) + len(seen)
+        if n > cap:
+            what = ", ".join(figures + [f"{r}×{c} table" for r, c in seen])
+            found.append((f, (
+                f"{n} visuals ({what}) — a table counts as a figure, and an "
+                f"entry shows one" + (" (two, when one is a drawing of the "
+                f"aircraft)" if drawn else "") + f". Delete whichever is not "
+                f"carrying the answer")))
         for rows, cols in seen:
             # 6x4, raised from 3x4-or-4x3. The tighter cap was written against a
             # table DECORATING a finding -- the failure behind rule 14 was 72

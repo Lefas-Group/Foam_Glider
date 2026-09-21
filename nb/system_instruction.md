@@ -100,7 +100,7 @@ prose is already written.
 11  `_notebook.py` and `_probe_base.py` byte-match the canonical copies
 12  the freeze is not older than the model that froze it
 13  every `_analysis.py` function the entry calls is passed to `footer(…)`
-14  one visual per entry — a table counts as a figure
+14  one visual per entry (two, if one draws the aircraft)
 15  a table is at most 6×4, excluding the header
 16  a budgeted chapter does not override SOLVE_BUDGET at a call site
 17  a frozen entry stays under the ENTRY_CEILING it declares
@@ -214,12 +214,21 @@ Order: hero → `**Answer.**` → callouts → evidence → `footer(...)`.
 - **One prose section.** A procedure folds into the answer as a numbered list; a
   caveat becomes a `::: {.callout-warning}`, which still counts against the 100.
 - **Choose the form the reader takes in fastest.** Not a ranking to apply blind:
-  a sentence for one or two values, a table once quantities are being compared
-  side by side, a plot only when the *shape* is the argument — a figure costs
-  roughly thirty times a small table to read. **More than five computed values
-  in one sentence is a table** (rule 25), and a table may be 6×4 (rule 15), so
-  there is room for it. Pass an explicit `figsize` — `draw_three_view()` and
-  friends ignore the notebook's rcParams.
+  a sentence for one or two values; a **drawing** when the answer is what
+  something *is* — a shape, a layout, a geometry; a **plot** when the answer is
+  how something *behaves* — a trend, a trade, a crossing; a **table** once
+  quantities are being compared side by side and neither of those is the point.
+  A question asking what the aircraft looks like, or what its dimensions are, is
+  answered by drawing it — `draw_three_view()` — not by tabulating millimetres.
+  **More than five computed values in one sentence is a table** (rule 25), and a
+  table may be 6×4 (rule 15), so there is room for it. A drawing of the aircraft
+  does not displace the plot carrying the answer: rule 14 allows both. Pass an
+  explicit `figsize` — `draw_three_view()` and friends ignore the notebook's
+  rcParams.
+- **A visual is what the reader sees, not what you labelled.** A table built in
+  an f-string and shown with `display(Markdown(...))` is a table and counts as
+  one, whether or not the cell carries a `tbl-` label. Put `#| echo: false` on
+  the cell that builds it, or its source prints above it.
 - **Captions describe, they do not conclude.** "Lift curve, drag curve and drag
   polar at 6 m/s", not "notice that everything is symmetric because…".
 - **Do not print working.** A fit slope, a Reynolds number already stated, a mass
