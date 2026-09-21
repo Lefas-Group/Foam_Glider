@@ -265,8 +265,8 @@ def create_chapter(notebook, name, title, defines="", claim=True,
                       f"TODO line with one line per deliberate difference as "
                       f"you make them, and change nothing you did not mean to. "
                       f"Rule 31 reads that file, and the arrow on the book "
-                      f"index is labelled with your `summary:` -- three to "
-                      f"six words for what this chapter changed.")
+                      f"index is drawn from it -- one node per chapter, one "
+                      f"arrow per fork.")
     if not forked:
         (target / "_model.py").write_text((SCAFFOLD / "_model.py.tmpl").read_text())
         (target / "_analysis.py").write_text("")

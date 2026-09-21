@@ -5,7 +5,6 @@
 # Nothing else differs.
 parent: 02-fuselage-model
 at: 4386dfc
-summary: "quarter chord unswept"
 changes:
   - the tip leading edge moves aft by `0.25 * c_root * (1 - taper)`, so
     the QUARTER CHORD is unswept instead of the leading edge

@@ -5,7 +5,6 @@
 # against the parent is reflow, not design.
 parent: 01-foam-glider
 at: c8bd387
-summary: "fuselage added, 200 mm"
 changes:
   - a Fuselage is added — 200 mm long, 15 mm high, 10 mm wide (two plies
     of 5 mm foam) — and passed to the Airplane, so its mass and drag now
