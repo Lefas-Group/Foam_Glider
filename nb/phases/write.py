@@ -950,8 +950,19 @@ def main(notebook_path, verbose=True, allow_refactor=False,
             return 1
 
     extra = ()
-    if accepted:
+    # WHENEVER THE GATE RAN, not only when its finding was accepted. `check`
+    # re-renders every sibling that reaches the changed function, which
+    # rewrites their freezes whatever the verdict -- so a refactor that came
+    # back "moved nothing" left them rebuilt and UNCOMMITTED beside a
+    # committed `_analysis.py`. The comment above states the invariant this
+    # broke: the committed freeze stops matching the committed code. Nothing
+    # wrong ever shipped, because the gate had just proved the values
+    # identical, but the repo stopped carrying that proof -- and the orphans
+    # sat in the working tree waiting to be swept into an unrelated commit,
+    # which has happened here once already.
+    if moved and _siblings:
         extra = (notebook.freeze / proposal.chapter,)
+    if accepted:
         title += ("\n\nAccepted refactor: " + ", ".join(accepted) +
                   f". {_siblings} sibling entr"
                   f"{'y' if _siblings == 1 else 'ies'} re-proved and re-frozen.")
