@@ -69,7 +69,12 @@ class Mailbox:
         if name in self.answers:
             return str(self.answers.pop(name))
 
+        # `default` goes IN the file, not just into this call's fallback. The
+        # board renders the question from the file, so a budget question
+        # arrived with no number on it -- the one thing the person answering
+        # most needs, and the value they get by saying nothing.
         q = {"kind": kind, "name": name, "why": why, "options": options,
+             "default": None if default is None else str(default),
              "asked_at": time.time(), "run": self.notebook.run_id}
         self.notebook.run.mkdir(parents=True, exist_ok=True)
         self.notebook.answer_path.unlink(missing_ok=True)

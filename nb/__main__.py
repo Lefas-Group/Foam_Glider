@@ -1,6 +1,8 @@
 """
     nb new   <notebook> [title]              scaffold a notebook, then prove it
     nb ask   <notebook> "<question>"         probe, write, render, commit
+             [--pool N] [--ceiling N]         …budgets, instead of being asked
+             [--chapter NN-name]              …route here, do not go looking
              [--quiet] [--answers f.json]     …no board on this terminal
     nb resume <notebook> [run]               resume: a gate, a refactor, a
              [--allow-refactor]               …run that died with work on disk
@@ -57,6 +59,22 @@ def _answers(argv):
         return None
 
 
+def _opt(argv, flag, number=True):
+    """`--flag value`, or None. A budget nobody set is asked for, as before."""
+    if flag not in argv:
+        return None
+    i = argv.index(flag) + 1
+    if i >= len(argv):
+        return None
+    if not number:
+        return argv[i]
+    try:
+        v = float(argv[i])
+    except ValueError:
+        return None
+    return v if v > 0 else None
+
+
 def main(argv):
     # A run is minutes long and prints one line per turn. Block-buffered to a
     # file or a pipe that is a silent hang, which is indistinguishable from a
@@ -88,9 +106,18 @@ def main(argv):
         # `--quiet` means. It is in old scripts and old muscle memory.
         quiet = "--quiet" in rest or "--detach" in rest
         answers = _answers(rest)
-        words = [r for r in rest[1:]
-                 if not r.startswith("--") and not r.endswith(".json")]
-        return ask(rest[0], " ".join(words), quiet=quiet, answers=answers)
+        pool, ceiling, chapter = _opt(rest, "--pool"), _opt(rest, "--ceiling"), \
+            _opt(rest, "--chapter", number=False)
+        # Everything that is not a flag or a flag's value is the question.
+        taken = set()
+        for f in ("--pool", "--ceiling", "--chapter", "--answers"):
+            if f in rest:
+                taken.add(rest.index(f) + 1)
+        words = [r for i, r in enumerate(rest)
+                 if i and i not in taken and not r.startswith("--")
+                 and not r.endswith(".json")]
+        return ask(rest[0], " ".join(words), quiet=quiet, answers=answers,
+                   pool=pool, ceiling=ceiling, chapter=chapter)
 
     # `resume` is what every one of its four uses is -- a gate approved, a
     # refactor allowed, a diff accepted, or a run that died with its entry

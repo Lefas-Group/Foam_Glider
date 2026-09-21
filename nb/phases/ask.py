@@ -20,6 +20,20 @@ from .common import setup, report, spoken_calls
 from ..log import detach_output, open_log, say, tell
 from .. import runstate
 
+ROUTING_FREE = """\
+Pick the chapter from what is above. If two look plausible, `probe` is how you
+tell them apart -- load one and look at the names it defines. That is one turn;
+reading files to infer it is many."""
+
+# Pinned by `--chapter`. Routing to an EXISTING chapter is a coordinator's
+# instruction, not a finding -- it costs probe turns to rediscover and getting
+# it wrong answers about a different aircraft. Creating a chapter is a
+# different decision and stays the user's, at the gate.
+ROUTING_PINNED = """\
+The chapter is already decided: **{chapter}**. Probe it, propose into it, and do
+not route elsewhere. If the question genuinely does not belong there, say so in
+the proposal's rationale rather than moving it."""
+
 BRIEF = """\
 You are in the ASK phase.
 
@@ -34,9 +48,7 @@ looking for what you have already been given -- re-reading an index.qmd, listing
 directories to see which chapters exist, or grepping for a term costs turns and
 tells you nothing new.
 
-Pick the chapter from what is above. If two look plausible, `probe` is how you
-tell them apart -- load one and look at the names it defines. That is one turn;
-reading files to infer it is many.
+{routing}
 
 Then probe for the answer. `probe` takes Python with the chapter already loaded
 and the solve budget already armed: do not import the chapter, and do not use it
@@ -76,7 +88,7 @@ through the notebook for why -- the traceback already says.
 
 def main(notebook_path, question, carry_queue=None, verbose=True,
          pool=None, ceiling=None, run_id=None, quiet=False,
-         answers=None):
+         answers=None, chapter=None):
     bad = preflight(notebook_path)
     if bad:
         for b in bad:
@@ -131,16 +143,33 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
     # Asked only at the head of a chain. A queued follow-on, and the write
     # phase, are handed what is left rather than prompted again -- the number
     # agreed here bounds the whole question, not one phase of it.
+    #
+    # `--pool` and `--ceiling` skip the prompt entirely. A caller who already
+    # knows the numbers -- a coordinator, a script, anyone re-running a
+    # question -- was being asked them twice a run for no decision.
     if pool is None:
         pool = ask_pool(PROBE_POOL)
     # The render ceiling is granted here too, before anything is built, so the
     # agent designs within it rather than discovering it at render time.
+    #
+    # `lint._defaults` is the ONLY source of the default, flag or no flag. A
+    # second copy of this number in `config.py` disagreed with the notebook
+    # once -- 20 s against 200 s, and the notebook won every time -- so the
+    # flag overrides the ANSWER and never the source of the default.
     if ceiling is None:
         import lint
         _, default_ceiling = lint._defaults(notebook.root)
-        ceiling = ask_render_ceiling(default_ceiling or 200.0)
-    session = Session(notebook, question, carry_queue=carry_queue,
+        ceiling = ask_render_ceiling(
+            default_ceiling or 200.0,
+            "declared by this notebook's _notebook.py" if default_ceiling
+            else "no notebook default; nb's fallback")
+    session = Session(notebook, question, chapter=chapter,
+                      carry_queue=carry_queue,
                       metrics=run_metrics, probe_pool=pool)
+    # The pin, for `propose` to hold the model to. On the session rather than
+    # threaded through, because `propose` already reaches the session for every
+    # other thing it checks.
+    session.pinned_chapter = chapter
     session.render_ceiling = ceiling
 
     say(f"  notebook  {notebook.root.name}")
@@ -149,7 +178,10 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
     notebook.run.mkdir(parents=True, exist_ok=True)
     notebook.transcript_path.write_text("")
 
-    contents = [{"role": "user", "parts": [{"text": BRIEF.format(question=question, max_turns=MAX_TURNS)}]}]
+    contents = [{"role": "user", "parts": [{"text": BRIEF.format(
+        question=question, max_turns=MAX_TURNS,
+        routing=(ROUTING_PINNED.format(chapter=chapter) if chapter
+                 else ROUTING_FREE))}]}]
 
     def on_turn(n, resp, turn):
         run_metrics.turn(resp)

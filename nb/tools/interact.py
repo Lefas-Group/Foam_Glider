@@ -79,7 +79,7 @@ def _prompt(banner, body, hint):
 DELEGATED = ("you decide", "your call", "you choose", "")
 
 
-def ask_budget(title, body, default):
+def ask_budget(title, body, default, source=""):
     """
     A number the USER grants before the run starts, with a safe default.
 
@@ -91,6 +91,13 @@ def ask_budget(title, body, default):
     nothing should get that default rather than a dead run. So a timeout, a
     blank reply and anything unparseable all fall through to `default`.
     """
+    # The default AND where it came from. Two numbers were being shown
+    # identically and they are not the same kind of thing: the pool is a
+    # constant in `config.py`, the ceiling belongs to the notebook and is read
+    # out of its own `_notebook.py`. Which one you are overriding changes what
+    # overriding it means.
+    body = f"{body}\n  {default:.0f} s unless you say otherwise" + (
+        f" — {source}" if source else "")
     tell(f"\n{'─' * 72}\n{title}\n{'─' * 72}")
     tell(body + "\n")
     got = MAILBOX.ask("budget", title, body, default=default)
@@ -103,15 +110,15 @@ def ask_budget(title, body, default):
     return value
 
 
-def ask_pool(default):
+def ask_pool(default, source="config.PROBE_POOL"):
     """Probe wall clock for the whole question. The AGENT divides this one."""
     return ask_budget(
         "PROBE TIME POOL",
         "  Seconds of exploring, for the whole question.",
-        default)
+        default, source)
 
 
-def ask_render_ceiling(default):
+def ask_render_ceiling(default, source=""):
     """
     Seconds ONE render of the entry may take. The agent does NOT divide this.
 
@@ -129,7 +136,7 @@ def ask_render_ceiling(default):
     return ask_budget(
         "ENTRY RENDER BUDGET",
         "  Seconds of solving the entry may take. Overrun is killed.",
-        default)
+        default, source)
 
 
 def persist(proposal, notebook):
@@ -297,6 +304,18 @@ def propose(session, **fields):
     """
     fields.setdefault("question", session.question)
     proposal = Proposal.model_validate(fields)
+
+    # The `--chapter` pin, enforced rather than suggested. The brief asks; this
+    # is what makes it a pin. A flag that only advises is a flag that reports
+    # the wrong chapter half the time, which is the misroute it exists to stop.
+    pinned = getattr(session, "pinned_chapter", None)
+    if pinned and proposal.chapter != pinned:
+        raise ValueError(
+            f"This run is pinned to chapters/{pinned}/ and you proposed "
+            f"{proposal.chapter!r}. Propose into {pinned}. If the question "
+            f"genuinely does not belong there, propose into it anyway and say "
+            f"so in the rationale -- moving it is the caller's decision, not "
+            f"yours.")
 
     unasked = [i.name for i in proposal.inputs
                if i.kind == "specified" and i.owner == "user"

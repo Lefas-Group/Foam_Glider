@@ -149,6 +149,11 @@ def _question_panel(run):
         body.append(q["why"])
     if q.get("options"):
         body.append(f"options: {q['options']}")
+    if q.get("default") is not None:
+        # What Enter gets you, and what silence gets you. A question with a
+        # default is not really asking you to decide -- it is offering you the
+        # chance to disagree -- and it should look like it.
+        body.append(f"[dim]Enter takes {q['default']}[/dim]")
     return Panel("\n".join(body), title=f"{run.get('chapter') or run['run']} asks",
                  border_style="yellow")
 

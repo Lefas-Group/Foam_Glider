@@ -30,11 +30,29 @@ either.
 
 ## Budgets
 
-| | default |
-|---|---|
-| probe pool, per question | 120 s |
-| `ENTRY_CEILING`, per render | 20 s |
-| `SOLVE_BUDGET`, per solve | 15 s |
+| | default | where it comes from |
+|---|---|---|
+| probe pool, per question | 120 s | `config.PROBE_POOL` |
+| `ENTRY_CEILING`, per render | the notebook's | its own `_notebook.py` |
+| `SOLVE_BUDGET`, per solve | 15 s | the entry declares it |
+
+Both are asked for at the start of a run, showing the default and where it came
+from — they are different kinds of number and were being shown identically.
+Supply them and the questions do not get asked:
+
+```bash
+uv run --group nb python -m nb ask glider-notebook "<q>" --pool 180 --ceiling 300
+```
+
+`--ceiling` overrides the answer, never the source of the default: the number a
+notebook renders under belongs to the notebook, and a second copy of it in
+`config.py` disagreed once — 20 s against 200 s, and the notebook won every time.
+
+`--chapter NN-name` pins the run to an existing chapter. Routing to one is a
+coordinator's instruction rather than a finding: it costs probe turns to
+rediscover and the wrong answer is about a different aircraft. `propose` refuses
+another chapter, so it is a pin and not a hint. Creating a NEW chapter is a
+different decision and still stops at the gate.
 
 They belong to the entry, never the chapter, and print in its footer:
 
