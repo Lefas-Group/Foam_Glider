@@ -1,0 +1,11 @@
+# What this chapter changed, and from what. Read by rule 31, by the
+# chapter index below it, and by the lineage diagram on the book index.
+#
+# Nothing else differs. An empty `diff` against the parent everywhere else
+# is the positive check that says so.
+parent: 05-fully-optimized
+at: e2e92dc
+changes:
+  - airfoils restored to 5 mm stock: naca4405 for the wing, naca0005 for
+    the tails
+  - fuselage width restored to 0.010 m

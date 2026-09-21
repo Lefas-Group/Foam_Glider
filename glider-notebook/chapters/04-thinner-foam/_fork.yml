@@ -1,0 +1,11 @@
+# What this chapter changed, and from what. Read by rule 31, by the
+# chapter index below it, and by the lineage diagram on the book index.
+#
+# The area density that goes with it is in _analysis.py, not here. Nothing
+# else differs.
+parent: 03-unswept-c4
+at: 12794f6
+changes:
+  - wing sections naca4405 → naca4403, tail naca0005 → naca0003, so the
+    airfoil thickness tracks the stock it is cut from
+  - fuselage width 0.010 → 0.006 m, two plies of the thinner foam

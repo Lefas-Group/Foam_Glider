@@ -1,0 +1,13 @@
+# What this chapter changed, and from what. Read by rule 31, by the
+# chapter index below it, and by the lineage diagram on the book index.
+#
+# The wing, both tails and every section are unchanged; the rest of the diff
+# against the parent is reflow, not design.
+parent: 01-foam-glider
+at: c8bd387
+changes:
+  - a Fuselage is added — 200 mm long, 15 mm high, 10 mm wide (two plies
+    of 5 mm foam) — and passed to the Airplane, so its mass and drag now
+    count
+  - the builder is renamed make_glider_with_fuse, since both aircraft
+    exist

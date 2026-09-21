@@ -1,12 +1,3 @@
-# Forked from chapters/02-fuselage-model/_model.py at 4386dfc.
-#
-# Differences, all deliberate:
-#   * the tip leading edge moves aft by 0.25 * c_root * (1 - taper), so the
-#     QUARTER CHORD is unswept instead of the leading edge. This is the whole
-#     point of the chapter and the only aerodynamic change.
-#
-# Nothing else differs. An empty `diff` against the parent on every other line
-# is the positive check that says so.
 import aerosandbox as asb
 import aerosandbox.numpy as np
 

@@ -1,11 +1,3 @@
-# Forked from chapters/05-fully-optimized/_model.py at e2e92dc.
-#
-# Differences, all deliberate:
-#   * Restored 5mm foam airfoils (naca4405, naca0005).
-#   * Restored 10mm fuselage width.
-#
-# Nothing else differs. An empty `diff` against the parent everywhere else
-# is the positive check that says so.
 import aerosandbox as asb
 import aerosandbox.numpy as np
 

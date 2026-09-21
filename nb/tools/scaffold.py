@@ -245,23 +245,32 @@ def create_chapter(notebook, name, title, defines="", claim=True,
     if fork_from:
         ref, src = _fork_sources(notebook, fork_from)
         if src.get("_model.py"):
-            header = (f"# Forked from chapters/{fork_from}/_model.py at {ref}.\n"
-                      f"#\n"
-                      f"# Differences, all deliberate:\n"
-                      f"#   * TODO: one line per change you make below.\n"
-                      f"#\n"
-                      f"# Nothing else differs. An empty `diff` against the "
-                      f"parent everywhere else\n# is the positive check that "
-                      f"says so.\n")
-            (target / "_model.py").write_text(header + src["_model.py"])
+            # The provenance goes BESIDE the model, not inside it. A header in
+            # `_model.py` would make every later correction dirty the file
+            # under rule 12 and re-prove the whole chapter -- so the record
+            # most likely to need editing would be the most expensive to edit.
+            # `_fork.yml` costs nothing to correct, for ever.
+            (target / "_fork.yml").write_text(
+                f"# What this chapter changed, and from what. Read by rule 31,\n"
+                f"# by the chapter index, and by the lineage diagram on the\n"
+                f"# book index -- one source, three readers.\n"
+                f"parent: {fork_from}\n"
+                f"at: {ref}\n"
+                f"changes:\n"
+                f"  - TODO: one line per deliberate difference, as you make it\n")
+            (target / "_model.py").write_text(src["_model.py"])
             (target / "_analysis.py").write_text(src.get("_analysis.py") or "")
             forked = (f"\n\n_model.py and _analysis.py were COPIED from "
                       f"chapters/{fork_from}/ at commit {ref} -- from the "
                       f"commit, not the working tree, so nothing half-finished "
-                      f"came across. The rule 31 header is already there: "
-                      f"replace its TODO line with one line per deliberate "
-                      f"difference as you make them, and change nothing you "
-                      f"did not mean to.")
+                      f"came across. chapters/{name}/_fork.yml is already "
+                      f"written with the parent and the commit: replace its "
+                      f"TODO line with one line per deliberate difference as "
+                      f"you make them, and change nothing you did not mean to. "
+                      f"Rule 31 reads that file, and the arrow on the book "
+                      f"index is drawn from how your `categories:` differ from "
+                      f"the parent's -- so a fork that varies nothing the "
+                      f"vocabulary names is a fork with no label.")
     if not forked:
         (target / "_model.py").write_text((SCAFFOLD / "_model.py.tmpl").read_text())
         (target / "_analysis.py").write_text("")
@@ -288,13 +297,14 @@ def create_chapter(notebook, name, title, defines="", claim=True,
             f"{what} with index.qmd, _model.qmd, _model.py and an empty "
             f"_analysis.py.{forked}\n\n"
             f"If you build this chapter's _model.py by COPYING an earlier "
-            f"chapter's, say so at the top of the file before you render "
-            f"anything (rule 31): \"# Forked from chapters/NN-name/_model.py "
-            f"at <commit>.\" then \"# Differences:\" and one line per "
-            f"deliberate change. `diff` against the parent is then the review, "
-            f"and an empty diff everywhere else is the positive check. Write it "
-            f"FIRST -- adding it later edits _model.py after the chapter is "
-            f"frozen, which costs a full re-prove to clear rule 12.\n\n"
+            f"chapter's, declare it in chapters/{name}/_fork.yml before you "
+            f"render anything (rule 31): `parent: NN-name`, `at: <commit>`, "
+            f"and a `changes:` list with one line per deliberate difference. "
+            f"`diff` against the parent is then the review, and an empty diff "
+            f"everywhere else is the positive check. The file is beside the "
+            f"model rather than inside it precisely so writing it later costs "
+            f"nothing -- editing _model.py after the chapter is frozen costs a "
+            f"full re-prove to clear rule 12.\n\n"
             f"Put the VEHICLE in chapters/{name}/_model.py -- rule 19 requires "
             f"it, and the chapter index renders that file, so it is where a "
             f"reader looks for the aircraft. Where the vehicle is parametric, "

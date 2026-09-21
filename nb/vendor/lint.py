@@ -55,7 +55,7 @@ entry can be written compliant rather than corrected afterwards.
     28  every entry declares ENTRY_CEILING and SOLVE_BUDGET
     29  never import `_model`, `_analysis` or `_notebook` -- already in scope
     30  a chapter index renders its own `_model.py`
-    31  a forked `_model.py` names its parent chapter, commit and differences
+    31  a fork declares parent, commit and differences in `_fork.yml`
     32  no empty callout -- delete it rather than write `None.`
     33  a chapter index declares `order:` and numbers its title
     34  the notebook has a front page that draws its own chapter graph
@@ -1634,7 +1634,6 @@ FORK_SIMILARITY = 0.85
 # What `forking.md` asks a forked file's header to carry. Checked by substring
 # because the header is prose -- the point is that a reader can answer "what
 # was this taken from, and what was meant to change", not that it match a form.
-FORK_HEADER = ("forked from", "differences")
 
 
 def _code_only(src):
@@ -1897,7 +1896,7 @@ def _book_index(root, chapters):
 
     The generated-block check is the same guard rule 30 makes for a chapter
     index, for the same reason and against the same failure: the scaffold ships
-    a cell that draws the chapter graph FROM the models, and a model that
+    a cell that draws the chapter graph FROM the chapters, and a model that
     rewrites the page with `write_file` rather than editing it replaces a
     derived diagram with a hand-drawn one that is correct exactly once.
 
@@ -1910,11 +1909,12 @@ def _book_index(root, chapters):
         return [(index, "the notebook has no front page — every chapter is "
                         "reachable only from the sidebar, and nothing says how "
                         "they relate. `nb new` scaffolds one")]
-    if "GENERATED FROM THE MODELS" not in index.read_text():
-        return [(index, "the chapter graph is not the generated one — it is "
-                        "drawn from each `_model.py`'s fork header so it cannot "
-                        "disagree with the models. A hand-drawn diagram is "
-                        "correct once")]
+    if "GENERATED FROM THE CHAPTERS" not in index.read_text():
+        return [(index, "the chapter graph is not the generated one — the nodes "
+                        "come from each `_fork.yml` and the arrow labels from "
+                        "how the two chapters' `categories:` differ, so it "
+                        "cannot disagree with the chapters. A hand-drawn "
+                        "diagram is correct once")]
     return []
 
 
@@ -1970,9 +1970,72 @@ def _index_ordering(root, chapters):
     return out
 
 
+def read_fork(root, chapter):
+    """
+    `chapters/<c>/_fork.yml` as a dict, or None. Flat by design.
+
+    Deliberately not a YAML parse, for the reason `_categories.yml` is not one:
+    lint imports nothing outside the stdlib, so the vendored checker runs
+    standalone. The shape is therefore held flat enough for one regex --
+    `key: value` lines and a `changes:` list of `- item` -- which is also the
+    shape a human edits, and a human edits this every time a fork is refined.
+
+    A file BESIDE the model rather than a comment inside it. Two reasons, and
+    neither is the one-off retrofit. `index.qmd` was the other candidate and
+    loses to rule 30: agents rewrite that page with `write_file` and drop what
+    was scaffolded into it, which is why three rules already exist. And a
+    header inside `_model.py` would make every future correction dirty the
+    model under rule 12 and re-prove the whole chapter -- the record most
+    likely to need editing would be the most expensive to edit, which is how a
+    record stops being edited and starts being wrong.
+    """
+    f = root / "chapters" / chapter / "_fork.yml"
+    try:
+        text = f.read_text()
+    except OSError:
+        return None
+    out, changes, in_changes = {}, [], False
+    for line in text.splitlines():
+        if re.match(r"^\s*#", line) or not line.strip():
+            continue
+        item = re.match(r"^\s*-\s*(.+?)\s*$", line)
+        if item and in_changes:
+            changes.append(item.group(1).strip().strip('"').strip("'"))
+            continue
+        kv = re.match(r"^(\w+):\s*(.*)$", line)
+        if kv:
+            key, val = kv.group(1), kv.group(2).strip().strip('"').strip("'")
+            in_changes = key == "changes"
+            if not in_changes:
+                out[key] = val
+            continue
+        # A CONTINUATION: indented, no dash, no key. One change is often a
+        # sentence and a file nobody can wrap is a file nobody edits, so a
+        # wrapped item joins the one above it rather than being dropped --
+        # which is what the first draft of this parser did, silently, to the
+        # second half of every wrapped line.
+        if in_changes and changes and line.startswith(" "):
+            changes[-1] += " " + line.strip()
+    out["changes"] = changes
+    return out
+
+
+def categories_of(root, chapter):
+    """The `categories:` list from a chapter index, as a set."""
+    try:
+        text = (root / "chapters" / chapter / "index.qmd").read_text()
+    except OSError:
+        return set()
+    m = re.search(r"^categories:\s*\[(.+?)\]\s*$", text, re.M)
+    if not m:
+        return set()
+    return {x.strip().strip('"').strip("'") for x in m.group(1).split(",")
+            if x.strip()}
+
+
 def _fork_provenance(root, chapters, entries):
     """
-    Rule 31. A copied `_model.py` says what it was copied from.
+    Rule 31. A copied `_model.py` declares its parent, in `_fork.yml`.
 
     `forking.md` has specified this since before the rule existed -- "the header
     of the copy names its parent chapter, the commit it was taken at, and every
@@ -1980,15 +2043,34 @@ def _fork_provenance(root, chapters, entries):
     an empty `diff` on the file that was NOT meant to change is a positive check
     rather than an absence of information."
 
-    Neither fork in this notebook had one. The doctrine was sound and entirely
-    unenforced, which is the worst of both: a reader who trusts it is misled,
-    and the review it promises never happens. Without the header a fork is
-    indistinguishable from a divergence nobody intended, and the physics now
-    lives in four places with nothing saying which is canonical.
+    That was a comment, and exactly one field of it was machine-readable. The
+    parent was parsed by a regex written out twice -- the book index and the
+    chapter index, independently, both truncating at 2000 bytes -- and the
+    DIFFERENCES, which are the thing a fork actually is, were prose nothing
+    checked. So the lineage arrows could not be labelled, and a later edit to a
+    forked model left the header describing a fork that no longer existed.
 
-    Blocking, because it is cheap to satisfy at the moment of forking and
-    expensive to reconstruct later -- the commit it was taken at is the part
-    that rots first.
+    Two checks now:
+
+      31   a fork has a `_fork.yml` naming its parent and the commit, and
+           listing what it changed
+      31c  its categories differ from its parent's -- a fork that varies
+           nothing the notebook has a word for is either not a chapter or the
+           vocabulary is missing an axis
+
+    A THIRD was designed and did not survive calibration: comparing the
+    declared list against a real `git diff` of the two models. Measured both
+    ways on the four forks here. Against `_code_only` the model collapses to
+    ten logical lines, so every geometry change lands in one hunk and two
+    separate undeclared edits did not move the count. Against raw lines,
+    reflow dominates -- a correct fork declaring 2 changes shows 9 hunks --
+    and the same two edits again moved nothing. A threshold loose enough to
+    clear 9-vs-2 catches nothing worth catching. The failure it was for, a
+    forked model edited without updating its record, stays uncaught; that is
+    worth knowing rather than papering over with a rule that fires at random.
+
+    Blocking, because it is cheap at the moment of forking and expensive to
+    reconstruct later -- the commit it was taken at is the part that rots first.
     """
     out = []
     import difflib
@@ -2012,16 +2094,44 @@ def _fork_provenance(root, chapters, entries):
         close = sorted((r, o) for o, r in kin if r >= FORK_SIMILARITY)
         if not close:
             continue
-        head = text[:1200].lower()
-        if all(k in head for k in FORK_HEADER):
-            continue
         ratio, parent = close[-1]
-        out.append((root / "chapters" / c / "_model.py", (
-            f"is {ratio:.0%} identical to chapters/{parent}/_model.py but says "
-            f"nothing about it — a fork's header names the parent chapter, the "
-            f"commit it was taken at, and every deliberate difference, so that "
-            f"`diff` between the two is the review. Add a comment header: "
-            f"\"Forked from {parent} at <commit>.\" and \"Differences: …\"")))
+        fork = read_fork(root, c)
+        where = root / "chapters" / c / "_fork.yml"
+        if not fork or not fork.get("parent"):
+            out.append((where, (
+                f"chapters/{c}/_model.py is {ratio:.0%} identical to "
+                f"chapters/{parent}/_model.py and no _fork.yml says so. Write "
+                f"one beside it: `parent: {parent}`, `at: <commit>`, and a "
+                f"`changes:` list with one line per deliberate difference, so "
+                f"that `diff` between the two files is the review")))
+            continue
+        if fork["parent"] != parent:
+            out.append((where, (
+                f"names parent {fork['parent']!r}, but chapters/{c}/_model.py "
+                f"is {ratio:.0%} identical to chapters/{parent}/ and less so to "
+                f"that one — a fork declares the chapter it was actually "
+                f"copied from")))
+            continue
+        if not fork.get("at"):
+            out.append((where, (
+                "names a parent but no commit. `at:` is what makes `git show "
+                "<at>:chapters/<parent>/_model.py` the baseline the changes "
+                "are read against, and it is the part that rots first")))
+        if not fork.get("changes"):
+            out.append((where, (
+                f"lists no changes, but chapters/{c}/_model.py is "
+                f"{100 - ratio * 100:.0f}% different from its parent. One line "
+                f"per deliberate difference — the differences ARE the chapter")))
+        # 31c. The arrow on the lineage diagram is drawn from this delta, so an
+        # empty one is a fork with no label as well as a fork with no reason.
+        delta = categories_of(root, c) - categories_of(root, parent)
+        if categories_of(root, c) and not delta:
+            out.append((where, (
+                f"varies nothing the notebook has a word for: its categories "
+                f"are identical to chapters/{parent}/'s. Either it is not a "
+                f"separate chapter, or _categories.yml is missing the axis it "
+                f"explores — and adding an axis is a decision about what the "
+                f"notebook is exploring")))
     return out
 
 
