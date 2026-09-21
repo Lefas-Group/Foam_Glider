@@ -1,9 +1,9 @@
 # Directing a run
 
-**Status: Stages 1-5 done.** `b81da9a` render scope, `cc5f348` `consult`,
+**Status: Stages 1-6 done.** `b81da9a` render scope, `cc5f348` `consult`,
 `faa1c01` `verify`, `e719253` always-detached, `82aaae7` budgets, `97ac681`
-visuals, `81e613b` declaration — on branch `nb-render-scope`. Stages 6-7
-unstarted; Stage 8 scoped and not recommended yet. Every number was measured on
+visuals, `81e613b` declaration, `b2866db` fork provenance — on branch
+`nb-render-scope`. Stage 7 unstarted; Stage 8 scoped and not recommended yet. Every number was measured on
 2026-09-21 against the three notebooks, the eight run directories in
 `glider-notebook/_scratch/runs/`, and the 65 rows in their metrics databases;
 re-measure before starting, because two stages are calibrated against counts that
@@ -704,6 +704,30 @@ bracketed block in a probe result that already carries two.
 ---
 
 # Stage 6 — Structured fork provenance, and derived arrows
+
+**Done — `b2866db`, except the diff check, which did not survive calibration.**
+
+Rule 31b was the half meant to fix "unreliable", and it does not work at either
+granularity. Measured on the four forks: against `_code_only` the model
+collapses to ten logical lines, so every geometry change lands in one hunk and
+two separate undeclared edits moved the count by zero; against raw lines reflow
+dominates, and a correct fork declaring 2 changes shows 9 hunks. A threshold
+loose enough to clear 9-vs-2 catches nothing worth catching. **So the failure it
+was written for — a forked model edited without updating its record — remains
+uncaught.** Rules 31 and 31c both work and shipped.
+
+Two other things the plan did not anticipate. Rule 34 checks the book index for
+a specific generated block and had to move with it, as did both scaffold
+templates — `nb new` would otherwise mint a notebook whose own front page fails
+rule 34. And `git show {ref}:chapters/…` is repo-root relative, which is wrong
+for every notebook that is not the repo itself; `{ref}:./chapters/…` is the form
+that works from a notebook subdirectory.
+
+The re-prove cost what it was measured at. `check.py` re-rendered all 32 pages
+and `freezediff` reported **four index pages changed, zero entries, zero
+figures** — the fork line now listing real differences instead of pointing at a
+comment. The arrows render as `fuselage`, `unswept quarter chord`, `3 mm foam`,
+`5 mm foam`.
 
 Last because it touches the most surfaces: the scaffold, two index generators, a
 lint rule and four existing forked chapters.
