@@ -2057,8 +2057,8 @@ def _fork_provenance(root, chapters, entries):
 
     One check, with four parts:
 
-      31   a fork has a `_fork.yml` naming its parent, the commit, and what
-           it changed
+      31   a fork has a `_fork.yml` naming its parent, the commit, a summary
+           and what it changed
     A THIRD was designed and did not survive calibration: comparing the
     declared list against a real `git diff` of the two models. Measured both
     ways on the four forks here. Against `_code_only` the model collapses to
@@ -2118,6 +2118,12 @@ def _fork_provenance(root, chapters, entries):
                 "names a parent but no commit. `at:` is what makes `git show "
                 "<at>:chapters/<parent>/_model.py` the baseline the changes "
                 "are read against, and it is the part that rots first")))
+        if not fork.get("summary"):
+            out.append((where, (
+                "names a parent but no `summary:` — a few words for the arrow "
+                "on the lineage diagram, which carries the text because the "
+                "nodes do not. Write what the design BECAME, not `from → to`: "
+                "the arrow already carries the from by pointing out of it")))
         if not fork.get("changes"):
             out.append((where, (
                 f"lists no changes, but chapters/{c}/_model.py is "

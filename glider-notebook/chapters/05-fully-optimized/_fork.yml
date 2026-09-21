@@ -8,6 +8,7 @@
 # unconnected trees and the notebook reads as two projects.
 parent: 04-thinner-foam
 at: f450884
+summary: "fully optimised geometry"
 changes:
   - every geometry variable is opened to the optimiser at once, where 04 fixed
     the tail and solved three wing variables

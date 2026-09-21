@@ -253,6 +253,7 @@ def create_chapter(notebook, name, title, defines="", claim=True,
                 f"# book index -- one source, three readers.\n"
                 f"parent: {fork_from}\n"
                 f"at: {ref}\n"
+                f'summary: "TODO: what the design BECAME, a few words"\n'
                 f"changes:\n"
                 f"  - TODO: one line per deliberate difference, as you make it\n")
             (target / "_model.py").write_text(src["_model.py"])
@@ -265,8 +266,9 @@ def create_chapter(notebook, name, title, defines="", claim=True,
                       f"TODO line with one line per deliberate difference as "
                       f"you make them, and change nothing you did not mean to. "
                       f"Rule 31 reads that file, and the arrow on the book "
-                      f"index is drawn from it -- one node per chapter, one "
-                      f"arrow per fork.")
+                      f"index is drawn from it: your `summary:` labels the "
+                      f"arrow into this chapter, so write what the design "
+                      f"BECAME rather than `from → to`.")
     if not forked:
         (target / "_model.py").write_text((SCAFFOLD / "_model.py.tmpl").read_text())
         (target / "_analysis.py").write_text("")

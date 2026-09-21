@@ -42,12 +42,19 @@ True of every chapter, and inherited by any new one:
 # prevent everywhere else. A line reads fine down a page, which already
 # scrolls that way. When a chapter finally branches, LR is worth revisiting.
 #
-# NO EDGE LABELS, and that is the point rather than an omission. A chapter's
-# TITLE already names what it changed -- "Fuselage model", "Unswept quarter
-# chord", "3 mm foam" -- so labelling the arrow into it said the same thing a
-# second time, in slightly different words, and doubled the width of every row
-# to do it. The node has to be labelled anyway; it is the link. So the change
-# is named once, where it is already needed.
+# THE ARROWS CARRY THE TEXT AND THE NODES DO NOT. A chapter's title and the
+# change that produced it are the same fact -- "Fuselage model" reached by
+# "fuselage, 200 mm" -- so only one of them should be on the page. Putting it
+# on the ARROW makes the picture read as a sequence of changes rather than a
+# list of names, which is what a lineage is: the node is the design at that
+# point, and the label before it says what made it that.
+#
+# The nodes stay clickable with no text in them. `click` binds to the node id,
+# not its label, so an empty node is still the link to its chapter -- and the
+# hover title carries the name for anyone who wants it.
+#
+# `summary:` is written in the "what it became" form, not "from → to": the
+# arrow already carries the from, by pointing out of it.
 import pathlib
 import re
 
@@ -55,25 +62,31 @@ _TITLE = re.compile(r'^title:\s*"(.+)"\s*$', re.M)
 
 
 def _fork(_d):
-    """`_fork.yml`'s parent, or None. Flat by design -- see lint.read_fork."""
+    """`_fork.yml`'s parent and summary. Flat by design -- see lint.read_fork."""
     _f = _d / "_fork.yml"
     if not _f.exists():
-        return None
-    _m = re.search(r"^parent:\s*(.+?)\s*$", _f.read_text(), re.M)
-    return _m.group(1).strip() if _m else None
+        return None, ""
+    _t = _f.read_text()
+    _p = re.search(r"^parent:\s*(.+?)\s*$", _t, re.M)
+    _s = re.search(r'^summary:\s*"?(.+?)"?\s*$', _t, re.M)
+    return (_p.group(1).strip() if _p else None), (_s.group(1).strip() if _s else "")
 
 
 _chapters = sorted(p for p in pathlib.Path("chapters").iterdir() if p.is_dir())
-_titles, _parent = {}, {}
+_titles, _parent, _label = {}, {}, {}
 for _c in _chapters:
     _index = _c / "index.qmd"
     _m = _TITLE.search(_index.read_text()) if _index.exists() else None
     _titles[_c.name] = _m.group(1) if _m else _c.name
     # Only a parent that still exists: a fork naming a renamed chapter should
     # leave a root node rather than a dangling edge.
-    _p = _fork(_c)
+    _p, _s = _fork(_c)
     if _p and (pathlib.Path("chapters") / _p).is_dir():
         _parent[_c.name] = _p
+        # Mermaid reads a quoted edge label as a MARKDOWN string, so a summary
+        # beginning "+ " or "- " renders as the literal "Unsupported markdown:
+        # list" in place of the label. Seen on the page, not in any check.
+        _label[_c.name] = re.sub(r"^\s*[-+*]\s+", "", _s)
 
 _id = lambda s: "c" + re.sub(r"[^0-9A-Za-z]", "", s)
 # A leaf is a chapter nothing was forked from: where a line of work reached,
@@ -81,16 +94,18 @@ _id = lambda s: "c" + re.sub(r"[^0-9A-Za-z]", "", s)
 _leaves = {c.name for c in _chapters} - set(_parent.values())
 print("```{mermaid}")
 print("graph TD")
-print("  classDef head fill:#e8f0fe,stroke:#4285f4,stroke-width:2px")
+print("  classDef node fill:#fff,stroke:#9aa0a6,stroke-width:2px")
+print("  classDef head fill:#e8f0fe,stroke:#4285f4,stroke-width:3px")
 for _c in _chapters:
-    print(f'  {_id(_c.name)}["{_titles[_c.name]}"]')
-    print(f"  click {_id(_c.name)} \"chapters/{_c.name}/index.html\"")
-    if _c.name in _leaves:
-        print(f"  class {_id(_c.name)} head")
+    print(f'  {_id(_c.name)}(( ))')
+    print(f'  click {_id(_c.name)} "chapters/{_c.name}/index.html" '
+          f'"{_titles[_c.name]}"')
+    print(f"  class {_id(_c.name)} {'head' if _c.name in _leaves else 'node'}")
 for _c in _chapters:
     if _c.name not in _parent:
         continue
-    print(f"  {_id(_parent[_c.name])} --> {_id(_c.name)}")
+    _e = f'-->|"{_label[_c.name]}"|' if _label[_c.name] else "-->"
+    print(f"  {_id(_parent[_c.name])} {_e} {_id(_c.name)}")
 print("```")
 ```
 
