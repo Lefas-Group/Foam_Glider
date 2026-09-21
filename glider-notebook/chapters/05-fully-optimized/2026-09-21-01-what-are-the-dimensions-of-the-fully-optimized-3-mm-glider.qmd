@@ -1,0 +1,56 @@
+---
+title: "What are the dimensions of the fully optimized 3 mm glider?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 50.0   # s for this render, granted by the user
+SOLVE_BUDGET = 40.0     # s for any one solve
+PROBE_POOL = 130.0        # s granted for the probe
+PROBE_SPENT = 75.2      # s the probe actually used
+
+res = optimize_full_glider(verbose=False)
+sol = res['sol']
+airplane = res['airplane']
+
+c_root = float(sol.value(airplane.wings[0].xsecs[0].chord)) * 1000
+c_tip = float(sol.value(airplane.wings[0].xsecs[1].chord)) * 1000
+sweep = float(sol.value(res['sweep']))
+dihedral = float(sol.value(res['dihedral']))
+h_span = float(sol.value(res['h_span'])) * 1000
+h_chord = float(sol.value(res['h_chord'])) * 1000
+v_span = float(sol.value(airplane.wings[2].span())) * 1000
+v_chord = float(sol.value(airplane.wings[2].xsecs[0].chord)) * 1000
+boom_len = float(sol.value(res['boom_len'])) * 1000
+h_inc = float(sol.value(airplane.wings[1].xsecs[0].twist))
+cg_x = float(sol.value(airplane.xyz_ref[0])) * 1000
+
+data = [
+    ["Span (fixed)", "300.0 mm", "H-tail span", f"{h_span:.1f} mm"],
+    ["Root chord", f"{c_root:.1f} mm", "H-tail chord", f"{h_chord:.1f} mm"],
+    ["Tip chord", f"{c_tip:.1f} mm", "H-tail inc.", f"{h_inc:.1f}°"],
+    ["Wing sweep", f"{sweep:.1f}°", "V-tail span", f"{v_span:.1f} mm"],
+    ["Dihedral", f"{dihedral:.1f}°", "V-tail chord", f"{v_chord:.1f} mm"],
+    ["Tail boom", f"{boom_len:.1f} mm", "CG (from root LE)", f"{cg_x:.1f} mm"]
+]
+
+md = "| Wing / Body | Dimension | Tail | Dimension |\n|---|---|---|---|\n"
+for row in data:
+    md += f"| {row[0]} | {row[1]} | {row[2]} | {row[3]} |\n"
+md += ": Table detailing the geometric dimensions and center of gravity for the fully optimized 3 mm foam glider. {#tbl-plans}\n"
+```
+
+**Answer.** The fully optimized plans feature a [`{python} f"{sweep:.1f}"`]{.key}° forward sweep, strong taper down to an [`{python} f"{c_tip:.1f}"`]{.key} mm tip, and a short [`{python} f"{boom_len:.1f}"`]{.key} mm tail boom. Dimensions are extracted into (@tbl-plans).
+
+```{python}
+#| echo: false
+#| output: asis
+print(md)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_full_glider)
+```
