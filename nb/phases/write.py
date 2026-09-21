@@ -762,7 +762,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         renders = 0
         while True:
             note = verifiers.build_entry(
-                notebook, proposal.chapter, stem, entry_path)
+                notebook, proposal.chapter, stem, entry_path, session=session)
             if note is None:
                 break
             # A page that does not BUILD is a code error with a traceback

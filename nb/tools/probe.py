@@ -165,7 +165,17 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
         # anyway -- the same shape as the ENTRY_CEILING notice below, which
         # already tells the model to go and ask.
         if session.probes == 1 and session.phase == "ask":
-            out += _inputs_notice(notebook, chapter or session.chapter)
+            notice = _inputs_notice(notebook, chapter or session.chapter)
+            out += notice
+            # AND TO THE LOG. The notice goes to the model inside a tool
+            # result, which `status.log` does not carry and `transcript.jsonl`
+            # does not either -- that file records model turns, not what was
+            # handed to them. So in the first live run there was no way to
+            # confirm it had fired at all, which is how a prompt silently stops
+            # working. The budget line beside it has said both all along.
+            if notice:
+                say(f"  inputs    {notice.strip()[1:-1].split('.')[0]} — "
+                    f"asked once, on the first probe")
         left = session.probe_left
         if left is not None:
             # To the MODEL, so the next `budget_s` is informed rather than

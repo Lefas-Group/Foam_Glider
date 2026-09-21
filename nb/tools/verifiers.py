@@ -256,7 +256,7 @@ def render(notebook, target="", why="", session=None):
 BUILD_FAILED = "render failed,"
 
 
-def build_entry(notebook, chapter, stem, entry_path):
+def build_entry(notebook, chapter, stem, entry_path, session=None):
     """
     Render one entry and confirm it left a freeze. Returns a note, or None.
 
@@ -269,10 +269,17 @@ def build_entry(notebook, chapter, stem, entry_path):
 
     It cost a whole run once, on a `from _analysis import …` that no rule then
     caught.
+
+    `session` so this render is COUNTED. The first live run recorded
+    `renders=1` for a write phase that rendered twice -- the agent's own call
+    and this one -- because only the tool handler passed a session. A cost
+    metric that misses the render the phase always does is the wrong number in
+    the direction that flatters.
     """
     if entry_path is not None:
         out = render(notebook, str(entry_path.relative_to(notebook.root)),
-                     why="the entry must build before it is committed")
+                     why="the entry must build before it is committed",
+                     session=session)
         if "FAILED" in out:
             return f"{BUILD_FAILED} the page did not build:\n{out}"
     frozen = (notebook.freeze / chapter / stem
