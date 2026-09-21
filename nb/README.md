@@ -1,6 +1,6 @@
 # `nb` — the design-notebook agent
 
-Turns a design question into a Quarto lab-notebook entry that passes a 32-rule
+Turns a design question into a Quarto lab-notebook entry that passes a 38-rule
 lint contract, renders, and is checked against its own output before it commits.
 Runs on Gemini; needs `GEMINI_API_KEY`, and `quarto`, `git`, `npx` on `PATH`.
 
@@ -9,12 +9,13 @@ Runs on Gemini; needs `GEMINI_API_KEY`, and `quarto`, `git`, `npx` on `PATH`.
 ```bash
 uv run --group nb python -m nb new    <notebook> [title]     # once per aircraft
 uv run --group nb python -m nb ask    <notebook> "<q>"       # the main one
+uv run --group nb python -m nb ask    <notebook> "<q>" --detach  # …and walk away
 uv run --group nb python -m nb resume <notebook> [run]       # resume a stop
 uv run --group nb python -m nb board  <notebook>             # N agents, one terminal
 uv run --group nb python -m nb answer <notebook> [run] "…"   # reply to a waiting run
 uv run --group nb python -m nb watch  <notebook> [run]       # follow the detail
 uv run --group nb python -m nb stop   <notebook> [run]       # ask a run to stop
-uv run --group nb python -m nb clean  <notebook> [--yes]     # drop spent runs
+uv run --group nb python -m nb clean  <notebook> [run] [--keep N] [--yes]
 uv run --group nb python -m nb view   <notebook> [--force]   # build the site
 uv run --group nb python -m nb eval   <notebook>             # runs, by model
 ```
@@ -43,19 +44,34 @@ Rendered in 2.3 s (limit 20 s) · 1 aero solve (budget 15 s each) · explored in
 
 ## Several at once
 
-One agent per chapter — never two in the same one, where `_analysis.py` is
-shared and rule 2 compares code across entries.
-
 ```bash
-uv run --group nb python -m nb ask glider-notebook "<question>" --detach &
+uv run --group nb python -m nb ask glider-notebook "<question A>" --detach
+uv run --group nb python -m nb ask glider-notebook "<question B>" --detach
 uv run --group nb python -m nb board glider-notebook
 ```
 
-`--detach` returns a run id and then goes quiet — its conversation is the run
-directory, so nothing of it prints over the board. `board` shows every run and
-prompts you for whichever is asking. `nb stop` asks a run to end: cooperative, checked before each turn and while
-blocked on a question, so it exits through its own door and records `stopped`
-rather than looking like a crash. It reverts nothing.
+**Do not add `&`.** `--detach` prints the run id and the `watch` line, then
+double-forks and `setsid`s: its own session, no controlling terminal, reparented
+to init. The prompt returns in about a second, and closing the window leaves the
+run alone. Everything a terminal can do to a process — Ctrl-Z, SIGTTIN on a
+background read, a hangup — needs a controlling terminal, and the run no longer
+has one. It used to detach only the *conversation*, which is how three runs got
+suspended mid-question.
+
+**One agent per chapter, and it is enforced.** `_analysis.py` is shared and
+rule 2 compares code across entries, so a second run entering a chapter someone
+is writing is refused before it spends a turn — its proposal is already on disk,
+and `nb resume <notebook> <run>` picks it up when the first finishes. Different
+chapters run side by side; they meet only at the render, which is locked.
+
+Launch both anyway when you have two questions: if they pick different chapters
+you have halved the wall clock, and if they collide the second refuses in
+seconds, which is still faster than waiting.
+
+`board` shows every run and prompts you for whichever is asking. `nb stop` asks
+a run to end: cooperative, checked before each turn and while blocked on a
+question, so it exits through its own door and records `stopped` rather than
+looking like a crash. It reverts nothing.
 
 `board` is a **view, not a supervisor**: questions and answers
 are files in `_scratch/runs/<id>/`, so killing the board leaves the agent
@@ -81,7 +97,7 @@ detector missed something — worth opening, not shrugging at.
 A front page draws the chapter graph from each `_model.py`'s fork header, so it
 cannot disagree with the models. Each chapter index carries `order:` (the sidebar
 does not sort without it), `categories:` from the notebook's own
-`_categories.yml`, its lineage, and a listing of its questions. Rules 33-37 keep
+`_categories.yml`, its lineage, and a listing of its questions. Rules 33-38 keep
 all of that from decaying — the scaffold ships it, and a model that rewrites an
 index with `write_file` would otherwise drop it silently.
 
@@ -115,5 +131,8 @@ command.
   entry's hero value from its freeze, and `check` re-renders every page citing a
   chapter it rebuilds — the one cross-chapter edge in the graph. An entry with
   two hero blocks needs `label=` to say which.
-- **A run does not survive the lid closing.** Asleep looks exactly like wedged,
-  and no timeout helps — the process is not running to observe it.
+- **A detached run survives the terminal, but not the lid.** Closing the window
+  is safe now. Sleep is not: every budget here is wall clock, and wall clock
+  runs while the process does not — so a probe interrupted by sleep wakes to a
+  watchdog that believes it overran by hours and kills it. One suspended run
+  recorded `15 s granted · 5596 s used`.

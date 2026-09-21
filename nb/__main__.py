@@ -10,7 +10,7 @@
     nb board <notebook>                      N agents, one terminal
     nb answer <notebook> [run] "<value>"     reply to a waiting run
     nb stop  <notebook> [run] ["why"]        ask a run to stop, and record it
-    nb watch <notebook> [--all]              follow the detail, live
+    nb watch <notebook> [run] [--all]        follow the detail, live
     nb clean <notebook> [run] [--keep N]     drop spent run directories
              [--yes]                          …a named run, or all but the last N
 

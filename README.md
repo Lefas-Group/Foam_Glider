@@ -9,7 +9,7 @@ development, which can be human reviewed for trust.
 
 The second task, now the main one, is **`nb`** — the same idea distilled out of
 the Claude Code skill into a standalone agent that runs on Gemini. One command
-turns a design question into a notebook entry that passes a 32-rule lint
+turns a design question into a notebook entry that passes a 38-rule lint
 contract, renders, is checked against its own output, and commits. See
 [`nb/README.md`](nb/README.md).
 
@@ -54,10 +54,12 @@ when you first launch Claude in this repo. `SKILL.md` covers the rest.
 ## What's in the notebooks
 
 - **`glider-notebook`** — the current design and the only one still being
-  written to. Sixteen entries across four chapters, each chapter a variation on
-  a 300 mm-span foam glider: *Foam glider* (the baseline planform in 5 mm
-  stock), *Fuselage model* (its mass and drag included), *Unswept quarter chord*
-  (the zero-sweep line moved off the leading edge), and *3 mm foam*.
+  written to. Twenty-six entries across six chapters, each a variation on a
+  300 mm-span foam glider: *Foam glider* (the baseline planform in 5 mm stock),
+  *Fuselage model* (its mass and drag included), *Unswept quarter chord* (the
+  zero-sweep line moved off the leading edge), *3 mm foam*, *Fully optimized
+  geometry* (nearly everything handed to the optimiser at once), and *Fully
+  optimized 5 mm glider*.
 - **`optimised-glider-notebook`** — a flat-plate foam-tray glider optimised for
   time aloft. Chapter 01, *Duration glider*: AeroBuildup inside an `asb.Opti`
   that trims and balances the glide together. Chapter 02, *Flight path*: the
@@ -102,21 +104,32 @@ uv run --group nb python -m nb ask glider-notebook "why is the tail so big?"
 
 It asks for two budgets, stops for anything Specified, confirms its assumptions,
 then writes, renders, verifies and commits one entry. Follow the detail in a
-second tab with `uv run --group nb python -m nb watch glider-notebook`.
+second tab with `uv run --group nb python -m nb watch glider-notebook` — add the
+run id to follow one particular run, which is what `--detach` prints for you.
 
 Several at once, one agent per chapter, driven from a single terminal:
 
 ```bash
-uv run --group nb python -m nb ask glider-notebook "<question>" --detach &
+uv run --group nb python -m nb ask glider-notebook "<question A>" --detach
+uv run --group nb python -m nb ask glider-notebook "<question B>" --detach
 uv run --group nb python -m nb board glider-notebook
 ```
 
-`--detach` returns a run id immediately; `board` shows every run and lets you
-answer whichever is asking. Questions and answers are files under
-`_scratch/runs/<id>/`, so the board is a view rather than a supervisor — kill
-it and the agent is still waiting, or answer from anywhere with `nb answer`.
-That is also the seam a coordinating agent will step into, writing the same
-files while you keep watching the same board.
+**No `&`.** `--detach` prints the run id and then leaves the terminal
+altogether — its own session, no controlling terminal — so the prompt comes
+back on its own and closing the window does not take the run with it. (It used
+to need `&`, and the reflex when the prompt did not return was Ctrl-Z, which
+suspends a run rather than backgrounding it.)
+
+`board` shows every run and lets you answer whichever is asking. Questions and
+answers are files under `_scratch/runs/<id>/`, so the board is a view rather
+than a supervisor — kill it and the agent is still waiting, or answer from
+anywhere with `nb answer`. That is also the seam a coordinating agent will step
+into, writing the same files while you keep watching the same board.
+
+Two runs may not write the same chapter: the second is refused at the door,
+before it spends a turn, and `nb resume <notebook> <run>` finishes it once the
+first is done. Different chapters run happily side by side.
 
 [`nb/README.md`](nb/README.md) covers the rest, and
 [`DEPRECATED-single-agent.md`](DEPRECATED-single-agent.md) preserves the
