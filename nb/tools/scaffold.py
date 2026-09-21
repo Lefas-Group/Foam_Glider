@@ -224,10 +224,13 @@ def create_chapter(notebook, name, title, defines="", claim=True,
     # title, so both are derived from the directory name that allocation just
     # settled -- never from the caller's guess, which `_allocate` may have
     # walked past. `order` is what stops the sidebar falling back to readdir
-    # order (rule 33); the numbered title is what makes the sequence legible in
-    # the text, where a mis-sorted sidebar cannot hide it.
+    # order (rule 33). The title used to carry the number too, as insurance
+    # against a mis-sorted sidebar; `order:` sorts it, breadcrumbs name the
+    # chapter on every entry page, and the number was being paid for in the
+    # narrowest column on the page. A title that arrives numbered is stripped,
+    # so an agent copying an older one does not reintroduce it.
     n = int(name[:2])
-    numbered = title if " · " in title else f"{n:02d} · {title}"
+    numbered = title.split(" · ", 1)[1] if " · " in title else title
     # Written as a YAML list on one line. An empty list is written as `[]` and
     # NOT omitted: a chapter with no axes is a claim -- that it varies nothing
     # its neighbours do not -- and an absent key is indistinguishable from one

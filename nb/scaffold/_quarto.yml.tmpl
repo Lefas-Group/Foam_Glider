@@ -42,6 +42,12 @@ format:
     # with a single item. Removing it also widens the content column, which is
     # what a figure wants.
     toc: false
+    # The sidebar is on every page and is the most cramped column on it.
+    # Quarto's default is 250px, which wrapped "Fully optimized 5 mm glider"
+    # even after the "06 · " prefix came off the titles. Widened rather than
+    # the titles shortened: a chapter's name is what it is.
+    grid:
+      sidebar-width: 320px
     # Scales matplotlib output down to the content column so pages never scroll
     # sideways.
     css: styles.css

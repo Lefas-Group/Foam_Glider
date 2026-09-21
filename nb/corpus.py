@@ -48,18 +48,26 @@ EXPECTED = {
     # renders in 21 s against the 35 s ceiling it was granted. Recorded because
     # lint reads the working tree, not HEAD.
     "glider-notebook": (0, 3),
-    # +2/+8 rule 33, +1/+1 rule 34, +2/+8 rule 35. Rule 36 is silent on
-    # both: neither has a `_categories.yml`, and a notebook that has not
-    # decided its axes is not thereby wrong (order:/numbered titles, one and four
-    # chapters at two findings each) the missing front page, and the chapter
-    # indexes that neither list their entries nor print their lineage. All three
-    # rules postdate both notebooks, which stay frozen -- the sidebar and front door of a
-    # notebook nobody opens are not worth unfreezing a corpus for.
-    "aircraft-notebook": (32, 33),
+    # Rules 33, 34 and 35 postdate both notebooks: the missing `order:`, the
+    # missing front page, and the chapter indexes that neither list their
+    # entries nor print their lineage. Both stay frozen -- the sidebar and
+    # front door of a notebook nobody opens are not worth unfreezing for.
+    # Rule 36 is silent on both: neither has a `_categories.yml`, and a
+    # notebook that has not decided its axes is not thereby wrong.
+    #
+    # -1/-1 when rule 33 stopped requiring a NUMBERED TITLE. These two carry
+    # unnumbered titles and were being flagged for it; glider-notebook carried
+    # numbered ones and was not. Measuring the change on the notebook being
+    # worked on said the check fired nowhere, which was true of one notebook
+    # in three -- the exact mistake `nb.corpus` exists to catch.
+    "aircraft-notebook": (31, 32),
     # +3 blocking from rule 31: its four chapters hold four copies of one
     # _model.py, three of them byte-identical to an earlier chapter and
     # none carrying a fork header. Correct, and frozen.
-    "optimised-glider-notebook": (76, 102),
+    #
+    # -4/-4 with the numbered-title half of rule 33, as above: four chapters,
+    # one finding each.
+    "optimised-glider-notebook": (72, 98),
 }
 
 

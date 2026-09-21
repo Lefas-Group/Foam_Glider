@@ -57,7 +57,7 @@ entry can be written compliant rather than corrected afterwards.
     30  a chapter index renders its own `_model.py`
     31  a fork declares parent, commit and differences in `_fork.yml`
     32  no empty callout -- delete it rather than write `None.`
-    33  a chapter index declares `order:` and numbers its title
+    33  a chapter index declares `order:` matching its directory
     34  the notebook has a front page that draws its own chapter graph
     35  a chapter index lists its entries and prints its lineage
     36  a chapter's categories come from the notebook's vocabulary
@@ -1920,7 +1920,7 @@ def _book_index(root, chapters):
 
 def _index_ordering(root, chapters):
     """
-    Rule 33. A chapter index declares `order:`, and its title carries the number.
+    Rule 33. A chapter index declares `order:` matching its directory number.
 
     The sidebar is built by `- auto: "chapters"`. With no `order:` in a
     chapter's index, Quarto does not sort the sections at all -- it emits them
@@ -1937,9 +1937,11 @@ def _index_ordering(root, chapters):
     And it is UNSTABLE: the hash changes as names are added, so a seventh
     chapter can reshuffle the six above it.
 
-    The numbered TITLE is checked too, because it is the half that survives
-    everything. A sidebar can be mis-sorted by a Quarto change or a stray file;
-    a title reading "04 · 3 mm foam" still tells a reader where they are.
+    The title was numbered too, and is not any more. That half was insurance
+    against a mis-sorted sidebar -- "a Quarto change or a stray file" -- and the
+    sidebar has since been sorted by `order:` and labelled by breadcrumbs on
+    every entry page. The number was being paid for in the narrowest column on
+    the page, which is also the one the titles have to fit.
 
     `create_chapter` writes both, so this rule exists for the case rule 30 was
     written for -- a model that rewrites index.qmd with `write_file` instead of
@@ -1961,12 +1963,6 @@ def _index_ordering(root, chapters):
             out.append((index, f"declares `order: {m.group(1)}` but is chapter "
                                f"{n} — the sidebar would disagree with the "
                                f"directory names"))
-        t = ENTRY_TITLE.search(text)
-        if t and not t.group(1).startswith(f"{n:02d} · "):
-            out.append((index, f'title is {t.group(1)!r} — a chapter title '
-                               f'carries its number, as "{n:02d} · '
-                               f'{t.group(1)}", so the sequence is legible '
-                               f'wherever the title appears'))
     return out
 
 

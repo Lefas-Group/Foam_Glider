@@ -1,5 +1,5 @@
 ---
-title: "04 · 3 mm foam"
+title: "3 mm foam"
 order: 4
 categories: ["3 mm foam", "manual sizing", "fuselage", "unswept quarter chord"]
 listing:
@@ -25,8 +25,12 @@ listing:
 #| output: asis
 # GENERATED FROM THIS CHAPTER'S OWN _fork.yml (rule 35 keeps this block here).
 # One source, three readers: rule 31 checks this file, the book index draws the
-# lineage from it, and this prints what the fork actually changed -- which used
-# to be prose in a comment that nothing read and nothing checked.
+# lineage from it, and this prints what the fork actually changed.
+#
+# In a CALLOUT, like the Specified and Assumed it sits above. As a bare
+# paragraph and a bare list it was the one un-styled region on the page, and it
+# read as a mistake rather than as a section. One change renders as a sentence;
+# a single-item bullet list is heavier than the sentence it replaced.
 import pathlib
 import re
 _fk = pathlib.Path("chapters/04-thinner-foam/_fork.yml")
@@ -48,11 +52,16 @@ if _fk.exists():
         _par = pathlib.Path("chapters") / _p.group(1) / "index.qmd"
         _pt = re.search(r'^title:\s*"(.+)"\s*$', _par.read_text(), re.M) \
             if _par.exists() else None
-        print(f"Forked from [{_pt.group(1) if _pt else _p.group(1)}]"
-              f"(../{_p.group(1)}/). What differs:\n")
-        for _i in _items:
-            print(f"* {_i}")
-        print()
+        _name = _pt.group(1) if _pt else _p.group(1)
+        print('::: {.callout-note appearance="simple"}')
+        print(f"## Forked from [{_name}](../{_p.group(1)}/)\n")
+        if len(_items) == 1:
+            print(f"{_items[0]}\n")
+        else:
+            for _i in _items:
+                print(f"* {_i}")
+            print()
+        print(":::\n")
 ```
 
 A redesign of the glider for 3 mm foam instead of 5 mm foam. The foam area density is scaled proportionally, the airfoils are changed to 3% thickness (NACA 4403 and NACA 0003), and the doubled-foam fuselage width is reduced to 6 mm.
