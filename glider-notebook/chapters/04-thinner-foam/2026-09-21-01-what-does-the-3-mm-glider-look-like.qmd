@@ -1,0 +1,33 @@
+---
+title: "What does the 3 mm glider look like?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+import matplotlib.pyplot as plt
+
+ENTRY_CEILING = 60.0
+SOLVE_BUDGET = 15.0
+PROBE_POOL = 120.0
+PROBE_SPENT = 25.9
+
+res = optimize_glider_3mm(verbose=False)
+glider = make_glider_3mm(res['c_root'], res['taper'], res['cg_x'])
+```
+
+**Answer.** The optimized 3 mm glider features a highly tapered wing with an unswept quarter chord, mounted to the doubled-foam fuselage ahead of the fixed tail surfaces.
+
+```{python}
+#| label: fig-three-view
+#| fig-cap: "Three-view drawing of the optimized 3 mm foam glider, showing the high-taper wing planform and side profile with the doubled-foam fuselage."
+fig = plt.figure(figsize=(8, 6))
+axs = fig.subplots(2, 2, subplot_kw={'projection': '3d'})
+glider.draw_three_view(axs=axs, show=False)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_glider_3mm)
+```
