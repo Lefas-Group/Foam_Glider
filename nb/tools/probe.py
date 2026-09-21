@@ -97,8 +97,20 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
 
     started = time.perf_counter()
     try:
+        # stdin=DEVNULL, deliberately. `capture_output` redirects stdout and
+        # stderr and says nothing about stdin, so a probe inherited the
+        # TERMINAL's -- and a background process group that reads the terminal
+        # is sent SIGTTIN, which stops the whole group, this process included.
+        # A run launched with `&` would then freeze mid-probe with no error,
+        # no CPU, and a wall-clock timer still counting: observed once at
+        # "15 s granted, 5596 s used".
+        #
+        # A probe has no business reading the operator's keyboard in any case.
+        # DEVNULL turns "silently suspend the run" into "EOF", which anything
+        # reading stdin already has to handle.
         r = subprocess.run(["uv", "run", "python", script.name],
                            cwd=run_dir, env=env, capture_output=True,
+                           stdin=subprocess.DEVNULL,
                            text=True, timeout=timeout)
         out = (r.stdout or "") + (r.stderr or "")
         if r.returncode != 0:

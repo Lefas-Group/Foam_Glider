@@ -56,6 +56,10 @@ def bash(notebook, command):
         allowed = ", ".join(" ".join(p) for p in ALLOWED)
         return (f"rejected: {' '.join(argv[:2]) if argv else '(empty)'} is not "
                 f"allowlisted. Allowed: {allowed}")
+    # stdin=DEVNULL for the reason given in probe.py: an inherited terminal
+    # stdin lets any child stop the whole run with SIGTTIN when it is a
+    # background job. `git` is the likeliest to try -- a pager, a credential
+    # prompt -- and this tool exists to be an escape hatch, not a trapdoor.
     r = subprocess.run(argv, cwd=notebook.root.parent, capture_output=True,
-                       text=True, timeout=900)
+                       stdin=subprocess.DEVNULL, text=True, timeout=900)
     return tail((r.stdout or "") + (r.stderr or ""))

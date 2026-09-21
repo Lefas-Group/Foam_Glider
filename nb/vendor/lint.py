@@ -1250,9 +1250,12 @@ def render_quarto(target, root, cwd=None):
     import subprocess
     deadline = render_deadline(root, target)
     try:
+        # stdin=DEVNULL: a render is the longest child this system spawns, and
+        # an inherited terminal stdin is how a background run gets SIGTTIN'd
+        # into a stop that looks exactly like a wedge. See `tools/probe.py`.
         return subprocess.run(["quarto", "render", str(target)],
                               capture_output=True, text=True, cwd=cwd,
-                              timeout=deadline)
+                              stdin=subprocess.DEVNULL, timeout=deadline)
     except subprocess.TimeoutExpired as t:
         blob = ((t.stdout or b"").decode() if isinstance(t.stdout, bytes)
                 else (t.stdout or ""))
