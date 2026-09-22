@@ -30,75 +30,114 @@ True of every chapter, and inherited by any new one:
 #| output: asis
 # GENERATED FROM THE CHAPTERS, never drawn by hand (rule 34 keeps this block).
 #
-# Reads source, executes none of it: no chapter model is imported or solved, so
-# this page stays free to render and has no cross-chapter value dependency.
-# `create_chapter` deletes this page's freeze when it scaffolds a chapter,
-# because rule 12 cannot -- the root index belongs to no chapter, so nothing
-# else would notice a seventh node was missing.
+# Reads source, executes none of it: no chapter model is imported or solved. On
+# a page that now re-renders after EVERY entry, that property stopped being a
+# nicety -- it is what makes the refresh cost 10 s instead of a re-solve.
 #
-# GRAPHVIZ, not mermaid. Quarto renders a ```{dot} block itself, so this costs
-# no new dependency -- and `dot` lays out a TREE, which mermaid's default
-# renderer did not do well enough to read. Drafted outside the notebook first,
-# against a lineage with two branches in it, because the thing that decided it
-# is what happens when this stops being a straight line: a hand-laid timeline
-# drew three siblings as a straight continuation of one rail, which is a
-# picture that LIES. `dot` gets it right without being told.
+# `create_chapter` deletes this page's freeze when it scaffolds a chapter, and
+# `write.py` re-renders it before every commit, because rule 12 cannot protect
+# a page that belongs to no chapter. Rule 40 checks that one of them happened.
 #
-# ONE LABEL PER CHAPTER, and it is the change. A node's title and the change
-# that produced it are the same fact here -- "3 mm foam" reached by "Changed to
-# 3 mm foam" -- so the box carries the change and the title is the tooltip. A
-# root has no change to name and carries its title, which is what it is: where
-# the line started.
+# WHAT THE PICTURE SAYS. A box is a chapter, carrying the change that produced
+# it; a tick below it is an entry. A fork puts the child on the SAME RANK as the
+# tick it was taken from, so the arrow is horizontal and every line starts level
+# with the entry it came from -- which makes y an axis. How far down two lines
+# reach is directly comparable, and the lowest tick on the page is the most
+# recent work.
+#
+# Three settings are load-bearing rather than taste:
+#   * `ranksep="... equally"` is what makes a chapter's ticks EVENLY spaced. A
+#     rank is as tall as the tallest thing in it, so without this a rank holding
+#     some other chapter's box stretched one chapter's entry spacing.
+#   * the BOX HEIGHT is therefore the entry spacing, since `equally` sizes every
+#     rank to the tallest thing in any of them. Tighter entries means smaller
+#     boxes, not a smaller `ranksep` -- that has no effect at all.
+#   * DECLARATION ORDER is the only lever on which side a fork lands. `dir=back`
+#     does nothing (`constraint=false` removes the edge from ordering),
+#     `ordering=out` only sorts a node's own out-edges, and `group`/`weight`
+#     change nothing measurable. Reversing declaration order mirrors the whole
+#     tree, so the side is chosen here -- alternating by generation, so a
+#     straight chain zig-zags rather than marching off one edge.
 import pathlib
 import re
 
 _TITLE = re.compile(r'^title:\s*"(.+)"\s*$', re.M)
+_ENTRY = re.compile(r"^\d{4}-\d{2}-\d{2}-")
 
 
 def _fork(_d):
-    """`_fork.yml`'s parent and summary. Flat by design -- see lint.read_fork."""
+    """`_fork.yml` as parent, summary and the parent's entry count at the fork."""
     _f = _d / "_fork.yml"
     if not _f.exists():
-        return None, ""
+        return None, "", 0
     _t = _f.read_text()
-    _p = re.search(r"^parent:\s*(.+?)\s*$", _t, re.M)
-    _s = re.search(r'^summary:\s*"?(.+?)"?\s*$', _t, re.M)
-    return (_p.group(1).strip() if _p else None), (_s.group(1).strip() if _s else "")
+    _g = lambda _k: (re.search(rf'^{_k}:\s*"?(.+?)"?\s*$', _t, re.M) or [None, ""])[1]
+    return (_g("parent") or None), _g("summary"), int(_g("at_entry") or 0)
 
 
 _chapters = sorted(p for p in pathlib.Path("chapters").iterdir() if p.is_dir())
-_titles, _parent, _label = {}, {}, {}
+_ch = {}
 for _c in _chapters:
     _index = _c / "index.qmd"
     _m = _TITLE.search(_index.read_text()) if _index.exists() else None
-    _titles[_c.name] = _m.group(1) if _m else _c.name
-    # Only a parent that still exists: a fork naming a renamed chapter should
-    # leave a root node rather than a dangling edge.
-    _p, _s = _fork(_c)
-    if _p and (pathlib.Path("chapters") / _p).is_dir():
-        _parent[_c.name] = _p
-        _label[_c.name] = _s.rstrip(".")
+    _p, _s, _at = _fork(_c)
+    _ch[_c.name] = dict(
+        label=(_s.rstrip(".") or (_m.group(1) if _m else _c.name)),
+        # Derived, so it needs no recording and cannot fall out of step: add an
+        # entry and the chapter grows a tick.
+        total=len([q for q in _c.glob("*.qmd") if _ENTRY.match(q.name)]),
+        # Only a parent that still exists: a fork naming a renamed chapter
+        # should leave a root node rather than a dangling edge.
+        parent=(_p if _p and (pathlib.Path("chapters") / _p).is_dir() else None),
+        at=_at)
 
-# A leaf is a chapter nothing was forked from: where a line of work reached.
-_leaves = {c.name for c in _chapters} - set(_parent.values())
+# Declaration order decides each fork's side; alternate by generation.
+_kid_of = {_n: _c["parent"] for _n, _c in _ch.items() if _c["parent"]}
+_key = {}
+
+
+def _walk(_n, _k, _step, _depth):
+    _key[_n] = _k
+    _sibs = sorted(_m for _m, _c in _ch.items() if _c["parent"] == _n)
+    for _i, _kid in enumerate(_sibs):
+        _base = -1 if _depth % 2 == 0 else 1
+        _walk(_kid, _k + (_base if _i % 2 == 0 else -_base) * _step, _step / 2,
+              _depth + 1)
+
+
+for _r in [_n for _n in _ch if _n not in _kid_of]:
+    _walk(_r, 0.0, 1.0, 0)
+_seq = sorted(_ch, key=lambda _n: _key.get(_n, 0.0))
+
 print("```{dot}")
-print("//| fig-width: 5.2")
+print("//| fig-width: 6.4")
 print("digraph lineage {")
-print('  rankdir=TB; bgcolor="transparent"; ranksep=0.34; nodesep=0.22;')
+print('  bgcolor="transparent"; rankdir=TB; nodesep=0.22;')
+print('  ranksep="0.05 equally"; splines=spline;')
 print('  node [shape=box style="rounded,filled" fontname="Helvetica" '
-      'fontsize=11 height=0.38 margin="0.22,0.09" penwidth=1.1];')
-print('  edge [color="#bdc1c6" arrowsize=0.6 penwidth=1.1];')
-for _c in _chapters:
-    _head = _c.name in _leaves
-    _text = _label.get(_c.name) or _titles[_c.name]
-    print(f'  "{_c.name}" [label="{_text}" '
-          f'URL="chapters/{_c.name}/index.html" tooltip="{_titles[_c.name]}" '
-          f'fillcolor="{"#e8f0fe" if _head else "#ffffff"}" '
-          f'color="{"#4285f4" if _head else "#dadce0"}" '
-          f'fontcolor="{"#1a73e8" if _head else "#3c4043"}"];')
-for _c in _chapters:
-    if _c.name in _parent:
-        print(f'  "{_parent[_c.name]}" -> "{_c.name}";')
+      'fontsize=11 height=0.22 margin="0.2,0.03" penwidth=1.4 '
+      'fillcolor="#ffffff" color="#495057" fontcolor="#212529"];')
+print('  edge [color="#495057" arrowsize=0.55 penwidth=1.4 arrowhead=none];')
+for _n in _seq:
+    print(f'  "{_n}" [label="{_ch[_n]["label"]}" '
+          f'URL="chapters/{_n}/index.html"];')
+    for _i in range(1, _ch[_n]["total"] + 1):
+        print(f'  "{_n}__e{_i}" [shape=point width=0.06 color="#495057" '
+              f'fillcolor="#495057"];')
+for _n in _seq:
+    _prev = f'"{_n}"'
+    for _i in range(1, _ch[_n]["total"] + 1):
+        print(f"  {_prev} -> \"{_n}__e{_i}\";")
+        _prev = f'"{_n}__e{_i}"'
+for _n in _seq:
+    _p, _at = _ch[_n]["parent"], _ch[_n]["at"]
+    if not _p:
+        continue
+    # Clamped: a recorded count can outrun the parent if entries were removed,
+    # and a fork from an unwritten tick would draw an edge to nothing.
+    _at = max(1, min(_at or 1, _ch[_p]["total"]))
+    print(f'  {{rank=same; "{_p}__e{_at}"; "{_n}"}}')
+    print(f'  "{_p}__e{_at}" -> "{_n}" [constraint=false arrowhead=normal];')
 print("}")
 print("```")
 ```

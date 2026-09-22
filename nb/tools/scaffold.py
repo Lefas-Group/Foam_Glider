@@ -253,6 +253,11 @@ def create_chapter(notebook, name, title, defines="", claim=True,
                 f"# book index -- one source, three readers.\n"
                 f"parent: {fork_from}\n"
                 f"at: {ref}\n"
+                # Counted HERE because here is the only place it is known
+                # exactly. Afterwards it can only be inferred from filename
+                # dates, which are day-granular, and the five forks that
+                # predate this field all had to be guessed that way.
+                f"at_entry: {len(notebook.entries(fork_from))}\n"
                 f'summary: "TODO: what the design BECAME, a few words"\n'
                 f"changes:\n"
                 f"  - TODO: one line per deliberate difference, as you make it\n")

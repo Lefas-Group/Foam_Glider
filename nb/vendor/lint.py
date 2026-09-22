@@ -1939,6 +1939,37 @@ def _index_ordering(root, chapters):
 INDEX_SECTIONS = ("Specified", "Assumed", "Questions asked here", "The model")
 
 
+def _root_index_freeze(root, chapters, entries):
+    """
+    Rule 40. The front page draws a tick per entry, so its freeze goes stale
+    whenever one is added -- and rule 12 cannot say so.
+
+    Rule 12 fires on a dirty `_model.py` against THAT chapter's freeze. The
+    root `index.qmd` belongs to no chapter, so nothing watches it. That was
+    survivable while the page only read `_fork.yml`, which changes when a
+    chapter is created, because `create_chapter` deletes the freeze itself.
+    Counting ENTRIES made every run a run that changes what the page shows.
+
+    `write.py` re-renders it before each commit. This is the check that the
+    re-render happened -- the same relationship rule 12 has with `check.py`:
+    one does the work, the other refuses to believe it was done.
+
+    No freeze means no finding, exactly as rule 12: a notebook that has never
+    been rendered is not thereby wrong.
+    """
+    index = root / "index.qmd"
+    frozen = root / "_freeze" / "index" / "execute-results" / "html.json"
+    if not index.exists() or not frozen.exists() or not entries:
+        return []
+    newest = max(e.stat().st_mtime for e in entries)
+    if newest > frozen.stat().st_mtime:
+        return [(index, "the front page counts every chapter's entries, and an "
+                        "entry is newer than the freeze it was drawn from — so "
+                        "the lineage diagram is showing a tick count that is "
+                        "out of date. Re-render it: `quarto render index.qmd`")]
+    return []
+
+
 def _index_shape(root, chapters, entries):
     """
     Rule 39. A chapter index's sections are in the scaffold's order.
@@ -2072,8 +2103,8 @@ def _fork_provenance(root, chapters, entries):
 
     One check, with four parts:
 
-      31   a fork has a `_fork.yml` naming its parent, the commit, a summary
-           and what it changed
+      31   a fork has a `_fork.yml` naming its parent, the commit, the
+           parent's entry count at the fork, a summary and what it changed
     A THIRD was designed and did not survive calibration: comparing the
     declared list against a real `git diff` of the two models. Measured both
     ways on the four forks here. Against `_code_only` the model collapses to
@@ -2133,6 +2164,14 @@ def _fork_provenance(root, chapters, entries):
                 "names a parent but no commit. `at:` is what makes `git show "
                 "<at>:chapters/<parent>/_model.py` the baseline the changes "
                 "are read against, and it is the part that rots first")))
+        if not fork.get("at_entry"):
+            out.append((where, (
+                "names a parent but no `at_entry:` — how many entries the "
+                "parent had written when this was taken. It cannot be "
+                "reconstructed later: filename dates are day-granular and a "
+                "chapter can gain several in a day. `create_chapter` counts it "
+                "at the moment of the fork, which is the only moment it is "
+                "known exactly")))
         if not fork.get("summary"):
             out.append((where, (
                 "names a parent but no `summary:` — a few words for the arrow "
@@ -2179,6 +2218,7 @@ def check(root, chapters):
     problems += _empty_callouts(root, chapters, entries)
     problems += _index_ordering(root, chapters)
     problems += _index_shape(root, chapters, entries)
+    problems += _root_index_freeze(root, chapters, entries)
     problems += _book_index(root, chapters)
     problems += _chapter_index_blocks(root, chapters)
     problems += _citation_targets(root, chapters, entries)

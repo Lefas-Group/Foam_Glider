@@ -5,6 +5,10 @@
 # is the positive check that says so.
 parent: 05-fully-optimized
 at: e2e92dc
+# RECONSTRUCTED from filename dates against the fork commit's date,
+# which is day-granular. Forks taken after this landed are exact:
+# `create_chapter` counts the parent's entries at the moment it forks.
+at_entry: 3
 summary: "Returned to 5 mm foam."
 changes:
   - airfoils restored to 5 mm stock: naca4405 for the wing, naca0005 for

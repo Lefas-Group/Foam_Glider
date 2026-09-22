@@ -5,6 +5,10 @@
 # else differs.
 parent: 03-unswept-c4
 at: 12794f6
+# RECONSTRUCTED from filename dates against the fork commit's date,
+# which is day-granular. Forks taken after this landed are exact:
+# `create_chapter` counts the parent's entries at the moment it forks.
+at_entry: 1
 summary: "Changed to 3 mm foam."
 changes:
   - wing sections naca4405 → naca4403, tail naca0005 → naca0003, so the

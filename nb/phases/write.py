@@ -244,6 +244,35 @@ def _refresh_index_freeze(notebook, chapter):
     shutil.rmtree(notebook.freeze / chapter / "index", ignore_errors=True)
 
 
+def _refresh_root_index(notebook):
+    """
+    Redraw the notebook's front page, BEFORE the entry is committed.
+
+    The lineage diagram counts each chapter's entries, so committing an entry
+    changes what that page should show -- and the root index belongs to no
+    chapter, so rule 12 cannot notice. `create_chapter` already deletes this
+    freeze for the case where a chapter appears; this is the same failure for
+    the case where an ENTRY appears, which is every run.
+
+    Before the commit, and rendered rather than merely invalidated. `site()`
+    runs after the commit on purpose -- so an unrelated broken page cannot
+    block an entry that passed on its own terms -- and a freeze deleted here
+    but rebuilt there would leave the new diagram dirty in the tree and the
+    committed one a tick behind, for ever.
+
+    TARGETED, which is both cheaper and more correct: a targeted render ignores
+    the freeze, so the page is guaranteed to re-execute rather than be served
+    from a cache that was just deleted. Measured at 10 s against 50 s for a
+    project render, and it rewrites exactly one freeze -- it does not re-solve
+    the notebook.
+    """
+    if not (notebook.root / "index.qmd").exists():
+        return
+    shutil.rmtree(notebook.root / "_freeze" / "index", ignore_errors=True)
+    verifiers.render(notebook, "index.qmd",
+                     why="the front page counts entries, and one was just added")
+
+
 # EVERY fenced block, not just the python ones. The rendered markdown carries
 # two kinds -- the echoed source, which Quarto tags "``` {.python .cell-code}",
 # and captured STDOUT, which is a bare "```" fence. The first version matched on
@@ -409,6 +438,14 @@ def _commit(notebook, chapter, stem, entry_path, title, extra_paths=()):
     index_freeze = notebook.freeze / chapter / "index"
     if index_freeze.exists():
         paths.append(rel(index_freeze))
+    # And the ROOT index's, which nothing committed before the front page
+    # started counting entries. Without it the diagram in git disagrees with
+    # the entries in git -- and a new-chapter run already left it dirty, since
+    # `create_chapter` deletes it and only `site()` rebuilt it, after the
+    # commit.
+    root_freeze = notebook.root / "_freeze" / "index"
+    if root_freeze.exists():
+        paths.append(rel(root_freeze))
     # Shared machinery the run may have touched -- rule 2 promotion lands here.
     # index.qmd and _model.qmd are in the list for a NEW chapter: they are
     # scaffolded, not written by the model, so they were missing from every
@@ -950,6 +987,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         title += ("\n\nAccepted refactor: " + ", ".join(accepted) +
                   f". {_siblings} sibling entr"
                   f"{'y' if _siblings == 1 else 'ies'} re-proved and re-frozen.")
+    _refresh_root_index(notebook)
     sha, detail = _commit(notebook, proposal.chapter, stem, entry_path,
                           title, extra_paths=extra)
     if sha is None:

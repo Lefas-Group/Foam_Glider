@@ -5,6 +5,10 @@
 # Nothing else differs.
 parent: 02-fuselage-model
 at: 4386dfc
+# RECONSTRUCTED from filename dates against the fork commit's date,
+# which is day-granular. Forks taken after this landed are exact:
+# `create_chapter` counts the parent's entries at the moment it forks.
+at_entry: 3
 summary: "Unswept the quarter chord."
 changes:
   - the tip leading edge moves aft by `0.25 * c_root * (1 - taper)`, so

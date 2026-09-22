@@ -5,6 +5,10 @@
 # against the parent is reflow, not design.
 parent: 01-foam-glider
 at: c8bd387
+# RECONSTRUCTED from filename dates against the fork commit's date,
+# which is day-granular. Forks taken after this landed are exact:
+# `create_chapter` counts the parent's entries at the moment it forks.
+at_entry: 3
 summary: "Added a 200 mm fuselage."
 changes:
   - a Fuselage is added — 200 mm long, 15 mm high, 10 mm wide (two plies
