@@ -1,6 +1,12 @@
 # The lineage diagram, with entries in it
 
-**Status: proposed.** The design is settled — drafted outside the notebook over
+**Status: implemented — `a77ab70`.** One correction to what is below: the plan
+said "delete `_freeze/index/` beside `_refresh_index_freeze`", which is at
+write.py:754, while the commit is at 953 and `site()` at 994 — so the rebuild
+would have landed after the commit. It is an explicit targeted render before
+the commit instead. Everything else held.
+
+**Originally: proposed.** The design is settled — drafted outside the notebook over
 a dozen renders and picked from a comparison page. What is not settled is the
 plumbing, which is what this is about: the diagram is about to depend on
 something that changes every time an entry is committed, and nothing currently
