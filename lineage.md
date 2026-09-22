@@ -168,23 +168,53 @@ their fork point would narrow it and lose the axis.
 
 | change | where |
 |---|---|
-| delete `_freeze/index/` on an entry commit | `nb/phases/write.py` |
-| commit the root index freeze | `_commit_paths` |
+| delete `_freeze/index/` and re-render it BEFORE the commit | `nb/phases/write.py`, beside `_refresh_index_freeze` |
+| add the root index freeze to the commit | `_commit_paths` |
 | rule 40: root index freeze newer than the entries it counts | `nb/vendor/lint.py` |
+
+**Before the commit, not after, and that is the whole of it.** The sequence
+today is `_refresh_index_freeze` (754) → `_commit` (953) → `site()` (994), and
+`site()`'s own comment says it runs after the commit deliberately, so that an
+unrelated broken page cannot block an entry that passed on its own terms. Delete
+the root freeze at 754 and the render that rebuilds it happens at 994 — after
+the commit — leaving the new diagram dirty in the tree and the committed one a
+tick behind, for ever.
+
+So the root index is rendered explicitly before the commit. Measured:
+
+```
+quarto render index.qmd     10 s,  1 freeze written
+quarto render (project)     50 s,  1 freeze written
+```
+
+A targeted render of one page is the cheap way to do it and is exact — a
+targeted render ignores the freeze, so the page is guaranteed to re-execute
+rather than being served from a cache that was just deleted.
 
 **Pros.** Without this the front page is wrong after the first entry and says
 nothing about it. With it, the diagram manages itself: an entry is committed,
 the freeze goes, the next render redraws, and a rule catches it if either step
 is skipped.
 
-**Cons.** Every entry commit now re-executes the root index. It is cheap — the
-page reads source and executes no chapter model, which is the property the
-generated block was written to preserve — but it is no longer free.
+**Cons.** Every entry commit now re-executes the root index, for about 10 s.
+Cheap because the page reads source and executes no chapter model — the
+property the generated block was written to preserve, now load-bearing rather
+than incidental — but no longer free.
 
-**Risk.** The ordering inside `write.py` matters. `site()` runs AFTER the
-commit, so a freeze deleted before the commit is rebuilt after it and left
-dirty unless `_commit_paths` picks it up. That is the state a new-chapter run
-leaves today, unnoticed because nothing checks it.
+**It does NOT re-solve the notebook.** Measured: delete `_freeze/index/`, run a
+project render, and exactly one freeze file is rewritten out of 33 pages.
+Quarto's freeze spares every page that has a current one; it is the TARGETED
+render that ignores the freeze, which is the asymmetry `will_execute` records
+and the reason `nb view` guards the project render rather than the reverse.
+
+**Risk.** `will_execute` walks `chapters/` only, so the root index is not in
+its count and not in the render deadline. Harmless while the page is trivial,
+and a blind spot in a number that has already been wrong twice for exactly this
+kind of reason.
+
+A new-chapter run leaves the root index freeze dirty today — `create_chapter`
+deletes it, `site()` rebuilds it after the commit, and nothing commits it.
+Rendering before the commit fixes that case too.
 
 ---
 
