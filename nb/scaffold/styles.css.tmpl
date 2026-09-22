@@ -93,3 +93,21 @@ figure img,
   font-variant-numeric: tabular-nums;
 }
 
+/* ---------------------------------------------------------------------------
+   The lineage diagram.
+
+   Quarto sizes a `dot` block's SVG from `fig-width` in INCHES, which becomes a
+   fixed pixel width that ignores how wide the column actually is -- on a wide
+   window it sat at 614px inside a 1380px column, adrift in whitespace while
+   the callouts above it spanned the lot.
+
+   The SVG carries a viewBox, so scaling it is lossless. Filling the column
+   also scales the type with it, which is the only lever there is: raising
+   graphviz's `fontsize` widens the diagram in exact proportion, so the page
+   scales it back and the glyphs come out where they started.
+   --------------------------------------------------------------------------- */
+.cell-output-display > div > figure > div > svg,
+.cell-output-display svg {
+  width: 100%;
+  height: auto;
+}

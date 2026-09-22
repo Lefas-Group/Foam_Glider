@@ -113,16 +113,20 @@ print("//| fig-width: 6.4")
 print("digraph lineage {")
 print('  bgcolor="transparent"; rankdir=TB; nodesep=0.22;')
 print('  ranksep="0.05 equally"; splines=spline;')
+# The site's own palette, read out of its bootstrap variables rather than
+# picked: --bs-border-color for a box's edge, --bs-link-color for its text
+# because every box IS a link, and --bs-secondary for the lines and ticks,
+# which are structure rather than content.
 print('  node [shape=box style="rounded,filled" fontname="Helvetica" '
-      'fontsize=11 height=0.22 margin="0.2,0.03" penwidth=1.4 '
-      'fillcolor="#ffffff" color="#495057" fontcolor="#212529"];')
-print('  edge [color="#495057" arrowsize=0.55 penwidth=1.4 arrowhead=none];')
+      'fontsize=11 height=0.22 margin="0.2,0.03" penwidth=1.2 '
+      'fillcolor="#ffffff" color="#dee2e6" fontcolor="#0d6efd"];')
+print('  edge [color="#6c757d" arrowsize=0.55 penwidth=1.2 arrowhead=none];')
 for _n in _seq:
     print(f'  "{_n}" [label="{_ch[_n]["label"]}" '
           f'URL="chapters/{_n}/index.html"];')
     for _i in range(1, _ch[_n]["total"] + 1):
-        print(f'  "{_n}__e{_i}" [shape=point width=0.06 color="#495057" '
-              f'fillcolor="#495057"];')
+        print(f'  "{_n}__e{_i}" [shape=point width=0.055 color="#6c757d" '
+              f'fillcolor="#6c757d"];')
 for _n in _seq:
     _prev = f'"{_n}"'
     for _i in range(1, _ch[_n]["total"] + 1):
