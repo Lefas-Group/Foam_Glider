@@ -36,29 +36,19 @@ True of every chapter, and inherited by any new one:
 # because rule 12 cannot -- the root index belongs to no chapter, so nothing
 # else would notice a seventh node was missing.
 #
-# `flowchart`, not `graph`: the same diagram, laid out by the current engine
-# rather than the legacy one, which routes edges and packs nodes better and is
-# what mermaid's own docs use now.
+# GRAPHVIZ, not mermaid. Quarto renders a ```{dot} block itself, so this costs
+# no new dependency -- and `dot` lays out a TREE, which mermaid's default
+# renderer did not do well enough to read. Drafted outside the notebook first,
+# against a lineage with two branches in it, because the thing that decided it
+# is what happens when this stops being a straight line: a hand-laid timeline
+# drew three siblings as a straight continuation of one rail, which is a
+# picture that LIES. `dot` gets it right without being told.
 #
-# TOP DOWN. Sideways was tried and the lineage is currently a straight line --
-# six chapters, no branching -- so LR drew a 1900px strip that shrank the text
-# to nothing and scrolled the page sideways, which `styles.css` exists to
-# prevent everywhere else. A line reads fine down a page, which already
-# scrolls that way. When a chapter finally branches, LR is worth revisiting.
-#
-# THE ARROWS CARRY THE TEXT AND THE NODES DO NOT. A chapter's title and the
-# change that produced it are the same fact -- "Fuselage model" reached by
-# "fuselage, 200 mm" -- so only one of them should be on the page. Putting it
-# on the ARROW makes the picture read as a sequence of changes rather than a
-# list of names, which is what a lineage is: the node is the design at that
-# point, and the label before it says what made it that.
-#
-# The nodes stay clickable with no text in them. `click` binds to the node id,
-# not its label, so an empty node is still the link to its chapter -- and the
-# hover title carries the name for anyone who wants it.
-#
-# `summary:` is written in the "what it became" form, not "from → to": the
-# arrow already carries the from, by pointing out of it.
+# ONE LABEL PER CHAPTER, and it is the change. A node's title and the change
+# that produced it are the same fact here -- "3 mm foam" reached by "Changed to
+# 3 mm foam" -- so the box carries the change and the title is the tooltip. A
+# root has no change to name and carries its title, which is what it is: where
+# the line started.
 import pathlib
 import re
 
@@ -87,29 +77,29 @@ for _c in _chapters:
     _p, _s = _fork(_c)
     if _p and (pathlib.Path("chapters") / _p).is_dir():
         _parent[_c.name] = _p
-        # Mermaid reads a quoted edge label as a MARKDOWN string, so a summary
-        # beginning "+ " or "- " renders as the literal "Unsupported markdown:
-        # list" in place of the label. Seen on the page, not in any check.
-        _label[_c.name] = re.sub(r"^\s*[-+*]\s+", "", _s)
+        _label[_c.name] = _s.rstrip(".")
 
-_id = lambda s: "c" + re.sub(r"[^0-9A-Za-z]", "", s)
-# A leaf is a chapter nothing was forked from: where a line of work reached,
-# and the reason the "Where to start" paragraph could go -- the picture says it.
+# A leaf is a chapter nothing was forked from: where a line of work reached.
 _leaves = {c.name for c in _chapters} - set(_parent.values())
-print("```{mermaid}")
-print("flowchart TD")
-print("  classDef node fill:#fff,stroke:#9aa0a6,stroke-width:2px")
-print("  classDef head fill:#e8f0fe,stroke:#4285f4,stroke-width:3px")
+print("```{dot}")
+print("//| fig-width: 5.2")
+print("digraph lineage {")
+print('  rankdir=TB; bgcolor="transparent"; ranksep=0.34; nodesep=0.22;')
+print('  node [shape=box style="rounded,filled" fontname="Helvetica" '
+      'fontsize=11 height=0.38 margin="0.22,0.09" penwidth=1.1];')
+print('  edge [color="#bdc1c6" arrowsize=0.6 penwidth=1.1];')
 for _c in _chapters:
-    print(f'  {_id(_c.name)}(( ))')
-    print(f'  click {_id(_c.name)} "chapters/{_c.name}/index.html" '
-          f'"{_titles[_c.name]}"')
-    print(f"  class {_id(_c.name)} {'head' if _c.name in _leaves else 'node'}")
+    _head = _c.name in _leaves
+    _text = _label.get(_c.name) or _titles[_c.name]
+    print(f'  "{_c.name}" [label="{_text}" '
+          f'URL="chapters/{_c.name}/index.html" tooltip="{_titles[_c.name]}" '
+          f'fillcolor="{"#e8f0fe" if _head else "#ffffff"}" '
+          f'color="{"#4285f4" if _head else "#dadce0"}" '
+          f'fontcolor="{"#1a73e8" if _head else "#3c4043"}"];')
 for _c in _chapters:
-    if _c.name not in _parent:
-        continue
-    _e = f'-->|"{_label[_c.name]}"|' if _label[_c.name] else "-->"
-    print(f"  {_id(_parent[_c.name])} {_e} {_id(_c.name)}")
+    if _c.name in _parent:
+        print(f'  "{_parent[_c.name]}" -> "{_c.name}";')
+print("}")
 print("```")
 ```
 
