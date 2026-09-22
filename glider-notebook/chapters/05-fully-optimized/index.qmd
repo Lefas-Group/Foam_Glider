@@ -56,12 +56,8 @@ if _fk.exists():
 1. **Directional and lateral stability bounds**: `0.0005`, for IPOPT.
 :::
 
-## Questions asked here
-
 ::: {#entries}
 :::
-
-## The model
 
 ```{python}
 #| echo: false

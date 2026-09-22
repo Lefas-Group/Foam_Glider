@@ -1933,10 +1933,11 @@ def _index_ordering(root, chapters):
     return out
 
 
-# The order the scaffold ships a chapter index in, and the order it is read in:
-# what the chapter IS, then what it was given and what it guessed, then what was
-# asked of it, then the code that answers.
-INDEX_SECTIONS = ("Specified", "Assumed", "Questions asked here", "The model")
+# An index carries its input callouts and nothing else with a heading. It used
+# to carry "Questions asked here" and "The model" too, above a listing and a
+# code dump that are perfectly legible without being announced -- a heading
+# whose section is one div is a label for something the reader can already see.
+INDEX_SECTIONS = INPUT_TITLES
 
 
 def _root_index_freeze(root, chapters, entries):
@@ -1972,7 +1973,16 @@ def _root_index_freeze(root, chapters, entries):
 
 def _index_shape(root, chapters, entries):
     """
-    Rule 39. A chapter index's sections are in the scaffold's order.
+    Rule 39. An index carries its input callouts, in order, and nothing else.
+
+    Two halves. The ORDER, which is the reading argument -- what was given
+    before what was guessed. And the absence of everything else: no `##`
+    outside a callout, and no prose inside one above its numbered items.
+
+    Both are the failure rule 30 names, which is a model rewriting the page
+    with `write_file` rather than editing it and putting back what it thinks
+    belongs there. A heading over a single listing, or a sentence explaining a
+    list of three numbered items, is exactly what gets put back.
 
     Rules 30, 33, 34, 35 and 38 each guard one thing the scaffold puts in an
     index, all for the reason rule 30 states: "a model that rewrites index.qmd
@@ -2002,15 +2012,33 @@ def _index_shape(root, chapters, entries):
             text = index.read_text()
         except OSError:
             continue
-        seen = [h for h in re.findall(r"^##\s+(.+?)\s*$", text, re.M)
-                if h in INDEX_SECTIONS]
+        heads = re.findall(r"^##\s+(.+?)\s*$", text, re.M)
+        seen = [h for h in heads if h in INDEX_SECTIONS]
         want = [s for s in INDEX_SECTIONS if s in seen]
         if seen != want:
             out.append((index, (
-                f"sections run {' → '.join(seen)}; the scaffold's order is "
-                f"{' → '.join(want)}. What the chapter IS comes before what it "
-                f"was given, which comes before what was asked of it, which "
-                f"comes before the code")))
+                f"sections run {' → '.join(seen)}; the order is "
+                f"{' → '.join(want)} — what was given before what was guessed")))
+        for h in heads:
+            if h not in INDEX_SECTIONS:
+                out.append((index, (
+                    f"has a `## {h}` heading. An index carries its input "
+                    f"callouts and nothing else: a listing and a code block "
+                    f"are legible without being announced, and a heading over "
+                    f"one div is a label for what the reader can already see")))
+        # Prose between a callout's title and its first item. The callouts are
+        # a numbered list of decisions; a sentence introducing three of them is
+        # longer than the three.
+        for body in re.findall(
+                r"^:{3,}\s*\{\.callout-\w+\}\s*\n\s*##\s*(?:" + INPUT_CALLOUTS
+                + r")[^\n]*\n(.*?)^:{3,}\s*$", text, re.S | re.M):
+            lead = [l for l in body.strip().splitlines()
+                    if l.strip() and not re.match(r"^\s*\d+\.", l)]
+            if lead and not lead[0].startswith(" "):
+                out.append((index, (
+                    f"says {lead[0].strip()[:40]!r} above its numbered items. "
+                    f"The callout IS the list; anything before it is a "
+                    f"sentence introducing three lines")))
     return out
 
 

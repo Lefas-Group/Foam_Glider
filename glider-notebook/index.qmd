@@ -2,14 +2,8 @@
 title: "Optimised Glider II"
 ---
 
-A chronological record of questions asked about a 300 mm span foam glider optimised for minimum sink rate in trimmed glide. Each **chapter**
-is one model — a vehicle, a fidelity, a method — and each **entry** is one
-question asked of it, answered by code that runs when the page renders.
-
 ::: {.callout-tip}
 ## Initial user specifications
-
-True of every chapter, and inherited by any new one:
 
 1. **Span**: 300 mm, fixed tip to tip.
 2. **Construction**: flat foam sheet, cut and assembled by hand.
@@ -22,8 +16,6 @@ True of every chapter, and inherited by any new one:
 1. **Still air**, no thermals and no wind gradient.
 2. **Rigid airframe**, no aeroelastic deflection under load.
 :::
-
-## How the chapters relate
 
 ```{python}
 #| echo: false
@@ -110,7 +102,14 @@ for _r in [_n for _n in _ch if _n not in _kid_of]:
 _seq = sorted(_ch, key=lambda _n: _key.get(_n, 0.0))
 
 print("```{dot}")
-print("//| fig-width: 6.4")
+# `column: page` because the text size is otherwise fixed. Raising `fontsize`
+# widens the diagram in exact proportion -- 11pt gives 7.94in, 13pt gives
+# 9.36in, a ratio of 1.18 both ways -- so after the page scales it back to the
+# column the glyphs are the same size they were. The only lever is how wide it
+# is allowed to DISPLAY. At the body column it renders at about 8.9pt against
+# prose at 12.75pt; spanning the page closes most of that.
+print("//| column: page")
+print("//| fig-width: 9.4")
 print("digraph lineage {")
 print('  bgcolor="transparent"; rankdir=TB; nodesep=0.22;')
 print('  ranksep="0.05 equally"; splines=spline;')

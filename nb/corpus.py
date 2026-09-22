@@ -60,14 +60,22 @@ EXPECTED = {
     # numbered ones and was not. Measuring the change on the notebook being
     # worked on said the check fired nowhere, which was true of one notebook
     # in three -- the exact mistake `nb.corpus` exists to catch.
-    "aircraft-notebook": (31, 32),
+    #
+    # +1/+1 rule 39, which now asks an index to carry its input callouts and
+    # nothing else: this one still heads its code dump "## The model".
+    "aircraft-notebook": (32, 33),
     # +3 blocking from rule 31: its four chapters hold four copies of one
     # _model.py, three of them byte-identical to an earlier chapter and
     # none carrying a fork header. Correct, and frozen.
     #
     # -4/-4 with the numbered-title half of rule 33, as above: four chapters,
     # one finding each.
-    "optimised-glider-notebook": (72, 98),
+    #
+    # +11/+11 rule 39. Four "## The model" headings and seven callouts with a
+    # line of prose above their numbered items -- "Asked of the user,
+    # 2026-09-03:" and the like. Correct, and frozen: both notebooks predate
+    # the rule exactly as they predate 33, 34 and 35.
+    "optimised-glider-notebook": (83, 109),
 }
 
 

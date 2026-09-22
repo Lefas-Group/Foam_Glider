@@ -57,12 +57,8 @@ if _fk.exists():
 2. **Airfoil thickness**: 3% to match foam.
 :::
 
-## Questions asked here
-
 ::: {#entries}
 :::
-
-## The model
 
 ```{python}
 #| echo: false

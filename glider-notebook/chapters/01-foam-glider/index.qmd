@@ -58,12 +58,8 @@ if _fk.exists():
 3. **Fuselage neglected**, both its mass and its drag.
 :::
 
-## Questions asked here
-
 ::: {#entries}
 :::
-
-## The model
 
 ```{python}
 #| echo: false

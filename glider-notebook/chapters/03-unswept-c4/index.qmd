@@ -50,12 +50,8 @@ if _fk.exists():
 1. **Wing sweep:** zero at the quarter chord.
 :::
 
-## Questions asked here
-
 ::: {#entries}
 :::
-
-## The model
 
 ```{python}
 #| echo: false

@@ -57,12 +57,8 @@ if _fk.exists():
 1. **Fuselage width: 10 mm**, doubled 5 mm foam.
 :::
 
-## Questions asked here
-
 ::: {#entries}
 :::
-
-## The model
 
 ```{python}
 #| echo: false
