@@ -14,7 +14,7 @@ listing:
   filter-ui: false
   sort-ui: false
   field-display-names:
-    title: "Question"
+    title: "Entries"
 ---
 
 {{< include _model.qmd >}}
