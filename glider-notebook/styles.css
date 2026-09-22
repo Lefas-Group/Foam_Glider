@@ -111,3 +111,11 @@ figure img,
   width: 100%;
   height: auto;
 }
+
+/* A box in the diagram is a link, and bootstrap underlines links. Inside an
+   SVG that puts a rule through the middle of a label sitting in a box, which
+   already reads as clickable without it. */
+.cell-output-display svg a,
+.cell-output-display svg a text {
+  text-decoration: none;
+}
