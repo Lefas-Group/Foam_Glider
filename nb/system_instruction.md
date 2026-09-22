@@ -94,7 +94,7 @@ find things whose name gives no clue.
 - Call `aero_report()` at the end of a probe. It prints what the solves cost, and
   that number becomes the proposal's render cost.
 
-# The 32 rules lint checks
+# The 39 rules lint checks
 
 Know these before drafting, not after. Finding one from a lint run means the
 prose is already written.
@@ -132,7 +132,22 @@ prose is already written.
 30  a chapter index renders its own `_model.py` — that is where the aircraft is
 31  a forked `_model.py` names its parent chapter, commit and differences
 32  no empty callout — delete it rather than write `None.`
+33  a chapter index declares `order:` matching its directory number
+34  the front page keeps its generated lineage block — never write_file over it
+35  a chapter index keeps its entry listing and its lineage cell
+37  `cite()` names an entry that exists and publishes a hero value
+38  every chapter is named in _quarto.yml's sidebar
+39  an index carries its input callouts, in order, and nothing else
+40  the front page's freeze is not older than the entries it counts
 ```
+
+There is no rule 36: it checked the categories system, which was retired, and
+the number is not reused. 33-35 and 37-40 are about pages you EDIT rather than
+write — a chapter's `index.qmd` and the notebook's front page — and every one of
+them is the same failure: `write_file` over a page that was scaffolded, putting
+back what looks like it belongs. `edit_file` them. 34, 38 and 40 are usually
+maintained for you; they are listed so that breaking one is recognisable rather
+than mysterious.
 
 `read_reference("why")` has the failure behind each one. Read it when a rule
 looks arbitrary, or before arguing one away.
@@ -252,9 +267,8 @@ Order: hero → `**Answer.**` → callouts → evidence → `footer(...)`.
 - **Both callouts say NEW.** They list only what this page introduced. What it
   inherits is stated once, at the level that introduced it — the chapter index
   for a chapter's decisions, and the notebook's front page, whose callouts say
-  INITIAL because everything inherits them. `nb inputs` aggregates all three. A
-  page restating what it inherited is the mistake; an empty callout is deleted,
-  not filled (rule 32).
+  INITIAL because everything inherits them. A page restating what it inherited
+  is the mistake; an empty callout is deleted, not filled (rule 32).
 - **A chapter index carries no standing description.** What a chapter IS is its
   title, the parent it links to, and what it newly specified. Prose above the
   callouts restated one of those — measured across six chapters it restated the
@@ -264,8 +278,9 @@ Order: hero → `**Answer.**` → callouts → evidence → `footer(...)`.
   stated once in `index.qmd`. Do not repeat it in entry prose. Each input you
   declare carries a `scope`: `new` if this entry introduced it — the only kind
   an entry's callouts should list — `chapter` or `notebook` if you are relying
-  on something already stated one level up. `nb inputs` aggregates all three
-  into the design state of the aircraft, which is why the level matters.
+  on something already stated one level up. The level is what tells a reader
+  where a commitment was made, and it is what the new-chapter gate shows the
+  user when it asks which of them a fork breaks.
 - **Every entry ends with one `footer(...)` cell**, passing the shared functions
   it called by name.
 - A claim the prose makes but does not quote gets an `assert`, so the page fails

@@ -120,12 +120,6 @@ class Proposal(BaseModel):
             "nothing of its own -- but it is a CLAIM, and an empty list with "
             "no claim is an omission. `propose` refuses that. Inheriting "
             "everything from the chapter is a perfectly good reason; say so."))
-    queue: list[str] = Field(
-        default_factory=list,
-        description=(
-            "Further distinct questions in the same ask, one entry each. Facets "
-            "of a SINGLE comparison (cost, fidelity, applicability) are one "
-            "question, not three."))
     chapter_title: str = Field(
         default="",
         description=(
@@ -172,12 +166,26 @@ class Proposal(BaseModel):
 
     @field_validator("figures")
     @classmethod
-    def _one_visual(cls, v):
-        if len(v) > 1:
+    def _visual_budget(cls, v):
+        # TWO, matching rule 14 and the field description above it. It was one,
+        # and the description three lines up already said "TWO are allowed when
+        # one of them DRAWS THE AIRCRAFT" -- so a model doing exactly what it
+        # was told got a ValueError from `propose`, and the repair it reaches
+        # for is to drop the three-view. That is the failure rule 14 was
+        # LOOSENED to prevent: "three chapters ended up with no picture of the
+        # aeroplane at all".
+        #
+        # Which of the two is a drawing cannot be judged from a caption, so the
+        # cap here is the ceiling and lint does the judging -- `_visuals_and_
+        # tables` counts the rendered page and allows the second only when
+        # DRAWING matched the source. A proposal for two plots therefore passes
+        # here and is caught there, with the page to point at.
+        if len(v) > 2:
             raise ValueError(
-                f"{len(v)} figures proposed; rule 14 allows one visual per entry "
-                f"(a table counts as a figure). Choose the one that carries the "
-                f"answer and drop the rest.")
+                f"{len(v)} figures proposed; rule 14 allows one visual per "
+                f"entry (a table counts as a figure), or two when one of them "
+                f"DRAWS THE AIRCRAFT. Choose the one that carries the answer, "
+                f"plus at most a drawing, and drop the rest.")
         return v
 
 

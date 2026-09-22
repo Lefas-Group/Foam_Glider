@@ -110,8 +110,10 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
     """
     Drive the loop until the model stops calling tools, or a Terminal fires.
 
-    Returns (response, contents, terminal_payload). `terminal_payload` is None
-    when the model simply stopped.
+    Returns nothing. A terminal tool RAISES -- `Terminal` carries the payload
+    and both phases catch it -- so the three-tuple this used to return had a
+    third element that was None on every path that reached a `return`, and
+    neither caller read any of it.
 
     `on_stuck(found)` is called when the run has gone `stuck.BARREN_LIMIT` turns
     without writing or measuring anything, and returns text to put to the model
@@ -157,7 +159,7 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
 
         calls = [p.function_call for p in (turn.parts or []) if p.function_call]
         if not calls:
-            return resp, contents, None
+            return
 
         parts, results = [], []
         for c in calls:

@@ -23,16 +23,21 @@ from google.genai import types
 
 from ..text import head
 
-# Six of fourteen. The rest stay out of the prefix -- tools sit at position 0,
+# Five of fourteen. The rest stay out of the prefix -- tools sit at position 0,
 # and every declaration is paid for on every request until the cache covers it.
-EXPOSED = ("read_text_file", "read_media_file", "list_directory",
+#
+# `read_media_file` was here and could never work: the server's root is
+# `chapters/`, rendered figures live under `_freeze/`, and there is no media
+# file under `chapters/` in any notebook. Its own note said "prefer the
+# read_figure tool", which is the native tool that reads the freeze -- so this
+# was a declaration billed on every request for a capability it did not have.
+EXPOSED = ("read_text_file", "list_directory",
            "search_files", "edit_file", "write_file")
 
 # The server's own descriptions are written for a general audience. These say
 # what the tool is for HERE, which is what changes whether it gets reached for.
 NOTES = {
     "read_text_file": " Use head/tail to read a slice rather than a whole file.",
-    "read_media_file": " Rendered figures are PNGs; prefer the read_figure tool.",
     "edit_file": " The default path for changing an existing file. Set dryRun to"
                  " preview a diff first.",
     "write_file": " Creation only -- a full overwrite. Use edit_file to modify.",

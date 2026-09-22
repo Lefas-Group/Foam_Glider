@@ -9,10 +9,12 @@ different order.
 The list is now PER PHASE. It used to be shared so that both phases hit one
 explicit cache object; with that cache deleted there is no such constraint, and
 `propose` -- 1,014 tokens, the largest declaration by a wide margin, larger than
-the next six combined -- was dead weight on every write turn. `check` is gone
-from both: a full chapter check re-solves every entry, which is minutes inside a
-loop, and its own description told the model not to use it. Both handlers remain;
-only their declarations are conditional.
+the next six combined -- was dead weight on every write turn. `check` has no declaration at
+all: a full chapter check re-solves every entry, which is minutes inside a loop,
+and its own description told the model not to use it. It was still BUILT on every
+call and then filtered out by `omit`, which is a twelve-line description written
+for nobody. The handler remains -- `write.py` runs it at the refactor gate, and a
+model that somehow names it gets a real answer rather than a KeyError.
 
 **`create_chapter` is deliberately NOT here.** Chapter creation is
 proposal-driven: `write.py` scaffolds from the approved `chapter_title` and
@@ -64,8 +66,10 @@ def native_declarations():
               ["question", "chapter", "budget_s"]),
 
         _decl("lint",
-              "Run the 26-rule lint contract over a chapter without rendering. "
-              "Returns the violations verbatim; each message names its own fix.",
+              "Run the lint contract over a chapter without rendering. Returns "
+              "the violations verbatim; each message names its own fix. The "
+              "rules are listed in your instructions -- this reports which of "
+              "them this chapter breaks.",
               {"chapter": S}, ["chapter"]),
 
         _decl("render",
@@ -80,17 +84,6 @@ def native_declarations():
                   "Path relative to the notebook root. One .qmd while "
                   "iterating; empty for the whole notebook. A chapter "
                   "directory is almost never what you want"))}),
-
-        _decl("check",
-              "The full gate: lint, discard invalidated freezes, render, lint "
-              "again, then diff rendered values and figures against git. Run this "
-              "after changing _model.py or _analysis.py -- it is what proves the "
-              "change moved nothing. SLOW and rarely what you want while "
-              "iterating: it renders the WHOLE notebook (only freeze deletion is "
-              "scoped by chapter), so on a notebook with expensive chapters it "
-              "can cost many minutes. Use `render` on a single entry instead, and "
-              "`lint` to check the rules.",
-              {"chapter": S, "force_all": B}),
 
         _decl("api_search",
               "Search the INSTALLED AeroSandbox by name and full docstring, "
@@ -185,7 +178,7 @@ PHASE_OMITS = {
 def build(session, fs, phase=None):
     """(tools, handlers) -- one sorted list, one dispatch table."""
     nb = session.notebook
-    omit = set(PHASE_OMITS.get(phase, ())) | {"check"}
+    omit = set(PHASE_OMITS.get(phase, ()))
     decls = sorted((d for d in native_declarations() + fs.declarations()
                     if d.name not in omit), key=lambda d: d.name)
 

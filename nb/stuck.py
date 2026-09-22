@@ -66,8 +66,12 @@ hundred turns to finish.
 # turn, resets the counter every turn, and burns the whole cap. A call that
 # errored produced nothing; counting it as progress is how a detector goes blind
 # to exactly the failure it was built for, wearing a different tool's name.
+# NOTE `create_chapter` is deliberately absent: it is not a tool. Chapter
+# creation is proposal-driven and `write.py` calls the handler directly, so a
+# name here that no model can emit is a line that looks like coverage and is
+# not -- see `tools/__init__.py`.
 PRODUCTIVE = frozenset({
-    "write_file", "edit_file", "create_chapter",     # the entry moved
+    "write_file", "edit_file",                       # the entry moved
     "probe",                                         # something was measured
     "propose", "ask_specified",                      # the phase advanced
     "declare_refactor", "request_refactor",          # a commitment was made

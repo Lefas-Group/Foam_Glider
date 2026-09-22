@@ -47,7 +47,19 @@ EXPECTED = {
     # Third warning is the uncommitted biplane entry in the working tree, which
     # renders in 21 s against the 35 s ceiling it was granted. Recorded because
     # lint reads the working tree, not HEAD.
-    "glider-notebook": (0, 3),
+    #
+    # +2 warnings, both rule 17, when `superseded_by` came out of `_notebook.py`
+    # and `_CHAPTER` out of every `_model.qmd`. NOT caused by the change: rule
+    # 12 watches the shim, so all six chapters had to be re-proved, and a cold
+    # render of all 33 pages at once is slower per page than the incremental
+    # renders that wrote the previous freezes. Two chapter-05 entries came back
+    # at 14 s and 17 s against a 20 s ceiling, which is over half.
+    #
+    # The change itself moved nothing, and that is the number that mattered:
+    # `check.py` reported `0 page(s) changed, 0 figure(s) changed` against HEAD
+    # across all 33. Rule 17 is a wall-clock warning and will drift with the
+    # machine; that is what this baseline is for.
+    "glider-notebook": (0, 5),
     # Rules 33, 34 and 35 postdate both notebooks: the missing `order:`, the
     # missing front page, and the chapter indexes that neither list their
     # entries nor print their lineage. Both stay frozen -- the sidebar and

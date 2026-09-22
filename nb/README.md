@@ -1,7 +1,9 @@
 # `nb` — the design-notebook agent
 
-Turns a design question into a Quarto lab-notebook entry that passes a 38-rule
+Turns a design question into a Quarto lab-notebook entry that passes a 39-rule
 lint contract, renders, and is checked against its own output before it commits.
+`lint.RULES` is the list; `preflight` refuses to start if the copy the model
+reads disagrees with it, which it silently did for eight rules.
 Runs on Gemini; needs `GEMINI_API_KEY`, and `quarto`, `git`, `npx` on `PATH`.
 
 **Run from the repo root** — there is no installed entry point.
@@ -20,13 +22,27 @@ uv run --group nb python -m nb view   <notebook> [--force]   # build the site
 uv run --group nb python -m nb eval   <notebook>             # runs, by model
 ```
 
-`ask` is one command per entry: probe, write, lint, render, commit.
+`ask` is one command per entry: probe, write, lint, render, commit. ONE
+question per ask -- there was a `queue` that carried extra questions into
+follow-on runs, and it was never used in 34 recorded asks; two questions are two
+`nb ask` calls, which get two pools and run in parallel.
 
 It asks you for two budgets, for any **Specified** input — one where a different
-answer changes what is being built — and once to confirm its assumptions. It
-stops and writes `proposal.json` for a **new chapter** or a **refused
+answer changes what is being built — and once to confirm its assumptions.
+
+At that last one, `1: 2.5e-4` corrects a VALUE and `1: redo — why` rejects the
+APPROACH. The two are different: a corrected value is carried into the write
+brief and the entry recomputes at render time (rule 1 makes every number in
+prose an expression), so it needs no fresh probe; a rejected approach ends the
+run, because `working_code` cannot be adapted to a method nobody probed. There
+used to be a loop that re-probed for both, three rounds deep. It never executed
+once in 67 runs.
+
+It stops and writes `proposal.json` for a **new chapter** or a **refused
 refactor**, both being commitments later entries depend on; `nb resume` resumes
-either.
+either. At the new-chapter stop it also shows what the chapter INHERITS from its
+parent and lets you strike whatever the fork breaks — and both halves, kept and
+struck, now reach the write brief. They were recorded and read by nothing.
 
 ## Budgets
 
@@ -77,6 +93,13 @@ now the N=1 case of N agents rather than a mode with its own failure shapes.
 CI. A question with a safe default (a budget, an assumption confirmation) takes
 that default after five minutes rather than holding the run for an hour;
 `--answers` supplies them up front and skips the wait entirely.
+
+`--answers` is keyed on the question's NAME, which every question logs as it is
+asked (`asking 'static margin' — --answers key`) and which `question.json`
+carries. `mailbox.py` lists the fixed ones; a Specified input is keyed by the
+quantity itself, so several can be supplied in one file. They used to share the
+single key `SPECIFIED INPUT NEEDED`, which meant exactly one could ever be
+pre-answered.
 
 ## Several at once
 
@@ -133,7 +156,7 @@ detector missed something — worth opening, not shrugging at.
 A front page draws the chapter graph from each `_model.py`'s fork header, so it
 cannot disagree with the models. Each chapter index carries `order:` (the sidebar
 does not sort without it), its lineage from `_fork.yml`, and a listing of its
-questions. Rules 33-39 keep
+questions. Rules 33-35 and 37-40 keep
 all of that from decaying — the scaffold ships it, and a model that rewrites an
 index with `write_file` would otherwise drop it silently.
 

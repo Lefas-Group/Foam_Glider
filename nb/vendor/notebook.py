@@ -492,33 +492,6 @@ def show_source(*objs):
     print(":::")
 
 
-def superseded_by(stem, reason):
-    """
-    Banner naming the entry that replaced this one.
-
-    The successor's title and link are read off disk rather than typed, so a
-    retitled successor cannot leave a stale label behind -- the same guarantee
-    inline expressions give numbers. A stem that matches no file, or more than
-    one, raises: a dead forward link is worse than none, because the reader
-    trusts it.
-
-    Scoped to the calling chapter, via `_CHAPTER` set by the shim. Globbing
-    `chapters/*/` instead finds two files the moment a chapter is duplicated for
-    reference, which is exactly what happened the first time this ran.
-    """
-    chapter = globals().get("_CHAPTER")
-    if chapter is None:
-        raise RuntimeError("superseded_by() needs _CHAPTER, set by _model.qmd")
-    hit = _pathlib.Path(chapter) / f"{stem}.qmd"
-    if not hit.exists():
-        raise FileNotFoundError(f"superseded_by({stem!r}): no {hit}")
-    title = _re.search(r'^title:\s*"(.+)"$', hit.read_text(), _re.M).group(1)
-    print('::: {.callout-important}')
-    print("## Superseded\n")
-    print(f"{reason} See [{title}]({stem}.qmd).")
-    print(":::\n")
-
-
 def _committed(path):
     """That file's contents at HEAD, or None. Used only by `cite`."""
     import subprocess

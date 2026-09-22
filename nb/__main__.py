@@ -3,13 +3,14 @@
     nb ask   <notebook> "<question>"         probe, write, render, commit
              [--pool N] [--ceiling N]         …budgets, instead of being asked
              [--chapter NN-name]              …route here, do not go looking
-             [--quiet] [--answers f.json]     …no board on this terminal
+             [--quiet] [--answers f.json]     …no board on this terminal;
+                                              …replies keyed by question name,
+                                              …which every question logs
     nb resume <notebook> [run]               resume: a gate, a refactor, a
              [--allow-refactor]               …run that died with work on disk
              [--accept-refactor]              …committing a diff you have read
     nb view  <notebook> [--force]            render the whole site
     nb eval  <notebook>                      what each model actually did
-    nb inputs <notebook>                     what has been decided, by level
     nb board <notebook>                      N agents, one terminal
     nb answer <notebook> [run] "<value>"     reply to a waiting run
     nb stop  <notebook> [run] ["why"]        ask a run to stop, and record it
@@ -29,9 +30,10 @@ CHAPTER, which later entries build on, and a refused edit to a chapter's
 not move. `nb write` resumes from `proposal.json` in either case.
 
 There is no gate on the finished entry, because by then lint and the render
-have all passed and an entry that turns out wrong is corrected by the next entry
--- `superseded_by()` exists for exactly that, and the record is append-only. The
-rendered prose, with its real numbers, is printed when the entry commits.
+have all passed and an entry that turns out wrong is corrected by the next
+entry, which states the old value, the new one and why they differ. The record
+is append-only: nothing is edited after it is committed. The rendered prose,
+with its real numbers, is printed when the entry commits.
 
 `ask` and `write` remain separate conversations inside one process: the write
 phase starts fresh from the proposal, which costs ~6% less than carrying the
@@ -136,10 +138,6 @@ def main(argv):
                      accept_refactor="--accept-refactor" in rest,
                      quiet="--quiet" in rest or "--detach" in rest,
                      answers=_answers(rest))
-
-    if cmd == "inputs":
-        from .inputs import main as inputs
-        return inputs(rest)
 
     if cmd == "watch":
         if not rest:

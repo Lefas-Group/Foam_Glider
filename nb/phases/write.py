@@ -225,6 +225,38 @@ def _touched(notebook, chapter, *names):
     return out
 
 
+def _ceiling_problem(notebook, entry_path, granted):
+    """
+    The entry declares an ENTRY_CEILING other than the one granted, or None.
+
+    A SOURCE READ. Nothing renders, nothing solves -- which is why it now runs
+    beside the lint gate instead of beside the commit. It used to sit in the
+    commit block, after the entry had been rendered and after a moved shared
+    function had re-proved every sibling, so a run could pay for minutes of
+    solves and then be refused over a literal in the first cell. Measured:
+    3 of 33 write runs ended `ceiling_changed`, each having paid for the whole
+    phase first.
+
+    Repairable, too, and that is the other half. The model wrote the wrong
+    number and can write the right one in a turn, so this is handed back the
+    way a lint violation is handed back rather than ending the run. The check
+    before the commit stays as the guarantee -- the same relationship lint has
+    with its own tool: one lets the loop fix it, the other is what makes it
+    true.
+    """
+    if granted is None:
+        return None
+    import lint
+    _, declared = lint.limits_of(notebook.root, entry_path)
+    if declared == granted:
+        return None
+    return (f"ENTRY_CEILING is {declared}, but {granted:.0f} s was granted at "
+            f"the prompt. The budget is the user's to set, not yours: write "
+            f"ENTRY_CEILING = {granted:.1f} in the entry's first cell. If the "
+            f"work genuinely needs more, ask for it with `ask_specified` -- "
+            f"that stops and asks a person, and the entry records the answer.")
+
+
 def _refresh_index_freeze(notebook, chapter):
     """
     Drop the chapter index's freeze when what it renders has moved.
@@ -261,16 +293,30 @@ def _refresh_root_index(notebook):
     committed one a tick behind, for ever.
 
     TARGETED, which is both cheaper and more correct: a targeted render ignores
-    the freeze, so the page is guaranteed to re-execute rather than be served
-    from a cache that was just deleted. Measured at 10 s against 50 s for a
-    project render, and it rewrites exactly one freeze -- it does not re-solve
-    the notebook.
+    the freeze, so the page is guaranteed to re-execute. Measured at 10 s
+    against 50 s for a project render, and it rewrites exactly one freeze -- it
+    does not re-solve the notebook.
+
+    NOTHING IS DELETED FIRST, and that is the fix to a hole this opened. It
+    used to `rmtree` the freeze and then render, ignoring the render's result:
+    if that render failed, the freeze was gone, `_commit` skipped it (it
+    commits the path only `if root_freeze.exists()`), and rule 40's "no freeze
+    means no finding" escape meant nothing ever said so -- the one failure the
+    rule exists to catch, let through by the code that calls it. The delete was
+    never needed: a targeted render ignores the freeze by definition, which is
+    the property this function already relies on. A failed render now leaves
+    the OLD freeze in place, stale, where rule 40 can see it.
     """
     if not (notebook.root / "index.qmd").exists():
         return
-    shutil.rmtree(notebook.root / "_freeze" / "index", ignore_errors=True)
-    verifiers.render(notebook, "index.qmd",
-                     why="the front page counts entries, and one was just added")
+    out = verifiers.render(
+        notebook, "index.qmd",
+        why="the front page counts entries, and one was just added")
+    if "FAILED" in str(out):
+        tell("  front     the lineage diagram did NOT rebuild — the front page "
+             "is a tick behind.")
+        tell("            The entry is unaffected. Rule 40 will report it; "
+             "`quarto render index.qmd` clears it.")
 
 
 # EVERY fenced block, not just the python ones. The rendered markdown carries
@@ -600,6 +646,19 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     pool = raw.get("_pool_left", PROBE_POOL)
     ceiling = raw.get("_render_ceiling")
     pool_total = raw.get("_pool_total")
+    # Assumptions the user corrected at the gate. The proposal's `findings` were
+    # computed under the OLD values, so the model has to be told which numbers
+    # moved -- the entry recomputes at render time, which is why a corrected
+    # value needs no fresh probe, only this line.
+    corrections = raw.get("_corrections") or []
+    # What a NEW chapter carries forward, as the user reviewed it at the gate.
+    # `_inherited` survived; `_struck` is what they said this fork BREAKS --
+    # which is the only part no computation could have worked out, and the
+    # reason the review is a question rather than a lookup. Both were persisted
+    # and read by nothing, so striking an item moved a log line and changed
+    # nothing about the chapter that got written.
+    inherited_kept = raw.get("_inherited") or []
+    inherited_struck = raw.get("_struck") or []
     proposal = Proposal.model_validate(
         {k: v for k, v in raw.items() if not k.startswith("_")})
     open_log(notebook, "write", proposal.title)
@@ -674,6 +733,35 @@ def main(notebook_path, verbose=True, allow_refactor=False,
 
     today = datetime.date.today().isoformat()
     stem = _stem(notebook, proposal.chapter, proposal.title, today)
+    # THE SEAL IS NOT THE ONLY EVIDENCE. `_seal` swallows every error by design
+    # ("a proposal that cannot be sealed is not worth failing a commit that has
+    # already happened"), so an unsealed proposal is not proof the entry was
+    # never written -- and one run in the record committed with its proposal
+    # unsealed, leaving it armed to write a second copy under a later date.
+    # `_stem` reuses a same-day file, which covers a resume on the same day and
+    # nothing else. This covers the rest: the chapter already holds this
+    # question under another date.
+    # [14:] is the SLUG: `YYYY-MM-DD-NN-slug` is 10 date characters, a dash, the
+    # two-digit within-day counter and a dash. `_stem` indexes it the same way,
+    # and comparing from [11:] instead would carry that counter into the test --
+    # so a duplicate that happened to be the second entry of its day would not
+    # match the first entry of another.
+    twin = next((e for e in notebook.entries(proposal.chapter)
+                 if e.stem[14:] == stem[14:] and e.stem != stem), None)
+    if twin:
+        tell(f"\n  {'─' * 70}\n  ALREADY WRITTEN — nothing started\n"
+             f"  {'─' * 70}\n"
+             f"  This question is already an entry in chapters/{proposal.chapter}/:\n"
+             f"    {twin.name}\n\n"
+             f"  Writing would put a second copy under today's date. If the "
+             f"existing entry is\n  wrong, the fix is a NEW question that "
+             f"supersedes it, never a duplicate:\n"
+             f"    uv run --group nb python -m nb ask {notebook.root.name} "
+             f'"<question>"\n')
+        dup = metrics.Run(notebook, "write", proposal.title)
+        dup.set(chapter=proposal.chapter, entry_stem=twin.stem)
+        dup.close("already_written")
+        return 2
     # title, not question: on a split ask the model keeps the whole original
     # in `question` and puts this entry's own question in `title`, so a row
     # keyed on `question` would label every entry of a multi-part ask the same.
@@ -720,11 +808,50 @@ def main(notebook_path, verbose=True, allow_refactor=False,
             pool=f"{(pool_total or pool or 0.0):.1f}",
             spent=f"{max(0.0, (pool_total or pool or 0.0) - (pool or 0.0)):.1f}")
         contents = [{"role": "user", "parts": [{"text": brief}]}]
+        # ITS OWN TURN, not folded into the brief: it is the user speaking, and
+        # it contradicts something the brief quotes as fact. Buried inside the
+        # proposal dump it reads as one more field.
+        if corrections:
+            contents.append({"role": "user", "parts": [{"text":
+                "The user CORRECTED these assumptions at the gate, AFTER the "
+                "probe ran:\n\n"
+                + "\n".join(f"  {c['name']}: {c['was']} -> {c['now']}"
+                             for c in corrections)
+                + "\n\nUse the corrected values. The proposal's `findings` and "
+                  "`working_code` above were computed under the old ones, so "
+                  "treat any number in them that depends on these as stale: the "
+                  "entry recomputes at render time, which is what makes the "
+                  "corrected value safe to use without probing again. Record "
+                  "each of these in the entry's `## Specified` callout -- the "
+                  "user answered it, so they own it."}]})
         # The scaffolder's own message -- which is the only place that says where
         # the vehicle goes. It used to be printed to the terminal and nowhere
         # else, so the model never saw it and wrote the vehicle into the entry.
         if chapter_msg:
             contents.append({"role": "user", "parts": [{"text": chapter_msg}]})
+        # The inheritance review, for the index this run is about to fill in.
+        if inherited_kept or inherited_struck:
+            lines = ["The user reviewed what this new chapter inherits from its "
+                     "parent, at the gate."]
+            if inherited_kept:
+                lines += ["", "STILL TRUE, inherited — do NOT restate these in "
+                              "this chapter's index or in entry prose. They are "
+                              "already stated one level up, and repeating them "
+                              "is what rule 24's `chapter_defines` and the "
+                              "Specified/Assumed callouts exist to prevent:"]
+                lines += [f"  [{i['kind']}] {i['item']}   (from {i['from']})"
+                          for i in inherited_kept]
+            if inherited_struck:
+                lines += ["", "STRUCK — the user says this fork BREAKS these, so "
+                              "they do NOT carry forward. Where this chapter "
+                              "needs its own value for one of them, that value "
+                              "is NEW and belongs in this chapter's index, "
+                              "stated without claiming anybody was asked unless "
+                              "they were:"]
+                lines += [f"  [{i['kind']}] {i['item']}   (was from {i['from']})"
+                          for i in inherited_struck]
+            contents.append({"role": "user",
+                             "parts": [{"text": "\n".join(lines)}]})
 
         def on_turn(n, resp, turn):
             run_metrics.turn(resp)
@@ -784,6 +911,21 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                 tell(f"  lint      still failing after {MAX_LINT_ATTEMPTS} "
                      f"attempts. Nothing committed; the entry is on disk to "
                      f"fix by hand.")
+                run_metrics.close("lint_failed")
+                return 1
+
+        # --- the granted ceiling, BEFORE anything is paid for ---------------
+        # Source only, so it costs nothing here and everything at the commit.
+        note = _ceiling_problem(notebook, entry_path, ceiling)
+        if note:
+            tell(f"  ceiling   {note.splitlines()[0]} — handing it back")
+            contents.append({"role": "user", "parts": [{"text":
+                note + "\n\nFix that and stop."}]})
+            loop_once()
+            clean, problems = verifiers.is_clean(notebook, proposal.chapter)
+            if not clean:
+                tell(f"  lint      {len(problems)} blocking after the ceiling "
+                     f"fix; stopping. The entry is on disk.")
                 run_metrics.close("lint_failed")
                 return 1
 
@@ -957,18 +1099,16 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     # The render ceiling was GRANTED, not negotiated. Refuse to commit an entry
     # that awarded itself a different one -- otherwise the number typed at the
     # prompt is decoration, and the run's real spend is whatever the agent felt
-    # like. More is available, but only through `ask_specified`, which stops and
-    # asks a person.
-    if ceiling is not None:
-        import lint
-        _, declared = lint.limits_of(notebook.root, entry_path)
-        if declared != ceiling:
-            tell(f"  Not committed: the entry declares ENTRY_CEILING = "
-                 f"{declared}, but {ceiling:.0f} s was granted at the prompt.\n"
-                 f"  The budget is the user's to set. Ask for more with a "
-                 f"Specified input rather than\n  writing a different number.")
-            run_metrics.close("ceiling_changed")
-            return 1
+    # like.
+    #
+    # THE GUARANTEE, not the gate. The gate is beside the lint loop above,
+    # where the entry has not yet been rendered and the model can still fix it;
+    # reaching here means it was handed back and came out wrong anyway.
+    note = _ceiling_problem(notebook, entry_path, ceiling)
+    if note:
+        tell(f"  Not committed: {note}")
+        run_metrics.close("ceiling_changed")
+        return 1
 
     extra = ()
     # WHENEVER THE GATE RAN, not only when its finding was accepted. `check`
@@ -1032,16 +1172,6 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     site(notebook, page=notebook.root / "_site" / "chapters"
                         / proposal.chapter / f"{stem}.html")
 
-    # --- advance the queue -------------------------------------------------
-    if proposal.queue:
-        nxt, rest = proposal.queue[0], proposal.queue[1:]
-        tell(f"\n  {len(proposal.queue)} question(s) queued. Next:\n    {nxt}\n")
-        from .ask import main as ask
-        # The pool is per QUESTION CHAIN, not per phase: a queue that claimed a
-        # fresh pool per question would make the number agreed at the prompt
-        # mean nothing.
-        return ask(notebook_path, nxt, carry_queue=rest, verbose=verbose,
-                   pool=session.probe_left, ceiling=ceiling)
     return 0
 
 

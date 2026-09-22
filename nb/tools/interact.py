@@ -15,6 +15,7 @@ it was reasonable to ask. Here the cap is only good manners.
 """
 
 import json
+import re
 
 from ..loop import Refactor, Terminal
 from ..schema import Input, Proposal
@@ -55,7 +56,7 @@ def ask_stuck(found, phase):
     return stuck.escalate(found, phase, asker)
 
 
-def _prompt(banner, body, hint):
+def _prompt(banner, name, body):
     """
     A question with no safe default: it is asked, and the run waits.
 
@@ -63,14 +64,19 @@ def _prompt(banner, body, hint):
     terminal, and it was not merely a different transport -- EOF there raised,
     killing the run with the question recorded nowhere. Here the question stays
     on disk and the run is resumable, which is what makes `nb answer`, a second
-    terminal and a coordinator interchangeable. `hint` is unused now that
-    nobody types at a caret; kept in the signature because the callers read
-    better for saying what they would have hinted.
+    terminal and a coordinator interchangeable.
+
+    `name` is the QUANTITY, not the banner. It used to be the banner, so every
+    Specified input in the system shared one mailbox key: `question.json` said
+    `"name": "SPECIFIED INPUT NEEDED"` whatever was being asked, the board's
+    panel and `run.json`'s `waiting_on` could not say WHICH input a run was
+    blocked on, and `--answers` could pre-answer exactly one of them, since
+    `Mailbox.ask` pops by name. The quantity was in the caller's hand all along.
     """
     tell(f"\n{'─' * 72}\n{banner}\n{'─' * 72}")
     tell(body)
     tell(f"  waiting for an answer — {MAILBOX.notebook.question_path}")
-    return MAILBOX.ask("specified", banner, body)
+    return MAILBOX.ask("specified", name, body)
 
 
 # What counts as handing the decision back. Named because `propose` needs the
@@ -139,7 +145,7 @@ def ask_render_ceiling(default, source=""):
         default, source)
 
 
-def persist(proposal, notebook):
+def persist(proposal, notebook, corrections=None):
     """
     Re-write proposal.json, preserving the private `_` fields already on disk.
 
@@ -147,6 +153,13 @@ def persist(proposal, notebook):
     afterwards -- a corrected assumption -- exists only in memory, and the write
     phase re-reads the file. Without this the confirmation would have looked
     like it worked and changed nothing that mattered.
+
+    `corrections` is [(name, was, now)] and goes into `_corrections`, which the
+    write phase turns into one line of its brief. It is the whole mechanism
+    that replaced the re-probe loop: a corrected VALUE does not need a fresh
+    probe, because rule 1 makes the entry recompute at render time -- what it
+    needs is for the model to know the finding it was handed was computed
+    under the old number.
     """
     path = notebook.proposal_path
     private = {}
@@ -159,19 +172,42 @@ def persist(proposal, notebook):
     out = proposal.model_dump()
     out.update(private)
     out["_assumptions_confirmed"] = True
+    if corrections:
+        out["_corrections"] = [
+            {"name": n, "was": w, "now": v} for n, w, v in corrections]
     path.write_text(json.dumps(out, indent=2) + "\n")
+
+
+# A correction that rejects the APPROACH rather than the value. Anything else
+# after "N:" is a new value.
+REDO = re.compile(r"^\s*redo\b[\s:,.\u2014-]*", re.I)
 
 
 def confirm_assumptions(proposal):
     """
     Show every assumption the probe made, and take corrections.
 
-    Returns the names corrected, so the caller knows whether the proposal still
-    stands. Assumptions were never confirmed before: `ask_specified` covers
-    inputs where a different answer changes WHAT IS BEING BUILT, and an
-    assumption is the other kind -- "assume and say what it costs". That is
-    defensible for the cost, and silent about the premise, so "point-mass with
-    fixed alpha" went into the record unexamined and an entry was built on it.
+    Returns (corrected, rejected). `corrected` is [(name, was, now)] for values
+    the user changed, already applied to `proposal.inputs`; `rejected` is
+    [(name, why)] for assumptions whose whole APPROACH they refused.
+
+    Assumptions were never confirmed before: `ask_specified` covers inputs
+    where a different answer changes WHAT IS BEING BUILT, and an assumption is
+    the other kind -- "assume and say what it costs". That is defensible for
+    the cost, and silent about the premise, so "point-mass with fixed alpha"
+    went into the record unexamined and an entry was built on it.
+
+    THE TWO ANSWERS ARE DIFFERENT KINDS OF THING, and the split is what let the
+    re-probe loop go. A corrected VALUE is safe to carry forward: rule 1 forces
+    every number in prose to be a `{python}` expression, so the entry
+    RECOMPUTES at render time, and the write phase given the new value produces
+    a genuinely correct entry -- the stale `findings` are context it is told to
+    distrust. A rejected APPROACH is not: `working_code` cannot be adapted to a
+    method that was not probed, so the run ends and the question is re-asked.
+
+    The old loop re-probed both, three rounds deep, because nothing could tell
+    them apart. The person correcting it can, so they say which. In 67 recorded
+    runs the loop never once executed.
 
     BATCHED, not asked one at a time, because per-assumption asking makes the
     model judge which of its assumptions are load-bearing -- the judgement rule
@@ -185,21 +221,26 @@ def confirm_assumptions(proposal):
     """
     assumed = [i for i in proposal.inputs if i.owner == "assumed"]
     if not assumed:
-        return []
+        return [], []
 
-    tell(f"\n{'─' * 72}\nASSUMPTIONS — confirm, or correct any\n{'─' * 72}")
-    for n, i in enumerate(assumed, 1):
-        tell(f"  {n}. {i.name}: {i.value or i.why}")
-    tell('\n  Enter accepts. Correct one with "1: 12 mm".')
+    listing = "\n".join(f"{n}. {i.name}: {i.value or i.why}"
+                        for n, i in enumerate(assumed, 1))
+    how = ('  Enter accepts.\n'
+           '  Correct a VALUE with        "1: 2.5e-4"\n'
+           '  Reject the APPROACH with   "1: redo — needs 3-DOF, not point-mass"'
+           '   (ends the run)')
+    tell(f"\n{'─' * 72}\nASSUMPTIONS — confirm, correct a value, or reject one"
+         f"\n{'─' * 72}")
+    for line in listing.splitlines():
+        tell(f"  {line}")
+    tell(f"\n{how}")
     # A confirmation with a safe default: accepting is the right answer if
     # nobody replies, so an unattended run is never stranded by one.
     answer = MAILBOX.ask("assumptions", "assumptions",
-                         "\n".join(f"{n}. {i.name}: {i.value or i.why}"
-                                    for n, i in enumerate(assumed, 1)),
-                         default="").strip()
+                         f"{listing}\n\n{how}", default="").strip()
     if not answer:
         say("  answered   (accepted as stated)")
-        return []
+        return [], []
 
     # A reply that names no assumption at all is APPROVAL, not a malformed
     # correction. "Enter accepts" is what the prompt says, and people type the
@@ -213,30 +254,46 @@ def confirm_assumptions(proposal):
     if not any(part.partition(":")[0].strip().isdigit()
                for part in answer.split(";")):
         say(f"  answered   (accepted as stated — {answer!r})")
-        return []
+        return [], []
 
-    corrected = []
+    corrected, rejected = [], []
     for part in answer.split(";"):
         head, _, value = part.partition(":")
         try:
             i = assumed[int(head.strip()) - 1]
         except (ValueError, IndexError):
-            tell(f"  ignored    {part.strip()!r} — expected \"N: value\"")
+            tell(f"  ignored    {part.strip()!r} — expected \"N: value\" or "
+                 f"\"N: redo — why\"")
+            continue
+        value = value.strip()
+        if REDO.match(value):
+            why = REDO.sub("", value).strip() or "no reason given"
+            rejected.append((i.name, why))
+            say(f"  answered   {i.name} REJECTED — {why}")
             continue
         # The same shape `ask_specified` produces, so nothing downstream has to
         # learn a second one: the user answered it, so they own it, and an input
         # they chose is Specified by definition.
-        i.kind, i.owner, i.value = "specified", "user", value.strip()
+        was = i.value or i.why
+        i.kind, i.owner, i.value = "specified", "user", value
         i.why = "corrected at the prompt"
-        corrected.append(i.name)
+        corrected.append((i.name, was, value))
         say(f"  answered   {i.name} -> {i.value}")
-    return corrected
+    return corrected, rejected
 
 
 def confirm_inherited(proposal, notebook):
     """
-    Show what a NEW chapter carries forward, and take strikes. Returns the set
-    that survives, as [(kind, item, from_chapter)].
+    Show what a NEW chapter carries forward, and take strikes. Returns
+    (kept, struck), each [(kind, item, from_chapter)].
+
+    BOTH halves, because both are read. The kept set is what the new chapter's
+    index may state without claiming anybody was asked; the struck set is what
+    the fork BREAKS, which is the one thing the computation cannot know and the
+    only reason this is a question at all. Returning only `kept` meant the
+    write phase was told neither: the answer was persisted to `proposal.json`
+    and read by nothing, so striking an item changed a log line and nothing
+    else.
 
     At the new-chapter stop because that stop already exists and already halts
     the run: `render_stop` told the user a chapter was being committed to and
@@ -256,7 +313,7 @@ def confirm_inherited(proposal, notebook):
     from ..inputs import inherited
     items = inherited(notebook, proposal.chapter)
     if not items:
-        return []
+        return [], []
     tell(f"\n{'─' * 72}\nINHERITED — strike anything this chapter breaks"
          f"\n{'─' * 72}")
     for n, (kind, item, src) in enumerate(items, 1):
@@ -267,7 +324,7 @@ def confirm_inherited(proposal, notebook):
         default="").strip()
     if not answer:
         say(f"  answered   (all {len(items)} carried forward)")
-        return items
+        return items, []
     struck = set()
     for part in answer.replace(",", ";").split(";"):
         head = part.strip().split(":")[0].strip()
@@ -278,7 +335,7 @@ def confirm_inherited(proposal, notebook):
     kept = [x for n, x in enumerate(items) if n not in struck]
     for n in sorted(struck):
         say(f"  answered   struck {items[n][1]}")
-    return kept
+    return kept, [items[n] for n in sorted(struck)]
 
 
 def ask_specified(session, name, why, kind="specified", options=""):
@@ -302,8 +359,7 @@ def ask_specified(session, name, why, kind="specified", options=""):
     body = f"  {name}\n  {why}"
     if options:
         body += f"\n  options: {options}"
-    answer = _prompt("SPECIFIED INPUT NEEDED", body,
-                     "answer, or 'you decide'")
+    answer = _prompt("SPECIFIED INPUT NEEDED", name, body)
     session.record_answer(name, answer)
     if answer.lower() in DELEGATED:
         return ("Delegated. Decide it yourself if it is answerable in a "
@@ -439,8 +495,8 @@ def propose(session, **fields):
     # unrecorded, so "replace the current model", the answer that caused a whole
     # chapter to exist, reached the entry nowhere. Which questions were put to
     # the user is a fact about the run, not a judgement, so it is bookkeeping:
-    # done here for the same reason `carry_queue` is merged below, because a
-    # model asked to copy a list forward will sometimes improve it instead.
+    # done here rather than asked of the model, because a model asked to copy
+    # a list forward will sometimes improve it instead.
     recorded = {i.name for i in proposal.inputs}
     for name, value in session.asked.items():
         if name in recorded:
@@ -451,14 +507,6 @@ def propose(session, **fields):
             owner="agent" if delegated else "user",
             value=None if delegated else str(value),
             why="delegated by the user" if delegated else "asked during the probe"))
-
-    # Questions owed from an earlier ask, appended without disturbing any the
-    # model added itself. Done here rather than in the prompt because it is
-    # bookkeeping, and a model asked to copy a list forward will sometimes
-    # improve it instead.
-    for q in session.carry_queue:
-        if q not in proposal.queue:
-            proposal.queue.append(q)
 
     session.notebook.run.mkdir(parents=True, exist_ok=True)
     # `_pool_left` is written beside the proposal, not into it: the write phase
@@ -481,7 +529,7 @@ def propose(session, **fields):
     raise Terminal(proposal)
 
 
-def render_stop(proposal, notebook, inherited_kept=None):
+def render_stop(proposal, notebook):
     """
     Why the run stopped, what saying yes commits to, and how to continue.
 

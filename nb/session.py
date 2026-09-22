@@ -10,15 +10,11 @@ from .config import PROBE_POOL
 
 
 class Session:
-    def __init__(self, notebook, question, chapter=None, carry_queue=None,
+    def __init__(self, notebook, question, chapter=None,
                  metrics=None, probe_pool=PROBE_POOL):
         self.notebook = notebook
         self.question = question
         self.chapter = chapter
-        # Questions still owed from a multi-question ask. Merged into the
-        # proposal by `propose` rather than by asking the model to copy them
-        # forward: the queue is bookkeeping, not judgement.
-        self.carry_queue = list(carry_queue or [])
         self.metrics = metrics
         self.asked = {}          # name -> value, from ask_specified
         # function -> one-line reason, from declare_refactor. Read by the

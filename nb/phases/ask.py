@@ -9,7 +9,7 @@ there is no pause the process did not choose.
 import json
 import sys
 
-from ..config import MAX_CORRECTION_ROUNDS, MAX_TURNS, PROBE_POOL
+from ..config import MAX_TURNS, PROBE_POOL
 from ..loop import Stopped, Terminal, run
 from ..session import Session
 from ..tools.interact import (ask_pool, ask_render_ceiling, ask_stuck,
@@ -64,9 +64,9 @@ Ask `ask_specified` the moment you hit an input where a different answer would
 change what is being built. Do not save it for the proposal.
 
 When the question is answered -- and not before -- call `propose`. Put everything
-the write phase needs into it: it does not get this conversation. If the ask
-really contained several distinct questions, the first becomes this proposal and
-the rest go in `queue`.
+the write phase needs into it: it does not get this conversation. ONE question,
+one proposal: if the ask really contains several distinct questions, answer the
+first and say in `handoff` what the others are, for the human to ask separately.
 
 Write nothing into the notebook in this phase. You are deciding what to write.
 
@@ -88,7 +88,7 @@ If a probe errors, read the traceback and fix the probe. Do not go looking
 through the notebook for why -- the traceback already says.
 """
 
-def main(notebook_path, question, carry_queue=None, verbose=True,
+def main(notebook_path, question, verbose=True,
          pool=None, ceiling=None, run_id=None, quiet=False,
          answers=None, chapter=None):
     bad = preflight(notebook_path)
@@ -142,9 +142,9 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
     detach_output()
     open_log(notebook, "ask", question)
     run_metrics = metrics.Run(notebook, "ask", question)
-    # Asked only at the head of a chain. A queued follow-on, and the write
-    # phase, are handed what is left rather than prompted again -- the number
-    # agreed here bounds the whole question, not one phase of it.
+    # Asked once, here. The write phase is handed what is LEFT rather than
+    # prompted again -- the number agreed here bounds the whole question, not
+    # one phase of it.
     #
     # `--pool` and `--ceiling` skip the prompt entirely. A caller who already
     # knows the numbers -- a coordinator, a script, anyone re-running a
@@ -166,7 +166,6 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
             "declared by this notebook's _notebook.py" if default_ceiling
             else "no notebook default; nb's fallback")
     session = Session(notebook, question, chapter=chapter,
-                      carry_queue=carry_queue,
                       metrics=run_metrics, probe_pool=pool)
     # The pin, for `propose` to hold the model to. On the session rather than
     # threaded through, because `propose` already reaches the session for every
@@ -176,7 +175,6 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
 
     say(f"  notebook  {notebook.root.name}")
     fs, handlers, make_config = setup(session, phase="ask")
-    gate = None
     notebook.run.mkdir(parents=True, exist_ok=True)
     notebook.transcript_path.write_text("")
 
@@ -211,49 +209,47 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
         try:
             proposal = probe_once()
             if proposal is None:
-                raise Terminal(None)     # handled by the `gate is None` path
+                # NOT `raise Terminal(None)`, which this function's own handler
+                # would catch and then dereference -- an AttributeError that
+                # left no metrics row and no `outcome`, so the board drew the
+                # run as `died`: the one state it exists to keep separate from
+                # an ending the system chose. The loop ending without a
+                # proposal is a real outcome, and it is recorded as one.
+                run_metrics.close("no_proposal")
+                tell("\n  The loop ended without a proposal. Nothing was "
+                     "written.")
+                return 1
 
             # Every assumption, put to the user before anything is built on it.
-            # A CORRECTION re-enters the probe rather than falling through to
-            # write: `findings` and `working_code` were computed under the old
-            # value, and a changed constant may recompute at render time but a
-            # changed METHOD cannot. Writing from them would launder a rejected
-            # assumption into an unchanged answer, which is worse than never
-            # having asked.
-            for _ in range(MAX_CORRECTION_ROUNDS):
-                corrected = confirm_assumptions(proposal)
-                # ALWAYS, not only when corrected: `propose` wrote the file
-                # before raising, so the accepted-as-stated case still needs
-                # `_assumptions_confirmed` recorded or a resumed `nb write`
-                # would ask again.
-                persist(proposal, notebook)
-                if not corrected:
-                    break
-                if not session.probe_left:
-                    tell(f"\n  Corrected {', '.join(corrected)}, but the probe "
-                         f"pool is spent — the proposal on disk was computed "
-                         f"under the old value(s) and is not safe to write "
-                         f"from.\n  Re-run `nb ask` with a bigger pool.")
-                    run_metrics.close("assumption_corrected")
-                    return 1
-                tell(f"  re-probing — {', '.join(corrected)} corrected, so the "
-                     f"answer it found no longer follows")
-                contents.append({"role": "user", "parts": [{"text":
-                    "The user CORRECTED these assumptions:\n\n"
-                    + "\n".join(f"  {i.name} = {i.value}"
-                                for i in proposal.inputs
-                                if i.name in corrected)
-                    + "\n\nYour findings and working code were computed under "
-                      "the old values, so they no longer follow. Probe again "
-                      "with the corrected ones and propose afresh — do not "
-                      "reuse the previous answer."}]})
-                again = probe_once()
-                if again is None:
-                    break
-                proposal = again
+            # A corrected VALUE goes forward into the write brief -- the entry
+            # recomputes at render time, so it needs the new number rather than
+            # a fresh probe. A rejected APPROACH ends the run, because
+            # `working_code` cannot be adapted to a method nobody probed.
+            corrected, rejected = confirm_assumptions(proposal)
+            # ALWAYS, not only when corrected: `propose` wrote the file before
+            # raising, so the accepted-as-stated case still needs
+            # `_assumptions_confirmed` recorded or a resumed `nb write` would
+            # ask again.
+            persist(proposal, notebook, corrections=corrected)
+            if rejected:
+                tell(f"\n  {'─' * 72}\n  ASSUMPTION REJECTED — nothing written"
+                     f"\n  {'─' * 72}")
+                for name, why in rejected:
+                    tell(f"  {name}: {why}")
+                tell(f"\n  The approach, not the number, so the probe's findings "
+                     f"and working code do not\n  survive it. Ask again with "
+                     f"the method named in the question:\n"
+                     f"    uv run --group nb python -m nb ask "
+                     f"{notebook.root.name} \"<question>\"\n"
+                     f"  proposal  {notebook.proposal_path}\n")
+                run_metrics.close("assumption_rejected")
+                return 1
+            if corrected:
+                tell("  corrected " + "; ".join(
+                    f"{n}: {w} → {v}" for n, w, v in corrected)
+                     + " — carried into the write brief")
 
-            t = Terminal(proposal)
-            raise t
+            raise Terminal(proposal)
         except Terminal as t:
             proposal = t.payload
             run_metrics.set(chapter=proposal.chapter,
@@ -272,11 +268,13 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
                 # that already halts the run. Persisted beside the proposal so
                 # `nb resume` writes the chapter's index from the set the user
                 # actually agreed to, hours later and in another process.
-                kept = confirm_inherited(proposal, notebook)
-                if kept:
+                kept, struck = confirm_inherited(proposal, notebook)
+                if kept or struck:
                     raw = json.loads(notebook.proposal_path.read_text())
-                    raw["_inherited"] = [
-                        {"kind": k, "item": i, "from": s} for k, i, s in kept]
+                    shape = lambda rows: [
+                        {"kind": k, "item": i, "from": s} for k, i, s in rows]
+                    raw["_inherited"] = shape(kept)
+                    raw["_struck"] = shape(struck)
                     notebook.proposal_path.write_text(json.dumps(raw, indent=2))
                 # TELEMETRY, not conversation: spend is something to look at,
                 # never something to act on, and the per-probe lines already go
@@ -286,9 +284,9 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
                 if session.probe_pool:
                     say(f"  budget    {session.probe_spent:.0f} s of "
                         f"{session.probe_pool:.0f} s probe pool used")
-                tell(render_stop(proposal, notebook, kept))
+                tell(render_stop(proposal, notebook))
                 return 0
-            gate = proposal
+            # Falls through to the write phase, in this same process.
         except Stopped as e:
             run_metrics.close("stopped")
             tell(f"\n  {e}. Nothing was written.")
@@ -306,11 +304,6 @@ def main(notebook_path, question, carry_queue=None, verbose=True,
             raise
     finally:
         fs.stop()
-
-    if gate is None:
-        run_metrics.close("no_proposal")
-        tell("\n  The loop ended without a proposal. Nothing was written.")
-        return 1
 
     # One command, two conversations. The write phase starts fresh from the
     # proposal inside this same process: it costs ~6% less than carrying the

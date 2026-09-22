@@ -122,15 +122,21 @@ def pages(n):
 
 def pages_of(root):
     """
-    Every page a render can execute, by the same rule `lint` enumerates them:
-    `chapters/*/*.qmd`, minus the leading-underscore includes.
+    Every page a render can execute: `chapters/*/*.qmd` minus the
+    leading-underscore includes, plus the notebook's front page.
 
     Here rather than in `lint` so the vendored checker keeps its own copy of
     this rule and nothing has to stay in step with an import.
+
+    The front page is in the list because it is a page a render executes, and
+    leaving it out understated "N served from cache" by one on every project
+    render -- the one page that is now rebuilt on every commit.
     """
     chapters = sorted(d for d in (root / "chapters").iterdir() if d.is_dir())
-    return [q for c in chapters for q in sorted(c.glob("*.qmd"))
-            if not q.name.startswith("_")]
+    out = [q for c in chapters for q in sorted(c.glob("*.qmd"))
+           if not q.name.startswith("_")]
+    index = root / "index.qmd"
+    return (out + [index]) if index.exists() else out
 
 
 def render_plan(root, path):
@@ -163,7 +169,8 @@ def render_plan(root, path):
     # page under it executes, whatever `_freeze/` holds -- so a chapter target
     # is routinely more expensive than rendering the whole notebook, which is
     # the opposite of the intuition and invisible from the count alone.
-    scope = "entry" if path.is_file() else "chapter"
+    scope = ("front page" if path == root / "index.qmd"
+             else "entry" if path.is_file() else "chapter")
     why = "targeted, so the freeze is ignored"
     project = len(lint.will_execute(root, root))
     if len(todo) > project:

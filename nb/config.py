@@ -78,12 +78,6 @@ INCLUDE_THOUGHTS = True
 # genuinely hard entry or a blind spot in the heuristic, and both are worth
 # opening. `python -m nb eval <notebook>` lists outcomes by run.
 MAX_TURNS = 60          # per agent loop
-# Rounds of "correct an assumption, re-probe, propose again" at the gate. It was
-# MAX_CONSULTS, and bounded two unrelated things: the `consult` tool, which was
-# never once called in 33 recorded ask runs, and this loop. Deleting the tool
-# without renaming would have left the loop uncapped by a constant that no
-# longer described it.
-MAX_CORRECTION_ROUNDS = 3
 MAX_LINT_ATTEMPTS = 3   # write -> lint -> write
 # write -> render -> write, on a page that does not BUILD. It used to be
 # deliberately separate from the verify budget, so that a build error could not
@@ -108,11 +102,12 @@ TRUNCATE = 8000
 
 # ---------------------------------------------------------------- budgets
 
-# `_notebook.py` runs its own watchdog that os._exit(9)s a probe at PROBE_BUDGET
-# (300 s, or the per-probe grant in $NB_PROBE_BUDGET). Ours sits above it
-# so that watchdog fires first: it knows why it killed the probe and says so,
-# where a subprocess timeout only knows that time ran out.
-PROBE_WALL_CLOCK = 960.0
+# No PROBE_WALL_CLOCK here. There was one -- 960 s -- and nothing read it: the
+# subprocess timeout comes from `budgets.probe_wall_clock()`, which sizes itself
+# from the per-probe grant plus WATCHDOG_HEADROOM. `_dead_config` did not catch
+# it because the only occurrence of the name in the tree was inside a docstring
+# in `lint.py`, and that check greps `*.py` as text. Same shape as the
+# DEFAULT_ENTRY_CEILING note below, which is the failure it was written for.
 
 # Total probe wall clock one phase may spend, seconds. The AGENT divides it: a
 # cheap probe asks for twenty seconds, a multistart for four hundred, and a

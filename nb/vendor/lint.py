@@ -119,7 +119,7 @@ def _machinery_names():
     try:
         tree = ast.parse((pathlib.Path(__file__).parent / "notebook.py").read_text())
     except (OSError, SyntaxError):
-        return {"time", "pathlib", "aero_cost", "footer", "_T0", "_CHAPTER"}
+        return {"time", "pathlib", "aero_cost", "footer", "_T0"}
     names = set()
     for n in tree.body:
         if isinstance(n, (ast.Import, ast.ImportFrom)):
@@ -128,9 +128,9 @@ def _machinery_names():
             names.add(n.name)
         elif isinstance(n, ast.Assign):
             names |= {t.id for t in n.targets if isinstance(t, ast.Name)}
-    # `_T0` and `_CHAPTER` are set by _model.qmd, not by _notebook.py, but
-    # footer() and superseded_by() read them and an entry can clobber both.
-    return names | {"_T0", "_CHAPTER"}
+    # `_T0` is set by _model.qmd, not by _notebook.py, but footer() reads it
+    # and an entry can clobber it.
+    return names | {"_T0"}
 
 
 MACHINERY = _machinery_names()
@@ -1197,6 +1197,35 @@ def unfrozen(root, chapters):
     return out
 
 
+def _root_index_stale(root):
+    """
+    The notebook's front page, if a PROJECT render would execute it, else None.
+
+    It is not under `chapters/`, so every function that sizes a render walked
+    straight past it -- `will_execute`, `unfrozen`, `render_deadline` and
+    `pages_of` all enumerate `chapters/*/*.qmd`. That was harmless while the
+    page was incidental. It stopped being harmless when the lineage diagram
+    started counting entries: the front page now re-renders on every commit,
+    and `render_deadline(root, "index.qmd")` returned RENDER_FLOOR alone while
+    the announce line said "0 pages", for a render that certainly executes one.
+
+    Same staleness test `unfrozen` applies to an entry: no freeze, or a freeze
+    older than the page. The page also depends on every chapter's `_fork.yml`
+    and entry COUNT, which no mtime can see -- that is rule 40's job, and this
+    is only about sizing the render.
+    """
+    page = root / "index.qmd"
+    if not page.exists():
+        return None
+    f = root / "_freeze" / "index" / "execute-results" / "html.json"
+    try:
+        if f.exists() and page.stat().st_mtime <= f.stat().st_mtime:
+            return None
+    except OSError:
+        pass
+    return page
+
+
 def will_execute(root, target=None):
     """
     The pages `quarto render <target>` will actually RUN, freeze included.
@@ -1223,15 +1252,19 @@ def will_execute(root, target=None):
     pages = [q for c in chapters
              for q in sorted((root / "chapters" / c).glob("*.qmd"))
              if not q.name.startswith("_")]
+    # The front page belongs to no chapter and was in nobody's count. It is a
+    # page a render executes like any other -- and since the lineage diagram
+    # started counting entries, one that re-renders on every commit.
+    index = root / "index.qmd"
     if target.is_file():
-        pages = [q for q in pages if q == target]
-    elif target != root:
-        pages = [q for q in pages if target in q.parents]
-    else:
-        # The one case where the freeze counts.
-        frozen = set(pages) - set(unfrozen(root, chapters))
-        return [q for q in pages if q not in frozen]
-    return pages
+        return [q for q in pages + [index] if q == target]
+    if target != root:
+        return [q for q in pages if target in q.parents]
+    # The one case where the freeze counts.
+    frozen = set(pages) - set(unfrozen(root, chapters))
+    out = [q for q in pages if q not in frozen]
+    stale = _root_index_stale(root)
+    return ([stale] + out) if stale else out
 
 
 def render_deadline(root, target=None):
@@ -1262,6 +1295,11 @@ def render_deadline(root, target=None):
     pages = [q for c in chapters
              for q in sorted((root / "chapters" / c).glob("*.qmd"))
              if not q.name.startswith("_")]
+    # The front page, on the two targets that reach it. Without this a targeted
+    # render of index.qmd was budgeted RENDER_FLOOR and nothing else, and a
+    # project render was charged for every page except the one that is now
+    # rebuilt on every commit.
+    pages = pages + [root / "index.qmd"]
     if target.is_file():
         pages = [q for q in pages if q == target]
     elif target != root:
@@ -1289,10 +1327,10 @@ def render_quarto(target, root, cwd=None):
     three call sites all want the same thing and a bare TimeoutExpired says only
     that time ran out.
 
-    Naming the page is the whole point. `PROBE_WALL_CLOCK`'s comment asks for
-    exactly this property -- the inner limit should fire first "because it knows
-    why it killed the probe and says so" -- and Quarto prints `[n/N] path` as it
-    goes, which `TimeoutExpired.stdout` preserves.
+    Naming the page is the whole point. It is the property `budgets.py` asks of
+    every layer -- the inner limit should fire first, "because it knows why it
+    killed the probe and says so" -- and Quarto prints `[n/N] path` as it goes,
+    which `TimeoutExpired.stdout` preserves.
     """
     import subprocess
     deadline = render_deadline(root, target)
@@ -1650,7 +1688,7 @@ FORK_SIMILARITY = 0.85
 
 # The two input callouts, under both names they have gone by. The rename to
 # "New ..." came with the rule that a page lists only what IT introduced --
-# what it inherits is stated once, one level up, and aggregated by `nb inputs`.
+# what it inherits is stated once, one level up.
 INPUT_TITLES = ("Specified", "Assumed",
                 "New user specifications", "New assumptions",
                 "Initial user specifications", "Initial assumptions")
@@ -2200,18 +2238,92 @@ def _fork_provenance(root, chapters, entries):
                 "chapter can gain several in a day. `create_chapter` counts it "
                 "at the moment of the fork, which is the only moment it is "
                 "known exactly")))
-        if not fork.get("summary"):
+        # A PLACEHOLDER IS NOT AN ANSWER. `create_chapter` writes
+        # `summary: "TODO: ..."` and one `TODO:` change, as the scaffold for
+        # the model to replace -- and the keys being present satisfied every
+        # test here, so a forked chapter could commit with its TODO intact and
+        # the lineage diagram on the front page would render, as the box label
+        # for that chapter, the words "TODO: what the design BECAME". Rule 24
+        # is the same check for `index.qmd`'s placeholders; this is the one
+        # scaffolded file that had none.
+        summary = fork.get("summary") or ""
+        if not summary or summary.upper().startswith("TODO"):
             out.append((where, (
                 "names a parent but no `summary:` — a few words for the arrow "
                 "on the lineage diagram, which carries the text because the "
-                "nodes do not. Write what the design BECAME, not `from → to`: "
+                "nodes do not, and which renders this string verbatim on the "
+                "front page. Write what the design BECAME, not `from → to`: "
                 "the arrow already carries the from by pointing out of it")))
-        if not fork.get("changes"):
+        changes = [x for x in (fork.get("changes") or [])
+                   if not x.upper().startswith("TODO")]
+        if not changes:
             out.append((where, (
                 f"lists no changes, but chapters/{c}/_model.py is "
                 f"{100 - ratio * 100:.0f}% different from its parent. One line "
                 f"per deliberate difference — the differences ARE the chapter")))
     return out
+
+
+# =============================================================================
+# WHICH RULES EXIST. The single source of truth for the rule NUMBERS, and the
+# only thing that stops the model's copy of the list drifting from the checks.
+#
+# It is not a dispatch table and does not pretend to be: one function covers
+# several rules (`_budget_rules` is 16, 17, 18 and 28) and rules 1-10 are inline
+# in `check()` below, so a number-to-function map would be a fiction. What
+# drifted was never the wiring -- it was the LIST. `system_instruction.md` said
+# "The 32 rules lint checks" while this file enforced 40, so rules 33, 35, 37
+# and 39 were blocking, were tripped by edits the write brief explicitly asks
+# for, and had never been shown to the model. README said 38; the `lint` tool
+# declaration said 26. Four copies, three wrong.
+#
+# `preflight` now refuses to start when the instruction's numbers are not
+# exactly these, so adding a rule is two edits that cannot be done singly.
+#
+# 36 IS ABSENT ON PURPOSE. It checked `_categories.yml`, and the categories
+# system was retired; the number is not reused, because rule numbers appear in
+# commit messages, in `corpus.py`'s recorded counts and in the references.
+RULES = {
+    1: "no hand-typed number in prose",
+    2: "no 3 consecutive code lines repeated across entries",
+    3: "`**Answer.**` comes before the last code cell",
+    4: "no sweeping a decision that should have been asked",
+    5: "no `for … in range(…)` around an aero solve",
+    6: "prose within the word budget",
+    7: "figure caption within the word budget",
+    8: "each Specified / Assumed item within the word budget",
+    9: "one prose section",
+    10: "a sibling entry is linked, never named in bare prose",
+    11: "`_notebook.py` and `_probe_base.py` byte-match the canonical copies",
+    12: "the freeze is not older than the model that froze it",
+    13: "every `_analysis.py` function the entry calls is passed to `footer(…)`",
+    14: "one visual per entry (two, if one draws the aircraft)",
+    15: "a table is at most 6x4",
+    16: "a budgeted chapter does not override SOLVE_BUDGET at a call site",
+    17: "a frozen entry stays under the ENTRY_CEILING it declares",
+    18: "budgets are declared in the entry's first cell",
+    19: "a chapter with an entry defines its vehicle in `_model.py`",
+    20: "(warning) an entry-local function reaching the vehicle belongs in _analysis.py",
+    21: "(warning) an `_analysis.py` function nothing calls is dead",
+    22: "(warning) an `_analysis.py` function called only internally is private",
+    23: "every `solve()` passes `verbose` explicitly",
+    24: "a chapter with an entry has no unfilled index placeholder",
+    25: "no sentence enumerates more than five computed values",
+    26: "the title is ONE question, at most 18 words",
+    27: "never assign to a name `_notebook.py` owns",
+    28: "every entry declares ENTRY_CEILING and SOLVE_BUDGET",
+    29: "never import `_model`, `_analysis` or `_notebook`",
+    30: "a chapter index renders its own `_model.py`",
+    31: "a forked `_model.py` names its parent chapter, commit and differences",
+    32: "no empty callout",
+    33: "a chapter index declares `order:` matching its directory number",
+    34: "the notebook has a front page, and its generated block is intact",
+    35: "a chapter index keeps its entry listing and its lineage cell",
+    37: "`cite()` names an entry that exists and publishes a hero value",
+    38: "every chapter is named in the sidebar",
+    39: "an index carries its input callouts, in order, and nothing else",
+    40: "the front page's freeze is not older than the entries it counts",
+}
 
 
 def check(root, chapters):

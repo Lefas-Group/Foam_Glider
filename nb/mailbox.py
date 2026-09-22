@@ -24,6 +24,22 @@ the file: the run neither knows nor cares.
 On timeout the run does not block for ever -- it leaves the question on disk and
 exits, which is the shape the two existing stops already have, and `nb write`
 resumes from the proposal exactly as it does for them.
+
+THE KEYS, which are what `--answers file.json` is keyed on and what a
+coordinator writes. `name` is the key; it is in `question.json`, and every
+question logs it as it is asked, so nothing has to be looked up in this file:
+
+    "PROBE TIME POOL"        seconds of probing for the whole question
+    "ENTRY RENDER BUDGET"    seconds one render of the entry may take
+    "assumptions"            "" accepts; "1: 2.5e-4"; "1: redo — why"
+    "inherited"              "" keeps all; "3" or "3; 5" strikes
+    "NO PROGRESS"            "continue" | "stop" | advice for the agent
+    <the quantity>           a Specified input, keyed by its own name --
+                             "static margin", "foam thickness", and so on
+
+Everything but the last has a safe default and takes it after DEFAULTED_WAIT.
+A Specified input has none and holds the run for WAIT, then stops with the
+question still on disk.
 """
 
 import json
@@ -80,6 +96,13 @@ class Mailbox:
         self.notebook.answer_path.unlink(missing_ok=True)
         self.notebook.question_path.write_text(json.dumps(q, indent=1) + "\n")
         runstate.write(self.notebook, waiting_on=name)
+        # The KEY, said out loud. It is what `--answers` is keyed on and what a
+        # coordinator writes, and it was discoverable only by reading this
+        # file -- which is how a supported feature comes to be unusable.
+        from .log import say
+        say(f"  asking     {name!r}"
+            + (f" (default {default!r})" if default is not None else "")
+            + f" — --answers key")
 
         if wait is None:
             wait = self.wait if default is None else min(self.wait,

@@ -9,14 +9,21 @@ A new NOTEBOOK is not offered. That wants a fresh session, which is a process
 decision rather than the agent's.
 """
 
+import contextlib
 import os
 import re
 import shutil
+import time
 
 from ..config import SCAFFOLD
 from ..log import say
 
 NAME = re.compile(r"^\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+# How long a number reservation may be held before it is a corpse.
+# An allocation is two `mkdir`s and a directory listing; a minute is
+# four orders of magnitude of slack.
+ALLOC_STALE = 60.0
 
 # What an undescribed chapter's index carries. Doubles as the marker that nobody
 # has claimed the chapter yet -- see `Notebook.claimable_stub`.
@@ -60,6 +67,19 @@ def _allocate(notebook, slug, start=None):
         try:
             marker.mkdir()
         except FileExistsError:     # another run is mid-allocation on this one
+            # ...or a run that was SIGKILLed while holding it. The reservation
+            # is released in a `finally`, which a hard kill does not run, and
+            # the leaked directory then skipped that number for ever -- silent,
+            # permanent, and indistinguishable from contention. An allocation
+            # is milliseconds, so anything older than ALLOC_STALE is a corpse.
+            try:
+                age = time.time() - marker.stat().st_mtime
+            except OSError:
+                age = 0.0
+            if age > ALLOC_STALE:
+                with contextlib.suppress(OSError):
+                    marker.rmdir()
+                continue            # retry THIS number, now unheld
             n += 1
             continue
         try:

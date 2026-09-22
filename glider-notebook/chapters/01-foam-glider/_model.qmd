@@ -15,10 +15,7 @@ for _p in ["_notebook.py",
     if pathlib.Path(_p).exists():
         exec(compile(pathlib.Path(_p).read_text(), _p, "exec"))
 
-# The chapter this page belongs to, taken from the paths above rather than
-# retyped -- superseded_by() resolves its forward link inside this directory.
-# Then start the entry's clock and zero the solve counter, both read by footer().
-_CHAPTER = str(pathlib.Path(_p).parent)
+# Start the entry's clock and zero the solve counter, both read by footer().
 _T0 = time.perf_counter()
 aero_cost.update(calls=0, seconds=0.0)
 ```
