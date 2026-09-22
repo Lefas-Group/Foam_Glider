@@ -305,23 +305,67 @@ def confirm_inherited(proposal, notebook):
     breaks an item: forking the 3 mm chapter back to 5 mm inherits "foam
     thickness: 3 mm", which is exactly wrong and exactly the thing to strike.
 
+    GROUPED BY ANCESTOR, nearest first, because the set operation and the
+    semantics disagree and the presentation is the only place that can say so.
+    `inherited()` UNIONS every ancestor's declarations; what the notebook
+    actually means is OVERRIDE -- a later chapter that revisited a subject has
+    settled it. Flattened into one numbered list, chapter 06 was offered
+    "Foam thickness: 3 mm" (from 04) and "Foam 5 mm, 174.4 g/m² sheet
+    throughout" (from 01) as thirteen peers, along with "Fuselage neglected"
+    that 02 had already contradicted by adding one, and NACA4405 sections that
+    04 had already replaced.
+
+    None of that is resolvable mechanically: measured on those thirteen items,
+    keying on the bold label and letting a nearer ancestor shadow a further one
+    shadows NOTHING, because the labels are descriptions rather than subjects
+    -- "Foam thickness" and "Foam 5 mm, 174.4 g/m²" name the same quantity and
+    share no key. So the ordering carries the meaning instead: the nearest
+    ancestor is at the top, the furthest at the bottom, and the header says
+    which way the arrow points. The reader resolves the conflict, which is what
+    they were being asked to do anyway -- now with the information to do it.
+
     Batched and defaulted, following `confirm_assumptions` rather than
     `_prompt`: accepting is the right answer when nobody replies, and a gate
     that can strand an unattended run is worse than one that occasionally
     carries an item too many.
     """
     from ..inputs import inherited
-    items = inherited(notebook, proposal.chapter)
+    items, superseded = inherited(notebook, proposal.chapter)
     if not items:
         return [], []
-    tell(f"\n{'─' * 72}\nINHERITED — strike anything this chapter breaks"
-         f"\n{'─' * 72}")
+
+    # NUMBERED GLOBALLY, grouped for reading. The numbers are what a strike
+    # names, so they run straight through the groups -- renumbering within each
+    # would make "3" ambiguous the moment there were two groups.
+    lines, seen = [], None
     for n, (kind, item, src) in enumerate(items, 1):
-        tell(f"  {n}. [{kind}] {item}   ({src})")
-    tell('\n  Enter keeps all of it. Strike with "3" or "3; 5".')
-    answer = MAILBOX.ask("inherited", "inherited", "\n".join(
-        f"{n}. [{k}] {i}   ({s})" for n, (k, i, s) in enumerate(items, 1)),
-        default="").strip()
+        if src != seen:
+            seen = src
+            where = ("nearest" if n == 1 else
+                     "furthest" if n + sum(1 for k in items[n:] if k[2] == src)
+                     == len(items) else "")
+            lines.append(f"\n  from {src}{f'  ({where})' if where else ''}")
+        lines.append(f"    {n:2}. [{kind}] {item}")
+    body = "\n".join(lines).lstrip("\n")
+    how = ('  A NEARER chapter overrides a further one: where two items name the\n'
+           '  same quantity, the one higher up is the one in force.\n\n'
+           '  Enter keeps all of it. Strike what this fork breaks — "3" or "3; 5".')
+
+    tell(f"\n{'─' * 72}\nINHERITED — nearest ancestor first"
+         f"\n{'─' * 72}")
+    for line in body.splitlines():
+        tell(line)
+    # RESOLVED, not hidden. These are items an ancestor declared and a later
+    # ancestor replaced, so they are not carried forward -- but a list that
+    # silently shrank would be a list nobody could check.
+    if superseded:
+        tell(f"\n  already superseded, so not carried:")
+        for kind, item, src, by in superseded:
+            tell(f"      [{kind}] {item}")
+            tell(f"          {src} → replaced by {by}")
+    tell(f"\n{how}")
+    answer = MAILBOX.ask("inherited", "inherited", f"{body}\n\n{how}",
+                         default="").strip()
     if not answer:
         say(f"  answered   (all {len(items)} carried forward)")
         return items, []

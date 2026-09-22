@@ -1883,11 +1883,17 @@ def _chapter_index_blocks(root, chapters):
             out.append((index, "has no entry listing — a reader landing here "
                                "has nothing to click. The scaffold ships the "
                                "`listing:` block and a `::: {#entries}` div"))
-        if "GENERATED FROM THIS CHAPTER'S OWN" not in text:
+        # Matched on `_fork.yml` plus the GENERATED banner, not on the banner's
+        # exact wording. The first version pinned the whole sentence
+        # ("GENERATED FROM THIS CHAPTER'S OWN _fork.yml"), so editing the cell
+        # to say something truer -- it now reads every chapter's `_fork.yml`,
+        # not just this one's -- failed the rule in all six chapters at once.
+        # What the rule is for is the cell being THERE.
+        if not ("GENERATED FROM" in text and "_fork.yml" in text):
             out.append((index, "does not print its lineage — the parent chapter "
-                               "is recorded only in `_model.py`'s fork header, "
-                               "which no reader opens. The scaffold ships the "
-                               "cell that reads it"))
+                               "and what this one replaces are recorded only in "
+                               "`_fork.yml`, which no reader opens. The scaffold "
+                               "ships the cell that reads it"))
     return out
 
 
@@ -2104,29 +2110,97 @@ def read_fork(root, chapter):
         text = f.read_text()
     except OSError:
         return None
-    out, changes, in_changes = {}, [], False
+    # ANY key whose value is empty opens a list -- `changes:` and `supersedes:`
+    # today. It used to be `changes` by name, which meant adding a second list
+    # was a parser change rather than a file change.
+    out, lists, current = {}, {}, None
     for line in text.splitlines():
         if re.match(r"^\s*#", line) or not line.strip():
             continue
         item = re.match(r"^\s*-\s*(.+?)\s*$", line)
-        if item and in_changes:
-            changes.append(item.group(1).strip().strip('"').strip("'"))
+        if item and current:
+            lists[current].append(item.group(1).strip().strip('"').strip("'"))
             continue
         kv = re.match(r"^(\w+):\s*(.*)$", line)
         if kv:
             key, val = kv.group(1), kv.group(2).strip().strip('"').strip("'")
-            in_changes = key == "changes"
-            if not in_changes:
+            if val:
                 out[key] = val
+                current = None
+            else:
+                current = key
+                lists.setdefault(key, [])
             continue
         # A CONTINUATION: indented, no dash, no key. One change is often a
         # sentence and a file nobody can wrap is a file nobody edits, so a
         # wrapped item joins the one above it rather than being dropped --
         # which is what the first draft of this parser did, silently, to the
         # second half of every wrapped line.
-        if in_changes and changes and line.startswith(" "):
-            changes[-1] += " " + line.strip()
-    out["changes"] = changes
+        if current and lists.get(current) and line.startswith(" "):
+            lists[current][-1] += " " + line.strip()
+    out["changes"] = lists.get("changes", [])
+    out["supersedes"] = lists.get("supersedes", [])
+    return out
+
+
+# `supersedes:` entry -- `<chapter>: <the item it replaces>`.
+SUPERSEDE = re.compile(r"^\s*([0-9]{2}-[a-z0-9-]+)\s*:\s*(.+?)\s*$")
+
+
+def declared_items(root, chapter):
+    """[(kind, text)] from one chapter index's input callouts."""
+    try:
+        text = (root / "chapters" / chapter / "index.qmd").read_text()
+    except OSError:
+        return []
+    out = []
+    for title, body in callouts_of(text):
+        if title not in INPUT_TITLES:
+            continue
+        kind = "Assumed" if "assum" in title.lower() else "Specified"
+        for item in re.findall(r"^\s*\d+\.\s+(.*(?:\n(?!\s*\d+\.).*)*)",
+                               body, re.M):
+            out.append((kind, " ".join(item.split())))
+    return out
+
+
+def _label_matches(label, item):
+    """
+    Does `label` name `item`? Substring, case- and emphasis-insensitive.
+
+    Deliberately loose. The label is typed by hand into `_fork.yml` and the item
+    is prose in a callout -- "Sections NACA4405 and NACA0005" against
+    "**Sections NACA4405 and NACA0005**, standing in for foam." An exact match
+    would fail on the asterisks alone, and rule 31 refuses a label that matches
+    NOTHING, so the cost of being loose is bounded by the cost of being wrong
+    about which of a chapter's three items you meant.
+    """
+    clean = lambda t: re.sub(r"[^a-z0-9 ]+", "", t.lower()).strip()
+    return clean(label) in clean(item)
+
+
+def supersessions(root, chapters):
+    """
+    {(ancestor, item text): superseding chapter} across the whole notebook.
+
+    The forward link the record was missing. A chapter index is append-only and
+    true as of its date, so `01-foam-glider` still declares "Sections NACA4405
+    and NACA0005" and "Fuselage neglected" -- both false of every chapter after
+    it, and its page said so nowhere. `_fork.yml` already records what a fork
+    CHANGED, in prose; `supersedes:` records which recorded item it replaced,
+    which is the same fact in a form something can read.
+    """
+    out = {}
+    for c in chapters:
+        fork = read_fork(root, c)
+        for raw in (fork or {}).get("supersedes", []):
+            m = SUPERSEDE.match(raw)
+            if not m:
+                continue
+            parent, label = m.group(1), m.group(2)
+            for _, item in declared_items(root, parent):
+                if _label_matches(label, item):
+                    out[(parent, item)] = c
     return out
 
 
@@ -2261,6 +2335,59 @@ def _fork_provenance(root, chapters, entries):
                 f"lists no changes, but chapters/{c}/_model.py is "
                 f"{100 - ratio * 100:.0f}% different from its parent. One line "
                 f"per deliberate difference — the differences ARE the chapter")))
+    # `supersedes:` is checked on EVERY chapter, not only ones the similarity
+    # test flagged: it is optional, and a fork that rewrote its model rather
+    # than copying it -- 05, at 35% -- can still replace an ancestor's
+    # declaration. A link that resolves to nothing is worse than no link, since
+    # the superseded page then goes on looking current.
+    out += _supersede_targets(root, chapters)
+    return out
+
+
+def _supersede_targets(root, chapters):
+    """
+    Rule 31, second half. Every `supersedes:` entry names something real.
+
+    Loose matching (`_label_matches`) is what makes the file writable by hand;
+    this is what keeps it honest. A typo, a renamed chapter, or an item that was
+    reworded out from under the link all produce a supersession that silently
+    stops resolving -- and the symptom is invisible, because the marker simply
+    does not appear on the page it was meant to mark.
+    """
+    out = []
+    known = set(chapters)
+    for c in chapters:
+        fork = read_fork(root, c)
+        where = root / "chapters" / c / "_fork.yml"
+        for raw in (fork or {}).get("supersedes", []):
+            m = SUPERSEDE.match(raw)
+            if not m:
+                out.append((where, (
+                    f"supersedes: {raw!r} is not `<chapter>: <item>` — name the "
+                    f"chapter whose declaration this replaces, then enough of "
+                    f"the item to identify it")))
+                continue
+            parent, label = m.group(1), m.group(2)
+            if parent not in known:
+                out.append((where, (
+                    f"supersedes {parent!r}, which is not a chapter of this "
+                    f"notebook")))
+                continue
+            if parent >= c:
+                out.append((where, (
+                    f"supersedes {parent!r}, which is not EARLIER than {c}. A "
+                    f"chapter can only replace a declaration that already "
+                    f"existed when it was written")))
+                continue
+            items = [i for _, i in declared_items(root, parent)]
+            if not any(_label_matches(label, i) for i in items):
+                out.append((where, (
+                    f"supersedes {parent}: {label!r}, which matches none of "
+                    f"its {len(items)} declared item(s). The marker it would "
+                    f"put on that page will never appear"
+                    + (f" — it declares: "
+                       + "; ".join(re.sub(r"\*+", "", i)[:34] for i in items)
+                       if items else ""))))
     return out
 
 

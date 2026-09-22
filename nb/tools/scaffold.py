@@ -280,7 +280,16 @@ def create_chapter(notebook, name, title, defines="", claim=True,
                 f"at_entry: {len(notebook.entries(fork_from))}\n"
                 f'summary: "TODO: what the design BECAME, a few words"\n'
                 f"changes:\n"
-                f"  - TODO: one line per deliberate difference, as you make it\n")
+                f"  - TODO: one line per deliberate difference, as you make it\n"
+                # OPTIONAL, and the only forward link the record has. A chapter
+                # index is append-only and true as of its date: without this,
+                # the parent goes on declaring what this chapter replaced, for
+                # ever, with nothing on either page to say so.
+                f"# Items from an EARLIER chapter's index that this one\n"
+                f"# replaces, as `<chapter>: <the item>`. Delete this block if\n"
+                f"# it replaces none. Rule 31 refuses a name that matches\n"
+                f"# nothing, and both pages show the link once it resolves.\n"
+                f"supersedes:\n")
             (target / "_model.py").write_text(src["_model.py"])
             (target / "_analysis.py").write_text(src.get("_analysis.py") or "")
             forked = (f"\n\n_model.py and _analysis.py were COPIED from "
@@ -328,6 +337,14 @@ def create_chapter(notebook, name, title, defines="", claim=True,
             f"model rather than inside it precisely so writing it later costs "
             f"nothing -- editing _model.py after the chapter is frozen costs a "
             f"full re-prove to clear rule 12.\n\n"
+            f"If this chapter REPLACES something an earlier chapter's index "
+            f"declares -- a foam thickness, an airfoil, an assumption it makes "
+            f"false -- list it under `supersedes:` as `NN-name: <the item>`. "
+            f"That is the only forward link the notebook has: without it the "
+            f"earlier page goes on declaring what you just replaced, and a "
+            f"reader landing there cannot tell. Both pages then show the link, "
+            f"and a fork below you stops inheriting the dead version. Delete "
+            f"the block if this chapter replaces nothing.\n\n"
             f"Put the VEHICLE in chapters/{name}/_model.py -- rule 19 requires "
             f"it, and the chapter index renders that file, so it is where a "
             f"reader looks for the aircraft. Where the vehicle is parametric, "

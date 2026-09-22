@@ -16,3 +16,9 @@ changes:
     count
   - the builder is renamed make_glider_with_fuse, since both aircraft
     exist
+# What this chapter REPLACED, as `<chapter>: <the item>`. The item is a
+# numbered entry in that chapter's index callouts; naming it here is what
+# lets its own page say it was later revisited, which an append-only record
+# cannot say for itself. Rule 31 refuses a name that matches nothing.
+supersedes:
+  - 01-foam-glider: Fuselage neglected

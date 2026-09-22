@@ -831,8 +831,11 @@ def main(notebook_path, verbose=True, allow_refactor=False,
             contents.append({"role": "user", "parts": [{"text": chapter_msg}]})
         # The inheritance review, for the index this run is about to fill in.
         if inherited_kept or inherited_struck:
-            lines = ["The user reviewed what this new chapter inherits from its "
-                     "parent, at the gate."]
+            lines = ["The user reviewed what this new chapter inherits, at the "
+                     "gate. NEAREST ANCESTOR FIRST: where two items name the "
+                     "same quantity, the one listed earlier is the one in "
+                     "force, because the chapter that declared it revisited "
+                     "the subject later."]
             if inherited_kept:
                 lines += ["", "STILL TRUE, inherited — do NOT restate these in "
                               "this chapter's index or in entry prose. They are "

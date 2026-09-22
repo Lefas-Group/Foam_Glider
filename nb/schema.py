@@ -82,9 +82,17 @@ class Proposal(BaseModel):
     chapter: str = Field(description="Chapter directory name, e.g. '04-chosen-throw'")
     route: Literal["entry", "new_chapter"] = Field(
         description=(
-            "entry: the same model as an existing chapter. new_chapter: a "
-            "different model, fidelity or vehicle -- confirm via ask_specified "
-            "first, since it decides whether both answers are kept."))
+            "A chapter is a VEHICLE, so the test is mechanical: would this "
+            "question change `_model.py`? new_chapter only when the MODEL "
+            "differs -- different material, different design, or different "
+            "variables free to the optimiser. entry for everything else, "
+            "however large: a new objective, different bounds, a multistart, a "
+            "finer sweep, more strips, a different aero method, or any new "
+            "measurement of the same vehicle all live in `_analysis.py` and "
+            "belong in the chapter that already holds that vehicle. Rule 31 "
+            "and the lineage diagram both measure `_model.py` similarity and "
+            "nothing else, so a fork the model file does not justify is a "
+            "chapter the notebook cannot draw."))
     rationale: str = Field(
         description="One line: what is held constant between arms, and what differs")
     findings: str = Field(
@@ -132,9 +140,12 @@ class Proposal(BaseModel):
             "Only for route='new_chapter', and only when this chapter's vehicle "
             "is a COPY of an existing one: the chapter directory it is copied "
             "from, e.g. '03-unswept-c4'. The copy is then made for you, from "
-            "the last commit rather than the working tree, with the header "
-            "rule 31 requires already written. Leave empty for a genuinely new "
-            "aircraft."))
+            "the last commit rather than the working tree, with `_fork.yml` "
+            "already written. Leave empty for a genuinely new aircraft. Where "
+            "the new vehicle makes one of the parent's recorded specifications "
+            "or assumptions FALSE, say so in `_fork.yml`'s `supersedes:` when "
+            "you fill it in -- the record is append-only, so nothing else will "
+            "ever mark the old one as replaced."))
     chapter_defines: str = Field(
         default="",
         description=(

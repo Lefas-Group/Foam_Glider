@@ -108,24 +108,43 @@ def inherited(notebook, chapter):
     A chapter with no parent inherits from the NOTEBOOK instead -- the front
     page states what the aircraft is, and a new aircraft in an existing notebook
     is where the most is open, not the least.
+
+    Returns (kept, dropped). `dropped` is [(kind, item, from, superseded_by)] --
+    items an ancestor declared and a LATER ancestor replaced. They used to be in
+    the list: chapter 06 was offered "Foam thickness: 3 mm" (04) beside "Foam
+    5 mm, 174.4 g/m² sheet throughout" (01) as thirteen peers, along with
+    "Fuselage neglected" that 02 had contradicted by adding one. The union was
+    doing the work of an override because nothing recorded which item replaced
+    which. `_fork.yml`'s `supersedes:` records it now, so the override is
+    mechanical and the dropped set is reported rather than silently missing.
     """
-    out = []
+    out, dropped = [], []
     chain = ancestry(notebook, chapter)
     if chain:
+        import lint
+        gone = lint.supersessions(notebook.root, notebook.chapters())
         for c in chain:
             for kind, item in _declared_items(notebook, c):
-                if not any(i == item for _, i, _ in out):
-                    out.append((kind, item, c))
-        return out
+                if any(i == item for _, i, _ in out):
+                    continue
+                by = gone.get((c, item))
+                # Only an ancestor's supersession counts. A chapter outside this
+                # lineage replacing one of its own ancestors' items says nothing
+                # about what THIS fork carries.
+                if by and by in chain:
+                    dropped.append((kind, item, c, by))
+                    continue
+                out.append((kind, item, c))
+        return out, dropped
     index = notebook.root / "index.qmd"
     try:
         md = index.read_text()
     except OSError:
-        return out
+        return out, dropped
     for kind, body in CALLOUT.findall(md):
         for item in ITEM.findall(body):
             out.append((_kind(kind), _unescape(item), notebook.root.name))
-    return out
+    return out, dropped
 
 
 def _declared_items(notebook, chapter):

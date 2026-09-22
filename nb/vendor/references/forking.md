@@ -4,53 +4,109 @@ SKILL.md carries the routing table and the rule that a new notebook is never
 built by reading an existing one. This is the detail: when a model change earns a
 new chapter, and how to make one cheaply.
 
-## The fork criterion is whether you want to keep both answers
+## The fork criterion is a change to the MODEL
 
-Not which file the change lands in.
+A chapter is a vehicle. It forks when the vehicle changes — not when the way you
+interrogate the vehicle changes.
+
+| the change | where it lands | |
+|---|---|---|
+| **Material** — 5 mm stock becomes 3 mm | `_model.py` | **New chapter** |
+| **Design** — a fuselage is added, the quarter chord is unswept | `_model.py` | **New chapter** |
+| **Free variables** — a fixed tail is opened to the optimiser | `_model.py` | **New chapter** |
+| **Optimisation** — a different objective, bounds, multistart, solver settings | `_analysis.py` | Same chapter |
+| **Fidelity of the analysis** — more strips, a tighter tolerance, a finer sweep | `_analysis.py` | Same chapter |
+| **A new measurement** of the same vehicle | `_analysis.py` | Same chapter |
+
+The test is mechanical and you can run it: **would `_model.py` differ?** If the
+answer is no, it is an entry in the chapter you are already in, however large the
+study.
+
+This is what the machinery already measures. Rule 31 compares `_model.py`
+similarity and demands a `_fork.yml` above 85%; `model_kinship` and the lineage
+diagram read the same number. Nothing has ever looked at `_analysis.py` to decide
+whether something was a fork, so a criterion resting on analysis or fidelity was
+asking for a judgement no check could support — and got one: chapter 05 forked
+for optimisation scope, and at 35% similarity to its parent it appears in no
+kinship pair at all. Its `_fork.yml` exists because a person wrote it.
+
+### The second question: is it a correction instead?
+
+Once you know the model changes, ask whether the OLD answer survives.
 
 | | |
 |---|---|
-| The old answer is **superseded**: wrong physics, wrong arithmetic, or a known omission now closed | Fix in place, delete the freeze, re-render, and update the chapter index if a "left out" bullet stopped being true. The correction goes in a **later entry**. Same chapter. |
+| The old answer is **superseded**: wrong physics, wrong arithmetic, or a known omission now closed | Fix in place, delete the freeze, re-render, update the chapter index if a "left out" bullet stopped being true. The correction goes in a **later entry**. Same chapter. |
 | The old answer stays **valid under its own stated assumptions**, and the comparison is the point | **New chapter.** |
 
 An assumption of yours that the user later replaces with a measurement or a brief
-is the first case, not the second: it was never the design. A genuinely different
-aircraft, or a method you would want to compare against, is the second — the old
-chapter then keeps rendering its own numbers *correctly*, because the model it
-references has not moved.
+is the first case, not the second: it was never the design.
 
 Worked examples, from the duration-glider chapter:
 
 - A zero-lift degeneracy in the force balance, and a lumped-CG error → mistakes.
-  Fixed in place, everything recomputed.
+  Fixed in place, everything recomputed. **Same chapter.**
 - Foam thickness 1.6 → 5 mm and a one-ply → two-ply fuselage → unowned
   assumptions replaced by the user's measurement and brief. Never the design;
-  recomputed.
-- Adding interference drag → closes a gap an entry explicitly flags as missing.
-  The old answer is incomplete, not a rival view. **Same chapter.**
-- 2.5 mm stock → a different aircraft. The 5 mm chapter's conclusions stay true
-  of 5 mm stock forever. **New chapter.**
-- AeroBuildup → a vortex lattice → you would want both, to compare. **New
-  chapter.**
+  recomputed. **Same chapter.**
+- Adding interference drag → closes a gap an entry explicitly flags as missing,
+  and lands in `_analysis.py`. **Same chapter.**
+- 2.5 mm stock → a different aircraft, and `_model.py` differs. The 5 mm
+  chapter's conclusions stay true of 5 mm stock forever. **New chapter.**
+- AeroBuildup → a vortex lattice → the vehicle is identical and only the method
+  moved. **Same chapter**, as a second entry that compares the two. This used to
+  say new chapter; it was the one example that contradicted the criterion above,
+  and it would have produced a chapter the lineage diagram draws as an
+  unconnected root, because a VLM `_analysis.py` shares nothing with a buildup
+  one and `_model.py` never changed.
+
+### Recording what a fork replaces
+
+A fork usually makes one of its ancestors' declarations false — 3 mm foam
+replaces 5 mm, a fuselage replaces "fuselage neglected". The record is
+append-only, so that ancestor's index goes on declaring the dead version unless
+something says otherwise, and a fork taken below you inherits it.
+
+`_fork.yml` carries the link:
+
+```yaml
+supersedes:
+  - 01-foam-glider: Foam 5 mm, 174.4 g/m²
+  - 01-foam-glider: Sections NACA4405 and NACA0005
+```
+
+Name the chapter and enough of the item to identify it. Rule 31 refuses a name
+matching nothing. Both indexes then show it — yours as "Replaces …", theirs as
+"Later revisited: … see …" — and `nb`'s inheritance review stops offering the
+version you replaced.
 
 ## Citing an earlier chapter's answer
 
-There is no mechanism for this, deliberately. A number from another chapter is
-**transcribed** -- assigned in the entry's code cell with a comment naming its
-source, and the source entry named and linked in prose so rule 10 records the
-dependency.
+Use `cite()`. Never retype the number.
 
-What that costs you, stated plainly: **a transcription stays correct only until
-the cited chapter is re-rendered, and nothing will tell you when it stops.** Lint
-warns when a hand-typed number matches one another chapter publishes, but it is
-about a third accurate -- it misses any number that was reformatted on the way
-across, kg to g or 0.0965 to 0.096, which no string match can see.
+```python
+sink_manual = cite("02-fuselage-model",
+                   "2026-09-14-01-how-does-modeling-the-fuselage-change-the-optimized-glider")
+```
 
-The known upgrade is a `cite(chapter, entry, key)` reading the committed freeze,
-which would make staleness detectable. It is not built because it changes what a
-chapter may depend on: a cited answer moving would invalidate every citer
-transitively, and `check`'s dependency graph is intra-chapter today. Build it
-when a stale citation is actually found in the record, not before.
+It reads that entry's hero value out of the COMMITTED freeze, so the citing page
+cannot drift from what the cited page actually published. An entry with two hero
+blocks needs `label=` to say which. Rule 37 checks that the target exists and
+publishes a hero value, and `check` re-renders every page citing a chapter it
+rebuilds — the one cross-chapter edge in the dependency graph.
+
+This section used to say the opposite: *"There is no mechanism for this,
+deliberately … a number from another chapter is transcribed … The known upgrade
+is a `cite(chapter, entry, key)` reading the committed freeze. It is not built."*
+It was built. Transcribing is now the failure mode rather than the procedure —
+a hand-typed number stays correct only until the cited chapter is re-rendered,
+and nothing tells you when it stops. Lint warns when a typed number matches one
+another chapter publishes, but it is about a third accurate: it misses anything
+reformatted on the way across, kg to g or 0.0965 to 0.096, which no string match
+can see.
+
+The prose still names and links the cited entry, so rule 10 records the
+dependency for a reader as well as for `check`.
 
 ## Copying a chapter
 
@@ -58,10 +114,10 @@ A forked chapter copies **both** `_model.py` and `_analysis.py`: chapters share
 nothing at runtime, so one without its own `_analysis.py` cannot measure
 anything.
 
-Which file carries the intended difference depends on the fork — a design change
-alters `_model.py`, a fidelity change alters `_analysis.py` — so the header of
-the copy names its parent chapter, the commit it was taken at, and every
-deliberate difference. `diff` between the two files is then the review, and an
+A fork is a `_model.py` change by definition, so that is the file to diff. The
+`_analysis.py` that came across with it is a starting point, free to grow; the
+`_fork.yml` beside them names the parent chapter, the commit it was taken at,
+every deliberate difference, and anything it supersedes. `diff` between the two files is then the review, and an
 empty `diff` on the file that was *not* meant to change is a positive check
 rather than an absence of information.
 

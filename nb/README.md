@@ -2,11 +2,76 @@
 
 Turns a design question into a Quarto lab-notebook entry that passes a 39-rule
 lint contract, renders, and is checked against its own output before it commits.
-`lint.RULES` is the list; `preflight` refuses to start if the copy the model
-reads disagrees with it, which it silently did for eight rules.
-Runs on Gemini; needs `GEMINI_API_KEY`, and `quarto`, `git`, `npx` on `PATH`.
 
-**Run from the repo root** — there is no installed entry point.
+---
+
+## Setup
+
+Four things have to be on the machine. Three are binaries; one is a key.
+
+| | why | check it |
+|---|---|---|
+| **`uv`** | runs everything; no venv to activate | `uv --version` |
+| **`quarto`** | renders the notebook | `quarto --version` |
+| **`git`** | freeze scoping, diffs, and the commit each entry makes | `git --version` |
+| **`npx`** (Node) | the MCP filesystem server the agent writes files through | `npx --version` |
+
+```bash
+# 1. dependencies — the notebook runtime AND the agent
+uv sync --group nb
+
+# 2. the API key, in the shell you will run from
+export GEMINI_API_KEY="…"          # https://aistudio.google.com/apikey
+
+# 3. prove it, before spending anything
+uv run --group nb python -m nb.preflight glider-notebook
+```
+
+That last command is the whole of setup verification. It checks every binary,
+the key, the vendored files, and that the model's copy of the rule list matches
+what lint enforces. It prints `preflight ok` or the list of what is wrong.
+
+**Run from the repo root.** There is no installed entry point and nothing to
+activate — `uv run` resolves the environment each time, and every path below is
+relative to the repo root.
+
+## Running it
+
+```bash
+uv run --group nb python -m nb ask glider-notebook "How heavy is the wing alone?"
+```
+
+That is the whole system. It probes the aircraft model, proposes an entry,
+writes it, lints it, renders it, commits it, and rebuilds the site — about five
+minutes, and it detaches immediately so closing the window does not kill it.
+
+**What you will be asked.** A board appears on your terminal. It asks for two
+budgets up front (press Enter for the defaults), then for anything it needs a
+decision on, then to confirm the assumptions it made. Ctrl-C leaves the board;
+the run carries on without it.
+
+```
+uv run --group nb python -m nb board  glider-notebook   # re-attach, any terminal
+uv run --group nb python -m nb watch  glider-notebook   # the detail, live
+uv run --group nb python -m nb answer glider-notebook "0.12"
+uv run --group nb python -m nb stop   glider-notebook
+```
+
+**Skip the questions** when you already know the answers:
+
+```bash
+uv run --group nb python -m nb ask glider-notebook "<q>" \
+    --pool 180 --ceiling 300 --chapter 04-thinner-foam --quiet
+```
+
+**Read the result.** The finished entry prints to the terminal with its real
+numbers, and the site is rebuilt:
+
+```bash
+open glider-notebook/_site/index.html
+```
+
+### Every command
 
 ```bash
 uv run --group nb python -m nb new    <notebook> [title]     # once per aircraft
@@ -22,8 +87,28 @@ uv run --group nb python -m nb view   <notebook> [--force]   # build the site
 uv run --group nb python -m nb eval   <notebook>             # runs, by model
 ```
 
+### When something goes wrong
+
+| symptom | what it is |
+|---|---|
+| `preflight FAILED` | read the list; every line names its own fix |
+| the run seems stuck | `nb watch <notebook>` — it stamps every line, so silence is visible |
+| a question nobody answered | `nb board`, or `nb answer <notebook> "<value>"` from anywhere |
+| it stopped at a **new chapter** | that stop is deliberate. `nb resume <notebook>` |
+| it stopped at a **refactor** | it wants to change a chapter's `_model.py`. `nb resume <notebook> --allow-refactor` |
+| nothing committed | the entry is on disk; the terminal says where |
+| quota exhausted | it says when to try again. Nothing was lost; `nb resume` picks up |
+
+Every run leaves `<notebook>/_scratch/runs/<id>/` behind: the transcript, the
+status log, the proposal and any question it asked. `nb clean` drops the spent
+ones and refuses to touch a run whose chapter still has uncommitted work.
+
+---
+
+## What `ask` actually does
+
 `ask` is one command per entry: probe, write, lint, render, commit. ONE
-question per ask -- there was a `queue` that carried extra questions into
+question per ask — there was a `queue` that carried extra questions into
 follow-on runs, and it was never used in 34 recorded asks; two questions are two
 `nb ask` calls, which get two pools and run in parallel.
 
@@ -40,9 +125,10 @@ once in 67 runs.
 
 It stops and writes `proposal.json` for a **new chapter** or a **refused
 refactor**, both being commitments later entries depend on; `nb resume` resumes
-either. At the new-chapter stop it also shows what the chapter INHERITS from its
-parent and lets you strike whatever the fork breaks — and both halves, kept and
-struck, now reach the write brief. They were recorded and read by nothing.
+either. At the new-chapter stop it also shows what the chapter INHERITS,
+grouped by ancestor with the nearest first, with anything a later chapter
+already superseded resolved out of the list — and both what you keep and what
+you strike reach the write brief.
 
 ## Budgets
 
@@ -181,7 +267,7 @@ routinely *more* expensive than rendering everything. Measured on
 
 ```
 quarto render chapters/01-foam-glider   5 pages executed
-quarto render                           0 pages executed, all 32 cached
+quarto render                           0 pages executed, all 34 cached
 ```
 
 Every render says which it is doing, and why:
@@ -204,9 +290,9 @@ A change that moves the counts updates them in the same commit.
 ## The version before this one
 
 `nb-single-agent` tags the system as it was before parallelism: one agent, one
-notebook, questions at the terminal. It still runs —
-[`../DEPRECATED-single-agent.md`](../DEPRECATED-single-agent.md) has the one
-command.
+notebook, questions at the terminal. `git show nb-single-agent:nb/README.md` has
+its instructions. (This used to link a `DEPRECATED-single-agent.md` beside the
+repo root; the file was never committed, so the link went nowhere.)
 
 ## Four things that will bite
 

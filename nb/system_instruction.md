@@ -53,6 +53,12 @@ This is the rule broken most. When in doubt, write less.
 - **One question, one entry.** Two questions asked in one breath become two
   entries. Facets of a *single* comparison (cost, fidelity, applicability) are
   one question, not three.
+- **One vehicle, one chapter.** A chapter is an aircraft, not a study. A new
+  chapter is earned by a change to `_model.py` — different material, different
+  design, different variables free to the optimiser — and by nothing else. A
+  new objective, different bounds, a multistart, a finer sweep or a different
+  aero method all live in `_analysis.py` and belong to the chapter that already
+  holds that vehicle. `read_reference("forking")` has the table.
 - **Compute only what was asked.** "What are the polars?" means the curves — not
   max L/D, CL_max, stall angle or Cm_α. Do not add things to the model while you
   are there.
@@ -130,7 +136,7 @@ prose is already written.
 28  every entry declares ENTRY_CEILING and SOLVE_BUDGET — never None, solve ≤ ceiling
 29  never import `_model`, `_analysis` or `_notebook` — already in scope
 30  a chapter index renders its own `_model.py` — that is where the aircraft is
-31  a forked `_model.py` names its parent chapter, commit and differences
+31  a forked `_model.py` names its parent, commit, differences and what it replaces
 32  no empty callout — delete it rather than write `None.`
 33  a chapter index declares `order:` matching its directory number
 34  the front page keeps its generated lineage block — never write_file over it
@@ -267,8 +273,17 @@ Order: hero → `**Answer.**` → callouts → evidence → `footer(...)`.
 - **Both callouts say NEW.** They list only what this page introduced. What it
   inherits is stated once, at the level that introduced it — the chapter index
   for a chapter's decisions, and the notebook's front page, whose callouts say
-  INITIAL because everything inherits them. A page restating what it inherited
-  is the mistake; an empty callout is deleted, not filled (rule 32).
+  INITIAL because everything inherits them. Those front-page items are quoted
+  to you above, under "The aircraft": they are the brief, and changing one is
+  `ask_specified`, never an assumption. A page restating what it inherited is
+  the mistake; an empty callout is deleted, not filled (rule 32).
+- **Replacing an inherited item is recorded, not implied.** The record is
+  append-only, so an earlier chapter goes on declaring what you replaced unless
+  something says otherwise. When a new chapter makes an ancestor's declaration
+  false — a thickness, an airfoil, an assumption it closes — name it in that
+  chapter's `_fork.yml` under `supersedes:`, as `NN-name: <the item>`. Both
+  pages then carry the link, and a fork below you stops inheriting the dead
+  version.
 - **A chapter index carries no standing description.** What a chapter IS is its
   title, the parent it links to, and what it newly specified. Prose above the
   callouts restated one of those — measured across six chapters it restated the

@@ -69,6 +69,55 @@ def signatures(path):
     return module_summary(path)[0]
 
 
+def notebook_context(notebook):
+    """
+    The front page's input callouts -- what is true of the WHOLE aircraft.
+
+    They were in no prompt at all. Measured on `glider-notebook`: the prefix ran
+    to 35,555 characters and contained none of "300 mm, fixed tip to tip",
+    "Still air" or "Rigid airframe". Every chapter's `index.qmd` was quoted in
+    full and the notebook's own was not, so the level that everything inherits
+    was the one level the model never saw.
+
+    Nothing else covered it. `_inputs_notice` reports a COUNT, for one chapter.
+    `inputs.inherited` reads this page only for a chapter with no parent, which
+    no fork ever is. And no chapter index restates a notebook-level item -- also
+    measured, zero of six.
+
+    The one surviving trace was the code, badly: chapter 05's `_model.py`
+    exposes no top-level constants at all, and the 300 mm span lives as the bare
+    literal `0.15` three times inside the builder. So the aircraft's first
+    Specified commitment reached the model as an unnamed magic number, with
+    nothing to say it was fixed rather than free.
+
+    Callouts only, not the whole page: the rest is the generated lineage
+    diagram, which is a picture of the chapters the manifest already lists.
+    """
+    index = notebook.root / "index.qmd"
+    try:
+        text = index.read_text()
+    except OSError:
+        return ""
+    from .inputs import CALLOUT, ITEM, _kind, _unescape
+    blocks = []
+    for heading, body in CALLOUT.findall(text):
+        items = [_unescape(i) for i in ITEM.findall(body)]
+        if items:
+            blocks.append((_kind(heading), items))
+    if not blocks:
+        return ""
+    out = ["\n## The aircraft — true of EVERY chapter\n",
+           "Stated once, on the notebook's front page, and inherited by "
+           "everything below. You do not restate these in a chapter index or "
+           "in entry prose, and you do not change one without `ask_specified`: "
+           "they are the brief.\n"]
+    for kind, items in blocks:
+        out.append(f"{kind}:")
+        out += [f"  - {i}" for i in items]
+        out.append("")
+    return "\n".join(out)
+
+
 def chapter_context(notebook):
     out = []
     for chapter in notebook.chapters():
@@ -132,6 +181,7 @@ def build(notebook):
         "```",
         manifest.build(notebook).strip(),
         "```",
+        notebook_context(notebook),
         chapter_context(notebook),
     ]
     return "\n".join(parts)
