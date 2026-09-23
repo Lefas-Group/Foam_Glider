@@ -678,17 +678,18 @@ def api(filename="_analysis.py"):
 # the true statement about it.
 # =============================================================================
 
-# `- <id>: <text>` inside a block. The id is a slug so that a colon inside the
-# TEXT -- "**Tail: H 100×30 mm**" -- cannot be mistaken for the separator.
-_ROW = _re.compile(r"^\s*-\s*([a-z0-9][a-z0-9-]*)\s*:\s*(.+?)\s*$")
+# `- <key>: <value>` inside a block. The key is a slug, optionally a
+# `chapter/id` pair, so that a colon inside the VALUE -- "**Tail: H 100x30
+# mm**" -- cannot be mistaken for the separator.
+_ROW = _re.compile(r"^\s*-\s*([a-z0-9][a-z0-9/-]*)\s*:\s*(.+?)\s*$")
 
 
 def _blocks(path):
     """
-    `{key: [(id, text), ...]}` for a flat `key:` / `- id: text` file.
+    `{key: [(k, v), ...]}` for a flat `key:` / `- k: v` file, scalars included.
 
-    Shared by `_inputs.yml` and `_fork.yml`'s `supersedes:`, which are the same
-    shape on purpose: one thing to learn, and one parser to be wrong in.
+    Shared by `_inputs.yml` and `_fork.yml`, which are the same shape on
+    purpose: one thing to learn, and one parser to be wrong in.
     """
     out, current = {}, None
     try:
@@ -703,12 +704,17 @@ def _blocks(path):
             out[current].append((row.group(1),
                                  row.group(2).strip().strip('"').strip("'")))
             continue
-        key = _re.match(r"^(\w+):\s*$", line)
-        if key:
-            current = key.group(1)
-            out.setdefault(current, [])
+        kv = _re.match(r"^(\w+):\s*(.*)$", line)
+        if kv:
+            key, val = kv.group(1), kv.group(2).strip()
+            if val:
+                out[key] = val.strip('"').strip("'")
+                current = None
+            else:
+                current = key
+                out.setdefault(current, [])
             continue
-        current = None              # a `key: value` line ends the block
+        current = None
     return out
 
 
@@ -721,20 +727,18 @@ def _chapter_title(chapter):
     return m.group(1) if m else chapter
 
 
-def _superseded(chapter):
-    """{id: chapter that replaced it} for items THIS chapter declared."""
-    out = {}
-    for d in sorted(_pathlib.Path("chapters").iterdir()):
-        if not d.is_dir() or d.name == chapter:
-            continue
-        for parent, item_id in _blocks(d / "_fork.yml").get("supersedes", []):
-            if parent == chapter:
-                out[item_id] = d.name
-    return out
+def _item_text(chapter, item_id):
+    """One item's prose, from that chapter's `_inputs.yml`."""
+    b = _blocks(_pathlib.Path("chapters") / chapter / "_inputs.yml")
+    for key in ("specified", "assumed"):
+        for i, t in (b.get(key) or []):
+            if i == item_id:
+                return t
+    return item_id
 
 
 def chapter_lineage(chapter):
-    """Where this chapter's vehicle came from, and what it replaced."""
+    """Where this chapter's vehicle came from."""
     fork = _pathlib.Path("chapters") / chapter / "_fork.yml"
     try:
         text = fork.read_text()
@@ -746,37 +750,79 @@ def chapter_lineage(chapter):
               f"(../{parent.group(1)}/).\n")
 
 
-def chapter_inputs(chapter):
+def notebook_inputs():
     """
-    The chapter's three input callouts, rendered from `_inputs.yml`.
+    The notebook's brief, from `_inputs.yml` at its root.
 
-    An item that a later chapter supersedes moves OUT of its own callout and
-    into `## Superseded`, with a link to the chapter that replaced it. It is
-    stated once either way. A callout with nothing in it is not printed, which
-    is rule 32 by construction rather than by checking.
+    Same file format as a chapter's, and the same renderer, because it is the
+    same entity one level up. It used to be hand-written markdown here and YAML
+    in the chapters, so `inputs.py` carried a regex that had to know three
+    historical heading names to read either.
+
+    INITIAL, not New: everything below inherits these, and nothing supersedes
+    them. A fork that departs from the brief is not a fork -- it is a different
+    aircraft, which is a different notebook.
     """
-    items = _blocks(_pathlib.Path("chapters") / chapter / "_inputs.yml")
-    gone = _superseded(chapter)
-    live = {k: [(i, t) for i, t in items.get(k, []) if i not in gone]
-            for k in ("specified", "assumed")}
-    dead = [(i, t, gone[i]) for k in ("specified", "assumed")
-            for i, t in items.get(k, []) if i in gone]
+    _render_inputs(_pathlib.Path("_inputs.yml"),
+                   "Initial user specifications", "Initial assumptions")
 
+
+def _render_inputs(path, spec_heading, assumed_heading):
+    items = _blocks(path)
     for key, style, heading in (
-            ("specified", "callout-tip", "New user specifications"),
-            ("assumed", "callout-note", "New assumptions")):
-        if not live[key]:
+            ("specified", "callout-tip", spec_heading),
+            ("assumed", "callout-note", assumed_heading)):
+        rows = items.get(key) or []
+        if not rows:
             continue
         print(f"::: {{.{style}}}")
         print(f"## {heading}\n")
-        for n, (_, text) in enumerate(live[key], 1):
+        for n, (_, text) in enumerate(rows, 1):
             print(f"{n}. {text}")
         print(":::\n")
 
-    if dead:
-        print("::: {.callout-important collapse=true}")
-        print("## Superseded\n")
-        for n, (_, text, by) in enumerate(dead, 1):
-            print(f"{n}. {text} — replaced by "
-                  f"[{_chapter_title(by)}](../{by}/).")
+
+def chapter_inputs(chapter):
+    """
+    The chapter's callouts: what it CHANGED, then what it newly declares.
+
+    EVERY LEVEL LOOKS BACKWARD ONE STEP, and this is the whole of it. A chapter
+    always renders its own specifications and assumptions -- they are its
+    premise, and they stay exactly as true as they ever were; `forking.md`'s
+    criterion for a chapter existing at all is that "the old answer stays valid
+    under its own stated assumptions".
+
+    The first version of this pointed FORWARD: a later chapter replacing an
+    item put a `Superseded` stamp on the page that declared it. That said the
+    chapter was stale, which contradicts the reason it was kept -- and on this
+    notebook it emptied two chapters of their callouts entirely, because every
+    one of their items had been departed from.
+
+    What is true is that the LATER chapter departed from it, and that fact
+    belongs to the later chapter. So `_fork.yml` carries `replaces:` and
+    `drops:`, and they render here, on the page that made the change.
+    """
+    fork = _blocks(_pathlib.Path("chapters") / chapter / "_fork.yml")
+
+    # What this chapter departed from, grouped by the chapter it came from --
+    # not by the parent, since 04 forks from 03 but departs from 01's items.
+    changed = {}
+    for key, arrow in (("replaces", None), ("drops", "dropped")):
+        for target, value in (fork.get(key) or []):
+            src, _, item_id = target.partition("/")
+            if not item_id:
+                continue
+            was = _item_text(src, item_id)
+            now = (_item_text(chapter, value) if arrow is None
+                   else f"*dropped* — {value}")
+            changed.setdefault(src, []).append((was, now))
+    for src, rows in changed.items():
+        print("::: {.callout-warning}")
+        print(f"## Changed from {_chapter_title(src)}\n")
+        for n, (was, now) in enumerate(rows, 1):
+            print(f"{n}. {was} → {now}")
+        print(f"\nSee [{_chapter_title(src)}](../{src}/).")
         print(":::\n")
+
+    _render_inputs(_pathlib.Path("chapters") / chapter / "_inputs.yml",
+                   "New user specifications", "New assumptions")

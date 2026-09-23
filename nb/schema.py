@@ -12,45 +12,40 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
+# ONE field says where an input came from, where there used to be three.
+# `kind` (derivable|specified|unknown), `owner` (user|agent|assumed) and `scope`
+# (new|chapter|notebook) between them allowed 27 combinations; across every
+# recorded proposal, THREE occurred, and they are exactly `source`'s three.
+#
+# `derivable` existed only to be rejected -- a lesson, not a state, and the
+# instruction's triage table already teaches it. `scope` carried the longest
+# description of any field here, longer than `kind` and `owner` combined, for a
+# single validator; and the level is not a property of an item, it is WHERE THE
+# ITEM IS DECLARED. A thing in `chapters/04/_inputs.yml` is chapter-level
+# because it is in that file, and a field saying otherwise is just something to
+# disagree with the filesystem about.
+#
+# EVERY DOCSTRING HERE IS SHIPPED. Pydantic puts a class docstring into
+# `model_json_schema()`, which is the `propose` declaration, which is 46% of the
+# tool surface -- so the reasoning above lives in a comment and the model reads
+# only what it needs. Writing it as a docstring cost 110 tokens per request.
 class Input(BaseModel):
     """One input the question needed that was not already fixed."""
 
     name: str = Field(description="The quantity, e.g. 'static margin'")
-    kind: Literal["derivable", "specified", "unknown"] = Field(
-        description=(
-            "derivable: the model or the plans already contain it -- compute it, "
-            "never declare it. specified: a different answer changes WHAT WE ARE "
-            "BUILDING -- ask via ask_specified. unknown: a different answer "
-            "changes HOW ACCURATELY WE MODELLED IT -- assume and say what it costs."
-        ))
     value: Optional[str] = Field(default=None, description="The value used")
-    owner: Literal["user", "agent", "assumed"] = Field(
+    source: Literal["asked", "decided", "guessed"] = Field(
         description=(
-            "user: they answered. agent: they delegated it and you answered, so "
-            "say why. assumed: nobody knows -- only valid for kind=unknown."
-        ))
+            "asked: a different answer changes WHAT WE ARE BUILDING and you "
+            "put it to the user with ask_specified. decided: you asked, they "
+            "handed it back, and you chose -- say why. guessed: nobody knows, "
+            "a different answer changes HOW ACCURATELY it is modelled, so you "
+            "assumed it and said what it costs. If the model or the plans "
+            "already contain it, it is none of these: compute it."))
     why: str = Field(description="Ten words at most -- lint rule 8 counts them")
-    scope: Literal["new", "chapter", "notebook"] = Field(
-        default="new",
-        description=(
-            "Which LEVEL this item belongs to. new: this entry introduced it, "
-            "and it is the only kind an entry declares. chapter: the chapter's "
-            "index already states it -- you inherit it, you do not restate it. "
-            "notebook: true of the whole aircraft, stated on the front page. "
-            "Declaring an inherited item as 'new' puts words in the entry that "
-            "belong one level up; the instruction's rule is that assumptions "
-            "sit at the level they belong to."))
 
     @model_validator(mode="after")
     def _discipline(self):
-        if self.kind == "derivable":
-            raise ValueError(
-                f"'{self.name}' is derivable -- compute it, don't declare it.")
-        if self.kind == "specified" and self.owner == "assumed":
-            raise ValueError(
-                f"'{self.name}' is Specified but owner is 'assumed'. A Specified "
-                f"input is asked, every time -- use ask_specified. If you answered "
-                f"it yourself because it was a one-sentence call, owner is 'agent'.")
         if len(self.why.split()) > 10:
             raise ValueError(
                 f"'{self.name}': why is {len(self.why.split())} words, budget is 10.")

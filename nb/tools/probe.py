@@ -42,31 +42,46 @@ PREAMBLE = (
 
 def _inputs_notice(notebook, chapter):
     """
-    What this chapter has already been given, and the one question about it.
+    What this chapter has already been given, ITEM BY ITEM, and the one
+    question about it.
 
     Asking is voluntary and stopped happening: `ask_specified` fired in 3 of 8
-    recorded runs and half the proposals declared no inputs at all, which meant
-    `confirm_assumptions` returned early and the correction loop behind it never
-    ran. The model is poor at judging WHETHER to ask and fine at reading a list,
-    so this turns the judgement into a lookup and puts it where the lookup is
-    cheap.
+    recorded runs and half the proposals declared no inputs at all. The model
+    is poor at judging WHETHER to ask and fine at reading a list, so this turns
+    the judgement into a lookup and puts it where the lookup is cheap.
 
-    Says nothing when the chapter declares nothing -- two of thirteen chapters
-    written so far, both predating the callouts. A notice with no numbers in it
-    is furniture.
+    IT USED TO SEND ONLY A COUNT -- "this chapter declares 1 Specified and 2
+    Assumed item(s)" -- which asks the model to decide which of three things
+    its question changes without showing it the three things. They are in the
+    prefix, but "go and find them" is the step that does not happen. The items
+    are 40 tokens; they ride a tool result the run was getting anyway.
+
+    The IDS are here because they are the handle: `ask_specified(replaces=...)`
+    takes one, and so does `_fork.yml`'s `replaces:`.
+
+    Says nothing when the chapter declares nothing -- a notice with no items in
+    it is furniture.
     """
-    from ..inputs import declared
+    import lint
     if not chapter:
         return ""
-    spec, asm = declared(notebook, chapter)
-    if not (spec or asm):
+    data = lint.read_inputs(notebook.root, chapter)
+    rows = [(k, i, t) for k, label in (("specified", "Specified"),
+                                       ("assumed", "Assumed"))
+            for i, t in (data.get(k) or [])]
+    if not rows:
         return ""
-    return (f"\n[This chapter declares {spec} Specified and {asm} Assumed "
-            f"item(s), in chapters/{chapter}/index.qmd. Which does THIS "
-            f"question change? A changed Specified item is `ask_specified`, "
-            f"now, before the next probe -- not saved for the proposal. A new "
-            f"assumption is yours to make and to record. Neither is a reason "
-            f"to re-state the ones you inherit.]")
+    listing = "\n".join(
+        f"    [{'Specified' if k == 'specified' else 'Assumed'}] {i}: {t}"
+        for k, i, t in rows)
+    return (f"\n[chapters/{chapter} is already committed to these. Every entry "
+            f"here inherits them and none restates them:\n\n{listing}\n\n"
+            f"Does THIS question change one of them? A changed SPECIFIED item "
+            f"is `ask_specified` now, before the next probe, with "
+            f"`replaces=\"<id>\"`. A changed ASSUMED item is yours: assume the "
+            f"new value, record it with source='guessed', and say which id it "
+            f"replaces in your rationale. Changing none of them is the common "
+            f"answer and needs nothing.]")
 
 
 def run_probe(notebook, chapter, question, session=None, budget_s=None):
@@ -174,8 +189,9 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
             # confirm it had fired at all, which is how a prompt silently stops
             # working. The budget line beside it has said both all along.
             if notice:
-                say(f"  inputs    {notice.strip()[1:-1].split('.')[0]} — "
-                    f"asked once, on the first probe")
+                say(f"  inputs    put {len(notice.splitlines())} line(s) of "
+                    f"chapters/{chapter}'s commitments to the model — once, "
+                    f"on the first probe")
         left = session.probe_left
         if left is not None:
             # To the MODEL, so the next `budget_s` is informed rather than

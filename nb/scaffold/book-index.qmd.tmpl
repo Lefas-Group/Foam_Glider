@@ -2,18 +2,49 @@
 title: "<Project>"
 ---
 
-::: {.callout-tip}
-## Initial user specifications
-as the notebook level; a new chapter with no parent inherits from here.
+```{python}
+#| echo: false
+#| output: asis
+# GENERATED, from `_inputs.yml` at the notebook root (rule 34 keeps this cell).
+#
+# THE BRIEF. True of the whole aircraft, inherited by every chapter and entry,
+# and never superseded -- a fork that departs from one of these is not a fork,
+# it is a different aircraft and so a different notebook.
+#
+# Parsed here rather than by `notebook_inputs()` in `_notebook.py`, which does
+# exactly this for a chapter. That file is reached through `_model.qmd`, which
+# this page does not include and must not: `_notebook.py` imports aerosandbox
+# and matplotlib, and the whole point of this page is that it reads source and
+# executes none of it. It re-renders on every commit; it costs 10 s because
+# nothing here imports a model.
+import pathlib
+import re
 
-1. <what was decided about the aircraft as a whole>
-:::
+_ROW = re.compile(r"^\s*-\s*[a-z0-9][a-z0-9/-]*\s*:\s*(.+?)\s*$")
+_brief, _key = {}, None
+for _line in pathlib.Path("_inputs.yml").read_text().splitlines():
+    if not _line.strip() or _line.lstrip().startswith("#"):
+        continue
+    _row = _ROW.match(_line)
+    if _row and _key:
+        _brief[_key].append(_row.group(1).strip('"').strip("'"))
+    elif re.match(r"^\w+:\s*$", _line):
+        _key = _line.split(":")[0]
+        _brief.setdefault(_key, [])
+    else:
+        _key = None
 
-::: {.callout-note}
-## Initial assumptions
-
-1. <what is assumed of every chapter, and what it costs>
-:::
+for _k, _style, _heading in (("specified", "tip", "Initial user specifications"),
+                             ("assumed", "note", "Initial assumptions")):
+    _rows = _brief.get(_k) or []
+    if not _rows:
+        continue
+    print("::: {.callout-" + _style + "}")
+    print(f"## {_heading}\n")
+    for _n, _t in enumerate(_rows, 1):
+        print(f"{_n}. {_t}")
+    print(":::\n")
+```
 
 ```{python}
 #| echo: false

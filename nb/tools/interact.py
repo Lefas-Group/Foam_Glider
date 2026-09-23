@@ -219,7 +219,7 @@ def confirm_assumptions(proposal):
     this is a confirmation with a safe default, not a question that must be
     answered, and raising on EOF would kill every piped run.
     """
-    assumed = [i for i in proposal.inputs if i.owner == "assumed"]
+    assumed = [i for i in proposal.inputs if i.source == "guessed"]
     if not assumed:
         return [], []
 
@@ -275,7 +275,7 @@ def confirm_assumptions(proposal):
         # learn a second one: the user answered it, so they own it, and an input
         # they chose is Specified by definition.
         was = i.value or i.why
-        i.kind, i.owner, i.value = "specified", "user", value
+        i.source, i.value = "asked", value
         i.why = "corrected at the prompt"
         corrected.append((i.name, was, value))
         say(f"  answered   {i.name} -> {i.value}")
@@ -382,7 +382,8 @@ def confirm_inherited(proposal, notebook):
     return kept, [items[n] for n in sorted(struck)]
 
 
-def ask_specified(session, name, why, kind="specified", options=""):
+def ask_specified(session, name, why, kind="specified", options="",
+                  replaces=""):
     """
     A Specified input: a different answer changes WHAT WE ARE BUILDING.
 
@@ -392,22 +393,62 @@ def ask_specified(session, name, why, kind="specified", options=""):
     better -- the rest of the probe then runs against the real value instead of
     a placeholder. A static margin discovered at turn 3 should not be guessed
     for twenty more turns.
+
+    `replaces` names an item the CHAPTER already declares, by its id. It is the
+    difference between asking cold and asking about a change: the question the
+    user sees then carries the value in force, which is the one thing they need
+    to answer it. Nothing in the system asked to CHANGE an existing commitment
+    before this -- `ask_specified` was for new inputs, the first-probe notice
+    nudged with a count, and `confirm_assumptions` ran the other way round, so
+    an entry could be written under an assumption its own question invalidated
+    and nothing would stand between that and a commit.
     """
-    # The SAME validator `propose` runs, at the moment of asking rather than
-    # twenty turns later. It catches two things here. A `derivable` admitted as
-    # such is refused outright -- that is rule 4, and the model has just told us
-    # it could compute the answer. And `why` is held to rule 8's ten words now,
-    # rather than after the whole proposal is assembled around it.
-    Input(name=name, kind=kind, owner="user", value=None, why=why)
+    # CLASSIFY BEFORE ASKING, checked here rather than twenty turns later. A
+    # `derivable` admitted as such is refused outright -- that is rule 4, and
+    # the model has just told us it could compute the answer. `kind` is a tool
+    # parameter and not a field of `Input`: it is a gate on the ASK, and once
+    # the question has been put the only thing worth recording is where the
+    # answer came from.
+    if kind == "derivable":
+        raise ValueError(
+            f"'{name}' is derivable -- the model or the plans already contain "
+            f"it. Compute it; do not ask (rule 4).")
+    if kind == "unknown":
+        raise ValueError(
+            f"'{name}' is unknown, not Specified: a different answer changes "
+            f"how ACCURATELY it is modelled, not what is being built. Assume "
+            f"it, record it with source='guessed', and say what it costs.")
+    # `why` is held to rule 8's ten words now, not after the whole proposal is
+    # assembled around it.
+    Input(name=name, source="asked", value=None, why=why)
 
     body = f"  {name}\n  {why}"
+    if replaces:
+        import lint
+        ids = lint.input_ids(session.notebook.root, session.chapter or "")
+        if replaces not in ids:
+            raise ValueError(
+                f"replaces={replaces!r} is not an id declared by "
+                f"chapters/{session.chapter}. Its ids are: "
+                + (", ".join(sorted(ids)) if ids else "(it declares nothing)")
+                + ". Name the item you are changing, or omit `replaces` if "
+                  "this is a new input.")
+        # THE VALUE IN FORCE, in the question. Asking "static margin?" of
+        # someone who set it to 10% four chapters ago is asking them to go and
+        # look it up.
+        body = (f"  {name}\n  {why}\n\n  This CHANGES what "
+                f"chapters/{session.chapter} is committed to:\n"
+                f"    {replaces}: {ids[replaces]}")
     if options:
         body += f"\n  options: {options}"
     answer = _prompt("SPECIFIED INPUT NEEDED", name, body)
     session.record_answer(name, answer)
+    if replaces:
+        # For the write phase: what this answer displaces, and where.
+        session.replaced[name] = (session.chapter, replaces)
     if answer.lower() in DELEGATED:
         return ("Delegated. Decide it yourself if it is answerable in a "
-                "sentence, and record it with owner='agent' and your reason. "
+                "sentence, and record it with source='decided' and your reason. "
                 "If answering it needs computation, it is a question in its own "
                 "right: probe it, answer it, then come back to the original.")
     return f"The user answered: {answer}"
@@ -482,36 +523,18 @@ def propose(session, **fields):
             "needed something Specified (a different answer changes WHAT IS "
             "BEING BUILT -- ask it with ask_specified), assumed something new "
             "(a different answer changes HOW ACCURATELY it is modelled -- "
-            "record it with kind='unknown', owner='assumed'), or inherited "
+            "record it with source='guessed'), or inherited "
             "everything the chapter already declares. If it is the last, say "
             "so in `inputs_none_because` in one line. Do not invent an input "
             "to satisfy this.")
 
-    # `scope` is checkable, not merely declarable. A claim that an item comes
-    # from the chapter is a claim about a file that is right there, and a
-    # provenance field the model can assert freely is a second thing to be
-    # wrong rather than a guard.
-    if proposal.chapter in session.notebook.chapters():
-        from ..inputs import declared
-        spec, asm = declared(session.notebook, proposal.chapter)
-        if not (spec or asm):
-            for i in proposal.inputs:
-                if i.scope == "chapter":
-                    raise ValueError(
-                        f"'{i.name}' is scope='chapter', but "
-                        f"chapters/{proposal.chapter}/index.qmd declares "
-                        f"nothing. Either it is scope='new' -- this entry "
-                        f"introduced it -- or the chapter index is missing a "
-                        f"declaration it should already carry.")
-
     unasked = [i.name for i in proposal.inputs
-               if i.kind == "specified" and i.owner == "user"
-               and i.name not in session.asked]
+               if i.source == "asked" and i.name not in session.asked]
     if unasked:
         raise ValueError(
-            f"These are recorded as Specified with owner='user' but were never "
-            f"put through ask_specified: {', '.join(unasked)}. Ask them, or "
-            f"record owner='agent' with your reason if you decided them.")
+            f"These are recorded as source='asked' but were never put through "
+            f"ask_specified: {', '.join(unasked)}. Ask them, or record "
+            f"source='decided' with your reason if you chose them yourself.")
 
     # A scaffolded chapter still carrying its placeholder is a SLOT, and filling
     # it is a chapter-level decision however the route is labelled. Without this
@@ -547,8 +570,7 @@ def propose(session, **fields):
             continue
         delegated = str(value).strip().lower() in DELEGATED
         proposal.inputs.append(Input(
-            name=name, kind="specified",
-            owner="agent" if delegated else "user",
+            name=name, source="decided" if delegated else "asked",
             value=None if delegated else str(value),
             why="delegated by the user" if delegated else "asked during the probe"))
 
@@ -569,6 +591,11 @@ def propose(session, **fields):
     # the entry can declare the number it was given rather than one of its own.
     if getattr(session, "render_ceiling", None) is not None:
         out["_render_ceiling"] = session.render_ceiling
+    # What an `ask_specified(replaces=...)` answer displaces. Private, like the
+    # budgets: it is a fact about the run, not a field the model fills in.
+    if getattr(session, "replaced", None):
+        out["_replaces"] = [{"name": n, "chapter": c, "id": i}
+                            for n, (c, i) in session.replaced.items()]
     session.notebook.proposal_path.write_text(json.dumps(out, indent=2) + "\n")
     raise Terminal(proposal)
 

@@ -1,0 +1,14 @@
+# THE BRIEF. True of the whole aircraft, inherited by every chapter and every
+# entry, and never superseded: a fork that departs from one of these is not a
+# fork, it is a different aircraft and therefore a different notebook.
+#
+# Rendered into index.qmd by `notebook_inputs()`. Same format as a chapter's
+# `_inputs.yml` -- `- <id>: <text>` -- because it is the same thing one level
+# up. Written by a PERSON, never by a run.
+specified:
+  - span: "**Span**: 300 mm, fixed tip to tip."
+  - construction: "**Construction**: flat foam sheet, cut and assembled by hand."
+  - objective: "**Objective**: minimum sink rate in trimmed glide."
+assumed:
+  - still-air: "**Still air**, no thermals and no wind gradient."
+  - rigid: "**Rigid airframe**, no aeroelastic deflection under load."

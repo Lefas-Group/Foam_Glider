@@ -266,12 +266,18 @@ class Notebook:
                     continue
                 if any(module_summary(d / "_model.py")):
                     continue
-                index = (d / "index.qmd").read_text()
+                # `_inputs.yml`, not `index.qmd`. The placeholder used to sit in
+                # the page, under a "what defines this chapter" heading that was
+                # removed when the index stopped carrying standing prose -- and
+                # it went with it, so `claimable_stub` silently returned None
+                # for every fresh notebook and the first real chapter would have
+                # allocated 02 beside a dead 01.
+                marker = (d / "_inputs.yml").read_text()
             except OSError:
                 # Renamed or removed while being inspected -- another run
                 # claiming it, which is exactly the answer we wanted.
                 continue
-            if PLACEHOLDER not in index:
+            if PLACEHOLDER not in marker:
                 continue
             return name
         return None

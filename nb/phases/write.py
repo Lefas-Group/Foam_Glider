@@ -134,9 +134,11 @@ in the entry: an entry answers the question asked and stops.
    `assumed:`. The index RENDERS them; it does not contain them. Do not write
    those callouts into index.qmd -- rule 39 refuses it, because an item in both
    places is on the page twice. If this chapter replaces something an earlier
-   chapter declared, name it in `{chapter}/_fork.yml` under `supersedes:` as
-   `NN-name: <id>`, and it moves into a Superseded callout on that chapter's
-   page. Your ENTRY's own callouts are still markdown, written in the entry.
+   chapter declared, name it in `{chapter}/_fork.yml` under `replaces:` as
+   `NN-name/their-id: your-id` (or `drops:` with a reason if nothing takes its
+   place). It renders on THIS chapter's page as "Changed from …"; the chapter
+   you departed from keeps its own items, because they are still true under it.
+   Your ENTRY's own callouts are still markdown, written in the entry.
 
    Attribute each item to where it actually came from. "Asked of the user,
    {today}:" covers ONLY what was put to them and answered -- which includes
@@ -280,7 +282,8 @@ def _refresh_index_freeze(notebook, chapter):
     re-solving it, which is right when proving a refactor moved nothing and far
     too expensive here.
     """
-    if not _touched(notebook, chapter, "_model.py", "_analysis.py"):
+    if not _touched(notebook, chapter, "_model.py", "_analysis.py",
+                    "_inputs.yml", "_fork.yml"):
         return
     shutil.rmtree(notebook.freeze / chapter / "index", ignore_errors=True)
 
@@ -668,6 +671,10 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     # nothing about the chapter that got written.
     inherited_kept = raw.get("_inherited") or []
     inherited_struck = raw.get("_struck") or []
+    # Answers that CHANGE something a chapter already declares, from
+    # `ask_specified(replaces=...)`. The user has agreed the new value; what is
+    # left is to record the departure where it renders.
+    replaced = raw.get("_replaces") or []
     proposal = Proposal.model_validate(
         {k: v for k, v in raw.items() if not k.startswith("_")})
     open_log(notebook, "write", proposal.title)
@@ -849,6 +856,17 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         # else, so the model never saw it and wrote the vehicle into the entry.
         if chapter_msg:
             contents.append({"role": "user", "parts": [{"text": chapter_msg}]})
+        if replaced:
+            contents.append({"role": "user", "parts": [{"text":
+                "The user ANSWERED these, and each one CHANGES something a "
+                "chapter already declares:\n\n"
+                + "\n".join(f"  {r['name']} — replaces "
+                             f"{r['chapter']}/{r['id']}" for r in replaced)
+                + "\n\nRecord the new value in this chapter's `_inputs.yml` "
+                  "with its own id, and record the departure in this chapter's "
+                  "`_fork.yml` under `replaces:` as `<chapter>/<their id>: "
+                  "<your id>`. It renders on this chapter's page as \"Changed "
+                  "from …\". Do not restate the old value anywhere."}]})
         # The inheritance review, for the index this run is about to fill in.
         if inherited_kept or inherited_struck:
             lines = ["The user reviewed what this new chapter inherits, at the "
@@ -868,8 +886,9 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                 lines += ["", "STRUCK — the user says this fork BREAKS these, so "
                               "they do NOT carry forward. Each is already "
                               "recorded in this chapter's `_fork.yml` under "
-                              "`supersedes:`, which moves it into a Superseded "
-                              "callout on the page that declared it. Where this "
+                              "`drops:`. Say what replaces each — move it to "
+                              "`replaces:` with your own id — or leave it a "
+                              "drop with a real reason. Where this "
                               "chapter needs its own value for one of them, "
                               "that value is NEW and goes in this chapter's "
                               "`_inputs.yml`:"]

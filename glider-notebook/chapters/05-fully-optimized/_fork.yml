@@ -18,10 +18,11 @@ changes:
     the tail and solved three wing variables
   - the model is rewritten around that rather than copied, so a diff against
     04 is not the review here -- the chapters differ everywhere
-# Items this chapter REPLACES, as `<chapter>: <id>`, where the id is the
-# handle in that chapter's _inputs.yml. The record is append-only, so without
-# this the earlier page goes on declaring what this one replaced; naming it
-# moves the item into that page's Superseded callout. Rule 31 refuses an id
-# that does not exist.
-supersedes:
-  - 01-foam-glider: tail-size
+# What this chapter DEPARTED FROM, and what it put in place.
+#   replaces:  - <chapter>/<their id>: <my id>
+#   drops:     - <chapter>/<their id>: why it no longer holds
+# It renders on THIS page, as "Changed from <chapter>" — the page that
+# made the change. The chapter it departed from keeps its own items as
+# they were: they are its premise and stay true under it.
+drops:
+  - 01-foam-glider/tail-size: the tail is a design variable here

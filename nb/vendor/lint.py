@@ -548,7 +548,13 @@ def _one_drift(canonical, local):
 # placeholder that also marks a stub as claimable. Angle-bracketed lowercase
 # prose is not something a real index writes, and nothing in the eight real
 # indexes matches it.
-PLACEHOLDER = re.compile(r"<[a-z][^>\n]{2,60}>")
+# 120, not 60. `create_chapter`'s own placeholder is 82 characters -- "<one sentence,
+# then a bullet list: the aero method, the section, what is left out>" -- so the
+# marker that decides whether a chapter is still claimable was the one placeholder
+# this could not see. The cap exists to avoid matching an inequality in prose;
+# 120 still does, because prose does not run a hundred characters between < and >
+# without a newline.
+PLACEHOLDER = re.compile(r"<[a-z][^>\n]{2,120}>")
 
 
 def _shadowed_machinery(root, chapters, entries):
@@ -705,17 +711,29 @@ def _unfinished_index(root, chapters, entries):
     for c in chapters:
         if not any(e.parent.name == c for e in entries):
             continue
-        index = root / "chapters" / c / "index.qmd"
-        try:
-            hits = PLACEHOLDER.findall(index.read_text())
-        except OSError:
-            continue
-        if hits:
-            out.append((index, f"still carries scaffold placeholders "
-                               f"({', '.join(sorted(set(hits))[:3])}) — fill the "
-                               f"Specified and Assumed callouts with what is "
-                               f"true of EVERY entry in this chapter, or delete "
-                               f"the lines"))
+        # BOTH FILES. The placeholder moved to `_inputs.yml` with the items and
+        # with `defines:`, and this went on reading only the page -- so a
+        # chapter could keep `<one sentence, then a bullet list…>` for ever and
+        # nothing said so. The index is still checked because its own scaffold
+        # placeholders (a title, a listing field) land there.
+        for name in ("_inputs.yml", "index.qmd"):
+            where = root / "chapters" / c / name
+            try:
+                text = where.read_text()
+            except OSError:
+                continue
+            # COMMENTS STRIPPED FIRST. `_inputs.yml`'s own header explains the
+            # format with `- <id>: <text>`, and both look exactly like a
+            # scaffold placeholder to this regex -- so every chapter would
+            # fail rule 24 for ever, on the instructions telling it how not to.
+            text = "\n".join(l for l in text.splitlines()
+                             if not l.lstrip().startswith("#"))
+            hits = PLACEHOLDER.findall(text)
+            if hits:
+                out.append((where, f"still carries scaffold placeholders "
+                                   f"({', '.join(sorted(set(hits))[:3])}) — say "
+                                   f"what is true of EVERY entry in this "
+                                   f"chapter, or delete the line"))
     return out
 
 
@@ -1056,7 +1074,13 @@ def _stale_freeze(root, chapters):
         if not frozen:
             continue                        # no freeze serves nothing stale
         touched = sorted(
-            n for n in ("_model.py", "_analysis.py", "_model.qmd")
+            # `_inputs.yml` and `_fork.yml` joined the list when the chapter
+            # index stopped carrying its callouts and started RENDERING them:
+            # `chapter_inputs()` and `chapter_lineage()` read those two files,
+            # so editing one changes the page exactly as editing `_model.qmd`
+            # does, and Quarto's freeze tracks neither.
+            n for n in ("_model.py", "_analysis.py", "_model.qmd",
+                        "_inputs.yml", "_fork.yml")
             if any(p.endswith(f"chapters/{c}/{n}") for p in dirty))
         if touched and not any(f"_freeze/chapters/{c}/" in p for p in dirty):
             found.append((
@@ -2005,7 +2029,13 @@ def _root_index_freeze(root, chapters, entries):
     frozen = root / "_freeze" / "index" / "execute-results" / "html.json"
     if not index.exists() or not frozen.exists() or not entries:
         return []
-    newest = max(e.stat().st_mtime for e in entries)
+    # The brief too: the front page RENDERS `_inputs.yml` now, so editing it
+    # moves the page exactly as adding an entry does.
+    watched = list(entries)
+    brief = root / "_inputs.yml"
+    if brief.exists():
+        watched.append(brief)
+    newest = max(e.stat().st_mtime for e in watched)
     if newest > frozen.stat().st_mtime:
         return [(index, "the front page counts every chapter's entries, and an "
                         "entry is newer than the freeze it was drawn from — so "
@@ -2098,13 +2128,12 @@ def _input_item_budget(root, chapters, entries):
     because its input moved is the failure `nb.corpus` exists to catch.
     """
     out = []
-    for c in chapters:
-        if not any(e.parent.name == c for e in entries):
-            continue
-        where = root / "chapters" / c / "_inputs.yml"
-        for kind, text in declared_items(root, c):
-            if not read_inputs(root, c):
-                continue
+    pairs = [(root / "_inputs.yml", notebook_items(root))]
+    pairs += [(root / "chapters" / c / "_inputs.yml", declared_items(root, c))
+              for c in chapters
+              if any(e.parent.name == c for e in entries) and read_inputs(root, c)]
+    for where, items in pairs:
+        for kind, text in items:
             n = words(text)
             if n > MAX_CALLOUT_ITEM:
                 out.append((where, (
@@ -2166,13 +2195,19 @@ def read_fork(root, chapter):
         # second half of every wrapped line.
         if current and lists.get(current) and line.startswith(" "):
             lists[current][-1] += " " + line.strip()
-    out["changes"] = lists.get("changes", [])
-    out["supersedes"] = lists.get("supersedes", [])
+    # EVERY list, not a hand-listed two. `changes:` and `supersedes:` were
+    # named explicitly here, so adding `replaces:`/`drops:` returned a parser
+    # that read them and then threw them away -- silently, because an empty
+    # list and an unread one look identical to every caller.
+    out.update(lists)
+    out.setdefault("changes", [])
     return out
 
 
-# `supersedes:` entry -- `<chapter>: <the id of the item it replaces>`.
-SUPERSEDE = re.compile(r"^\s*([0-9]{2}-[a-z0-9-]+)\s*:\s*([a-z0-9][a-z0-9-]*)\s*$")
+# A `replaces:`/`drops:` entry. The key is `<chapter>/<their id>`; the value is
+# either MY id (replaces) or a reason (drops).
+DEPARTURE = re.compile(
+    r"^\s*([0-9]{2}-[a-z0-9-]+)/([a-z0-9][a-z0-9-]*)\s*:\s*(.+?)\s*$")
 
 
 def read_inputs(root, chapter):
@@ -2192,9 +2227,26 @@ def read_inputs(root, chapter):
     wrong in. `_notebook.py` carries its own copy for the page to render from,
     for the reason rule 11 exists: a notebook must render without `nb`.
     """
+    return parse_inputs(root / "chapters" / chapter / "_inputs.yml")
+
+
+def parse_inputs(path):
+    """
+    A flat `key:` / `- id: text` file, plus `key: value` scalars.
+
+    Scalars carry `defines:` -- the aero method, the section, what is left out.
+    That used to be prose in `index.qmd` and was removed from the page for good
+    reason (measured across six chapters it restated the fork in half of them
+    and the front page in the other half), which left it with nowhere to live:
+    `chapter_defines` is a required field of every new-chapter proposal and was
+    being written into a placeholder that no longer existed. It is not rendered.
+    Its readers are the PREFIX, which needs it to route a question to the right
+    chapter, and `claimable_stub`, which needs its placeholder to tell a
+    scaffolded chapter from a claimed one.
+    """
     out, current = {}, None
     try:
-        text = (root / "chapters" / chapter / "_inputs.yml").read_text()
+        text = path.read_text()
     except OSError:
         return out
     for line in text.splitlines():
@@ -2205,10 +2257,15 @@ def read_inputs(root, chapter):
             out[current].append((row.group(1),
                                  row.group(2).strip().strip('"').strip("'")))
             continue
-        key = re.match(r"^(\w+):\s*$", line)
-        if key:
-            current = key.group(1)
-            out.setdefault(current, [])
+        kv = re.match(r"^(\w+):\s*(.*)$", line)
+        if kv:
+            key, val = kv.group(1), kv.group(2).strip()
+            if val:
+                out[key] = val.strip('"').strip("'")
+                current = None
+            else:
+                current = key
+                out.setdefault(current, [])
             continue
         current = None
     return out
@@ -2232,7 +2289,8 @@ def declared_items(root, chapter):
     data = read_inputs(root, chapter)
     if data:
         return [("Specified" if k == "specified" else "Assumed", t)
-                for k in ("specified", "assumed") for _, t in data.get(k, [])]
+                for k in ("specified", "assumed")
+                for _, t in (data.get(k) or [])]
     try:
         text = (root / "chapters" / chapter / "index.qmd").read_text()
     except OSError:
@@ -2254,32 +2312,43 @@ def input_ids(root, chapter):
     return {i: t for k in ("specified", "assumed") for i, t in data.get(k, [])}
 
 
-def supersessions(root, chapters):
+def notebook_items(root):
+    """[(kind, text)] from the notebook's brief -- `_inputs.yml` at its root."""
+    data = parse_inputs(root / "_inputs.yml")
+    return [("Specified" if k == "specified" else "Assumed", t)
+            for k in ("specified", "assumed") for _, t in (data.get(k) or [])]
+
+
+def defines(root, chapter):
+    """The one line saying what this chapter is, for routing. Not rendered."""
+    return read_inputs(root, chapter).get("defines", "")
+
+
+def departures(root, chapters):
     """
-    {(ancestor, item text): superseding chapter} across the whole notebook.
+    {(chapter, item id): the chapter that departed from it}.
 
-    The forward link the record was missing. A chapter index is append-only and
-    true as of its date, so `01-foam-glider` went on declaring "Sections
-    NACA4405 and NACA0005" and "Fuselage neglected" long after 04 changed the
-    sections and 02 added a fuselage -- both false, with nothing on the page to
-    say so.
+    Read from `replaces:` and `drops:` in each chapter's `_fork.yml` -- which
+    record what THAT chapter changed, on the page that changed it. It used to
+    be a `supersedes:` block meaning the same thing read the other way round,
+    and reading it forward put a `Superseded` stamp on the page that DECLARED
+    the item. That says the chapter is stale, when `forking.md`'s whole
+    criterion for keeping it is that "the old answer stays valid under its own
+    stated assumptions" -- and on this notebook it emptied two chapters of
+    their callouts, because every one of their items had been departed from.
 
-    Keyed on the ITEM ID, not on matching its prose. The first version matched a
-    hand-typed label against the callout text case-insensitively, because the
-    items were markdown and had no handles; with `_inputs.yml` they do, so a
-    supersession either resolves exactly or is a lint failure.
+    Nothing renders from this. Its one reader is the inheritance review, which
+    needs to know that an item an ancestor declared was replaced further down
+    the chain before it offers it to a new fork.
     """
     out = {}
     for c in chapters:
-        fork = read_fork(root, c)
-        for raw in (fork or {}).get("supersedes", []):
-            m = SUPERSEDE.match(raw)
-            if not m:
-                continue
-            parent, item_id = m.group(1), m.group(2)
-            text = input_ids(root, parent).get(item_id)
-            if text:
-                out[(parent, text)] = c
+        fork = read_fork(root, c) or {}
+        for key in ("replaces", "drops"):
+            for raw in (fork.get(key) or []):
+                m = DEPARTURE.match(raw)
+                if m:
+                    out[(m.group(1), m.group(2))] = c
     return out
 
 
@@ -2414,57 +2483,62 @@ def _fork_provenance(root, chapters, entries):
                 f"lists no changes, but chapters/{c}/_model.py is "
                 f"{100 - ratio * 100:.0f}% different from its parent. One line "
                 f"per deliberate difference — the differences ARE the chapter")))
-    # `supersedes:` is checked on EVERY chapter, not only ones the similarity
-    # test flagged: it is optional, and a fork that rewrote its model rather
-    # than copying it -- 05, at 35% -- can still replace an ancestor's
-    # declaration. A link that resolves to nothing is worse than no link, since
-    # the superseded page then goes on looking current.
-    out += _supersede_targets(root, chapters)
+    # Departures are checked on EVERY chapter, not only ones the similarity
+    # test flagged: a fork that rewrote its model rather than copying it -- 05,
+    # at 35% -- can still depart from an ancestor's declaration.
+    out += _departure_targets(root, chapters)
     return out
 
 
-def _supersede_targets(root, chapters):
+def _departure_targets(root, chapters):
     """
-    Rule 31, second half. Every `supersedes:` entry names something real.
+    Rule 31, second half. Every `replaces:`/`drops:` entry names something real.
 
-    An id either exists or it does not, which is the point of having ids. A
+    The id either exists or it does not, which is the point of having ids. A
     typo, a renamed chapter, or an item deleted out from under the link all
-    produce a supersession that silently stops resolving -- and the symptom is invisible, because the marker simply
-    does not appear on the page it was meant to mark.
+    produce a departure that silently stops resolving -- and the symptom is
+    invisible, because the row simply does not appear in the callout it was
+    meant to appear in.
     """
     out = []
     known = set(chapters)
     for c in chapters:
-        fork = read_fork(root, c)
+        fork = read_fork(root, c) or {}
         where = root / "chapters" / c / "_fork.yml"
-        for raw in (fork or {}).get("supersedes", []):
-            m = SUPERSEDE.match(raw)
-            if not m:
-                out.append((where, (
-                    f"supersedes: {raw!r} is not `<chapter>: <item>` — name the "
-                    f"chapter whose declaration this replaces, then enough of "
-                    f"the item to identify it")))
-                continue
-            parent, label = m.group(1), m.group(2)
-            if parent not in known:
-                out.append((where, (
-                    f"supersedes {parent!r}, which is not a chapter of this "
-                    f"notebook")))
-                continue
-            if parent >= c:
-                out.append((where, (
-                    f"supersedes {parent!r}, which is not EARLIER than {c}. A "
-                    f"chapter can only replace a declaration that already "
-                    f"existed when it was written")))
-                continue
-            ids = input_ids(root, parent)
-            if label not in ids:
-                out.append((where, (
-                    f"supersedes {parent}: {label!r}, which is not an id in "
-                    f"chapters/{parent}/_inputs.yml. The item would never move "
-                    f"into that page's Superseded callout"
-                    + (f" — its ids are: " + ", ".join(sorted(ids))
-                       if ids else " — it has no _inputs.yml"))))
+        for key in ("replaces", "drops"):
+            for raw in (fork.get(key) or []):
+                m = DEPARTURE.match(raw)
+                if not m:
+                    out.append((where, (
+                        f"{key}: {raw!r} is not `<chapter>/<id>: "
+                        f"{'<your id>' if key == 'replaces' else '<why>'}`")))
+                    continue
+                parent, item_id, value = m.groups()
+                if parent not in known:
+                    out.append((where, (
+                        f"{key} {parent!r}, which is not a chapter of this "
+                        f"notebook")))
+                    continue
+                if parent >= c:
+                    out.append((where, (
+                        f"{key} {parent!r}, which is not EARLIER than {c}. A "
+                        f"chapter can only depart from a declaration that "
+                        f"already existed when it was written")))
+                    continue
+                theirs = input_ids(root, parent)
+                if item_id not in theirs:
+                    out.append((where, (
+                        f"{key} {parent}/{item_id!r}, which is not an id in "
+                        f"chapters/{parent}/_inputs.yml"
+                        + (f" — its ids are: " + ", ".join(sorted(theirs))
+                           if theirs else " — it has no _inputs.yml"))))
+                    continue
+                if key == "replaces" and value not in input_ids(root, c):
+                    out.append((where, (
+                        f"replaces {parent}/{item_id} with {value!r}, which is "
+                        f"not an id in chapters/{c}/_inputs.yml. Declare what "
+                        f"you put in its place, or use `drops:` with a reason "
+                        f"if nothing replaces it")))
     return out
 
 

@@ -14,11 +14,12 @@ changes:
   - wing sections naca4405 → naca4403, tail naca0005 → naca0003, so the
     airfoil thickness tracks the stock it is cut from
   - fuselage width 0.010 → 0.006 m, two plies of the thinner foam
-# Items this chapter REPLACES, as `<chapter>: <id>`, where the id is the
-# handle in that chapter's _inputs.yml. The record is append-only, so without
-# this the earlier page goes on declaring what this one replaced; naming it
-# moves the item into that page's Superseded callout. Rule 31 refuses an id
-# that does not exist.
-supersedes:
-  - 01-foam-glider: foam-stock
-  - 01-foam-glider: airfoil-sections
+# What this chapter DEPARTED FROM, and what it put in place.
+#   replaces:  - <chapter>/<their id>: <my id>
+#   drops:     - <chapter>/<their id>: why it no longer holds
+# It renders on THIS page, as "Changed from <chapter>" — the page that
+# made the change. The chapter it departed from keeps its own items as
+# they were: they are its premise and stay true under it.
+replaces:
+  - 01-foam-glider/foam-stock: foam-thickness
+  - 01-foam-glider/airfoil-sections: airfoil-thickness

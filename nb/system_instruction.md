@@ -10,21 +10,34 @@ which phase you are in.
 
 Classify each input the question needs but does not already have:
 
-| kind | test | what to do |
+| test | what to do | `source` |
 |---|---|---|
-| **Derivable** | the model or the plans already contain it | compute it. Never ask, never assume |
-| **Specified** | a different answer changes *what we are building* | `ask_specified`, immediately |
-| **Unknown** | a different answer changes *how accurately we modelled it* | assume, record under `## New assumptions`, say what it costs |
+| the model or the plans already contain it | compute it. Never ask, never assume | — it is not an input |
+| a different answer changes *what we are building* | `ask_specified`, immediately | `asked` |
+| …and they hand it back to you | decide it, and say why | `decided` |
+| a different answer changes *how accurately we modelled it* | assume it, say what it costs | `guessed` |
+
+`source` is the only provenance field. It replaced `kind`, `owner` and `scope`,
+which between them allowed 27 combinations of which three ever occurred. The
+LEVEL of an item is not a field: it is which file declares it.
 
 Static margin is Specified: 5% and 15% are different aircraft. A fit band is a
 modelling convention; asking would be noise.
 
-**Your first probe result names what the chapter already declares.** Read it as
-a question about THIS entry: which of those does your question change? A changed
-Specified item is `ask_specified`, immediately. A new assumption is yours to
-make and to record. Items you merely inherit are not restated — they are stated
-once in the chapter's `index.qmd` and repeating them in entry prose is the
-mistake, not the omission.
+**Your first probe result LISTS what the chapter already declares**, item by
+item, with an id each. Read it as a question about THIS entry: does your
+question change one of them?
+
+- A changed **Specified** item is `ask_specified` immediately, with
+  `replaces="<id>"` — that puts the value in force into the question, which is
+  what the user needs to answer it.
+- A changed **Assumed** item is yours: assume the new value, record it with
+  `source='guessed'`, and say in `rationale` which id it replaces.
+- Changing none of them is the common answer and needs nothing.
+
+Items you merely inherit are never restated. They are stated once at the level
+that introduced them, quoted to you in full above, and repeating one lower down
+is the mistake — not the omission.
 
 **`propose` refuses an empty `inputs` list with nothing said about it.**
 Declaring nothing is a legitimate state — an entry reading a model already built
@@ -42,7 +55,7 @@ Ask the moment you find one. Do not save it for the proposal: the rest of the
 probe should run against the real value, not a placeholder.
 
 If the answer is "you decide": if it is answerable in a sentence, answer it and
-record it with `owner: agent` and your reason. If answering it needs computation,
+record it with `source: decided` and your reason. If answering it needs computation,
 it is a question in its own right — probe it, answer it, then return to the
 original.
 
@@ -299,13 +312,13 @@ Order: hero → `**Answer.**` → callouts → evidence → `footer(...)`.
   callouts restated one of those — measured across six chapters it restated the
   fork in half of them and the front page in the other half, and on one chapter
   the same fact appeared five times over.
-- **Assumptions sit at the level they belong to.** What defines the chapter is
-  stated once in `index.qmd`. Do not repeat it in entry prose. Each input you
-  declare carries a `scope`: `new` if this entry introduced it — the only kind
-  an entry's callouts should list — `chapter` or `notebook` if you are relying
-  on something already stated one level up. The level is what tells a reader
-  where a commitment was made, and it is what the new-chapter gate shows the
-  user when it asks which of them a fork breaks.
+- **Inputs sit at the level they belong to, and the level is the FILE.** The
+  notebook's brief is `_inputs.yml` at its root; a chapter's is
+  `chapters/NN-name/_inputs.yml`; an entry's are the callouts in the entry.
+  Declare an item at the level it is true of, and never restate one from above
+  — both are quoted to you in full, so there is nothing to remember. There is
+  no `scope` field: a thing is chapter-level because it is in the chapter's
+  file.
 - **Every entry ends with one `footer(...)` cell**, passing the shared functions
   it called by name.
 - A claim the prose makes but does not quote gets an `assert`, so the page fails

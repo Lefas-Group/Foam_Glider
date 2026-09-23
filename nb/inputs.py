@@ -18,31 +18,6 @@ command: the source holds `{python} f"{sm:.2f}"` where only the freeze holds
 """
 
 import re
-
-# Every heading these callouts have gone by. The notebook front page says
-# INITIAL -- it is what everything inherits; a chapter or entry says NEW -- it
-# lists only what that page introduced; and the two frozen notebooks still say
-# Specified/Assumed. All three are read, and the kind is normalised, because a
-# parser that knew one vocabulary would silently return nothing for the others
-# and the inheritance gate would offer an empty list.
-CALLOUT = re.compile(
-    r"^::: *\{\.callout-[a-z]+\}\s*\n##\s*"
-    r"(?:New |Initial )?(specifications?|user specifications|assumptions|"
-    r"Specified|Assumed)\s*\n(.*?)^:::",
-    re.S | re.M | re.I)
-ITEM = re.compile(r"^\s*\d+\.\s*(.+?)\s*$", re.M)
-
-
-def _kind(heading):
-    """`Specified` or `Assumed`, whichever vocabulary said it."""
-    return "Assumed" if "assum" in heading.lower() else "Specified"
-
-
-def _unescape(s):
-    """Pandoc escapes punctuation in rendered markdown: `5\\.7%` -> `5.7%`."""
-    return re.sub(r"\\(.)", r"\1", s).strip()
-
-
 def declared(notebook, chapter):
     """
     (specified, assumed) counts for ONE chapter.
@@ -106,19 +81,22 @@ def inherited(notebook, chapter):
     5 mm, 174.4 g/m² sheet throughout" (01) as thirteen peers, along with
     "Fuselage neglected" that 02 had contradicted by adding one. The union was
     doing the work of an override because nothing recorded which item replaced
-    which. `_fork.yml`'s `supersedes:` records it now, so the override is
-    mechanical and the dropped set is reported rather than silently missing.
+    which. `_fork.yml`'s `replaces:`/`drops:` record it now, so the override
+    is mechanical and the dropped set is reported rather than silently
+    missing.
     """
     out, dropped = [], []
     chain = ancestry(notebook, chapter)
     if chain:
         import lint
-        gone = lint.supersessions(notebook.root, notebook.chapters())
+        gone = lint.departures(notebook.root, notebook.chapters())
+        ids = {c: lint.input_ids(notebook.root, c) for c in chain}
         for c in chain:
             for kind, item in _declared_items(notebook, c):
                 if any(i == item for _, i, _ in out):
                     continue
-                by = gone.get((c, item))
+                item_id = next((i for i, t in ids[c].items() if t == item), None)
+                by = gone.get((c, item_id)) if item_id else None
                 # Only an ancestor's supersession counts. A chapter outside this
                 # lineage replacing one of its own ancestors' items says nothing
                 # about what THIS fork carries.
@@ -127,14 +105,9 @@ def inherited(notebook, chapter):
                     continue
                 out.append((kind, item, c))
         return out, dropped
-    index = notebook.root / "index.qmd"
-    try:
-        md = index.read_text()
-    except OSError:
-        return out, dropped
-    for kind, body in CALLOUT.findall(md):
-        for item in ITEM.findall(body):
-            out.append((_kind(kind), _unescape(item), notebook.root.name))
+    import lint
+    for kind, item in lint.notebook_items(notebook.root):
+        out.append((kind, item, notebook.root.name))
     return out, dropped
 
 

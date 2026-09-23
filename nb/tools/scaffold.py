@@ -261,7 +261,7 @@ def create_chapter(notebook, name, title, defines="", claim=True,
     # The chapter's standing commitments, as data. The index RENDERS this; it
     # is not markdown any more, because a superseded item has to be movable and
     # a Quarto cell cannot annotate markup already on the page.
-    (target / "_inputs.yml").write_text((SCAFFOLD / "_inputs.yml.tmpl").read_text())
+    (target / "_inputs.yml").write_text(sub((SCAFFOLD / "_inputs.yml.tmpl").read_text()))
     forked = ""
     if fork_from:
         ref, src = _fork_sources(notebook, fork_from)
@@ -289,18 +289,22 @@ def create_chapter(notebook, name, title, defines="", claim=True,
                 # index is append-only and true as of its date: without this,
                 # the parent goes on declaring what this chapter replaced, for
                 # ever, with nothing on either page to say so.
-                f"# Items from an EARLIER chapter that this one REPLACES, as\n"
-                f"# `<chapter>: <id>`, where the id is the handle in that\n"
-                f"# chapter's _inputs.yml. Naming one moves it into that\n"
-                f"# page's Superseded callout -- the only forward link an\n"
-                f"# append-only record has. Rule 31 refuses an unknown id.\n"
-                f"supersedes:\n"
+                f"# What this chapter DEPARTED FROM, and what it put in\n"
+                f"# place. The key is `<chapter>/<their id>` -- the handle in\n"
+                f"# that chapter's _inputs.yml.\n"
+                f"#   replaces: - NN-name/their-id: my-id\n"
+                f"#   drops:    - NN-name/their-id: why it no longer holds\n"
+                f"# It renders HERE, as \"Changed from <chapter>\" -- on the\n"
+                f"# page that made the change. The chapter departed from keeps\n"
+                f"# its own items: they are its premise and stay true under it.\n"
                 # SEEDED from what the user struck at the new-chapter gate.
-                # Striking "foam 5 mm" for a 3 mm fork IS declaring that this
-                # chapter supersedes it; recording that fact twice, in two
-                # formats, by two actors, with nothing checking they agree, is
-                # what the two mechanisms were doing before.
-                + "".join(f"  - {c}: {i}\n" for c, i in supersedes))
+                # Striking an inherited item IS declaring that this chapter
+                # departs from it; recording that twice, in two formats, by two
+                # actors, with nothing checking they agree, is what the two
+                # mechanisms were doing before.
+                + ("drops:\n" if supersedes else "")
+                + "".join(f"  - {c}/{i}: struck at the new-chapter gate\n"
+                          for c, i in supersedes))
             (target / "_model.py").write_text(src["_model.py"])
             (target / "_analysis.py").write_text(src.get("_analysis.py") or "")
             forked = (f"\n\n_model.py and _analysis.py were COPIED from "
@@ -350,7 +354,8 @@ def create_chapter(notebook, name, title, defines="", claim=True,
             f"full re-prove to clear rule 12.\n\n"
             f"If this chapter REPLACES something an earlier chapter's index "
             f"declares -- a foam thickness, an airfoil, an assumption it makes "
-            f"false -- list it under `supersedes:` as `NN-name: <the item>`. "
+            f"false -- list it under `replaces:` as `NN-name/their-id: "
+            f"your-id`, or `drops:` with a reason if nothing takes its place. "
             f"That is the only forward link the notebook has: without it the "
             f"earlier page goes on declaring what you just replaced, and a "
             f"reader landing there cannot tell. Both pages then show the link, "

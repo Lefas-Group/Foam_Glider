@@ -6,6 +6,10 @@
 # own _fork.yml under `supersedes: - NN-this-chapter: <id>`, which moves the
 # item into the Superseded callout on this page. Rule 8: ten words per item.
 
+# What this chapter IS, for routing a question to it. Not rendered --
+# the page says it with its title, its fork link and its items.
+defines: 300 mm span, 5 mm foam, with a 200 mm doubled-foam fuselage whose mass and drag count.
+
 specified:
   - fuselage-material: **Fuselage: 5 mm foam**, doubled up.
   - fuselage-dimensions: **Dimensions: 15 mm high, 200 mm long**.

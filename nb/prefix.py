@@ -93,48 +93,76 @@ def notebook_context(notebook):
     Callouts only, not the whole page: the rest is the generated lineage
     diagram, which is a picture of the chapters the manifest already lists.
     """
-    index = notebook.root / "index.qmd"
-    try:
-        text = index.read_text()
-    except OSError:
-        return ""
-    from .inputs import CALLOUT, ITEM, _kind, _unescape
-    blocks = []
-    for heading, body in CALLOUT.findall(text):
-        items = [_unescape(i) for i in ITEM.findall(body)]
-        if items:
-            blocks.append((_kind(heading), items))
-    if not blocks:
+    import lint
+    items = lint.notebook_items(notebook.root)
+    if not items:
         return ""
     out = ["\n## The aircraft — true of EVERY chapter\n",
-           "Stated once, on the notebook's front page, and inherited by "
-           "everything below. You do not restate these in a chapter index or "
-           "in entry prose, and you do not change one without `ask_specified`: "
-           "they are the brief.\n"]
-    for kind, items in blocks:
-        out.append(f"{kind}:")
-        out += [f"  - {i}" for i in items]
-        out.append("")
+           "Stated once, in the notebook's `_inputs.yml`, and inherited by "
+           "everything below. Nothing supersedes them: a fork that departs "
+           "from one is a different aircraft, and so a different notebook. You "
+           "do not restate these in a chapter or an entry, and you do not "
+           "change one without `ask_specified`.\n"]
+    for kind in ("Specified", "Assumed"):
+        rows = [t for k, t in items if k == kind]
+        if rows:
+            out.append(f"{kind}:")
+            out += [f"  - {t}" for t in rows]
+            out.append("")
     return "\n".join(out)
 
 
 def chapter_context(notebook):
+    """
+    Each chapter, as DATA: what it is, what it forked from, what it declares.
+
+    It used to quote `index.qmd` up to `## The model`, which stopped working
+    the moment the items became data. Measured on this notebook: 793 tokens of
+    listing configuration, an include directive and two generated cells, under
+    a heading reading "what defines this chapter", containing 237 tokens of
+    real content and not one specification. The page is for a reader; the model
+    wants the register.
+
+    IDS ARE SHOWN, because they are how the model names an item it is changing
+    -- `ask_specified(replaces=...)` and `_fork.yml`'s `replaces:` both take
+    one, and a handle you cannot see is a handle you cannot use.
+    """
+    import re
+    import lint
     out = []
     for chapter in notebook.chapters():
         d = notebook.chapters_dir / chapter
-        out.append(f"\n## chapters/{chapter}\n")
+        title = ""
         index = d / "index.qmd"
         if index.exists():
-            # Up to `## The model` only. That heading opens a `pathlib` loop
-            # that prints `_model.py` and `_analysis.py` into the RENDERED page
-            # -- near-identical in every chapter, worth nothing for routing, and
-            # measured at 620 tokens of this prefix on every turn. The file
-            # serves a reader and the model; only the reader wants the listing.
-            defining = index.read_text().split("## The model")[0]
-            out.append("### index.qmd — what defines this chapter\n")
-            out.append("```")
-            out.append(defining.strip())
-            out.append("```\n")
+            m = re.search(r'^title:\s*"(.+)"\s*$', index.read_text(), re.M)
+            title = m.group(1) if m else ""
+        out.append(f"\n## chapters/{chapter}" + (f' — "{title}"' if title else ""))
+        defines = lint.defines(notebook.root, chapter)
+        if defines:
+            out.append(f"\n{defines}")
+        fork = lint.read_fork(notebook.root, chapter) or {}
+        if fork.get("parent"):
+            out.append(f"Forked from {fork['parent']}"
+                       + (f" — {fork['summary']}" if fork.get("summary") else ""))
+
+        data = lint.read_inputs(notebook.root, chapter)
+        declared = lint.declared_items(notebook.root, chapter)
+        if declared:
+            out.append("\n### Committed to by this chapter. Inherited by every "
+                       "entry in it, and never restated in one.\n")
+            for key, label in (("specified", "Specified"), ("assumed", "Assumed")):
+                rows = data.get(key) or []
+                if rows:
+                    out.append(f"{label}:")
+                    out += [f"    {i}: {t}" for i, t in rows]
+            if not data:
+                # A chapter still on hand-written callouts -- the frozen corpus.
+                for kind, text in declared:
+                    out.append(f"    [{kind}] {text}")
+            out.append("")
+        else:
+            out.append("\n    (declares nothing yet)\n")
 
         funcs, consts = module_summary(d / "_model.py")
         out.append("### _model.py — the vehicle. These names are in scope in a "

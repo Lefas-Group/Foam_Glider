@@ -124,7 +124,13 @@ def native_declarations():
                                         "'specified' may be asked: 'derivable' "
                                         "you compute, 'unknown' you assume and "
                                         "flag."),
-               "options": dict(S, description="Plausible values, if that helps")},
+               "options": dict(S, description="Plausible values, if that helps"),
+               "replaces": dict(S, description=(
+                   "The id of an item this chapter ALREADY declares, when your "
+                   "question changes it rather than adding something new. The "
+                   "ids are listed after your first probe and in the chapter "
+                   "context above. Naming it puts the value in force into the "
+                   "question, which is what the user needs to answer it."))},
               ["name", "why", "kind"]),
 
         _decl("bash",
@@ -196,8 +202,9 @@ def build(session, fs, phase=None):
         "read_reference": lambda name: refs.read_reference(name),
         "read_figure": lambda chapter, stem, name="": figures.read_figure(
             nb, chapter, stem, name),
-        "ask_specified": lambda name, why, kind="specified", options="": (
-            interact.ask_specified(session, name, why, kind, options)),
+        "ask_specified": lambda name, why, kind="specified", options="",
+                                replaces="": (
+            interact.ask_specified(session, name, why, kind, options, replaces)),
         "bash": lambda command: shell.bash(nb, command),
         "propose": lambda **kw: interact.propose(session, **kw),
         "request_refactor": lambda chapter, why: interact.request_refactor(

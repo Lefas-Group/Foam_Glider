@@ -17,6 +17,11 @@ class Session:
         self.chapter = chapter
         self.metrics = metrics
         self.asked = {}          # name -> value, from ask_specified
+        # name -> (chapter, id) for an ask_specified that CHANGES
+        # something the chapter already declares. The write phase turns
+        # it into a `replaces:` entry; without it the answer would be
+        # recorded as a new input beside the one it displaced.
+        self.replaced = {}
         # function -> one-line reason, from declare_refactor. Read by the
         # refactor gate, which otherwise names a changed function and nothing
         # else -- leaving the user to run `git diff` to judge it.

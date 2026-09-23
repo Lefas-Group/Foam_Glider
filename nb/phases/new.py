@@ -94,7 +94,11 @@ def main(path, title=None, subject=None, chapter="01-first-chapter",
                        # The site's front page. Without it Quarto serves a
                        # synthesised stub -- not a 404, but nothing that says
                        # what the aircraft is or how the chapters relate.
-                       ("book-index.qmd.tmpl", "index.qmd")):
+                       ("book-index.qmd.tmpl", "index.qmd"),
+                       # The brief, as data. The front page renders it; nothing
+                       # in a run writes it. Its placeholders are what rule 24
+                       # sees when nobody has filled the brief in.
+                       ("_inputs.root.yml.tmpl", "_inputs.yml")):
         (root / dest).write_text(
             _render((SCAFFOLD / tmpl).read_text(), title, subject, chapter))
 
@@ -129,7 +133,7 @@ def main(path, title=None, subject=None, chapter="01-first-chapter",
 
     if not problems and not bad:
         tell(f"\n  Fill chapters/{chapter}/_model.py with the vehicle, and say in"
-              f"\n  its index.qmd what defines the chapter. Then:"
+              f"\n  its _inputs.yml what defines the chapter. Then:"
               f"\n\n    uv run --group nb python -m nb ask {root.name} \"<question>\"\n")
     return 1 if (problems or bad) else 0
 
