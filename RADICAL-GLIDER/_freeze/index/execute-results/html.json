@@ -1,0 +1,12 @@
+{
+  "hash": "3f3d3991a58801c6ee43eef80d6c6f11",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: \"RADICAL GLIDER # once per aircraft\"\n---\n\n::: {.callout-tip}\n## Initial user specifications\n\n1. **Flat plate foam**, cut and slotted by hand.\n2. **Star Wars X-Wing**, from the FliteTest plan.\n:::\n\n\n\n```{dot}\n//| fig-width: 6.4\ndigraph lineage {\n  bgcolor=\"transparent\"; rankdir=TB; nodesep=0.22;\n  ranksep=\"0.05 equally\"; splines=spline;\n  node [shape=box style=\"rounded,filled\" fontname=\"Helvetica\" fontsize=11 height=0.22 margin=\"0.2,0.03\" penwidth=1.2 fillcolor=\"#e7f0ff\" color=\"#0d6efd\" fontcolor=\"#0d6efd\"];\n  edge [color=\"#000000\" arrowsize=0.55 penwidth=1.2 arrowhead=none];\n  \"01-first-chapter\" [label=\"First chapter\" URL=\"chapters/01-first-chapter/index.html\"];\n  \"01-first-chapter__e1\" [shape=point width=0.055 color=\"#198754\" fillcolor=\"#198754\"];\n  \"01-first-chapter\" -> \"01-first-chapter__e1\";\n}\n```\n\n\n",
+    "supporting": [
+      "index_files"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}
