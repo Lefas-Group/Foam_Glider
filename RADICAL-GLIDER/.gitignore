@@ -1,0 +1,7 @@
+/.quarto/
+**/*.quarto_ipynb
+/_site/
+/_freeze/site_libs/
+**/*-listing.json
+/_scratch/*
+!/_scratch/_probe_base.py

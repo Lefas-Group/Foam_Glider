@@ -2204,10 +2204,13 @@ def read_fork(root, chapter):
     return out
 
 
-# A `replaces:`/`drops:` entry. The key is `<chapter>/<their id>`; the value is
-# either MY id (replaces) or a reason (drops).
+# An `overwrites:` entry: `<chapter>/<their id>`, with an OPTIONAL reason. It
+# was a `replaces:`/`drops:` pair whose value named the replacing id, and that
+# was a fiction -- one overwritten assumption is often replaced by several new
+# items, so the 1:1 link had to pick one arbitrarily. What replaced it is the
+# chapter's own `_inputs.yml`, entire.
 DEPARTURE = re.compile(
-    r"^\s*([0-9]{2}-[a-z0-9-]+)/([a-z0-9][a-z0-9-]*)\s*:\s*(.+?)\s*$")
+    r"^\s*([0-9]{2}-[a-z0-9-]+)/([a-z0-9][a-z0-9-]*)\s*(?::\s*(.*?))?\s*$")
 
 
 def read_inputs(root, chapter):
@@ -2344,11 +2347,10 @@ def departures(root, chapters):
     out = {}
     for c in chapters:
         fork = read_fork(root, c) or {}
-        for key in ("replaces", "drops"):
-            for raw in (fork.get(key) or []):
-                m = DEPARTURE.match(raw)
-                if m:
-                    out[(m.group(1), m.group(2))] = c
+        for raw in (fork.get("overwrites") or []):
+            m = DEPARTURE.match(raw)
+            if m:
+                out[(m.group(1), m.group(2))] = c
     return out
 
 
@@ -2492,7 +2494,7 @@ def _fork_provenance(root, chapters, entries):
 
 def _departure_targets(root, chapters):
     """
-    Rule 31, second half. Every `replaces:`/`drops:` entry names something real.
+    Rule 31, second half. Every `overwrites:` entry names something real.
 
     The id either exists or it does not, which is the point of having ids. A
     typo, a renamed chapter, or an item deleted out from under the link all
@@ -2505,40 +2507,32 @@ def _departure_targets(root, chapters):
     for c in chapters:
         fork = read_fork(root, c) or {}
         where = root / "chapters" / c / "_fork.yml"
-        for key in ("replaces", "drops"):
-            for raw in (fork.get(key) or []):
-                m = DEPARTURE.match(raw)
-                if not m:
-                    out.append((where, (
-                        f"{key}: {raw!r} is not `<chapter>/<id>: "
-                        f"{'<your id>' if key == 'replaces' else '<why>'}`")))
-                    continue
-                parent, item_id, value = m.groups()
-                if parent not in known:
-                    out.append((where, (
-                        f"{key} {parent!r}, which is not a chapter of this "
-                        f"notebook")))
-                    continue
-                if parent >= c:
-                    out.append((where, (
-                        f"{key} {parent!r}, which is not EARLIER than {c}. A "
-                        f"chapter can only depart from a declaration that "
-                        f"already existed when it was written")))
-                    continue
-                theirs = input_ids(root, parent)
-                if item_id not in theirs:
-                    out.append((where, (
-                        f"{key} {parent}/{item_id!r}, which is not an id in "
-                        f"chapters/{parent}/_inputs.yml"
-                        + (f" — its ids are: " + ", ".join(sorted(theirs))
-                           if theirs else " — it has no _inputs.yml"))))
-                    continue
-                if key == "replaces" and value not in input_ids(root, c):
-                    out.append((where, (
-                        f"replaces {parent}/{item_id} with {value!r}, which is "
-                        f"not an id in chapters/{c}/_inputs.yml. Declare what "
-                        f"you put in its place, or use `drops:` with a reason "
-                        f"if nothing replaces it")))
+        for raw in (fork.get("overwrites") or []):
+            m = DEPARTURE.match(raw)
+            if not m:
+                out.append((where, (
+                    f"overwrites: {raw!r} is not `<chapter>/<id>`, with an "
+                    f"optional reason after a colon")))
+                continue
+            parent, item_id, _ = m.groups()
+            if parent not in known:
+                out.append((where, (
+                    f"overwrites {parent!r}, which is not a chapter of this "
+                    f"notebook")))
+                continue
+            if parent >= c:
+                out.append((where, (
+                    f"overwrites {parent!r}, which is not EARLIER than {c}. A "
+                    f"chapter can only overwrite a declaration that already "
+                    f"existed when it was written")))
+                continue
+            theirs = input_ids(root, parent)
+            if item_id not in theirs:
+                out.append((where, (
+                    f"overwrites {parent}/{item_id!r}, which is not an id in "
+                    f"chapters/{parent}/_inputs.yml"
+                    + (" — its ids are: " + ", ".join(sorted(theirs))
+                       if theirs else " — it has no _inputs.yml"))))
     return out
 
 

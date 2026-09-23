@@ -134,11 +134,12 @@ in the entry: an entry answers the question asked and stops.
    `assumed:`. The index RENDERS them; it does not contain them. Do not write
    those callouts into index.qmd -- rule 39 refuses it, because an item in both
    places is on the page twice. If this chapter replaces something an earlier
-   chapter declared, name it in `{chapter}/_fork.yml` under `replaces:` as
-   `NN-name/their-id: your-id` (or `drops:` with a reason if nothing takes its
-   place). It renders on THIS chapter's page as "Changed from …"; the chapter
-   you departed from keeps its own items, because they are still true under it.
-   Your ENTRY's own callouts are still markdown, written in the entry.
+   chapter declared, name it in `{chapter}/_fork.yml` under `overwrites:` as
+   `NN-name/their-id`. It renders on THIS chapter's page as "Overwritten
+   from …", listing the OLD item only — what replaced it is your own
+   `_inputs.yml`, so do not restate it. The chapter you overwrote keeps its own
+   items, because they are still true under it. Your ENTRY's own callouts are
+   still markdown, written in the entry.
 
    Attribute each item to where it actually came from. "Asked of the user,
    {today}:" covers ONLY what was put to them and answered -- which includes
@@ -719,7 +720,7 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         proposal.chapter, chapter_msg = create_chapter(
             notebook, proposal.chapter,
             proposal.chapter_title or proposal.title, proposal.chapter_defines,
-            fork_from=proposal.forked_from, supersedes=_struck_ids)
+            fork_from=proposal.forked_from, overwrites=_struck_ids)
         tell(f"  chapter   {chapter_msg.splitlines()[0]}")
         if chapter_msg.startswith("rejected"):
             return 1
@@ -864,9 +865,9 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                              f"{r['chapter']}/{r['id']}" for r in replaced)
                 + "\n\nRecord the new value in this chapter's `_inputs.yml` "
                   "with its own id, and record the departure in this chapter's "
-                  "`_fork.yml` under `replaces:` as `<chapter>/<their id>: "
-                  "<your id>`. It renders on this chapter's page as \"Changed "
-                  "from …\". Do not restate the old value anywhere."}]})
+                  "`_fork.yml` under `overwrites:` as `<chapter>/<their id>`. "
+                  "It renders on this chapter's page as \"Overwritten from …\". "
+                  "Do not restate the old value anywhere."}]})
         # The inheritance review, for the index this run is about to fill in.
         if inherited_kept or inherited_struck:
             lines = ["The user reviewed what this new chapter inherits, at the "
@@ -886,9 +887,8 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                 lines += ["", "STRUCK — the user says this fork BREAKS these, so "
                               "they do NOT carry forward. Each is already "
                               "recorded in this chapter's `_fork.yml` under "
-                              "`drops:`. Say what replaces each — move it to "
-                              "`replaces:` with your own id — or leave it a "
-                              "drop with a real reason. Where this "
+                              "`overwrites:`, which lists them on this "
+                              "chapter's page as no longer holding. Where this "
                               "chapter needs its own value for one of them, "
                               "that value is NEW and goes in this chapter's "
                               "`_inputs.yml`:"]

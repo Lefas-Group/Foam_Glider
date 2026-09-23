@@ -138,7 +138,7 @@ class Proposal(BaseModel):
             "the last commit rather than the working tree, with `_fork.yml` "
             "already written. Leave empty for a genuinely new aircraft. Where "
             "the new vehicle makes one of the parent's recorded specifications "
-            "or assumptions FALSE, say so in `_fork.yml`'s `supersedes:` when "
+            "or assumptions FALSE, say so in `_fork.yml`'s `overwrites:` when "
             "you fill it in -- the record is append-only, so nothing else will "
             "ever mark the old one as replaced."))
     chapter_defines: str = Field(

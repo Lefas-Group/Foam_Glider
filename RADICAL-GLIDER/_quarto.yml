@@ -1,0 +1,72 @@
+project:
+  type: website
+  output-dir: _site
+  # Run every cell from the notebook/ root so relative paths mean the same
+  # thing regardless of which page is being rendered.
+  execute-dir: project
+
+website:
+  title: "RADICAL GLIDER # once per aircraft Notebook"
+  description: "A chronological record of questions asked about the aircraft."
+  # Next/Previous links in each page footer, so entries read straight through.
+  # Only true once the chapters are ordered -- see the sidebar note below.
+  page-navigation: true
+  # Entries live two levels deep (chapters/<chapter>/<entry>.qmd), which is what
+  # bread-crumbs needs: every entry page then names the chapter it belongs to.
+  bread-crumbs: true
+  sidebar:
+    style: docked
+    # Chapters closed on arrival: with the "Chapters" wrapper gone they sit at
+    # depth 1, and the default of 2 expanded every one of them -- six chapters
+    # and twenty-two entries in one list. Quarto still opens the section holding
+    # the page you are on, so you see where you are without seeing everything.
+    collapse-level: 1
+    contents:
+      # The front page, named explicitly. Quarto links the sidebar TITLE to the
+      # site root, which is the only way back from a chapter and not a thing a
+      # reader guesses -- and the breadcrumb's "Chapters" is a section label
+      # with no href, so it looks like the way home and is not.
+      - text: "Overview"
+        href: index.qmd
+      # ONE LINE PER CHAPTER, kept sorted, written by `create_chapter` and
+      # checked by rule 38. `- auto: "chapters"` would need no maintenance, but
+      # it wraps everything in a redundant "Chapters" heading -- the whole
+      # notebook is chapters -- and `auto: "chapters/*"` crashes Quarto's
+      # navigation. So each chapter is named, and the rule makes a chapter
+      # missing from here loud rather than invisible.
+      - auto: "chapters/01-first-chapter"
+
+format:
+  html:
+    # No table of contents. One entry answers one question, so 22 of 28 pages
+    # have no `##` heading at all and the "On this page" column renders empty or
+    # with a single item. Removing it also widens the content column, which is
+    # what a figure wants.
+    toc: false
+    # The sidebar is on every page and is the most cramped column on it.
+    # Quarto's default is 250px, which wrapped "Fully optimized 5 mm glider"
+    # even after the "06 · " prefix came off the titles. Widened rather than
+    # the titles shortened: a chapter's name is what it is.
+    grid:
+      sidebar-width: 320px
+    # Scales matplotlib output down to the content column so pages never scroll
+    # sideways.
+    css: styles.css
+    # Code is folded away everywhere by default -- the prose and figures are the
+    # content; the code is there when you want to check it.
+    code-fold: true
+    code-summary: "Show code"
+    code-copy: true
+    code-overflow: wrap
+    fig-width: 8
+    fig-height: 4.5
+    fig-dpi: 150
+
+execute:
+  # Entries are written once, debugged, then left alone -- so freeze genuinely
+  # freezes them. Commit _freeze/ so a fresh clone renders without re-solving.
+  # NOTE: freeze tracks page files, not their includes -- so editing a
+  # chapter's _model.py does NOT invalidate its entries. Delete
+  # _freeze/chapters/01-first-chapter/ and render. There is no --no-freeze flag.
+  freeze: auto
+  warning: false

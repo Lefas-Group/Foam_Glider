@@ -124,7 +124,7 @@ def chapter_context(notebook):
     wants the register.
 
     IDS ARE SHOWN, because they are how the model names an item it is changing
-    -- `ask_specified(replaces=...)` and `_fork.yml`'s `replaces:` both take
+    -- `ask_specified(replaces=...)` and `_fork.yml`'s `overwrites:` both take
     one, and a handle you cannot see is a handle you cannot use.
     """
     import re

@@ -1,0 +1,55 @@
+---
+title: "First chapter"
+# The sidebar's `auto:` does not sort without this -- it falls back to readdir
+# order, which is a hash of the directory names (rule 33).
+order: 1
+listing:
+  id: entries
+  contents: "20*.qmd"
+  type: table
+  fields: [title]
+  # By filename, which starts with the date -- entries carry no `date:` of their
+  # own, and within a chapter alphabetical order IS chronological order.
+  sort: "filename"
+  # A plain table. Chronological is the only order an append-only record has,
+  # and a filter over three rows is furniture.
+  filter-ui: false
+  sort-ui: false
+  field-display-names:
+    title: "Entries"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+#| echo: false
+#| output: asis
+# GENERATED, from this chapter's _fork.yml (rule 35 keeps this cell here).
+chapter_lineage("01-first-chapter")
+```
+
+```{python}
+#| echo: false
+#| output: asis
+# GENERATED, from this chapter's _inputs.yml and every _fork.yml that names it
+# (rule 39 keeps this cell here). The callouts are NOT written by hand: an item
+# a later chapter replaced moves into `## Superseded` with a link to it, which
+# is impossible if the list is markdown, because a cell cannot annotate markup
+# that is already on the page. Edit `_inputs.yml`.
+chapter_inputs("01-first-chapter")
+```
+
+::: {#entries}
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+import pathlib
+for _f in ("_model.py", "_analysis.py"):
+    _src = pathlib.Path(f"chapters/01-first-chapter/{_f}").read_text()
+    print(f'::: {{.callout-note collapse="true"}}')
+    print(f"## `{_f}`\n")
+    print(f"```python\n{_src}\n```")
+    print(":::\n")
+```

@@ -681,7 +681,9 @@ def api(filename="_analysis.py"):
 # `- <key>: <value>` inside a block. The key is a slug, optionally a
 # `chapter/id` pair, so that a colon inside the VALUE -- "**Tail: H 100x30
 # mm**" -- cannot be mistaken for the separator.
-_ROW = _re.compile(r"^\s*-\s*([a-z0-9][a-z0-9/-]*)\s*:\s*(.+?)\s*$")
+# The value is OPTIONAL: `overwrites:` rows often need no reason, because
+# the New callouts below already say what replaced the item.
+_ROW = _re.compile(r"^\s*-\s*([a-z0-9][a-z0-9/-]*)\s*(?::\s*(.*?))?\s*$")
 
 
 def _blocks(path):
@@ -702,7 +704,7 @@ def _blocks(path):
         row = _ROW.match(line)
         if row and current is not None:
             out[current].append((row.group(1),
-                                 row.group(2).strip().strip('"').strip("'")))
+                                 (row.group(2) or "").strip().strip('"').strip("'")))
             continue
         kv = _re.match(r"^(\w+):\s*(.*)$", line)
         if kv:
@@ -784,7 +786,7 @@ def _render_inputs(path, spec_heading, assumed_heading):
 
 def chapter_inputs(chapter):
     """
-    The chapter's callouts: what it CHANGED, then what it newly declares.
+    The chapter's callouts: what it OVERWROTE, then what it newly declares.
 
     EVERY LEVEL LOOKS BACKWARD ONE STEP, and this is the whole of it. A chapter
     always renders its own specifications and assumptions -- they are its
@@ -792,36 +794,36 @@ def chapter_inputs(chapter):
     criterion for a chapter existing at all is that "the old answer stays valid
     under its own stated assumptions".
 
-    The first version of this pointed FORWARD: a later chapter replacing an
-    item put a `Superseded` stamp on the page that declared it. That said the
-    chapter was stale, which contradicts the reason it was kept -- and on this
-    notebook it emptied two chapters of their callouts entirely, because every
-    one of their items had been departed from.
+    The first version pointed FORWARD: a later chapter replacing an item put a
+    `Superseded` stamp on the page that DECLARED it. That says the chapter is
+    stale, which contradicts the reason it was kept -- and on this notebook it
+    emptied two chapters of their callouts entirely, because every one of their
+    items had been departed from.
 
-    What is true is that the LATER chapter departed from it, and that fact
-    belongs to the later chapter. So `_fork.yml` carries `replaces:` and
-    `drops:`, and they render here, on the page that made the change.
+    The second printed a PAIR, `was -> now`. The `now` half was already in the
+    New callout below, so chapter 02 said "Fuselage: 5 mm foam, doubled up"
+    twice on one page -- and the pair was a fiction: "Fuselage neglected" was
+    replaced by the whole fuselage model, three items, and a 1:1 link had to
+    pick one of them arbitrarily.
+
+    So: only the OLD item, on the page that overwrote it. What replaced it is
+    the New callouts, entire. No "see <chapter>" link either -- `Forked from`
+    is directly above and the heading already names the chapter.
     """
     fork = _blocks(_pathlib.Path("chapters") / chapter / "_fork.yml")
 
-    # What this chapter departed from, grouped by the chapter it came from --
-    # not by the parent, since 04 forks from 03 but departs from 01's items.
-    changed = {}
-    for key, arrow in (("replaces", None), ("drops", "dropped")):
-        for target, value in (fork.get(key) or []):
-            src, _, item_id = target.partition("/")
-            if not item_id:
-                continue
-            was = _item_text(src, item_id)
-            now = (_item_text(chapter, value) if arrow is None
-                   else f"*dropped* — {value}")
-            changed.setdefault(src, []).append((was, now))
-    for src, rows in changed.items():
+    # Grouped by the chapter that DECLARED the item, not by the parent: 04
+    # forks from 03 but overwrites 01's items.
+    gone = {}
+    for target, why in (fork.get("overwrites") or []):
+        src, _, item_id = target.partition("/")
+        if item_id:
+            gone.setdefault(src, []).append((_item_text(src, item_id), why))
+    for src, rows in gone.items():
         print("::: {.callout-warning}")
-        print(f"## Changed from {_chapter_title(src)}\n")
-        for n, (was, now) in enumerate(rows, 1):
-            print(f"{n}. {was} → {now}")
-        print(f"\nSee [{_chapter_title(src)}](../{src}/).")
+        print(f"## Overwritten from {_chapter_title(src)}\n")
+        for n, (text, why) in enumerate(rows, 1):
+            print(f"{n}. {text}" + (f" — {why}" if why else ""))
         print(":::\n")
 
     _render_inputs(_pathlib.Path("chapters") / chapter / "_inputs.yml",

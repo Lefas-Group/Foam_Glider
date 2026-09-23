@@ -208,7 +208,7 @@ def _sidebar_add(notebook, name):
 
 
 def create_chapter(notebook, name, title, defines="", claim=True,
-                   number=None, fork_from="", supersedes=()):
+                   number=None, fork_from="", overwrites=()):
     """
     Create `chapters/<name>/` with index.qmd, _model.qmd, _model.py, _analysis.py.
 
@@ -289,22 +289,26 @@ def create_chapter(notebook, name, title, defines="", claim=True,
                 # index is append-only and true as of its date: without this,
                 # the parent goes on declaring what this chapter replaced, for
                 # ever, with nothing on either page to say so.
-                f"# What this chapter DEPARTED FROM, and what it put in\n"
-                f"# place. The key is `<chapter>/<their id>` -- the handle in\n"
-                f"# that chapter's _inputs.yml.\n"
-                f"#   replaces: - NN-name/their-id: my-id\n"
-                f"#   drops:    - NN-name/their-id: why it no longer holds\n"
-                f"# It renders HERE, as \"Changed from <chapter>\" -- on the\n"
-                f"# page that made the change. The chapter departed from keeps\n"
-                f"# its own items: they are its premise and stay true under it.\n"
+                f"# What this chapter OVERWROTE: items an EARLIER\n"
+                f"# chapter declared that no longer hold here, as\n"
+                f"# `<chapter>/<their id>`, with an optional reason after a\n"
+                f"# colon. What REPLACED them is this chapter's own\n"
+                f"# _inputs.yml -- do not restate it here, and do not force a\n"
+                f"# 1:1 link: one overwritten assumption is often replaced by\n"
+                f"# several new items.\n"
+                f"#\n"
+                f"# It renders HERE, as \"Overwritten from <chapter>\" -- on\n"
+                f"# the page that made the change. The chapter overwritten\n"
+                f"# keeps its own items: they are its premise and stay true\n"
+                f"# under it.\n"
+                f"overwrites:\n"
                 # SEEDED from what the user struck at the new-chapter gate.
                 # Striking an inherited item IS declaring that this chapter
-                # departs from it; recording that twice, in two formats, by two
+                # overwrites it; recording that twice, in two formats, by two
                 # actors, with nothing checking they agree, is what the two
                 # mechanisms were doing before.
-                + ("drops:\n" if supersedes else "")
                 + "".join(f"  - {c}/{i}: struck at the new-chapter gate\n"
-                          for c, i in supersedes))
+                          for c, i in overwrites))
             (target / "_model.py").write_text(src["_model.py"])
             (target / "_analysis.py").write_text(src.get("_analysis.py") or "")
             forked = (f"\n\n_model.py and _analysis.py were COPIED from "
@@ -354,8 +358,8 @@ def create_chapter(notebook, name, title, defines="", claim=True,
             f"full re-prove to clear rule 12.\n\n"
             f"If this chapter REPLACES something an earlier chapter's index "
             f"declares -- a foam thickness, an airfoil, an assumption it makes "
-            f"false -- list it under `replaces:` as `NN-name/their-id: "
-            f"your-id`, or `drops:` with a reason if nothing takes its place. "
+            f"false -- list it under `overwrites:` as `NN-name/their-id`. "
+            f"What replaces it is your own _inputs.yml; do not restate it. "
             f"That is the only forward link the notebook has: without it the "
             f"earlier page goes on declaring what you just replaced, and a "
             f"reader landing there cannot tell. Both pages then show the link, "

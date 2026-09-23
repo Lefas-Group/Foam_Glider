@@ -70,20 +70,26 @@ something says otherwise, and a fork taken below you inherits it.
 `_fork.yml` carries the link:
 
 ```yaml
-supersedes:
-  - 01-foam-glider: foam-stock
-  - 01-foam-glider: airfoil-sections
+overwrites:
+  - 01-foam-glider/foam-stock
+  - 01-foam-glider/airfoil-sections: 3 mm stock needs a thinner section
 ```
 
 The id is the handle in that chapter's `_inputs.yml`, where its Specified and
-Assumed items live — they are data, not markdown, precisely so that a
-superseded one can MOVE. Rule 31 refuses an id that does not exist.
+Assumed items live — they are data, not markdown, precisely so this can name
+one. The reason after the colon is optional. Rule 31 refuses an id that does
+not exist.
 
-The item then leaves its own callout on that page and appears under
-`## Superseded`, linked to your chapter. Nothing is stated twice, and a chapter
-whose every item has been replaced renders no "new" callouts at all. `nb`'s
-inheritance review also stops offering the version you replaced: on this
-notebook that took chapter 06's candidate list from thirteen items — which
+It renders on YOUR page, as "Overwritten from Foam glider", listing the OLD
+item only. What replaced it is your own `_inputs.yml`, entire — do not restate
+it, and do not try to pair them off: "Fuselage neglected" was replaced by the
+whole fuselage model, three items, and a 1:1 link would have to pick one
+arbitrarily.
+
+The chapter you overwrote keeps its own items exactly as they are. They are its
+premise, and the criterion for it existing at all is that its answers stay valid
+under them. `nb`'s inheritance review is the one thing that reads the link: on
+this notebook it took chapter 06's candidate list from thirteen items — which
 included both "Foam thickness: 3 mm" and "Foam 5 mm sheet throughout" — down to
 nine.
 

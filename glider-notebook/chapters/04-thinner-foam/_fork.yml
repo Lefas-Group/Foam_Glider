@@ -14,12 +14,15 @@ changes:
   - wing sections naca4405 → naca4403, tail naca0005 → naca0003, so the
     airfoil thickness tracks the stock it is cut from
   - fuselage width 0.010 → 0.006 m, two plies of the thinner foam
-# What this chapter DEPARTED FROM, and what it put in place.
-#   replaces:  - <chapter>/<their id>: <my id>
-#   drops:     - <chapter>/<their id>: why it no longer holds
-# It renders on THIS page, as "Changed from <chapter>" — the page that
-# made the change. The chapter it departed from keeps its own items as
-# they were: they are its premise and stay true under it.
-replaces:
-  - 01-foam-glider/foam-stock: foam-thickness
-  - 01-foam-glider/airfoil-sections: airfoil-thickness
+# What this chapter OVERWROTE: items an EARLIER chapter declared that
+# no longer hold here, as `<chapter>/<their id>` with an optional
+# reason after a colon. What REPLACED them is this chapter's own
+# _inputs.yml -- do not restate it here, and do not force a 1:1 link:
+# one dropped assumption is often replaced by several new items.
+#
+# It renders HERE, as "Overwritten from <chapter>" -- on the page that
+# made the change. The chapter overwritten keeps its own items: they
+# are its premise and stay true under it.
+overwrites:
+  - 01-foam-glider/foam-stock
+  - 01-foam-glider/airfoil-sections

@@ -75,15 +75,14 @@ def inherited(notebook, chapter):
     page states what the aircraft is, and a new aircraft in an existing notebook
     is where the most is open, not the least.
 
-    Returns (kept, dropped). `dropped` is [(kind, item, from, superseded_by)] --
+    Returns (kept, dropped). `dropped` is [(kind, item, from, overwritten_by)] --
     items an ancestor declared and a LATER ancestor replaced. They used to be in
     the list: chapter 06 was offered "Foam thickness: 3 mm" (04) beside "Foam
     5 mm, 174.4 g/m² sheet throughout" (01) as thirteen peers, along with
     "Fuselage neglected" that 02 had contradicted by adding one. The union was
     doing the work of an override because nothing recorded which item replaced
-    which. `_fork.yml`'s `replaces:`/`drops:` record it now, so the override
-    is mechanical and the dropped set is reported rather than silently
-    missing.
+    which. `_fork.yml`'s `overwrites:` records it now, so the override is
+    mechanical and the dropped set is reported rather than silently missing.
     """
     out, dropped = [], []
     chain = ancestry(notebook, chapter)

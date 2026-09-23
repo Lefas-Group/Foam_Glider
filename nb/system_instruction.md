@@ -149,7 +149,7 @@ prose is already written.
 28  every entry declares ENTRY_CEILING and SOLVE_BUDGET — never None, solve ≤ ceiling
 29  never import `_model`, `_analysis` or `_notebook` — already in scope
 30  a chapter index renders its own `_model.py` — that is where the aircraft is
-31  a forked `_model.py` names its parent, commit, differences and what it replaces
+31  a forked `_model.py` names its parent, commit, differences and what it overwrites
 32  no empty callout — delete it rather than write `None.`
 33  a chapter index declares `order:` matching its directory number
 34  the front page keeps its generated lineage block — never write_file over it
@@ -297,16 +297,20 @@ Order: hero → `**Answer.**` → callouts → evidence → `footer(...)`.
   item written in both places is on the page twice, and rule 39 refuses it. An
   ENTRY still writes its own callouts as markdown, in the entry — it is a
   one-time record, where a chapter's is a standing one that has to be movable.
-- **Replacing an inherited item is recorded, not implied.** The record is
-  append-only, so an earlier chapter goes on declaring what you replaced unless
-  something says otherwise. When a new chapter makes an ancestor's declaration
-  false — a thickness, an airfoil, an assumption it closes — name it in your
-  `_fork.yml` under `supersedes:`, as `NN-name: <id>`, where the id is the
-  handle in that chapter's `_inputs.yml`. The item then moves out of its own
-  callout and into `## Superseded` on that page, with a link to yours, and a
-  fork below you stops inheriting the dead version. A chapter whose every item
-  has been replaced renders no "new" callouts at all, which is the true thing
-  to say about it.
+- **Overwriting an inherited item is recorded, not implied.** When a new
+  chapter makes an ancestor's declaration false — a thickness, an airfoil, an
+  assumption it closes — name it in YOUR `_fork.yml` under `overwrites:`, as
+  `NN-name/<their id>`, with an optional reason after a colon.
+
+  It renders on YOUR page, as "Overwritten from …", listing the OLD item only.
+  What replaced it is your own `_inputs.yml`, entire — never restate it there,
+  and do not try to pair them off: one overwritten assumption is often replaced
+  by several new items.
+
+  The chapter you overwrote keeps its items exactly as they are. They are its
+  premise, and the whole criterion for it existing is that its answers stay
+  valid under them; stamping it stale would contradict that. Every level looks
+  backward one step, and nothing ever writes on a page above it.
 - **A chapter index carries no standing description.** What a chapter IS is its
   title, the parent it links to, and what it newly specified. Prose above the
   callouts restated one of those — measured across six chapters it restated the
