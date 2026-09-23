@@ -1,0 +1,58 @@
+---
+title: "What is the best lift-to-drag ratio, and at what angle of attack?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 60.0
+SOLVE_BUDGET = 15.0
+PROBE_POOL = 150.0
+PROBE_SPENT = 5.6
+
+import aerosandbox as asb
+import aerosandbox.numpy as np
+
+alphas = np.linspace(0, 12, 61)
+airplane = get_airplane()
+op_point = asb.OperatingPoint(velocity=5.0, alpha=alphas)
+aero = asb.AeroBuildup(airplane=airplane, op_point=op_point).run()
+
+LD = aero['L'] / aero['D']
+best_idx = np.argmax(LD)
+max_LD = LD[best_idx]
+best_alpha = alphas[best_idx]
+```
+
+::: {.hero}
+[`{python} f"{max_LD:.2f}"`]{.hero-value}
+[Best L/D]{.hero-label}
+:::
+
+**Answer.** The X-Wing achieves a maximum lift-to-drag ratio of [`{python} f"{max_LD:.2f}"`]{.key} at an angle of attack of [`{python} f"{best_alpha:.1f}°"`]{.key}.
+
+::: {.callout-note}
+## New assumptions
+1. **velocity: 5 m/s**, typical for a chuck glider.
+:::
+
+```{python}
+#| label: fig-ld-vs-alpha
+#| fig-cap: "Lift-to-drag ratio across angle of attack at 5 m/s."
+import matplotlib.pyplot as plt
+import aerosandbox.tools.pretty_plots as p
+
+fig, ax = plt.subplots(figsize=(5, 4))
+ax.plot(alphas, LD)
+ax.axvline(best_alpha, color="k", linestyle="--", alpha=0.5)
+ax.set_xlabel(r"Angle of attack $\alpha$ [deg]")
+ax.set_ylabel(r"Lift-to-drag ratio $L/D$")
+ax.set_title("X-Wing Lift-to-Drag Ratio")
+p.show_plot()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```

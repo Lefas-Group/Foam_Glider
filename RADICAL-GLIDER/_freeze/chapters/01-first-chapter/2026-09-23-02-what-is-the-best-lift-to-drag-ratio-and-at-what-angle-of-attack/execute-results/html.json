@@ -1,0 +1,12 @@
+{
+  "hash": "fb51fda2281d44b5718c1d453f74fde7",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: \"What is the best lift-to-drag ratio, and at what angle of attack?\"\n---\n\n\n::: {#9d257c80 .cell execution_count=2}\n``` {.python .cell-code}\nENTRY_CEILING = 60.0\nSOLVE_BUDGET = 15.0\nPROBE_POOL = 150.0\nPROBE_SPENT = 5.6\n\nimport aerosandbox as asb\nimport aerosandbox.numpy as np\n\nalphas = np.linspace(0, 12, 61)\nairplane = get_airplane()\nop_point = asb.OperatingPoint(velocity=5.0, alpha=alphas)\naero = asb.AeroBuildup(airplane=airplane, op_point=op_point).run()\n\nLD = aero['L'] / aero['D']\nbest_idx = np.argmax(LD)\nmax_LD = LD[best_idx]\nbest_alpha = alphas[best_idx]\n```\n:::\n\n\n::: {.hero}\n[5\\.38]{.hero-value}\n[Best L/D]{.hero-label}\n:::\n\n**Answer.** The X-Wing achieves a maximum lift-to-drag ratio of [5\\.38]{.key} at an angle of attack of [6\\.0°]{.key}.\n\n::: {.callout-note}\n## New assumptions\n1. **velocity: 5 m/s**, typical for a chuck glider.\n:::\n\n::: {#cell-fig-ld-vs-alpha .cell execution_count=3}\n``` {.python .cell-code}\nimport matplotlib.pyplot as plt\nimport aerosandbox.tools.pretty_plots as p\n\nfig, ax = plt.subplots(figsize=(5, 4))\nax.plot(alphas, LD)\nax.axvline(best_alpha, color=\"k\", linestyle=\"--\", alpha=0.5)\nax.set_xlabel(r\"Angle of attack $\\alpha$ [deg]\")\nax.set_ylabel(r\"Lift-to-drag ratio $L/D$\")\nax.set_title(\"X-Wing Lift-to-Drag Ratio\")\np.show_plot()\n```\n\n::: {.cell-output .cell-output-display}\n![Lift-to-drag ratio across angle of attack at 5 m/s.](2026-09-23-02-what-is-the-best-lift-to-drag-ratio-and-at-what-angle-of-attack_files/figure-html/fig-ld-vs-alpha-output-1.png){#fig-ld-vs-alpha width=1027 height=822}\n:::\n:::\n\n\n[Rendered in 2.3 s (limit 60 s) · explored in 6 s (limit 150 s)]{.runtime}\n\n\n",
+    "supporting": [
+      "2026-09-23-02-what-is-the-best-lift-to-drag-ratio-and-at-what-angle-of-attack_files"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}
