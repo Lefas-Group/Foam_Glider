@@ -45,27 +45,18 @@ def _unescape(s):
 
 def declared(notebook, chapter):
     """
-    (specified, assumed) counts for ONE chapter's index.
+    (specified, assumed) counts for ONE chapter.
 
-    The chapter's own declarations, not its entries': what the chapter was
-    given and what it guessed, which is the set an entry inherits rather than
-    restates (`system_instruction.md`, "assumptions sit at the level they
-    belong to"). Zero for a chapter whose index declares nothing -- two of the
-    thirteen written so far, both predating the callouts.
+    Delegated to `lint.declared_items`, which knows both sources: a chapter
+    with `_inputs.yml` is read from it, one without from its index callouts.
+    This used to carry its own regex over the markdown, and the day the items
+    moved into a data file that copy would have returned zero -- silently, for
+    the notice that is the only reason `ask_specified` fires at all.
     """
-    index = notebook.chapters_dir / chapter / "index.qmd"
-    try:
-        md = index.read_text()
-    except OSError:
-        return 0, 0
-    spec = asm = 0
-    for kind, body in CALLOUT.findall(md):
-        n = len(ITEM.findall(body))
-        if _kind(kind) == "Specified":
-            spec += n
-        else:
-            asm += n
-    return spec, asm
+    import lint
+    items = lint.declared_items(notebook.root, chapter)
+    spec = sum(1 for k, _ in items if k == "Specified")
+    return spec, len(items) - spec
 
 
 def ancestry(notebook, chapter):
@@ -148,10 +139,6 @@ def inherited(notebook, chapter):
 
 
 def _declared_items(notebook, chapter):
-    """[(kind, item)] from one chapter's index."""
-    try:
-        md = (notebook.chapters_dir / chapter / "index.qmd").read_text()
-    except OSError:
-        return []
-    return [(_kind(kind), _unescape(i)) for kind, body in CALLOUT.findall(md)
-            for i in ITEM.findall(body)]
+    """[(kind, item)] from one chapter, via lint's dual-source reader."""
+    import lint
+    return lint.declared_items(notebook.root, chapter)

@@ -18,9 +18,10 @@ changes:
     the tail and solved three wing variables
   - the model is rewritten around that rather than copied, so a diff against
     04 is not the review here -- the chapters differ everywhere
-# What this chapter REPLACED, as `<chapter>: <the item>`. The item is a
-# numbered entry in that chapter's index callouts; naming it here is what
-# lets its own page say it was later revisited, which an append-only record
-# cannot say for itself. Rule 31 refuses a name that matches nothing.
+# Items this chapter REPLACES, as `<chapter>: <id>`, where the id is the
+# handle in that chapter's _inputs.yml. The record is append-only, so without
+# this the earlier page goes on declaring what this one replaced; naming it
+# moves the item into that page's Superseded callout. Rule 31 refuses an id
+# that does not exist.
 supersedes:
-  - 01-foam-glider: Tail: H 100×30 mm, V 50×30 mm
+  - 01-foam-glider: tail-size

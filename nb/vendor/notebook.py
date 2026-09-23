@@ -652,3 +652,131 @@ def api(filename="_analysis.py"):
         if obj.__code__.co_filename.endswith(filename):
             summary = (_inspect.getdoc(obj) or "").strip().split("\n")[0]
             yield name + str(_inspect.signature(obj)), summary
+
+
+# =============================================================================
+# The chapter index's two generated blocks.
+#
+# Here rather than in the page, because there is one implementation instead of
+# one per chapter. The page cell is `chapter_inputs("NN-name")` and nothing
+# else, so a model rewriting an index cannot half-copy the logic, and rule 11
+# pins this file byte-identical across notebooks.
+#
+# WHY THE CALLOUTS ARE DATA NOW. They used to be hand-written markdown in
+# `index.qmd`: a numbered list under `## New user specifications`. That made a
+# chapter's standing commitments unreadable to anything but a regex, and it made
+# them unmarkable -- when a later chapter replaced one, nothing could say so on
+# the page where it was declared, because a Python cell cannot reach back into
+# markdown that is already written. The fix was a generated line listing what
+# had been revisited, and it put every item on the page TWICE: measured on this
+# notebook, both affected chapters had all of their items doubled.
+#
+# So the items live in `_inputs.yml` beside the model, with an id each, and the
+# page renders them. A superseded item then simply moves into its own callout,
+# once, with the chapter that replaced it attached -- and a chapter whose
+# commitments have all been replaced renders no "new" callouts at all, which is
+# the true statement about it.
+# =============================================================================
+
+# `- <id>: <text>` inside a block. The id is a slug so that a colon inside the
+# TEXT -- "**Tail: H 100×30 mm**" -- cannot be mistaken for the separator.
+_ROW = _re.compile(r"^\s*-\s*([a-z0-9][a-z0-9-]*)\s*:\s*(.+?)\s*$")
+
+
+def _blocks(path):
+    """
+    `{key: [(id, text), ...]}` for a flat `key:` / `- id: text` file.
+
+    Shared by `_inputs.yml` and `_fork.yml`'s `supersedes:`, which are the same
+    shape on purpose: one thing to learn, and one parser to be wrong in.
+    """
+    out, current = {}, None
+    try:
+        text = path.read_text()
+    except OSError:
+        return out
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        row = _ROW.match(line)
+        if row and current is not None:
+            out[current].append((row.group(1),
+                                 row.group(2).strip().strip('"').strip("'")))
+            continue
+        key = _re.match(r"^(\w+):\s*$", line)
+        if key:
+            current = key.group(1)
+            out.setdefault(current, [])
+            continue
+        current = None              # a `key: value` line ends the block
+    return out
+
+
+def _chapter_title(chapter):
+    index = _pathlib.Path("chapters") / chapter / "index.qmd"
+    try:
+        m = _re.search(r'^title:\s*"(.+)"\s*$', index.read_text(), _re.M)
+    except OSError:
+        return chapter
+    return m.group(1) if m else chapter
+
+
+def _superseded(chapter):
+    """{id: chapter that replaced it} for items THIS chapter declared."""
+    out = {}
+    for d in sorted(_pathlib.Path("chapters").iterdir()):
+        if not d.is_dir() or d.name == chapter:
+            continue
+        for parent, item_id in _blocks(d / "_fork.yml").get("supersedes", []):
+            if parent == chapter:
+                out[item_id] = d.name
+    return out
+
+
+def chapter_lineage(chapter):
+    """Where this chapter's vehicle came from, and what it replaced."""
+    fork = _pathlib.Path("chapters") / chapter / "_fork.yml"
+    try:
+        text = fork.read_text()
+    except OSError:
+        return
+    parent = _re.search(r"^parent:\s*(.+?)\s*$", text, _re.M)
+    if parent:
+        print(f"Forked from [{_chapter_title(parent.group(1))}]"
+              f"(../{parent.group(1)}/).\n")
+
+
+def chapter_inputs(chapter):
+    """
+    The chapter's three input callouts, rendered from `_inputs.yml`.
+
+    An item that a later chapter supersedes moves OUT of its own callout and
+    into `## Superseded`, with a link to the chapter that replaced it. It is
+    stated once either way. A callout with nothing in it is not printed, which
+    is rule 32 by construction rather than by checking.
+    """
+    items = _blocks(_pathlib.Path("chapters") / chapter / "_inputs.yml")
+    gone = _superseded(chapter)
+    live = {k: [(i, t) for i, t in items.get(k, []) if i not in gone]
+            for k in ("specified", "assumed")}
+    dead = [(i, t, gone[i]) for k in ("specified", "assumed")
+            for i, t in items.get(k, []) if i in gone]
+
+    for key, style, heading in (
+            ("specified", "callout-tip", "New user specifications"),
+            ("assumed", "callout-note", "New assumptions")):
+        if not live[key]:
+            continue
+        print(f"::: {{.{style}}}")
+        print(f"## {heading}\n")
+        for n, (_, text) in enumerate(live[key], 1):
+            print(f"{n}. {text}")
+        print(":::\n")
+
+    if dead:
+        print("::: {.callout-important collapse=true}")
+        print("## Superseded\n")
+        for n, (_, text, by) in enumerate(dead, 1):
+            print(f"{n}. {text} — replaced by "
+                  f"[{_chapter_title(by)}](../{by}/).")
+        print(":::\n")

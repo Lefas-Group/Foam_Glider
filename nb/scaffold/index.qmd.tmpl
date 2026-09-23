@@ -24,85 +24,20 @@ listing:
 ```{python}
 #| echo: false
 #| output: asis
-# GENERATED FROM THE NOTEBOOK'S _fork.yml FILES (rule 35 keeps this block here).
-#
-# Three lines at most, and the last two are the forward link an append-only
-# record cannot give itself. A chapter index is true as of its date and says so
-# nowhere: 01 went on declaring "Sections NACA4405 and NACA0005" and "Fuselage
-# neglected" long after 04 changed the sections and 02 added a fuselage, and a
-# reader landing on 01 had no way to know. `supersedes:` in the LATER chapter's
-# `_fork.yml` records which item it replaced, and this reads every one of them,
-# so both pages carry the link and neither has to be edited to get it.
-#
-# `changes:` still does not print. On a chapter whose whole point is one
-# decision it was the third copy of that decision on the page -- 03 said "the
-# quarter chord is unswept" in the fork list, in its prose and in its
-# specifications, under a title and an arrow that said it twice more.
-import pathlib
-import re
-
-_HERE = "__CHAPTER__"
-_LIST = re.compile(r"^supersedes:\s*$(.*?)(?=^\w|\Z)", re.M | re.S)
-_ROW = re.compile(r"^\s*-\s*([0-9]{2}-[a-z0-9-]+)\s*:\s*(.+?)\s*$", re.M)
-
-
-def _title(_c):
-    _i = pathlib.Path("chapters") / _c / "index.qmd"
-    _m = re.search(r'^title:\s*"(.+)"\s*$', _i.read_text(), re.M) \
-        if _i.exists() else None
-    return _m.group(1) if _m else _c
-
-
-def _supersedes(_c):
-    """[(replaced chapter, item)] that chapter `_c` declares it replaced."""
-    _f = pathlib.Path("chapters") / _c / "_fork.yml"
-    if not _f.exists():
-        return []
-    _b = _LIST.search(_f.read_text())
-    return _ROW.findall(_b.group(1)) if _b else []
-
-
-_fk = pathlib.Path(f"chapters/{_HERE}/_fork.yml")
-if _fk.exists():
-    _p = re.search(r"^parent:\s*(.+?)\s*$", _fk.read_text(), re.M)
-    if _p:
-        print(f"Forked from [{_title(_p.group(1))}](../{_p.group(1)}/).\n")
-
-# What this chapter replaced, and what a later one replaced of its own.
-_mine = [f"{_i} ([{_title(_c)}](../{_c}/))" for _c, _i in _supersedes(_HERE)]
-if _mine:
-    print(f"Replaces {'; '.join(_mine)}.\n")
-
-_later = []
-for _d in sorted(pathlib.Path("chapters").iterdir()):
-    if not _d.is_dir() or _d.name == _HERE:
-        continue
-    _later += [f"{_i} — see [{_title(_d.name)}](../{_d.name}/)"
-               for _c, _i in _supersedes(_d.name) if _c == _HERE]
-if _later:
-    print(f"Later revisited: {'; '.join(_later)}.\n")
+# GENERATED, from this chapter's _fork.yml (rule 35 keeps this cell here).
+chapter_lineage("__CHAPTER__")
 ```
 
-::: {.callout-tip}
-## New user specifications
-
-<!-- One numbered item per commitment, ten words at most (rule 8). The test is
-     whether it is true of EVERY entry in this chapter -- the section, the
-     objective, the fixed dimensions. If it is true of only one entry, it
-     belongs in that entry instead. Date them: "Asked of the user, YYYY-MM-DD:".
-     Budgets do NOT go here: each entry declares its own and footer() prints
-     them (rules 18 and 28).
-     NOTHING TO PUT HERE? Delete this whole callout, opening fence to closing.
-     A box containing "None." is furniture (rule 32). -->
-:::
-
-::: {.callout-note}
-## New assumptions
-
-<!-- What this chapter takes on faith, one clause of reason each. Same test:
-     true of every entry, or it belongs in the entry.
-     NOTHING TO PUT HERE? Delete this whole callout (rule 32). -->
-:::
+```{python}
+#| echo: false
+#| output: asis
+# GENERATED, from this chapter's _inputs.yml and every _fork.yml that names it
+# (rule 39 keeps this cell here). The callouts are NOT written by hand: an item
+# a later chapter replaced moves into `## Superseded` with a link to it, which
+# is impossible if the list is markdown, because a cell cannot annotate markup
+# that is already on the page. Edit `_inputs.yml`.
+chapter_inputs("__CHAPTER__")
+```
 
 ::: {#entries}
 :::

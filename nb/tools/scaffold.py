@@ -208,7 +208,7 @@ def _sidebar_add(notebook, name):
 
 
 def create_chapter(notebook, name, title, defines="", claim=True,
-                   number=None, fork_from=""):
+                   number=None, fork_from="", supersedes=()):
     """
     Create `chapters/<name>/` with index.qmd, _model.qmd, _model.py, _analysis.py.
 
@@ -258,6 +258,10 @@ def create_chapter(notebook, name, title, defines="", claim=True,
 
     (target / "_model.qmd").write_text(sub((SCAFFOLD / "_model.qmd.tmpl").read_text()))
     (target / "index.qmd").write_text(sub((SCAFFOLD / "index.qmd.tmpl").read_text()))
+    # The chapter's standing commitments, as data. The index RENDERS this; it
+    # is not markdown any more, because a superseded item has to be movable and
+    # a Quarto cell cannot annotate markup already on the page.
+    (target / "_inputs.yml").write_text((SCAFFOLD / "_inputs.yml.tmpl").read_text())
     forked = ""
     if fork_from:
         ref, src = _fork_sources(notebook, fork_from)
@@ -285,11 +289,18 @@ def create_chapter(notebook, name, title, defines="", claim=True,
                 # index is append-only and true as of its date: without this,
                 # the parent goes on declaring what this chapter replaced, for
                 # ever, with nothing on either page to say so.
-                f"# Items from an EARLIER chapter's index that this one\n"
-                f"# replaces, as `<chapter>: <the item>`. Delete this block if\n"
-                f"# it replaces none. Rule 31 refuses a name that matches\n"
-                f"# nothing, and both pages show the link once it resolves.\n"
-                f"supersedes:\n")
+                f"# Items from an EARLIER chapter that this one REPLACES, as\n"
+                f"# `<chapter>: <id>`, where the id is the handle in that\n"
+                f"# chapter's _inputs.yml. Naming one moves it into that\n"
+                f"# page's Superseded callout -- the only forward link an\n"
+                f"# append-only record has. Rule 31 refuses an unknown id.\n"
+                f"supersedes:\n"
+                # SEEDED from what the user struck at the new-chapter gate.
+                # Striking "foam 5 mm" for a 3 mm fork IS declaring that this
+                # chapter supersedes it; recording that fact twice, in two
+                # formats, by two actors, with nothing checking they agree, is
+                # what the two mechanisms were doing before.
+                + "".join(f"  - {c}: {i}\n" for c, i in supersedes))
             (target / "_model.py").write_text(src["_model.py"])
             (target / "_analysis.py").write_text(src.get("_analysis.py") or "")
             forked = (f"\n\n_model.py and _analysis.py were COPIED from "

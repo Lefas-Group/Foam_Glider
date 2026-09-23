@@ -1,0 +1,10 @@
+# What this chapter NEWLY committed to and NEWLY assumed. Rendered into its
+# index.qmd by `chapter_inputs()`; do not write these callouts by hand.
+#
+# `- <id>: <text>` — the id is a handle, not prose, and need only be unique
+# within this file. A later chapter that REPLACES one of these names it in its
+# own _fork.yml under `supersedes: - NN-this-chapter: <id>`, which moves the
+# item into the Superseded callout on this page. Rule 8: ten words per item.
+
+specified:
+  - wing-sweep: **Wing sweep:** zero at the quarter chord.

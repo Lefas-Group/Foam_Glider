@@ -1883,17 +1883,16 @@ def _chapter_index_blocks(root, chapters):
             out.append((index, "has no entry listing — a reader landing here "
                                "has nothing to click. The scaffold ships the "
                                "`listing:` block and a `::: {#entries}` div"))
-        # Matched on `_fork.yml` plus the GENERATED banner, not on the banner's
-        # exact wording. The first version pinned the whole sentence
-        # ("GENERATED FROM THIS CHAPTER'S OWN _fork.yml"), so editing the cell
-        # to say something truer -- it now reads every chapter's `_fork.yml`,
-        # not just this one's -- failed the rule in all six chapters at once.
-        # What the rule is for is the cell being THERE.
-        if not ("GENERATED FROM" in text and "_fork.yml" in text):
+        # THE CALL, not a comment. This pinned the banner's exact wording twice
+        # and failed all six chapters both times -- once when the cell learned
+        # to read every chapter's `_fork.yml` rather than its own, once when it
+        # moved into `_notebook.py`. A comment is prose and will be reworded;
+        # `chapter_lineage(` is the thing that has to be on the page.
+        if "chapter_lineage(" not in text:
             out.append((index, "does not print its lineage — the parent chapter "
-                               "and what this one replaces are recorded only in "
-                               "`_fork.yml`, which no reader opens. The scaffold "
-                               "ships the cell that reads it"))
+                               "is recorded only in `_fork.yml`, which no reader "
+                               "opens. The scaffold ships the one-line cell: "
+                               "`chapter_lineage(\"<chapter>\")`"))
     return out
 
 
@@ -2017,35 +2016,24 @@ def _root_index_freeze(root, chapters, entries):
 
 def _index_shape(root, chapters, entries):
     """
-    Rule 39. An index carries its input callouts, in order, and nothing else.
+    Rule 39. An index RENDERS its input callouts and does not also write them.
 
-    Two halves. The ORDER, which is the reading argument -- what was given
-    before what was guessed. And the absence of everything else: no `##`
-    outside a callout, and no prose inside one above its numbered items.
+    The callouts are data now (`_inputs.yml`) and the page carries
+    `chapter_inputs("<chapter>")`, which prints New user specifications, New
+    assumptions and Superseded from it. Two things can go wrong, and both are
+    the failure rule 30 names -- a model rewriting the page with `write_file`
+    and putting back what looks like it belongs:
 
-    Both are the failure rule 30 names, which is a model rewriting the page
-    with `write_file` rather than editing it and putting back what it thinks
-    belongs there. A heading over a single listing, or a sentence explaining a
-    list of three numbered items, is exactly what gets put back.
+      * the call goes missing, and the chapter silently declares nothing;
+      * the callouts come back as hand-written markdown beside the generated
+        ones, and every item is on the page twice. That is not hypothetical:
+        it is what the first version of the supersession marker did, measured
+        at all 7 items across the two affected chapters.
 
-    Rules 30, 33, 34, 35 and 38 each guard one thing the scaffold puts in an
-    index, all for the reason rule 30 states: "a model that rewrites index.qmd
-    with `write_file` rather than editing it drops the block and nothing
-    noticed". Each of those checks an ITEM. Nothing checked the ORDER, and one
-    chapter of six had been rewritten into `Questions, The model, Specified,
-    Assumed` with its defining sentence stranded underneath a dump of its own
-    source -- which is what made the page look broken, not anything in it.
-
-    There was a prose check here too, requiring a sentence above the callouts
-    saying what the chapter IS. It is gone, with the prose. Read across the six
-    chapters that prose was doing two different jobs and neither consistently:
-    in 02-04 it restated the fork's `changes:`, and in 05-06 it restated the
-    notebook's own front page. On 03 the same fact appeared in the fork list,
-    the prose, the specifications, the title and the arrow -- five times. What a
-    chapter IS is now its title, its parent link and what it newly specified.
-
-    Only chapters with entries, the same exemption as rules 19, 24 and 30: a
-    scaffold nobody has filled in is not a finding.
+    A chapter with no `_inputs.yml` is held to the OLD rule instead -- order,
+    no stray `##`, no lead-in prose. Both frozen corpus notebooks are in that
+    state and are not worth migrating, which is the same judgement rules 33-35
+    already make about them.
     """
     out = []
     for c in chapters:
@@ -2056,6 +2044,23 @@ def _index_shape(root, chapters, entries):
             text = index.read_text()
         except OSError:
             continue
+
+        if read_inputs(root, c):
+            if "chapter_inputs(" not in text:
+                out.append((index, (
+                    "has an `_inputs.yml` but never renders it — the chapter's "
+                    "specifications and assumptions appear nowhere on its page. "
+                    "The scaffold ships the one-line cell: "
+                    "`chapter_inputs(\"" + c + "\")`")))
+            for title, _ in callouts_of(text):
+                if title in INPUT_TITLES:
+                    out.append((index, (
+                        f"writes a `## {title}` callout by hand AND renders "
+                        f"`_inputs.yml`, so every item is on the page twice. "
+                        f"The list lives in `_inputs.yml`; delete the markup")))
+                    break
+            continue
+
         heads = re.findall(r"^##\s+(.+?)\s*$", text, re.M)
         seen = [h for h in heads if h in INDEX_SECTIONS]
         want = [s for s in INDEX_SECTIONS if s in seen]
@@ -2070,9 +2075,6 @@ def _index_shape(root, chapters, entries):
                     f"callouts and nothing else: a listing and a code block "
                     f"are legible without being announced, and a heading over "
                     f"one div is a label for what the reader can already see")))
-        # Prose between a callout's title and its first item. The callouts are
-        # a numbered list of decisions; a sentence introducing three of them is
-        # longer than the three.
         for body in re.findall(
                 r"^:{3,}\s*\{\.callout-\w+\}\s*\n\s*##\s*(?:" + INPUT_CALLOUTS
                 + r")[^\n]*\n(.*?)^:{3,}\s*$", text, re.S | re.M):
@@ -2083,6 +2085,32 @@ def _index_shape(root, chapters, entries):
                     f"says {lead[0].strip()[:40]!r} above its numbered items. "
                     f"The callout IS the list; anything before it is a "
                     f"sentence introducing three lines")))
+    return out
+
+
+def _input_item_budget(root, chapters, entries):
+    """
+    Rule 8, for a chapter that keeps its items in `_inputs.yml`.
+
+    The budget used to be counted in `check()`, over callouts found in the page
+    source. Generated callouts are not in the source, so an index's items
+    stopped being counted at all the moment they moved -- a rule going quiet
+    because its input moved is the failure `nb.corpus` exists to catch.
+    """
+    out = []
+    for c in chapters:
+        if not any(e.parent.name == c for e in entries):
+            continue
+        where = root / "chapters" / c / "_inputs.yml"
+        for kind, text in declared_items(root, c):
+            if not read_inputs(root, c):
+                continue
+            n = words(text)
+            if n > MAX_CALLOUT_ITEM:
+                out.append((where, (
+                    f"{kind} item is {n} words, over {MAX_CALLOUT_ITEM} — "
+                    f"record the input, not the argument for it: "
+                    f"{' '.join(text.split())[:56]}…")))
     return out
 
 
@@ -2143,12 +2171,68 @@ def read_fork(root, chapter):
     return out
 
 
-# `supersedes:` entry -- `<chapter>: <the item it replaces>`.
-SUPERSEDE = re.compile(r"^\s*([0-9]{2}-[a-z0-9-]+)\s*:\s*(.+?)\s*$")
+# `supersedes:` entry -- `<chapter>: <the id of the item it replaces>`.
+SUPERSEDE = re.compile(r"^\s*([0-9]{2}-[a-z0-9-]+)\s*:\s*([a-z0-9][a-z0-9-]*)\s*$")
+
+
+def read_inputs(root, chapter):
+    """
+    `chapters/<c>/_inputs.yml` as {"specified": [(id, text)], "assumed": [...]}.
+
+    The chapter's standing commitments, as DATA. They used to be a numbered
+    markdown list inside a callout in `index.qmd`, which made them readable
+    only by regex and, worse, UNMARKABLE: when a later chapter replaced one,
+    nothing could say so on the page that declared it, because a Quarto cell
+    cannot annotate markup already written. The generated line that worked
+    around it put every item on the page twice -- measured on this notebook,
+    both affected chapters had all of their items doubled.
+
+    Same shape as `_fork.yml`'s `supersedes:` on purpose -- `key:` then
+    `- <id>: <text>` -- so there is one format to learn and one parser to be
+    wrong in. `_notebook.py` carries its own copy for the page to render from,
+    for the reason rule 11 exists: a notebook must render without `nb`.
+    """
+    out, current = {}, None
+    try:
+        text = (root / "chapters" / chapter / "_inputs.yml").read_text()
+    except OSError:
+        return out
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        row = INPUT_ROW.match(line)
+        if row and current is not None:
+            out[current].append((row.group(1),
+                                 row.group(2).strip().strip('"').strip("'")))
+            continue
+        key = re.match(r"^(\w+):\s*$", line)
+        if key:
+            current = key.group(1)
+            out.setdefault(current, [])
+            continue
+        current = None
+    return out
+
+
+# `- <id>: <text>`. The id is a slug so a colon inside the TEXT -- "**Tail: H
+# 100x30 mm**" -- cannot be mistaken for the separator.
+INPUT_ROW = re.compile(r"^\s*-\s*([a-z0-9][a-z0-9-]*)\s*:\s*(.+?)\s*$")
 
 
 def declared_items(root, chapter):
-    """[(kind, text)] from one chapter index's input callouts."""
+    """
+    [(kind, text)] a chapter declares. `_inputs.yml` if it has one.
+
+    DUAL SOURCE, deliberately. `aircraft-notebook` and
+    `optimised-glider-notebook` are frozen corpus with hand-written callouts,
+    and unfreezing the front door of a notebook nobody opens is not worth a
+    migration. A chapter with `_inputs.yml` is read from it; one without is
+    read the old way and nothing complains.
+    """
+    data = read_inputs(root, chapter)
+    if data:
+        return [("Specified" if k == "specified" else "Assumed", t)
+                for k in ("specified", "assumed") for _, t in data.get(k, [])]
     try:
         text = (root / "chapters" / chapter / "index.qmd").read_text()
     except OSError:
@@ -2164,19 +2248,10 @@ def declared_items(root, chapter):
     return out
 
 
-def _label_matches(label, item):
-    """
-    Does `label` name `item`? Substring, case- and emphasis-insensitive.
-
-    Deliberately loose. The label is typed by hand into `_fork.yml` and the item
-    is prose in a callout -- "Sections NACA4405 and NACA0005" against
-    "**Sections NACA4405 and NACA0005**, standing in for foam." An exact match
-    would fail on the asterisks alone, and rule 31 refuses a label that matches
-    NOTHING, so the cost of being loose is bounded by the cost of being wrong
-    about which of a chapter's three items you meant.
-    """
-    clean = lambda t: re.sub(r"[^a-z0-9 ]+", "", t.lower()).strip()
-    return clean(label) in clean(item)
+def input_ids(root, chapter):
+    """{id: text} for a chapter with `_inputs.yml`, else {}."""
+    data = read_inputs(root, chapter)
+    return {i: t for k in ("specified", "assumed") for i, t in data.get(k, [])}
 
 
 def supersessions(root, chapters):
@@ -2184,11 +2259,15 @@ def supersessions(root, chapters):
     {(ancestor, item text): superseding chapter} across the whole notebook.
 
     The forward link the record was missing. A chapter index is append-only and
-    true as of its date, so `01-foam-glider` still declares "Sections NACA4405
-    and NACA0005" and "Fuselage neglected" -- both false of every chapter after
-    it, and its page said so nowhere. `_fork.yml` already records what a fork
-    CHANGED, in prose; `supersedes:` records which recorded item it replaced,
-    which is the same fact in a form something can read.
+    true as of its date, so `01-foam-glider` went on declaring "Sections
+    NACA4405 and NACA0005" and "Fuselage neglected" long after 04 changed the
+    sections and 02 added a fuselage -- both false, with nothing on the page to
+    say so.
+
+    Keyed on the ITEM ID, not on matching its prose. The first version matched a
+    hand-typed label against the callout text case-insensitively, because the
+    items were markdown and had no handles; with `_inputs.yml` they do, so a
+    supersession either resolves exactly or is a lint failure.
     """
     out = {}
     for c in chapters:
@@ -2197,10 +2276,10 @@ def supersessions(root, chapters):
             m = SUPERSEDE.match(raw)
             if not m:
                 continue
-            parent, label = m.group(1), m.group(2)
-            for _, item in declared_items(root, parent):
-                if _label_matches(label, item):
-                    out[(parent, item)] = c
+            parent, item_id = m.group(1), m.group(2)
+            text = input_ids(root, parent).get(item_id)
+            if text:
+                out[(parent, text)] = c
     return out
 
 
@@ -2348,10 +2427,9 @@ def _supersede_targets(root, chapters):
     """
     Rule 31, second half. Every `supersedes:` entry names something real.
 
-    Loose matching (`_label_matches`) is what makes the file writable by hand;
-    this is what keeps it honest. A typo, a renamed chapter, or an item that was
-    reworded out from under the link all produce a supersession that silently
-    stops resolving -- and the symptom is invisible, because the marker simply
+    An id either exists or it does not, which is the point of having ids. A
+    typo, a renamed chapter, or an item deleted out from under the link all
+    produce a supersession that silently stops resolving -- and the symptom is invisible, because the marker simply
     does not appear on the page it was meant to mark.
     """
     out = []
@@ -2379,15 +2457,14 @@ def _supersede_targets(root, chapters):
                     f"chapter can only replace a declaration that already "
                     f"existed when it was written")))
                 continue
-            items = [i for _, i in declared_items(root, parent)]
-            if not any(_label_matches(label, i) for i in items):
+            ids = input_ids(root, parent)
+            if label not in ids:
                 out.append((where, (
-                    f"supersedes {parent}: {label!r}, which matches none of "
-                    f"its {len(items)} declared item(s). The marker it would "
-                    f"put on that page will never appear"
-                    + (f" — it declares: "
-                       + "; ".join(re.sub(r"\*+", "", i)[:34] for i in items)
-                       if items else ""))))
+                    f"supersedes {parent}: {label!r}, which is not an id in "
+                    f"chapters/{parent}/_inputs.yml. The item would never move "
+                    f"into that page's Superseded callout"
+                    + (f" — its ids are: " + ", ".join(sorted(ids))
+                       if ids else " — it has no _inputs.yml"))))
     return out
 
 
@@ -2485,6 +2562,7 @@ def check(root, chapters):
     problems += _empty_callouts(root, chapters, entries)
     problems += _index_ordering(root, chapters)
     problems += _index_shape(root, chapters, entries)
+    problems += _input_item_budget(root, chapters, entries)
     problems += _root_index_freeze(root, chapters, entries)
     problems += _book_index(root, chapters)
     problems += _chapter_index_blocks(root, chapters)

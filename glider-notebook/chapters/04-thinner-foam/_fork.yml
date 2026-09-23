@@ -14,10 +14,11 @@ changes:
   - wing sections naca4405 → naca4403, tail naca0005 → naca0003, so the
     airfoil thickness tracks the stock it is cut from
   - fuselage width 0.010 → 0.006 m, two plies of the thinner foam
-# What this chapter REPLACED, as `<chapter>: <the item>`. The item is a
-# numbered entry in that chapter's index callouts; naming it here is what
-# lets its own page say it was later revisited, which an append-only record
-# cannot say for itself. Rule 31 refuses a name that matches nothing.
+# Items this chapter REPLACES, as `<chapter>: <id>`, where the id is the
+# handle in that chapter's _inputs.yml. The record is append-only, so without
+# this the earlier page goes on declaring what this one replaced; naming it
+# moves the item into that page's Superseded callout. Rule 31 refuses an id
+# that does not exist.
 supersedes:
-  - 01-foam-glider: Foam 5 mm, 174.4 g/m²
-  - 01-foam-glider: Sections NACA4405 and NACA0005
+  - 01-foam-glider: foam-stock
+  - 01-foam-glider: airfoil-sections

@@ -239,12 +239,34 @@ detector missed something — worth opening, not shrugging at.
 
 ## The shape of a notebook
 
-A front page draws the chapter graph from each `_model.py`'s fork header, so it
-cannot disagree with the models. Each chapter index carries `order:` (the sidebar
-does not sort without it), its lineage from `_fork.yml`, and a listing of its
-questions. Rules 33-35 and 37-40 keep
-all of that from decaying — the scaffold ships it, and a model that rewrites an
-index with `write_file` would otherwise drop it silently.
+```
+glider-notebook/
+  index.qmd               the front page: the aircraft's brief, and the lineage diagram
+  _notebook.py            vendored runtime — footer(), cite(), chapter_inputs()
+  chapters/NN-name/
+    _model.py             THE VEHICLE. Guarded once the chapter has entries
+    _analysis.py          how this chapter measures it. Yours to grow
+    _inputs.yml           what the chapter specified and assumed, as data
+    _fork.yml             parent, commit, differences, and what it supersedes
+    index.qmd             renders the four above; carries `order:` and the listing
+    YYYY-MM-DD-NN-slug.qmd  one entry, one question
+```
+
+A chapter's Specified and Assumed items are **data, not markdown**. `_inputs.yml`
+holds them as `- <id>: <text>`; `index.qmd` renders them with
+`chapter_inputs(...)`. That is what makes a superseded item movable: when a
+later chapter names one in its `_fork.yml` under `supersedes:`, the item leaves
+its own callout and appears under `## Superseded` on the page that declared it,
+linked to the chapter that replaced it. An append-only record has no other way
+to say "this is no longer true", and the version that tried to say it in an
+extra line put every item on the page twice.
+
+An ENTRY still writes its callouts as markdown. It is a one-time record; a
+chapter's is a standing one.
+
+Rules 33-35 and 37-40 keep all of it from decaying — the scaffold ships it, and
+a model that rewrites an index with `write_file` would otherwise drop it
+silently.
 
 ## Three checks
 

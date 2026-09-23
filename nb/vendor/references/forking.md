@@ -71,14 +71,25 @@ something says otherwise, and a fork taken below you inherits it.
 
 ```yaml
 supersedes:
-  - 01-foam-glider: Foam 5 mm, 174.4 g/m²
-  - 01-foam-glider: Sections NACA4405 and NACA0005
+  - 01-foam-glider: foam-stock
+  - 01-foam-glider: airfoil-sections
 ```
 
-Name the chapter and enough of the item to identify it. Rule 31 refuses a name
-matching nothing. Both indexes then show it — yours as "Replaces …", theirs as
-"Later revisited: … see …" — and `nb`'s inheritance review stops offering the
-version you replaced.
+The id is the handle in that chapter's `_inputs.yml`, where its Specified and
+Assumed items live — they are data, not markdown, precisely so that a
+superseded one can MOVE. Rule 31 refuses an id that does not exist.
+
+The item then leaves its own callout on that page and appears under
+`## Superseded`, linked to your chapter. Nothing is stated twice, and a chapter
+whose every item has been replaced renders no "new" callouts at all. `nb`'s
+inheritance review also stops offering the version you replaced: on this
+notebook that took chapter 06's candidate list from thirteen items — which
+included both "Foam thickness: 3 mm" and "Foam 5 mm sheet throughout" — down to
+nine.
+
+You will usually not write this by hand. What you strike at the new-chapter
+gate is written here for you, because striking an inherited item IS declaring
+that your chapter supersedes it.
 
 ## Citing an earlier chapter's answer
 

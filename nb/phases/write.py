@@ -124,10 +124,19 @@ in the entry: an entry answers the question asked and stops.
    entry that publishes one has buried its answer under the working. Keep it a
    PARAMETER rather than hard-coding False, so a probe can still turn it on.
 
-7. Anything true of EVERY entry in `{chapter}` belongs in its index.qmd, not in
+7. Anything true of EVERY entry in `{chapter}` belongs to the CHAPTER, not to
    your entry -- the section, the objective, the fixed dimensions, what is left
    out. Your entry keeps what THIS question produced. If the index still holds
    template placeholders, fill them (rule 24).
+
+   The chapter's Specified and Assumed items live in
+   `{chapter}/_inputs.yml`, as `- <id>: <text>` under `specified:` and
+   `assumed:`. The index RENDERS them; it does not contain them. Do not write
+   those callouts into index.qmd -- rule 39 refuses it, because an item in both
+   places is on the page twice. If this chapter replaces something an earlier
+   chapter declared, name it in `{chapter}/_fork.yml` under `supersedes:` as
+   `NN-name: <id>`, and it moves into a Superseded callout on that chapter's
+   page. Your ENTRY's own callouts are still markdown, written in the entry.
 
    Attribute each item to where it actually came from. "Asked of the user,
    {today}:" covers ONLY what was put to them and answered -- which includes
@@ -689,10 +698,21 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         # holds ("Flight path"), not for whichever question happened to create it.
         # The returned name is authoritative: create_chapter owns the number, and
         # may have claimed an empty scaffold chapter instead of adding a sibling.
+        # The strike IS the supersession. What the user struck at the gate is a
+        # declaration that this chapter replaces it, so it is written straight
+        # into `_fork.yml`; the model adds any it finds while writing the
+        # vehicle. They were two mechanisms recording one decision, and nothing
+        # reconciled them.
+        _struck_ids = []
+        for row in inherited_struck:
+            import lint as _l
+            for _id, _text in _l.input_ids(notebook.root, row["from"]).items():
+                if _text == row["item"]:
+                    _struck_ids.append((row["from"], _id))
         proposal.chapter, chapter_msg = create_chapter(
             notebook, proposal.chapter,
             proposal.chapter_title or proposal.title, proposal.chapter_defines,
-            fork_from=proposal.forked_from)
+            fork_from=proposal.forked_from, supersedes=_struck_ids)
         tell(f"  chapter   {chapter_msg.splitlines()[0]}")
         if chapter_msg.startswith("rejected"):
             return 1
@@ -846,11 +866,13 @@ def main(notebook_path, verbose=True, allow_refactor=False,
                           for i in inherited_kept]
             if inherited_struck:
                 lines += ["", "STRUCK — the user says this fork BREAKS these, so "
-                              "they do NOT carry forward. Where this chapter "
-                              "needs its own value for one of them, that value "
-                              "is NEW and belongs in this chapter's index, "
-                              "stated without claiming anybody was asked unless "
-                              "they were:"]
+                              "they do NOT carry forward. Each is already "
+                              "recorded in this chapter's `_fork.yml` under "
+                              "`supersedes:`, which moves it into a Superseded "
+                              "callout on the page that declared it. Where this "
+                              "chapter needs its own value for one of them, "
+                              "that value is NEW and goes in this chapter's "
+                              "`_inputs.yml`:"]
                 lines += [f"  [{i['kind']}] {i['item']}   (was from {i['from']})"
                           for i in inherited_struck]
             contents.append({"role": "user",

@@ -143,7 +143,7 @@ prose is already written.
 35  a chapter index keeps its entry listing and its lineage cell
 37  `cite()` names an entry that exists and publishes a hero value
 38  every chapter is named in _quarto.yml's sidebar
-39  an index carries its input callouts, in order, and nothing else
+39  an index RENDERS its input callouts from `_inputs.yml`, never writes them
 40  the front page's freeze is not older than the entries it counts
 ```
 
@@ -277,13 +277,23 @@ Order: hero → `**Answer.**` → callouts → evidence → `footer(...)`.
   to you above, under "The aircraft": they are the brief, and changing one is
   `ask_specified`, never an assumption. A page restating what it inherited is
   the mistake; an empty callout is deleted, not filled (rule 32).
+- **A chapter's callouts are DATA; an entry's are markdown.** A chapter's
+  Specified and Assumed items live in `chapters/NN-name/_inputs.yml`, as
+  `- <id>: <text>` under `specified:` and `assumed:`, and its `index.qmd`
+  renders them with `chapter_inputs(...)`. Edit the YAML, never the page: an
+  item written in both places is on the page twice, and rule 39 refuses it. An
+  ENTRY still writes its own callouts as markdown, in the entry — it is a
+  one-time record, where a chapter's is a standing one that has to be movable.
 - **Replacing an inherited item is recorded, not implied.** The record is
   append-only, so an earlier chapter goes on declaring what you replaced unless
   something says otherwise. When a new chapter makes an ancestor's declaration
-  false — a thickness, an airfoil, an assumption it closes — name it in that
-  chapter's `_fork.yml` under `supersedes:`, as `NN-name: <the item>`. Both
-  pages then carry the link, and a fork below you stops inheriting the dead
-  version.
+  false — a thickness, an airfoil, an assumption it closes — name it in your
+  `_fork.yml` under `supersedes:`, as `NN-name: <id>`, where the id is the
+  handle in that chapter's `_inputs.yml`. The item then moves out of its own
+  callout and into `## Superseded` on that page, with a link to yours, and a
+  fork below you stops inheriting the dead version. A chapter whose every item
+  has been replaced renders no "new" callouts at all, which is the true thing
+  to say about it.
 - **A chapter index carries no standing description.** What a chapter IS is its
   title, the parent it links to, and what it newly specified. Prose above the
   callouts restated one of those — measured across six chapters it restated the
