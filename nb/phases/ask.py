@@ -123,7 +123,8 @@ def main(notebook_path, question, verbose=True,
         # Nothing will be drawn over, so say where the run went. Printed BEFORE
         # detaching, because every later `tell` goes only to the log.
         tell(f"  run       {notebook.run_id}")
-        tell(f"  detail    uv run --group nb python -m nb watch "
+        tell("  detail:")
+        tell(f"    uv run --group nb python -m nb watch "
              f"{notebook.root.name} {notebook.run_id}")
     # AND THEN LEAVE THE SESSION. Before `setup()`, which starts the MCP
     # filesystem subprocess, and before the metrics connection: `fork` past

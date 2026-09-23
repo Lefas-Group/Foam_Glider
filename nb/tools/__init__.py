@@ -134,8 +134,16 @@ def native_declarations():
               ["name", "why", "kind"]),
 
         _decl("bash",
-              "Run an allowlisted command: uv run quarto, uv run python, "
-              "git show/status/diff/log. The escape hatch, not the default path.",
+              "Run an allowlisted command: uv run quarto, uv run python, git "
+              "status, git diff. The escape hatch, not the default path.\n"
+              "IT RUNS IN THE REPO ROOT, which is the PARENT of the notebook -- "
+              "not where the file tools write. A path you gave write_file is "
+              "relative to <notebook>/chapters/, so the same string means a "
+              "different file here: `rm chapters/x.py` from bash silently "
+              "removes nothing, because the file is at "
+              "<notebook>/chapters/x.py. Do not use this to run scratch code "
+              "-- that is `probe`, which runs in the run directory with the "
+              "chapter already loaded and writes nothing into the notebook.",
               {"command": S}, ["command"]),
 
         types.FunctionDeclaration(

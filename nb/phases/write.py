@@ -11,7 +11,6 @@ import json
 import os
 import pathlib
 import re
-import shutil
 import subprocess
 import sys
 import time
@@ -152,6 +151,15 @@ in the entry: an entry answers the question asked and stops.
    most 18 words, ending in `?`. It is also the filename, so a brief pasted in
    whole gives a 70-character stem nobody can read.
 
+`probe` IS AVAILABLE HERE, and it is how you try something out. It runs your
+Python in the run directory with `{chapter}` already loaded, prints what you
+ask it to, and writes nothing into the notebook. The first X-Wing entry did not
+know that: it spent fourteen turns writing `test.py`, `test2.py` and `test3.py`
+into `chapters/` and running them through `bash` to find out what
+`draw_three_view()` returns, then failed to delete them, because `bash` runs in
+the repo root and those paths meant something else there. Never write a scratch
+file into the notebook. What is left of the probe pool is above.
+
 Today is {today}, so the entry stem is already dated for you. Stop when lint is
 clean; rendering and committing are handled after you finish.
 """
@@ -282,11 +290,26 @@ def _refresh_index_freeze(notebook, chapter):
     `check.py` solves the same problem by deleting a whole chapter's freeze and
     re-solving it, which is right when proving a refactor moved nothing and far
     too expensive here.
+
+    RENDERED, not merely deleted -- the same correction `_refresh_root_index`
+    already carries. Deleting left `_commit` nothing to commit (it adds this
+    freeze only `if it exists`) and `site()` rebuilt it AFTER the commit, so
+    the chapter index freeze was never committed at all: observed on the first
+    X-Wing entry, where `_freeze/chapters/01-first-chapter/index/` came out of
+    the run untracked. A targeted render ignores the freeze by definition, so
+    there is nothing to delete first, and an index costs RENDER_INDEX because
+    it prints source rather than solving.
     """
     if not _touched(notebook, chapter, "_model.py", "_analysis.py",
                     "_inputs.yml", "_fork.yml"):
         return
-    shutil.rmtree(notebook.freeze / chapter / "index", ignore_errors=True)
+    out = verifiers.render(
+        notebook, str((notebook.chapters_dir / chapter / "index.qmd")
+                      .relative_to(notebook.root)),
+        why="the chapter index renders files this run changed")
+    if "FAILED" in str(out):
+        tell(f"  index     chapters/{chapter}/index.qmd did NOT rebuild — its "
+             f"freeze is a version behind.")
 
 
 def _refresh_root_index(notebook):
@@ -510,7 +533,14 @@ def _commit(notebook, chapter, stem, entry_path, title, extra_paths=()):
     # scaffolded, not written by the model, so they were missing from every
     # commit that created one -- leaving a chapter in history with an entry but
     # no index, and a fresh clone with nothing to render the aircraft from.
-    for name in ("_analysis.py", "_model.py", "index.qmd", "_model.qmd"):
+    # `_inputs.yml` and `_fork.yml` joined the list when the chapter index
+    # stopped carrying its callouts and started RENDERING them. Without them
+    # the first X-Wing commit carried the entry, `_model.py` and the freezes
+    # while the SOURCE of the chapter's Specified and Assumed items stayed
+    # uncommitted in the working tree -- the exact invariant the note above
+    # states: the committed freeze stops matching the committed code.
+    for name in ("_analysis.py", "_model.py", "index.qmd", "_model.qmd",
+                 "_inputs.yml", "_fork.yml"):
         f = notebook.chapters_dir / chapter / name
         if f.exists():
             changed = subprocess.run(
@@ -627,7 +657,8 @@ def main(notebook_path, verbose=True, allow_refactor=False,
     if not detached():
         if quiet:
             tell(f"  run       {notebook.run_id}")
-            tell(f"  detail    uv run --group nb python -m nb watch "
+            tell("  detail:")
+            tell(f"    uv run --group nb python -m nb watch "
                  f"{notebook.root.name} {notebook.run_id}")
         from ..detach import detach_process
         board = None
@@ -684,7 +715,8 @@ def main(notebook_path, verbose=True, allow_refactor=False,
         # ONE line, and only the one a reader can act on. The notebook name is
         # what they just typed, and the entry title is the first line of the
         # finished prose printed at the end -- both were saying it twice.
-        tell(f"  detail    uv run --group nb python -m nb watch {notebook.root.name}")
+        tell("  detail:")
+        tell(f"    uv run --group nb python -m nb watch {notebook.root.name}")
     say(f"  notebook  {notebook.root.name}")
     say(f"  entry     {proposal.title}")
 

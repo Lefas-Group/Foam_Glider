@@ -628,7 +628,15 @@ def render_stop(proposal, notebook):
         "  re-solving all of them. That commitment is yours, not the entry.",
         "",
         f"  proposal  {notebook.proposal_path}",
-        f"  continue  uv run --group nb python -m nb resume {notebook.root.name}",
+        "",
+        # A COMMAND ON ITS OWN LINE, never in the right-hand column. Every
+        # other row of that column is information, so a command there reads as
+        # information too and gets copied whole -- label and all. `continue` is
+        # the worst possible label for it: zsh's loop keyword, so the paste
+        # fails with "continue: too many arguments", which says nothing about
+        # the real mistake. Observed, four times in a row.
+        "  continue:",
+        f"    uv run --group nb python -m nb resume {notebook.root.name}",
         "─" * 72,
         "",
     ])

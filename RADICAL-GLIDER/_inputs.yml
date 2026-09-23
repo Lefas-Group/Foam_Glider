@@ -1,15 +1,20 @@
-# THE BRIEF for the aircraft. True of the whole aircraft, inherited by every
-# chapter and every entry, and never superseded: a fork that departs from one
-# of these is not a fork, it is a different aircraft and so a different
-# notebook. Written by a PERSON, never by a run.
+# THE BRIEF for the X-Wing glider. True of the whole aircraft, inherited by
+# every chapter and every entry, and never overwritten: a fork that departs
+# from one of these is not a fork, it is a different aircraft and so a
+# different notebook. Written by a PERSON, never by a run.
 #
 # Rendered into index.qmd. Same format as a chapter's `_inputs.yml`:
 # `- <id>: <text>`, ten words each.
 #
-# The test for what belongs here rather than in the first chapter: IF THIS
-# CHANGED, WOULD IT STILL BE THE SAME AEROPLANE? A 300 mm span, no. Foam 5 mm
-# — yes, that is the same project at a different thickness, so it is a chapter.
+# The test for what belongs here rather than in a chapter: IF THIS CHANGED,
+# WOULD IT STILL BE THE SAME AEROPLANE? Two things pass it. The FOAM STOCK does
+# not -- 5 mm becoming 3 mm is the same X-Wing on thinner sheet, and is exactly
+# the fork `glider-notebook` already made once -- so it belongs to the chapter
+# that first commits to it. Nor do `still air` and `rigid airframe`: those are
+# modelling conventions, guessed rather than briefed, and they belong wherever
+# they are first relied on.
+#
+# No `assumed:` block. The brief assumes nothing; it only specifies.
 specified:
-  - <id>: "**<what>**: <value>."
-assumed:
-  - <id>: "**<what>**, <the one-clause reason>."
+  - construction: "**Flat plate foam**, cut and slotted by hand."
+  - subject: "**Star Wars X-Wing**, from the FliteTest plan."
