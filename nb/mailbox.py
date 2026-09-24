@@ -23,7 +23,7 @@ the file: the run neither knows nor cares.
 
 On timeout the run does not block for ever -- it leaves the question on disk and
 exits, which is the shape the two existing stops already have, and `nb write`
-resumes from the proposal exactly as it does for them.
+resumes from `run.json` exactly as it does for them.
 
 THE KEYS, which are what `--answers file.json` is keyed on and what a
 coordinator writes. `name` is the key; it is in `question.json`, and every

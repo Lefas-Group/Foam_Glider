@@ -34,10 +34,12 @@ class Refactor(Exception):
     """
     Declared in `tools/interact.py`; defined here so `loop` can let it through.
 
-    Lives beside `Terminal` because it is the same kind of thing -- a handler
-    that ends the run rather than returning to it -- and the loop's catch-all
-    would otherwise turn it into a tool error the model would try to work
-    around.
+    A handler that ends the run rather than returning to it, which the loop's
+    catch-all would otherwise turn into a tool error the model would try to
+    work around. It is the last of its kind: `Terminal` went with `propose`,
+    because the loop no longer needs a way to be interrupted with a payload --
+    it ends when a turn calls no tool, and what the run produced is on the
+    session.
     """
 
 
@@ -50,14 +52,6 @@ class Stopped(Exception):
     A run that vanishes without an outcome is indistinguishable from one that
     crashed, and telling those apart is most of what the board is for.
     """
-
-
-class Terminal(Exception):
-    """A handler that ends the loop -- `propose`. Carries its result."""
-
-    def __init__(self, payload):
-        super().__init__("terminal tool called")
-        self.payload = payload
 
 
 def _spoken(turn):
@@ -110,7 +104,7 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
     """
     Drive the loop until the model stops calling tools, or a Terminal fires.
 
-    Returns nothing. A terminal tool RAISES -- `Terminal` carries the payload
+    Returns nothing. A stop RAISES -- `Refactor` and `Stopped` carry the
     and both phases catch it -- so the three-tuple this used to return had a
     third element that was None on every path that reached a `return`, and
     neither caller read any of it.
@@ -178,8 +172,6 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
                 continue
             try:
                 out = fn(**dict(c.args))
-            except Terminal:
-                raise                  # must not be swallowed by the catch below
             except Refactor:
                 raise                  # a declared stop, not a tool failure
             except Stopped:
@@ -223,4 +215,4 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
             if nudge:
                 contents.append({"role": "user", "parts": [{"text": nudge}]})
 
-    raise RuntimeError(f"max turns ({max_turns}) exceeded without a proposal")
+    raise RuntimeError(f"max turns ({max_turns}) exceeded")

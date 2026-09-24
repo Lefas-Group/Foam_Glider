@@ -16,7 +16,9 @@ preflights before it returns.
 """
 
 import pathlib
+import re
 import shutil
+import subprocess
 import sys
 
 from ..config import SCAFFOLD, VENDOR, Notebook
@@ -35,7 +37,7 @@ GITIGNORE = ("/.quarto/\n"
              # Quarto writes a <page>-listing.json beside every page carrying a
              # listing: build output, regenerated on every render, and it churns.
              "**/*-listing.json\n"
-             # Per-run working state: probe scripts, logs, proposals, the
+             # Per-run working state: probe scripts, logs, run.json, the
              # render lock. This repo's root .gitignore already covers it, so
              # a notebook created HERE was fine by accident -- one created in a
              # sibling directory, which `nb new` exists to support, would have
@@ -61,8 +63,37 @@ def _render(name, title, subject, chapter):
                 .replace("NN-name", chapter))
 
 
+def _slug(text, taken):
+    """A short, unique id for a brief item, from its first few words."""
+    words = re.findall(r"[a-z0-9]+", re.sub(r"\*\*", " ", text.lower()))
+    base = "-".join(words[:3])[:28].strip("-") or "item"
+    slug, n = base, 1
+    while slug in taken:
+        n += 1
+        slug = f"{base}-{n}"
+    taken.add(slug)
+    return slug
+
+
+def _brief(specs, assumes):
+    """The root `_inputs.yml` body, or "" to leave the template placeholders."""
+    if not specs and not assumes:
+        return ""
+    taken = set()
+    out = []
+    for key, rows in (("specified", specs), ("assumed", assumes)):
+        if not rows:
+            continue
+        out.append(f"{key}:")
+        for text in rows:
+            text = " ".join(str(text).split())
+            out.append(f'  - {_slug(text, taken)}: "{text}"')
+    return "\n".join(out) + "\n"
+
+
 def main(path, title=None, subject=None, chapter="01-first-chapter",
-         chapter_title="First chapter", verbose=True):
+         chapter_title="First chapter", verbose=True,
+         specs=(), assumes=()):
     root = pathlib.Path(path).resolve()
     if root.exists() and any(root.iterdir()):
         tell(f"  {root} exists and is not empty")
@@ -99,8 +130,18 @@ def main(path, title=None, subject=None, chapter="01-first-chapter",
                        # in a run writes it. Its placeholders are what rule 24
                        # sees when nobody has filled the brief in.
                        ("_inputs.root.yml.tmpl", "_inputs.yml")):
-        (root / dest).write_text(
-            _render((SCAFFOLD / tmpl).read_text(), title, subject, chapter))
+        text = _render((SCAFFOLD / tmpl).read_text(), title, subject, chapter)
+        # `--spec` / `--assume`, written in place of the placeholders. The
+        # prefix is built ONCE at `nb ask`, so a brief left for a hand-edit
+        # afterwards is a first run with no notebook level at all -- and rule
+        # 24 now watches this file, so the placeholders are a lint failure the
+        # moment anything is written.
+        if dest == "_inputs.yml":
+            body = _brief(specs, assumes)
+            if body:
+                head = text.split("specified:")[0]
+                text = head + body
+        (root / dest).write_text(text)
 
     notebook = Notebook(root)
     # claim=False: there is nothing to claim in a notebook this command just
@@ -131,11 +172,26 @@ def main(path, title=None, subject=None, chapter="01-first-chapter",
     for b in bad:
         tell(f"              {b}")
 
-    if not problems and not bad:
+    # PROVE IT RENDERS, not merely that it lints. "It lints" says the source
+    # satisfies the contract; it says nothing about whether Quarto can execute
+    # the front page, find `_notebook.py`, or resolve the sidebar -- and the
+    # first notebook created by this command discovered all three inside its
+    # first `nb ask`, minutes in and with an API bill attached. Nothing here
+    # solves: the chapter model is a bare scaffold and the front page reads
+    # source, so it is seconds.
+    render = subprocess.run(["uv", "run", "quarto", "render"], cwd=root,
+                            capture_output=True, text=True, timeout=600)
+    ok = render.returncode == 0
+    tell(f"  render    {'ok' if ok else 'FAILED'}")
+    if not ok:
+        for line in (render.stdout + render.stderr).strip().splitlines()[-12:]:
+            tell(f"              {line}")
+
+    if not problems and not bad and ok:
         tell(f"\n  Fill chapters/{chapter}/_model.py with the vehicle, and say in"
               f"\n  its _inputs.yml what defines the chapter. Then:"
               f"\n\n    uv run --group nb python -m nb ask {root.name} \"<question>\"\n")
-    return 1 if (problems or bad) else 0
+    return 1 if (problems or bad or not ok) else 0
 
 
 if __name__ == "__main__":

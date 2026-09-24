@@ -126,7 +126,7 @@ def complete(contents, cfg, model=MODEL):
         raise SystemExit(
             f"\n  API quota exhausted for {model}.{wait}\n"
             f"  Nothing was committed; the entry is on disk and "
-            f"`nb resume <notebook>` resumes from the same proposal.") from None
+            f"`nb resume <notebook>` picks the entry up where it stopped.") from None
 
 
 def usage(resp):

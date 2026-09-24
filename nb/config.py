@@ -172,7 +172,7 @@ class Notebook:
         self.freeze = self.root / "_freeze" / "chapters"
         self.scratch = self.root / "_scratch"
         # PER RUN, because `_scratch/run/` assumed one writer: a second agent
-        # overwrote the first's proposal.json -- its only resume point -- and,
+        # overwrote the first's run.json -- its only resume point -- and,
         # worse, its probe script, which is WRITTEN AND THEN EXECUTED. Two
         # agents probing within a second and one runs the other's code,
         # attributing the answer to the wrong question, silently.
@@ -225,10 +225,6 @@ class Notebook:
     @property
     def probe_script(self):
         return self.run / "probe.py"
-
-    @property
-    def proposal_path(self):
-        return self.run / "proposal.json"
 
     @property
     def transcript_path(self):

@@ -1,5 +1,5 @@
 """
-One row per phase-run, in SQLite.
+One row per run, in SQLite.
 
 Stage 1 computed the first-pass lint violation count and then printed it and
 threw it away, which made every comparison anecdotal. That number is the eval:
@@ -20,7 +20,12 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
     id                     INTEGER PRIMARY KEY,
     ts                     REAL,
-    phase                  TEXT,     -- ask | write
+    -- run | resume. It was `ask | write`, one row each, back when a question
+    -- was two processes; a question is one row now, and `resume` is the crash
+    -- path rather than half of every question. Historical rows keep the old
+    -- values, which is why queries here match on what they want rather than on
+    -- what is current.
+    phase                  TEXT,
     model                  TEXT,
     thinking_level         TEXT,
     question               TEXT,
@@ -34,7 +39,7 @@ CREATE TABLE IF NOT EXISTS runs (
     solve_seconds          REAL,
     first_pass_violations  INTEGER,  -- write only; the eval
     lint_calls             INTEGER,  -- times the model asked lint before stopping
-    renders                INTEGER,  -- quarto renders this phase asked for
+    renders                INTEGER,  -- quarto renders this run asked for
     pages_rendered         INTEGER,  -- pages those renders actually executed
     -- A whole phase produced zero findings in 32 write runs and was deleted.
     -- The column stays: old rows recorded a real (zero) measurement, and
@@ -88,7 +93,7 @@ def _db(notebook):
 
 
 class Run:
-    """Accumulates a phase's numbers; writes one row on close."""
+    """Accumulates a run's numbers; writes one row on close."""
 
     def __init__(self, notebook, phase, question=""):
         from .config import MODEL, THINKING_LEVEL
@@ -112,7 +117,7 @@ class Run:
         # How hard the model worked to satisfy lint, which
         # `first_pass_violations` cannot see: that samples AFTER the loop
         # returns, so a run that spent eight turns in lint/edit still reported
-        # zero. Counted here rather than in each phase's `on_turn` so there is
+        # zero. Counted here rather than in the phase's `on_turn` so there is
         # one implementation and no indentation to get wrong -- the first
         # attempt at this patched `write.py` and silently missed `ask.py`.
         parts = (resp.candidates[0].content.parts or []) if resp.candidates else []
@@ -164,7 +169,7 @@ def summary(notebook):
     agg = con.execute(
         "SELECT model, COUNT(*), AVG(first_pass_violations), AVG(turns), "
         "AVG(COALESCE(lint_calls, 0)) "
-        "FROM runs WHERE phase='write' AND first_pass_violations IS NOT NULL "
+        "FROM runs WHERE first_pass_violations IS NOT NULL "
         "GROUP BY model").fetchall()
     if agg:
         out.append("\n  first-pass lint violations, by model:")

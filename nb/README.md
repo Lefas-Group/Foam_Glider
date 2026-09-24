@@ -41,9 +41,10 @@ relative to the repo root.
 uv run --group nb python -m nb ask glider-notebook "How heavy is the wing alone?"
 ```
 
-That is the whole system. It probes the aircraft model, proposes an entry,
-writes it, lints it, renders it, commits it, and rebuilds the site — about five
-minutes, and it detaches immediately so closing the window does not kill it.
+That is the whole system. It probes the aircraft model, opens an entry, writes
+it, lints it, renders it, commits it, and rebuilds the site — about five
+minutes, in one conversation, and it detaches immediately so closing the window
+does not kill it.
 
 **What you will be asked.** A board appears on your terminal. It asks for two
 budgets up front (press Enter for the defaults), then for anything it needs a
@@ -95,12 +96,12 @@ uv run --group nb python -m nb eval   <notebook>             # runs, by model
 | the run seems stuck | `nb watch <notebook>` — it stamps every line, so silence is visible |
 | a question nobody answered | `nb board`, or `nb answer <notebook> "<value>"` from anywhere |
 | it stopped at a **new chapter** | that stop is deliberate. `nb resume <notebook>` |
-| it stopped at a **refactor** | it wants to change a chapter's `_model.py`. `nb resume <notebook> --allow-refactor` |
+| it stopped at a **refactor** | it wants to change a chapter's `_model.py`. `nb resume <notebook> <run> --allow-refactor` |
 | nothing committed | the entry is on disk; the terminal says where |
 | quota exhausted | it says when to try again. Nothing was lost; `nb resume` picks up |
 
 Every run leaves `<notebook>/_scratch/runs/<id>/` behind: the transcript, the
-status log, the proposal and any question it asked. `nb clean` drops the spent
+status log, `run.json` and any question it asked. `nb clean` drops the spent
 ones and refuses to touch a run whose chapter still has uncommitted work.
 
 ---
@@ -112,23 +113,53 @@ question per ask — there was a `queue` that carried extra questions into
 follow-on runs, and it was never used in 34 recorded asks; two questions are two
 `nb ask` calls, which get two pools and run in parallel.
 
+Three calls move the run forward, and they are the only structure there is:
+
+| call | what it settles |
+|---|---|
+| `open_chapter` | which aircraft. First — nothing is writable before it |
+| `declare_input` | one input, recorded the moment it is assumed |
+| `open_entry` | the filename, the assumption check, and the write brief |
+
+**It used to be two processes** with `proposal.json` between them — a fifteen
+-field document the model filled in at the end and a second command read back.
+Seven of ten recorded runs crossed that boundary inside a single process,
+milliseconds apart; the three that really crossed it did so because the system
+deliberately stopped, never because anything crashed. On one run the stop cost
+five minutes of human round-trip against sixteen minutes of compute. What the
+document was actually for was four refusals, and all four are still enforced —
+at `open_chapter` and `open_entry`, where each becomes true.
+
+The trade is stated rather than hidden: one conversation re-sends its whole
+history every turn, so prompt tokens grow with the square of the turn count
+rather than the sum of two halves. Tool surface and latency down (the
+declarations are 26% smaller), conversation cost up. `nb eval` is where it
+shows.
+
 It asks you for two budgets, for any **Specified** input — one where a different
 answer changes what is being built — and once to confirm its assumptions.
 
 At that last one, `1: 2.5e-4` corrects a VALUE and `1: redo — why` rejects the
-APPROACH. The two are different: a corrected value is carried into the write
-brief and the entry recomputes at render time (rule 1 makes every number in
-prose an expression), so it needs no fresh probe; a rejected approach ends the
-run, because `working_code` cannot be adapted to a method nobody probed. There
-used to be a loop that re-probed for both, three rounds deep. It never executed
-once in 67 runs.
+APPROACH. The two are different: a corrected value needs no fresh probe,
+because rule 1 makes every number in prose an expression and the entry
+recomputes at render time. A rejected approach used to end the run, because the
+findings had been computed under the old premise and the conversation that
+produced them was gone. It does not any more: the conversation is still alive,
+so the rejection comes back as a refusal the model probes past and the entry is
+simply not opened. The three-round re-probe loop that was deleted for never
+firing is free now, and it is free precisely because there is no boundary left
+to re-probe across.
 
-It stops and writes `proposal.json` for a **new chapter** or a **refused
-refactor**, both being commitments later entries depend on; `nb resume` resumes
-either. At the new-chapter stop it also shows what the chapter INHERITS,
-grouped by ancestor with the nearest first, with anything a later chapter
-already superseded resolved out of the list — and both what you keep and what
-you strike reach the write brief.
+It still stops for a **new chapter** and a **refused refactor**, both being
+commitments later entries depend on — but as questions the run waits on, not as
+exits. Answer either at the keyboard and it costs a keystroke; walk away and it
+ends exactly as it used to, with the question and the work on disk and
+`nb resume` to pick it up. At the new-chapter stop it also shows what the
+chapter INHERITS, grouped by ancestor with the nearest first and anything a
+later chapter already superseded resolved out of the list. A chapter with no
+ancestor is shown the notebook's brief as CONTEXT and asked nothing: the brief
+is never overwritten, because a design that departs from it is a different
+aircraft and so a different notebook.
 
 ## Budgets
 
@@ -152,9 +183,9 @@ notebook renders under belongs to the notebook, and a second copy of it in
 
 `--chapter NN-name` pins the run to an existing chapter. Routing to one is a
 coordinator's instruction rather than a finding: it costs probe turns to
-rediscover and the wrong answer is about a different aircraft. `propose` refuses
-another chapter, so it is a pin and not a hint. Creating a NEW chapter is a
-different decision and still stops at the gate.
+rediscover and the wrong answer is about a different aircraft. `open_chapter`
+refuses another chapter, so it is a pin and not a hint. Creating a NEW chapter
+is a different decision and still stops for approval.
 
 They belong to the entry, never the chapter, and print in its footer:
 
@@ -205,8 +236,8 @@ suspended mid-question.
 
 **One agent per chapter, and it is enforced.** `_analysis.py` is shared and
 rule 2 compares code across entries, so a second run entering a chapter someone
-is writing is refused before it spends a turn — its proposal is already on disk,
-and `nb resume <notebook> <run>` picks it up when the first finishes. Different
+is writing is refused before it spends a turn, at `open_chapter`, and
+`nb resume <notebook> <run>` picks it up when the first finishes. Different
 chapters run side by side; they meet only at the render, which is locked.
 
 Launch both anyway when you have two questions: if they pick different chapters
@@ -221,7 +252,10 @@ looking like a crash. It reverts nothing.
 `board` is a **view, not a supervisor**: questions and answers
 are files in `_scratch/runs/<id>/`, so killing the board leaves the agent
 waiting, and `nb answer` works from anywhere. `--answers file.json` pre-empts
-the routine questions.
+the routine questions — keyed by question name, which for a Specified input is
+the quantity and for a new chapter is the directory name, so a coordinator can
+approve one up front with `{"05-thinner-boom": "yes"}` or turn it down with
+`{"05-thinner-boom": "no — that belongs in 04"}`.
 
 ## When a run wedges
 
@@ -231,8 +265,8 @@ minutes means continue, so a detached run is never stranded by it. Calibrated on
 recorded transcripts: the run that prompted it went 26 barren turns, healthy
 runs peak at 4.
 
-A productive tool that keeps *failing* counts as no progress either, so a
-`propose` the model cannot satisfy trips it at eight rather than sixty.
+A productive tool that keeps *failing* counts as no progress either, so an
+`open_entry` the model cannot satisfy trips it at eight rather than sixty.
 
 `MAX_TURNS` (60) stays as the backstop. A run that reaches it now means the
 detector missed something — worth opening, not shrugging at.

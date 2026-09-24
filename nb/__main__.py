@@ -1,11 +1,13 @@
 """
     nb new   <notebook> [title]              scaffold a notebook, then prove it
+             [--spec "…"] [--assume "…"]      …the brief, repeatable
+             [--chapter-title "…"]            …name the first chapter
     nb ask   <notebook> "<question>"         probe, write, render, commit
              [--pool N] [--ceiling N]         …budgets, instead of being asked
              [--chapter NN-name]              …route here, do not go looking
              [--quiet] [--answers f.json]     …no board on this terminal;
-                                              …replies keyed by question name,
-                                              …which every question logs
+                                              …replies keyed by question name:
+                                              …a quantity, or a chapter name
     nb resume <notebook> [run]               resume: a gate, a refactor, a
              [--allow-refactor]               …run that died with work on disk
              [--accept-refactor]              …committing a diff you have read
@@ -23,21 +25,24 @@ finished entry. Every turn, the model's reasoning and the probe budgets go to
 `<notebook>/_scratch/run/status.log`; `nb watch` follows it from another tab.
 There is no flag: an option everyone sets the same way is a default in disguise.
 
-`ask` runs a question through to a commit. It stops for two things, both of them
-decisions about structure or spend rather than approvals of output: a NEW
-CHAPTER, which later entries build on, and a refused edit to a chapter's
-`_model.py`, which would mean re-solving every sibling to prove the answers did
-not move. `nb write` resumes from `proposal.json` in either case.
+`ask` runs a question through to a commit in ONE conversation -- probe, chapter,
+entry, lint, render, commit. It used to be two, with `proposal.json` between
+them, and the boundary bought nothing: seven of ten recorded runs crossed it
+inside a single process, milliseconds apart.
+
+It still stops for two things, both of them decisions about structure or spend
+rather than approvals of output: a NEW CHAPTER, which later entries build on,
+and a refused edit to a chapter's `_model.py`, which would mean re-solving every
+sibling to prove the answers did not move. Both are now questions the run waits
+on rather than exits for, so answering one costs a keystroke instead of a second
+command. Walk away from either and it ends exactly as it used to: the question
+on disk, the work on disk, `nb resume` to pick it up.
 
 There is no gate on the finished entry, because by then lint and the render
 have all passed and an entry that turns out wrong is corrected by the next
 entry, which states the old value, the new one and why they differ. The record
 is append-only: nothing is edited after it is committed. The rendered prose,
 with its real numbers, is printed when the entry commits.
-
-`ask` and `write` remain separate conversations inside one process: the write
-phase starts fresh from the proposal, which costs ~6% less than carrying the
-probe history forward and is what the two stops resume from.
 """
 
 import sys
@@ -60,6 +65,19 @@ def _answers(argv):
     except (OSError, ValueError) as e:
         print(f"  --answers: {e}")
         return None
+
+
+def _repeated(argv, flag):
+    """Every `--flag value` pair, in order. A brief is a list, not a setting."""
+    return [argv[i + 1] for i, a in enumerate(argv)
+            if a == flag and i + 1 < len(argv)]
+
+
+def _free(argv, flags):
+    """Words that are neither a flag nor a flag's value."""
+    taken = {i + 1 for i, a in enumerate(argv) if a in flags}
+    return [a for i, a in enumerate(argv)
+            if i not in taken and not a.startswith("--")]
 
 
 def _opt(argv, flag, number=True):
@@ -97,13 +115,21 @@ def main(argv):
             print(USAGE)
             return 2
         from .phases.new import main as new
-        return new(rest[0], " ".join(rest[1:]) or None)
+        # THE BRIEF, on the command line. It was always a hand-edit afterwards,
+        # and the prefix is built once at `nb ask` -- so forgetting meant a
+        # first run with no notebook level in front of the model at all.
+        specs, assumes = _repeated(rest, "--spec"), _repeated(rest, "--assume")
+        chapter_title = _opt(rest, "--chapter-title", number=False)
+        title = " ".join(_free(rest[1:], ("--spec", "--assume",
+                                          "--chapter-title"))) or None
+        return new(rest[0], title, specs=specs, assumes=assumes,
+                   **({"chapter_title": chapter_title} if chapter_title else {}))
 
     if cmd == "ask":
         if len(rest) < 2:
             print(USAGE)
             return 2
-        from .phases.ask import main as ask
+        from .phases.run import main as ask
         # `--detach` is kept as an alias: every run detaches now, and what
         # the flag used to buy -- no board drawn on this terminal -- is what
         # `--quiet` means. It is in old scripts and old muscle memory.
@@ -122,15 +148,15 @@ def main(argv):
         return ask(rest[0], " ".join(words), quiet=quiet, answers=answers,
                    pool=pool, ceiling=ceiling, chapter=chapter)
 
-    # `resume` is what every one of its four uses is -- a gate approved, a
-    # refactor allowed, a diff accepted, or a run that died with its entry
-    # finished. `write` is the phase's name internally and stays as an alias,
-    # since it is in old logs, old commit messages and muscle memory.
+    # `resume` is the crash path and the two approvals now, not the routine
+    # one: a run that is answered at the keyboard never comes back here. `write`
+    # stays as an alias, since it is in old logs, old commit messages and
+    # muscle memory.
     if cmd in ("resume", "write"):
         if not rest:
             print(USAGE)
             return 2
-        from .phases.write import main as write
+        from .phases.run import resume as write
         args = [r for r in rest[1:] if not r.startswith("--")]
         return write(rest[0],
                      run_id=args[0] if args else None,

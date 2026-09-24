@@ -14,7 +14,7 @@ columns all along.
 The number that decides it is FIRST-PASS VIOLATIONS -- lint problems before any
 correction round. Turns and tokens measure effort; first-pass measures whether
 the model knew the rules before it wrote, which is the thing more prompt cannot
-fix. `outcome` is the floor under both: a model that never reaches `propose` has
+fix. `outcome` is the floor under both: a model that never reaches `open_entry` has
 no first-pass score at all, and that is the failure worth seeing first.
 """
 
@@ -28,7 +28,7 @@ QUERY = """
 SELECT model,
        phase,
        COUNT(*)                                        AS runs,
-       SUM(outcome IN ('committed', 'committed_refactor', 'proposed')) AS ok,
+       SUM(outcome IN ('committed', 'committed_refactor')) AS ok,
        ROUND(AVG(turns), 1)                            AS turns,
        ROUND(AVG(lint_calls), 1)                       AS lints,
        ROUND(AVG(first_pass_violations), 2)            AS fpv,
@@ -71,7 +71,7 @@ def main(argv):
              f"{turns or 0:6} {lints or 0:5} "
              f"{dash(fpv):>8} {dash(rnd):>6} {dash(pages):>6} {secs or 0:5.0f}")
 
-    tell("\n  ok = proposed or committed. 1st-pass = lint problems before any")
+    tell("\n  ok = committed. 1st-pass = lint problems before any")
     tell("  correction round; lower is the model knowing the rules in advance.")
     tell("  A model with runs but no ok is not cheap, it is not working.")
     # rndrs/pages, not rndrs alone: the COST of a render is the pages it

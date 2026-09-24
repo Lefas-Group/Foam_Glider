@@ -27,17 +27,16 @@ from ..tools import build as build_tools
 from ..tools.mcp_fs import FileSystem
 
 
-def setup(session, verbose=True, phase=None):
+def setup(session, verbose=True):
     """
     (filesystem, tools, make_config).
 
     The caller must stop the filesystem when done -- it owns a subprocess.
     """
     notebook = session.notebook
-    session.phase = phase
     text = prefix_mod.build(notebook)
     fs = FileSystem(notebook.chapters_dir).start()
-    tools, handlers = build_tools(session, fs, phase=phase)
+    tools, handlers = build_tools(session, fs)
 
     def make_config():
         return config(tools=tools, system_instruction=text)
@@ -59,7 +58,7 @@ CALL_ARG = {
     "read_reference": "name", "read_figure": "stem",
     "ask_specified": "name",
     "declare_refactor": "function", "request_refactor": "why",
-    "propose": "title",
+    "open_chapter": "chapter", "declare_input": "name", "open_entry": "title",
 }
 
 

@@ -2,7 +2,7 @@
 `nb clean` -- drop the run directories nothing needs any more.
 
 Runs accumulate forever: `_scratch/runs/<id>/` per question, each holding a
-transcript, a status log, a proposal and the probe script. The board caps what
+transcript, a status log, `run.json` and the probe script. The board caps what
 it DISPLAYS at ten; nothing capped what was on disk.
 
 Two rules, and the second is the one that matters:

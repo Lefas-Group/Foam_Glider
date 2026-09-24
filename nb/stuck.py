@@ -67,13 +67,14 @@ hundred turns to finish.
 # errored produced nothing; counting it as progress is how a detector goes blind
 # to exactly the failure it was built for, wearing a different tool's name.
 # NOTE `create_chapter` is deliberately absent: it is not a tool. Chapter
-# creation is proposal-driven and `write.py` calls the handler directly, so a
+# creation goes through `open_chapter`, which calls the handler directly, so a
 # name here that no model can emit is a line that looks like coverage and is
 # not -- see `tools/__init__.py`.
 PRODUCTIVE = frozenset({
     "write_file", "edit_file",                       # the entry moved
     "probe",                                         # something was measured
-    "propose", "ask_specified",                      # the phase advanced
+    "open_chapter", "declare_input", "open_entry",   # the run advanced
+    "ask_specified",
     "declare_refactor", "request_refactor",          # a commitment was made
 })
 
@@ -147,7 +148,7 @@ class Detector:
         `results` is [(call, output)] for the turn, in call order.
 
         Progress is one productive call that did NOT come back an error. An
-        errored call still goes into the evidence, because "propose failed eight
+        errored call still goes into the evidence, because "open_entry failed eight
         times" is precisely what the person answering needs to see.
         """
         advanced = any(c.name in PRODUCTIVE and not failed(out)

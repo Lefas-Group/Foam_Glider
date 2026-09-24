@@ -734,6 +734,30 @@ def _unfinished_index(root, chapters, entries):
                                    f"({', '.join(sorted(set(hits))[:3])}) — say "
                                    f"what is true of EVERY entry in this "
                                    f"chapter, or delete the line"))
+    # AND THE NOTEBOOK'S OWN BRIEF, on a different trigger from the chapter
+    # one: not "this chapter has an entry" but "this notebook has an entry".
+    # A placeholder brief before the first entry is a notebook nobody has
+    # started; after it, it is a top level that lies -- and it lied silently,
+    # because a fresh notebook lints clean with `- <id>: "**<what>**: <value>."`
+    # still in it and nothing watched the root at all.
+    #
+    # `nb new --spec/--assume` is the way to fill it, so it is filled before
+    # the first run rather than after the model has been shown the placeholder
+    # as fact. The prefix is built ONCE, at `nb ask`.
+    if entries:
+        where = root / "_inputs.yml"
+        try:
+            text = "\n".join(l for l in where.read_text().splitlines()
+                             if not l.lstrip().startswith("#"))
+        except OSError:
+            text = ""
+        hits = PLACEHOLDER.findall(text)
+        if hits:
+            out.append((where, f"the notebook's BRIEF still carries scaffold "
+                               f"placeholders ({', '.join(sorted(set(hits))[:3])})"
+                               f" — say what is true of the whole aircraft, or "
+                               f"delete the line. It is rendered on the front "
+                               f"page and inherited by every chapter"))
     return out
 
 
@@ -2241,7 +2265,7 @@ def parse_inputs(path):
     That used to be prose in `index.qmd` and was removed from the page for good
     reason (measured across six chapters it restated the fork in half of them
     and the front page in the other half), which left it with nowhere to live:
-    `chapter_defines` is a required field of every new-chapter proposal and was
+    `defines` is a required argument of `open_chapter` for a new one, and was
     being written into a placeholder that no longer existed. It is not rendered.
     Its readers are the PREFIX, which needs it to route a question to the right
     chapter, and `claimable_stub`, which needs its placeholder to tell a
@@ -2510,6 +2534,22 @@ def _departure_targets(root, chapters):
         for raw in (fork.get("overwrites") or []):
             m = DEPARTURE.match(raw)
             if not m:
+                # NAMING THE NOTEBOOK gets its own message, because the fix is
+                # not to correct the row. A first chapter has no parent, so the
+                # inheritance review used to offer the notebook's BRIEF for
+                # striking, and a strike wrote `<notebook>/<id>` here --
+                # resolving to no chapter and no id, silently. The gate no
+                # longer takes those strikes; this is the backstop, and it says
+                # why rather than asking for a better id.
+                if str(raw).partition("/")[0].strip() == root.name:
+                    out.append((where, (
+                        f"overwrites: {raw!r} names the NOTEBOOK. The brief in "
+                        f"{root.name}/_inputs.yml is true of the whole "
+                        f"aircraft and is never overwritten -- a design that "
+                        f"departs from it is a different aircraft, and so a "
+                        f"different notebook, not a fork. Drop the row; if the "
+                        f"departure is real, this chapter belongs elsewhere")))
+                    continue
                 out.append((where, (
                     f"overwrites: {raw!r} is not `<chapter>/<id>`, with an "
                     f"optional reason after a colon")))
@@ -2579,14 +2619,15 @@ RULES = {
     21: "(warning) an `_analysis.py` function nothing calls is dead",
     22: "(warning) an `_analysis.py` function called only internally is private",
     23: "every `solve()` passes `verbose` explicitly",
-    24: "a chapter with an entry has no unfilled index placeholder",
+    24: "no unfilled scaffold placeholder, in a chapter index or the brief",
     25: "no sentence enumerates more than five computed values",
     26: "the title is ONE question, at most 18 words",
     27: "never assign to a name `_notebook.py` owns",
     28: "every entry declares ENTRY_CEILING and SOLVE_BUDGET",
     29: "never import `_model`, `_analysis` or `_notebook`",
     30: "a chapter index renders its own `_model.py`",
-    31: "a forked `_model.py` names its parent chapter, commit and differences",
+    31: "a forked `_model.py` names its parent chapter, commit and differences; "
+        "every `overwrites:` row names a real item",
     32: "no empty callout",
     33: "a chapter index declares `order:` matching its directory number",
     34: "the notebook has a front page, and its generated block is intact",

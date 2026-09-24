@@ -235,7 +235,7 @@ def measure(notebook):
     text = build(notebook)
     fs = FileSystem(notebook.chapters_dir).start()
     try:
-        tools, _ = build_tools(Session(notebook, "measure"), fs, phase="ask")
+        tools, _ = build_tools(Session(notebook, "measure"), fs)
         base = complete("x", config(max_output_tokens=1)).usage_metadata.prompt_token_count
         full = complete("x", config(tools=tools, system_instruction=text,
                                     max_output_tokens=1)

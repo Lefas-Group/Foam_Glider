@@ -6,29 +6,38 @@ and tools render at prefix position 0 -- an unsorted merge silently breaks the
 byte-prefix match that caching depends on, every time the server comes up in a
 different order.
 
-The list is now PER PHASE. It used to be shared so that both phases hit one
-explicit cache object; with that cache deleted there is no such constraint, and
-`propose` -- 1,014 tokens, the largest declaration by a wide margin, larger than
-the next six combined -- was dead weight on every write turn. `check` has no declaration at
-all: a full chapter check re-solves every entry, which is minutes inside a loop,
-and its own description told the model not to use it. It was still BUILT on every
-call and then filtered out by `omit`, which is a twelve-line description written
-for nobody. The handler remains -- `write.py` runs it at the refactor gate, and a
-model that somehow names it gets a real answer rather than a KeyError.
+ONE LIST, because there is one conversation. It was per-phase, and the reason
+was `propose`: 6,676 of 15,053 characters -- 44% of the whole tool surface --
+which was dead weight on every write turn, so `PHASE_OMITS` existed to stop
+paying for it twice. `propose` is gone and so is the mechanism that worked
+around it. Filtering the list mid-run was never free anyway: tools render at
+prefix position 0, so a list that changes at a transition invalidates the cached
+prefix from that point, and at a measured 67% implicit hit rate that is re-paying
+full rate for the whole accumulated history to save a few hundred tokens.
 
-**`create_chapter` is deliberately NOT here.** Chapter creation is
-proposal-driven: `write.py` scaffolds from the approved `chapter_title` and
-`chapter_defines` BEFORE the model's first turn. Leaving it in the tool list gave
-the agent a tool that could only ever return `rejected: already exists`, and made
-ownership ambiguous on the one path that is structurally irreversible -- an entry
-is a `git revert`, a chapter is something later entries build on. The handler
-still exists; only `write.py` calls it.
+`check` has no declaration at all: a full chapter check re-solves every entry,
+which is minutes inside a loop, and its own description told the model not to use
+it. The handler remains -- the refactor gate runs it, and a model that somehow
+names it gets a real answer rather than a KeyError.
+
+**`create_chapter` is deliberately NOT here.** `open_chapter` is a declaration
+of intent that the system acts on, and the system does the creating. A
+`create_chapter` tool could only ever return `rejected: already exists`, and it
+made ownership ambiguous on the one path that is structurally irreversible -- an
+entry is a `git revert`, a chapter is something later entries build on.
+
+**The three new declarations are POINTERS, not doctrine.** Weighed, `propose`
+was mostly not a schema: `figures` (239 tok), `route` (186), `forked_from` (157)
+and `title` (134) were 57% of all its field descriptions, and all four restated
+things already in `system_instruction.md`, which is shared and cached once.
+There is a second reason beyond tokens: duplicated doctrine drifts and nothing
+catches it -- `route`'s description still described the OLD fork criterion long
+after `references/forking.md` had changed. A pointer cannot go stale.
 """
 
 from google.genai import types
 
 from . import api, figures, guards, interact, probe, refs, shell, verifiers
-from ..schema import Proposal
 
 
 def _decl(name, description, properties=None, required=()):
@@ -114,7 +123,7 @@ def native_declarations():
         _decl("ask_specified",
               "Ask the user for a Specified input -- one where a different answer "
               "changes WHAT WE ARE BUILDING, not how accurately we modelled it. "
-              "Ask the moment you find one; do not save it for the proposal, and "
+              "Ask the moment you find one; do not save it for the end, and "
               "never sweep a range instead of asking. Blocks until they answer.",
               {"name": dict(S, description="The quantity, e.g. 'static margin'"),
                "why": dict(S, description="Why it changes what we are building "
@@ -146,14 +155,65 @@ def native_declarations():
               "chapter already loaded and writes nothing into the notebook.",
               {"command": S}, ["command"]),
 
-        types.FunctionDeclaration(
-            name="propose",
-            description=(
-                "Propose the entry and END the run. Everything the write phase "
-                "needs goes here: it does not get this conversation. Call it once "
-                "the question is answered -- not before, and not with a second "
-                "question folded in."),
-            parameters_json_schema=Proposal.model_json_schema()),
+        _decl("open_chapter",
+              "Settle which chapter this question belongs to. FIRST -- no file "
+              "may be written until it has run. An EXISTING chapter is opened "
+              "and claimed. A NEW one stops the run for the user's approval, "
+              "then is scaffolded for you, so `title` and `defines` are "
+              "required for it. The test for needing one is whether `_model.py` "
+              "would differ -- see the Scope section of your instructions.",
+              {"chapter": dict(S, description=(
+                  "Chapter directory name, e.g. '04-chosen-throw'. For a new "
+                  "one, NN-kebab-case; the number is reallocated if it clashes")),
+               "title": dict(S, description=(
+                   "New chapters only. The CHAPTER's name, two or three words "
+                   "in the style of 'Flight path' — not this question")),
+               "defines": dict(S, description=(
+                   "New chapters only. What defines the chapter: the aero "
+                   "method, the section, what is left out. It goes in "
+                   "index.qmd and is the one place those are stated")),
+               "forked_from": dict(S, description=(
+                   "New chapters only, and only when this vehicle is a COPY of "
+                   "an existing one: the chapter directory it comes from. The "
+                   "copy is made for you, from the last commit, with _fork.yml "
+                   "written. Empty for a genuinely new aircraft"))},
+              ["chapter"]),
+
+        _decl("declare_input",
+              "Record one input this question needed that was not already "
+              "fixed. Call it the MOMENT you assume or decide something, not "
+              "at the end: four of eight recorded runs finished having declared "
+              "nothing at all. Declaring the same quantity twice corrects it.",
+              {"name": dict(S, description="The quantity, e.g. 'static margin'"),
+               "value": dict(S, description="The value used"),
+               "source": dict(S, enum=["asked", "decided", "guessed"],
+                              description=(
+                   "asked: a different answer changes WHAT WE ARE BUILDING and "
+                   "you put it through ask_specified. decided: you asked, they "
+                   "handed it back, and you chose. guessed: nobody knows, a "
+                   "different answer changes HOW ACCURATELY it is modelled. If "
+                   "the model or the plans already contain it, it is none of "
+                   "these: compute it")),
+               "why": dict(S, description="TEN WORDS at most -- rule 8 counts them")},
+              ["name", "source", "why"]),
+
+        _decl("open_entry",
+              "Probing is over: this is the question the entry answers. Puts "
+              "your assumptions to the user, allocates the filename and hands "
+              "back the instructions for writing. Call it once the question is "
+              "answered -- not before, and not with a second question folded "
+              "in. ONE question, one entry.",
+              {"title": dict(S, description=(
+                  "The question THIS entry answers: ONE question ending in "
+                  "'?', 18 words at most (rule 26), about eight is right. "
+                  "REPHRASE the ask -- strip what holds for the whole chapter. "
+                  "It becomes the title, the sidebar text and the filename")),
+               "inputs_none_because": dict(S, description=(
+                   "ONLY when you have declared no inputs at all: one line "
+                   "saying why. Inheriting everything the chapter declares is "
+                   "a perfectly good reason; say so. An empty list with no "
+                   "claim is refused"))},
+              ["title"]),
         _decl("declare_refactor",
               "Say why you changed a function that was already in _model.py "
               "or _analysis.py. This is the PROCEDURE for editing shared code, "
@@ -181,20 +241,11 @@ def native_declarations():
     ]
 
 
-# Declarations a phase does not need. The handler stays wired either way, so a
-# model that somehow names one still gets a real answer rather than a KeyError.
-PHASE_OMITS = {
-    "write": ("propose",),      # the proposal is already approved and in the brief
-    "ask": ("declare_refactor",),   # the probe phase writes no chapter files
-}
-
-
-def build(session, fs, phase=None):
+def build(session, fs):
     """(tools, handlers) -- one sorted list, one dispatch table."""
     nb = session.notebook
-    omit = set(PHASE_OMITS.get(phase, ()))
-    decls = sorted((d for d in native_declarations() + fs.declarations()
-                    if d.name not in omit), key=lambda d: d.name)
+    decls = sorted(native_declarations() + fs.declarations(),
+                   key=lambda d: d.name)
 
     handlers = dict(fs.handlers())
     handlers.update({
@@ -214,7 +265,12 @@ def build(session, fs, phase=None):
                                 replaces="": (
             interact.ask_specified(session, name, why, kind, options, replaces)),
         "bash": lambda command: shell.bash(nb, command),
-        "propose": lambda **kw: interact.propose(session, **kw),
+        "open_chapter": lambda chapter, title="", defines="", forked_from="": (
+            interact.open_chapter(session, chapter, title, defines, forked_from)),
+        "declare_input": lambda name, source, why, value="": (
+            interact.declare_input(session, name, value, source, why)),
+        "open_entry": lambda title, inputs_none_because="": (
+            interact.open_entry(session, title, inputs_none_because)),
         "request_refactor": lambda chapter, why: interact.request_refactor(
             session, chapter, why),
         "declare_refactor": lambda function, why: interact.declare_refactor(

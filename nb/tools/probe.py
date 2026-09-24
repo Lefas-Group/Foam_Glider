@@ -46,7 +46,7 @@ def _inputs_notice(notebook, chapter):
     question about it.
 
     Asking is voluntary and stopped happening: `ask_specified` fired in 3 of 8
-    recorded runs and half the proposals declared no inputs at all. The model
+    recorded runs and half of them declared no inputs at all. The model
     is poor at judging WHETHER to ask and fine at reading a list, so this turns
     the judgement into a lookup and puts it where the lookup is cheap.
 
@@ -79,9 +79,9 @@ def _inputs_notice(notebook, chapter):
             f"Does THIS question change one of them? A changed SPECIFIED item "
             f"is `ask_specified` now, before the next probe, with "
             f"`replaces=\"<id>\"`. A changed ASSUMED item is yours: assume the "
-            f"new value, record it with source='guessed', and say which id it "
-            f"replaces in your rationale. Changing none of them is the common "
-            f"answer and needs nothing.]")
+            f"new value, `declare_input` it with source='guessed', and say "
+            f"which id it replaces in the entry. Changing none of them is the "
+            f"common answer and needs nothing.]")
 
 
 def run_probe(notebook, chapter, question, session=None, budget_s=None):
@@ -115,26 +115,26 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
     if session is not None:
         granted, left = session.take_probe_budget(budget_s)
         if granted is not None and left is not None and left <= 0:
-            # PHASE-SPECIFIC, because the way out differs and naming the wrong
-            # one is worse than naming none. "Propose now" in the write phase
-            # points at a tool that does not exist there -- seen in a run whose
-            # write phase inherited 13 s of pool, exhausted it on the second
-            # probe, and was told twice to do something it could not.
-            writing = getattr(session, "phase", None) == "write"
+            # THE WAY OUT DIFFERS by whether the entry is open, and naming the
+            # wrong one is worse than naming none: "propose now" was once sent
+            # to a run in the write phase, which had no such tool, twice. The
+            # test used to be the phase; there is one phase now, so it is the
+            # thing the phase stood for -- has `open_entry` run.
+            writing = bool(session.stem)
             say(f"  budget    probe pool EXHAUSTED — "
                 f"{session.probe_pool:.0f} s spent; "
-                f"{'no more probing' if writing else 'forcing a proposal'}")
+                f"{'no more probing' if writing else 'open the entry'}")
             if writing:
                 return ("probe pool exhausted -- the whole question's probe "
-                        "wall clock is spent, and the write phase shares one "
-                        "pool with the probe that preceded it. There is no "
-                        "more probing to be had. Work from the entry, the "
-                        "chapter's files and the render output; if you "
-                        "genuinely cannot proceed without measuring something, "
-                        "say so with `ask_specified`.")
+                        "wall clock is spent, and writing shares one pool with "
+                        "the probing that preceded it. There is no more "
+                        "probing to be had. Work from the entry, the chapter's "
+                        "files and the render output; if you genuinely cannot "
+                        "proceed without measuring something, say so with "
+                        "`ask_specified`.")
             return ("probe pool exhausted -- this run has spent all the probe "
-                    "wall clock it was given. Propose now with what you have, "
-                    "and say in `rationale` what you did not get to.")
+                    "wall clock it was given. Call `open_entry` now with what "
+                    "you have, and say in the entry what you did not get to.")
         if granted:
             env["NB_PROBE_BUDGET"] = f"{granted:.1f}"
             timeout = budgets.probe_wall_clock(granted)
@@ -171,7 +171,7 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
         session.record_probe(used)
         # ONCE, after the first probe. Not before probing, where the model has
         # not loaded the chapter and is being asked to classify inputs at the
-        # moment it knows least; and not at `propose`, where the pool may be
+        # moment it knows least; and not at the end, where the pool may be
         # spent and the whole probe already ran against a placeholder. By here
         # it has loaded the vehicle and run one query against it, and has spent
         # one probe rather than all of them.
@@ -179,7 +179,7 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
         # It costs NO TURN, because it rides a tool result the run was getting
         # anyway -- the same shape as the ENTRY_CEILING notice below, which
         # already tells the model to go and ask.
-        if session.probes == 1 and session.phase == "ask":
+        if session.probes == 1 and not session.stem:
             notice = _inputs_notice(notebook, chapter or session.chapter)
             out += notice
             # AND TO THE LOG. The notice goes to the model inside a tool
@@ -209,12 +209,12 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
         session.record_cost(solves, seconds)
         # The ceiling in force is the one the USER granted at the prompt, not
         # anything the chapter carries -- chapters no longer carry budgets.
-        ceiling = getattr(session, "render_ceiling", None)
+        ceiling = session.render_ceiling
         if ceiling and session.solve_seconds > ceiling:
             out += (f"\n[ENTRY_CEILING: {session.solve_seconds:.0f} s of solves "
                     f"already, against the {ceiling:.0f} s granted for this "
-                    f"entry's render. Propose now with what you have, or "
-                    f"ask_specified whether to raise it -- that is the user's "
-                    f"call, and the entry records the answer.]")
+                    f"entry's render. Open the entry now with what you have, "
+                    f"or ask_specified whether to raise it -- that is the "
+                    f"user's call, and the entry records the answer.]")
 
     return tail(out)

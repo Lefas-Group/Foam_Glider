@@ -1,5 +1,17 @@
 """
-The three tools that talk to the human, and the one that ends the run.
+The tools that talk to the human, and the three that move the run forward.
+
+`open_chapter`, `declare_input` and `open_entry` replaced `propose`, which was
+a fifteen-field document the model filled in at the end and a second process
+read back. None of that survived contact: 44% of the whole tool surface was one
+declaration, most of it doctrine already in the system instruction; four of
+eight recorded runs reached it having declared no inputs at all, because a list
+you complete last is a list you forget; and the process boundary underneath it
+cost five minutes of human round-trip on a run whose compute was sixteen.
+
+What the document was actually FOR was four refusals -- a pinned chapter, an
+unclaimed stub, an empty input list, an input claiming an ask that never
+happened. Those are still here, re-homed to the call where each becomes true.
 
 Every one of them goes through the MAILBOX: the question is written to the run
 directory and the run waits for a file in reply. There is no stdin path any
@@ -17,8 +29,8 @@ it was reasonable to ask. Here the cap is only good manners.
 import json
 import re
 
-from ..loop import Refactor, Terminal
-from ..schema import Input, Proposal
+from ..loop import Refactor
+from ..schema import Input
 from ..log import say, tell
 
 
@@ -79,9 +91,10 @@ def _prompt(banner, name, body):
     return MAILBOX.ask("specified", name, body)
 
 
-# What counts as handing the decision back. Named because `propose` needs the
-# same test: an input the user DELEGATED is owned by the agent, and recording it
-# as theirs would put words in their mouth -- "the user specified: you decide".
+# What counts as handing the decision back. Named because `_collect_inputs`
+# needs the same test: an input the user DELEGATED is owned by the agent, and
+# recording it as theirs would put words in their mouth -- "the user specified:
+# you decide".
 DELEGATED = ("you decide", "your call", "you choose", "")
 
 
@@ -145,50 +158,17 @@ def ask_render_ceiling(default, source=""):
         default, source)
 
 
-def persist(proposal, notebook, corrections=None):
-    """
-    Re-write proposal.json, preserving the private `_` fields already on disk.
-
-    `propose` writes the file and THEN raises, so anything the gate changes
-    afterwards -- a corrected assumption -- exists only in memory, and the write
-    phase re-reads the file. Without this the confirmation would have looked
-    like it worked and changed nothing that mattered.
-
-    `corrections` is [(name, was, now)] and goes into `_corrections`, which the
-    write phase turns into one line of its brief. It is the whole mechanism
-    that replaced the re-probe loop: a corrected VALUE does not need a fresh
-    probe, because rule 1 makes the entry recompute at render time -- what it
-    needs is for the model to know the finding it was handed was computed
-    under the old number.
-    """
-    path = notebook.proposal_path
-    private = {}
-    if path.exists():
-        try:
-            private = {k: v for k, v in json.loads(path.read_text()).items()
-                       if k.startswith("_")}
-        except ValueError:
-            pass
-    out = proposal.model_dump()
-    out.update(private)
-    out["_assumptions_confirmed"] = True
-    if corrections:
-        out["_corrections"] = [
-            {"name": n, "was": w, "now": v} for n, w, v in corrections]
-    path.write_text(json.dumps(out, indent=2) + "\n")
-
-
 # A correction that rejects the APPROACH rather than the value. Anything else
 # after "N:" is a new value.
 REDO = re.compile(r"^\s*redo\b[\s:,.\u2014-]*", re.I)
 
 
-def confirm_assumptions(proposal):
+def confirm_assumptions(session):
     """
     Show every assumption the probe made, and take corrections.
 
     Returns (corrected, rejected). `corrected` is [(name, was, now)] for values
-    the user changed, already applied to `proposal.inputs`; `rejected` is
+    the user changed, already applied to `session.inputs`; `rejected` is
     [(name, why)] for assumptions whose whole APPROACH they refused.
 
     Assumptions were never confirmed before: `ask_specified` covers inputs
@@ -219,7 +199,7 @@ def confirm_assumptions(proposal):
     this is a confirmation with a safe default, not a question that must be
     answered, and raising on EOF would kill every piped run.
     """
-    assumed = [i for i in proposal.inputs if i.source == "guessed"]
+    assumed = [i for i in session.inputs.values() if i.source == "guessed"]
     if not assumed:
         return [], []
 
@@ -228,7 +208,7 @@ def confirm_assumptions(proposal):
     how = ('  Enter accepts.\n'
            '  Correct a VALUE with        "1: 2.5e-4"\n'
            '  Reject the APPROACH with   "1: redo — needs 3-DOF, not point-mass"'
-           '   (ends the run)')
+           '   (sends it back to probe)')
     tell(f"\n{'─' * 72}\nASSUMPTIONS — confirm, correct a value, or reject one"
          f"\n{'─' * 72}")
     for line in listing.splitlines():
@@ -282,23 +262,34 @@ def confirm_assumptions(proposal):
     return corrected, rejected
 
 
-def confirm_inherited(proposal, notebook):
+def confirm_inherited(notebook, chapter, parent=None):
     """
     Show what a NEW chapter carries forward, and take strikes. Returns
     (kept, struck), each [(kind, item, from_chapter)].
+
+    A CHAPTER WITH NO ANCESTOR IS SHOWN THE BRIEF AND ASKED NOTHING. With no
+    parent, `inherited()` falls back to the notebook's own `_inputs.yml`, and
+    offering those for striking is an offer that cannot be honoured twice over.
+    Mechanically: resolving a strike calls `lint.input_ids(root, "<notebook>")`,
+    which looks for `chapters/<notebook>/_inputs.yml`, finds nothing and matches
+    no id -- so the strike was silently discarded, and rule 31 now refuses the
+    `overwrites:` row it would have written. In principle: the brief is never
+    overwritten, because a design that departs from it is a different aircraft
+    and so a different notebook, not a fork. So it is shown as CONTEXT -- the
+    reader still needs to see what the new chapter is being held to -- and the
+    run is not stopped for an answer nobody can act on.
 
     BOTH halves, because both are read. The kept set is what the new chapter's
     index may state without claiming anybody was asked; the struck set is what
     the fork BREAKS, which is the one thing the computation cannot know and the
     only reason this is a question at all. Returning only `kept` meant the
-    write phase was told neither: the answer was persisted to `proposal.json`
-    and read by nothing, so striking an item changed a log line and nothing
-    else.
+    model was told neither: the answer was persisted and read by nothing, so
+    striking an item changed a log line and nothing else.
 
-    At the new-chapter stop because that stop already exists and already halts
-    the run: `render_stop` told the user a chapter was being committed to and
-    showed them its name, its title and a resume command -- nothing about what
-    it INHERITS, which is the substance of the commitment.
+    At `open_chapter`, beside the approval, because that is the only moment
+    both halves are known and it is the one place the run already stops. The
+    approval names the chapter and its title; what it INHERITS is the substance
+    of the commitment, and it used to be shown nowhere.
 
     The list is COMPUTED (see `inputs.inherited`), so this is a review rather
     than a question. What the computation cannot know is whether the fork
@@ -329,10 +320,20 @@ def confirm_inherited(proposal, notebook):
     that can strand an unattended run is worse than one that occasionally
     carries an item too many.
     """
-    from ..inputs import inherited
-    items, superseded = inherited(notebook, proposal.chapter)
+    from ..inputs import ancestry, inherited
+    items, superseded = inherited(notebook, chapter, parent)
     if not items:
         return [], []
+
+    if not ancestry(notebook, chapter, parent):
+        tell(f"\n{'─' * 72}\nTHE BRIEF — true of the whole aircraft, and "
+             f"inherited as it stands\n{'─' * 72}")
+        for kind, item, src in items:
+            tell(f"    [{kind}] {item}")
+        tell("\n  This chapter has no parent, so it carries the notebook's own "
+             "brief.\n  Nothing here is strikeable: a design that departs from "
+             "it is a different\n  aircraft, and so a different notebook.")
+        return items, []
 
     # NUMBERED GLOBALLY, grouped for reading. The numbers are what a strike
     # names, so they run straight through the groups -- renumbering within each
@@ -387,7 +388,7 @@ def ask_specified(session, name, why, kind="specified", options="",
     """
     A Specified input: a different answer changes WHAT WE ARE BUILDING.
 
-    Asked immediately rather than batched into the proposal. The skill batches
+    Asked immediately rather than batched up for the end. The skill batches
     them because in a chat interface the run is stopping anyway and the round
     trip is the cost; here the process is alive, so asking early is strictly
     better -- the rest of the probe then runs against the real value instead of
@@ -418,8 +419,7 @@ def ask_specified(session, name, why, kind="specified", options="",
             f"'{name}' is unknown, not Specified: a different answer changes "
             f"how ACCURATELY it is modelled, not what is being built. Assume "
             f"it, record it with source='guessed', and say what it costs.")
-    # `why` is held to rule 8's ten words now, not after the whole proposal is
-    # assembled around it.
+    # `why` is held to rule 8's ten words now, not twenty turns later.
     Input(name=name, source="asked", value=None, why=why)
 
     body = f"  {name}\n  {why}"
@@ -473,9 +473,9 @@ def request_refactor(session, chapter, why):
     Declare that the entry cannot be written without changing the vehicle.
 
     Reached only after a write to `_model.py` was refused, so by here the agent
-    has tried the cheap path. Terminal, like `propose`: the decision is whether
-    to pay for re-proving every sibling entry, and that is not the agent's to
-    make.
+    has tried the cheap path. It ENDS THE RUN, which is the one place that
+    still happens from inside a tool: the decision is whether to pay for
+    re-proving every sibling entry, and that is not the agent's to make.
     """
     err = Refactor(why)
     err.chapter, err.why = chapter, why
@@ -483,52 +483,328 @@ def request_refactor(session, chapter, why):
     raise err
 
 
-def propose(session, **fields):
+def _new_chapter_approval(notebook, chapter, title, defines, forked_from):
     """
-    The single terminal tool. Validates, writes proposal.json, ends the run.
+    The one stop that survives. Undefaulted, so nobody is needed for it to end
+    safely.
 
-    Route, inputs and proposal arrive together. The integrity check below is the
-    one thing the schema cannot do on its own: a Specified input claiming the
-    user answered it has to correspond to an ask that actually happened.
+    A chapter is a structural commitment later entries build on -- far harder
+    to undo than an entry, which a `git revert` removes -- and it is decided
+    BEFORE any of the work it authorises is paid for. That was worth ending a
+    process over when ending the process was the only way to ask; it is worth
+    one keystroke now.
+
+    `default=None` is the whole safety of it. A defaulted question takes its
+    default after DEFAULTED_WAIT and carries on; an undefaulted one waits the
+    full hour and then raises SystemExit with the question still on disk --
+    which is exactly what the old stop did. Walk away and you get the old
+    outcome, resumable. Be at the keyboard and you pay a keystroke instead of a
+    second command.
+
+    A "no" is NOT the end of the run. The conversation is alive, so a refusal
+    goes back as a tool error the model reads and acts on -- route into an
+    existing chapter, or say why it cannot. Ending the process on a refusal
+    would throw away the probe that justified the request.
     """
-    fields.setdefault("question", session.question)
-    proposal = Proposal.model_validate(fields)
+    body = "\n".join([
+        f"  {chapter}", f'  "{title}"', "",
+        f"  defines   {' '.join(defines.split())[:400]}",
+    ] + ([f"  forked    from {forked_from}"] if forked_from else []) + [
+        "",
+        "  Later entries build on its _model.py — changing it then means",
+        "  re-solving all of them. That commitment is yours, not the entry's.",
+        "",
+        '  Enter (or anything else) creates it. "no — <why>" sends it back.',
+    ])
+    tell(f"\n{'─' * 72}\nNEW CHAPTER — approve before it is created"
+         f"\n{'─' * 72}")
+    tell(body)
+    tell(f"  waiting for an answer — {MAILBOX.notebook.question_path}")
+    answer = str(MAILBOX.ask("chapter", chapter, body) or "").strip()
+    if answer.lower().startswith(("no", "n ", "reject", "don't", "do not")):
+        return answer
+    say(f"  answered   approved{f' — {answer}' if answer else ''}")
+    return None
+
+
+def open_chapter(session, chapter, title="", defines="", forked_from=""):
+    """
+    Settle which aircraft this run is about. Nothing may be written until it
+    has been called.
+
+    It carries `propose`'s whole routing half -- the `--chapter` pin, the
+    claimable-stub refusal, the new-chapter approval and the inheritance review
+    -- moved to the moment the model actually decides, instead of a field it
+    filled in afterwards and a second process acted on.
+
+    `create_chapter` STAYS OUT OF THE MODEL'S HANDS, and that is not an
+    oversight. This is a declaration of intent that the system acts on, which
+    is the distinction `tools/__init__.py` has always drawn: a `create_chapter`
+    tool could only ever return `rejected: already exists`, and it made
+    ownership ambiguous on the one path that is structurally irreversible.
+    """
+    from ..locks import claim_chapter
+    from ..tools.guards import bodies
+    from ..tools.scaffold import create_chapter
+    notebook = session.notebook
+    chapter = str(chapter or "").strip().strip("/")
+
+    if session.chapter_open:
+        if chapter == session.chapter:
+            return (f"chapters/{session.chapter} is already open. "
+                    f"{'Write the entry.' if session.stem else 'Carry on.'}")
+        raise ValueError(
+            f"chapters/{session.chapter} is already open and claimed by this "
+            f"run. One question, one chapter: if {chapter!r} is where this "
+            f"belongs, that is a different ask.")
 
     # The `--chapter` pin, enforced rather than suggested. The brief asks; this
     # is what makes it a pin. A flag that only advises is a flag that reports
     # the wrong chapter half the time, which is the misroute it exists to stop.
-    pinned = getattr(session, "pinned_chapter", None)
-    if pinned and proposal.chapter != pinned:
+    pinned = session.pinned_chapter
+    if pinned and chapter != pinned:
         raise ValueError(
-            f"This run is pinned to chapters/{pinned}/ and you proposed "
-            f"{proposal.chapter!r}. Propose into {pinned}. If the question "
-            f"genuinely does not belong there, propose into it anyway and say "
-            f"so in the rationale -- moving it is the caller's decision, not "
-            f"yours.")
+            f"This run is pinned to chapters/{pinned}/ and you opened "
+            f"{chapter!r}. Open {pinned}. If the question genuinely does not "
+            f"belong there, open it anyway and say so in the entry's "
+            f"rationale -- moving it is the caller's decision, not yours.")
 
+    known = notebook.chapters()
+    stub = notebook.claimable_stub()
+    # A scaffolded chapter still carrying its placeholder is a SLOT, and
+    # filling it is a chapter-level decision however it is labelled. Without
+    # this a run opens `01-first-chapter`, fills it correctly, and leaves the
+    # placeholder directory name -- which entry stems and freeze paths then
+    # bake in permanently.
+    fresh = chapter not in known or chapter == stub
+    if fresh and not (title.strip() and defines.strip()):
+        where = ("is an empty scaffold, not a chapter yet -- its name is a "
+                 "placeholder and its _model.py is bare" if chapter == stub
+                 else "does not exist yet")
+        raise ValueError(
+            f"chapters/{chapter}/ {where}. You are the first entry in it, so "
+            f"name it: give `title` (what the CHAPTER holds, e.g. 'Trimmed "
+            f"glide' -- not this question) and `defines` (the aero method, the "
+            f"section, what is left out). The directory is renamed to match "
+            f"before you write, and creating one stops the run for the user's "
+            f"approval.")
+
+    if fresh:
+        refused = _new_chapter_approval(notebook, chapter, title, defines,
+                                        forked_from)
+        if refused:
+            raise ValueError(
+                f"The user REFUSED a new chapter: {refused}\n"
+                f"Do not ask again. Either open the existing chapter this "
+                f"question belongs in -- the test is whether `_model.py` would "
+                f"differ, and a new objective, different bounds or a finer "
+                f"sweep all belong in the chapter that already holds that "
+                f"vehicle -- or stop and say why it cannot be written without "
+                f"one.")
+        # THE STRIKE IS THE SUPERSESSION, and it is resolved here because this
+        # is the only moment both halves are known: the ancestor an item came
+        # from, and the fact that this chapter breaks it. `create_chapter`
+        # writes it straight into `_fork.yml` under `overwrites:`.
+        kept, struck = confirm_inherited(notebook, chapter,
+                                        parent=forked_from or None)
+        struck_ids = []
+        if struck:
+            import lint
+            for _kind, item, src in struck:
+                for _id, _text in lint.input_ids(notebook.root, src).items():
+                    if _text == item:
+                        struck_ids.append((src, _id))
+        session.inherited_kept, session.inherited_struck = kept, struck
+        chapter, msg = create_chapter(
+            notebook, chapter, title, defines, fork_from=forked_from,
+            overwrites=struck_ids)
+        tell(f"  chapter   {msg.splitlines()[0]}")
+        if msg.startswith("rejected"):
+            raise ValueError(msg)
+        session.chapter_msg = msg
+    else:
+        msg = f"chapters/{chapter}/ already exists. Write into it."
+
+    # ONE WRITER PER CHAPTER, claimed as soon as the name is settled and held
+    # until this process exits. Refused rather than queued, and refused HERE,
+    # before anything is written: two agents in one chapter edit the same
+    # `_analysis.py` and the refactor gate then blames whichever asks first.
+    holder = claim_chapter(notebook, chapter)
+    if holder:
+        raise ValueError(
+            f"chapters/{chapter} is being written by another run (pid "
+            f"{holder}). Two agents in one chapter edit the same _analysis.py "
+            f"and the refactor gate then blames whichever asks first. Stop "
+            f"here and say so -- this is not something to work around.")
+
+    session.chapter = chapter
+    session.chapter_open = True
+    # BEFORE the model may write anything, which is what makes the comparison
+    # after the loop mean something. `_allowed` refuses every write until this
+    # call has happened, so this snapshot is of the chapter as it was committed.
+    d = notebook.chapters_dir / chapter
+    session.before_bodies = {n: bodies(d / n)
+                             for n in ("_model.py", "_analysis.py")}
+    from .. import runstate
+    runstate.write(notebook, chapter=chapter)
+    say(f"  chapter   {chapter} open")
+    return msg + _inherited_note(session)
+
+
+def _inherited_note(session):
+    """What the user agreed the new chapter carries, for the model to honour."""
+    kept, struck = session.inherited_kept, session.inherited_struck
+    if not (kept or struck):
+        return ""
+    lines = ["", "The user reviewed what this chapter inherits. NEAREST "
+             "ANCESTOR FIRST: where two items name the same quantity, the one "
+             "listed earlier is the one in force, because the chapter that "
+             "declared it revisited the subject later."]
+    if kept:
+        lines += ["", "STILL TRUE, inherited — do NOT restate these in this "
+                  "chapter's index, its _inputs.yml or in entry prose. They "
+                  "are already stated one level up, and repeating them is what "
+                  "rule 39 and the Specified/Assumed callouts exist to prevent:"]
+        lines += [f"  [{k}] {i}   (from {s})" for k, i, s in kept]
+    if struck:
+        lines += ["", "STRUCK — the user says this chapter BREAKS these, so "
+                  "they do NOT carry forward. Each is already recorded in "
+                  "`_fork.yml` under `overwrites:`, which lists them on this "
+                  "chapter's page as no longer holding. Where this chapter "
+                  "needs its own value for one of them, that value is NEW and "
+                  "goes in this chapter's `_inputs.yml`:"]
+        lines += [f"  [{k}] {i}   (was from {s})" for k, i, s in struck]
+    return "\n".join(lines)
+
+
+def declare_input(session, name, value="", source="guessed", why=""):
+    """
+    One input, recorded at the moment it is assumed.
+
+    Mirrors `ask_specified`, which is called the instant an input is found
+    rather than saved for the end, and for the same measured reason: FOUR OF
+    EIGHT recorded runs reached `propose` having declared no inputs at all,
+    which is what a list you complete last looks like. A static margin
+    discovered at turn 3 should not be guessed for twenty more turns, and it
+    should not go unrecorded for twenty more either.
+
+    It RECORDS; it does not ask. The batched confirmation survives at
+    `open_entry`, because the reason for batching was about asking:
+    per-assumption asking makes the model judge which of its assumptions are
+    load-bearing, which is the judgement rule 4 exists because it gets wrong.
+
+    A DICT keyed by name, so declaring the same quantity twice corrects it
+    rather than listing it twice -- which is what a probe that revises its own
+    assumption three turns later would otherwise produce.
+    """
+    name = " ".join(str(name).split())
+    if source == "asked" and name not in session.asked:
+        raise ValueError(
+            f"'{name}' is recorded as source='asked' but was never put through "
+            f"ask_specified. Ask it, or record source='decided' with your "
+            f"reason if you chose it yourself.")
+    # `why` is held to rule 8's ten words now, not after a whole document is
+    # assembled around it. `Input` raises on eleven.
+    item = Input(name=name, value=str(value) or None, source=source,
+                 why=" ".join(str(why).split()))
+    again = name in session.inputs
+    session.inputs[name] = item
+    say(f"  input     {'revised' if again else 'recorded'} {name} "
+        f"[{source}]{f' = {item.value}' if item.value else ''}")
+    return (f"{'Revised' if again else 'Recorded'}: {name} [{source}]. "
+            f"{len(session.inputs)} input(s) so far. It goes in the entry's "
+            f"`## {'Specified' if source != 'guessed' else 'Assumed'}` callout "
+            f"when you write it.")
+
+
+def _collect_inputs(session):
+    """
+    Every input the user ACTUALLY answered, whether or not the model declared
+    it.
+
+    The `unasked` check catches the opposite error -- claiming an ask that
+    never happened -- and nothing caught an ask that happened and went
+    unrecorded, so "replace the current model", the answer that caused a whole
+    chapter to exist, reached the entry nowhere. Which questions were put to
+    the user is a fact about the run, not a judgement, so it is bookkeeping:
+    done here rather than asked of the model, because a model asked to copy a
+    list forward will sometimes improve it instead.
+    """
+    for name, value in session.asked.items():
+        if name in session.inputs:
+            continue
+        delegated = str(value).strip().lower() in DELEGATED
+        session.inputs[name] = Input(
+            name=name, source="decided" if delegated else "asked",
+            value=None if delegated else str(value),
+            why="delegated by the user" if delegated else "asked during the probe")
+
+
+def open_entry(session, title, inputs_none_because=""):
+    """
+    Probing is over; this is the question. The one hard gate in the run.
+
+    It allocates the filename and RETURNS IT, which is what keeps the
+    `YYYY-MM-DD-NN-slug` convention without a filename protocol: the model does
+    not choose the stem, it is told it. It also returns the write brief, so the
+    instructions for writing arrive at the moment writing starts, with the
+    probe that produced the answer still above them -- rather than as the
+    opening statement of a fresh conversation that had never seen the aircraft.
+
+    Everything here is a refusal the model can act on and then retry. Nothing
+    here ends the run.
+    """
+    from .. import briefs, runstate
+    from ..phases.write import _stem
+    import datetime
+    notebook = session.notebook
+    title = " ".join(str(title).split())
+
+    if not session.chapter_open:
+        raise ValueError(
+            "No chapter is open. Call `open_chapter` first -- it settles which "
+            "aircraft this is about, claims the chapter and, for a new one, "
+            "stops for the user's approval. Nothing can be written until it "
+            "has run.")
+    if session.stem:
+        return (f"The entry is already open at "
+                f"{session.chapter}/{session.stem}.qmd. Write it.")
+
+    # RULE 26, BEFORE IT BECOMES A FILENAME. Lint checks the title after the
+    # fact, by which point the stem, the freeze path and the sidebar entry have
+    # all been built from it -- and a brief pasted in whole gives a
+    # 70-character stem nobody can read.
+    words = title.split()
+    if not title.endswith("?") or len(words) > 18 or not words:
+        raise ValueError(
+            f"The title is the question THIS entry answers: ONE question "
+            f"ending in '?', 18 words at most (rule 26) -- aim for about "
+            f"eight. Yours is {len(words)} word(s) and does not "
+            f"end in a question mark. REPHRASE "
+            f"the ask: strip anything that holds for the whole chapter, "
+            f"because that lives in its index.qmd, and turn a brief into a "
+            f"question. 'optimise a glider for trimmed glide. It is "
+            f"constructed of foam 5mm thick…' is a brief; 'Which planform "
+            f"gives the lowest sink rate?' is its question. It becomes the "
+            f"entry title, the sidebar text and the filename.")
+
+    _collect_inputs(session)
     # An empty `inputs` list is a CLAIM or an omission, and nothing could tell
-    # them apart. Measured: four of eight recorded runs proposed with no inputs
-    # at all, which meant `confirm_assumptions` hit its early exit and the
-    # correction loop behind it -- the one that re-probes rather than writing
-    # from a rejected premise -- never ran. It did not decline to fire; nothing
-    # asked it to.
-    #
-    # Refused the way the claimable-stub check below is refused: a ValueError
-    # the model reads and acts on, not a schema error. The escape is explicit,
-    # because an entry that genuinely inherits everything is common and its
-    # reason belongs on the record.
-    if not proposal.inputs and not proposal.inputs_none_because.strip():
+    # them apart. The escape is explicit, because an entry that genuinely
+    # inherits everything is common and its reason belongs on the record.
+    if not session.inputs and not inputs_none_because.strip():
         raise ValueError(
-            "`inputs` is empty and nothing says why. Every question either "
-            "needed something Specified (a different answer changes WHAT IS "
-            "BEING BUILT -- ask it with ask_specified), assumed something new "
-            "(a different answer changes HOW ACCURATELY it is modelled -- "
-            "record it with source='guessed'), or inherited "
-            "everything the chapter already declares. If it is the last, say "
-            "so in `inputs_none_because` in one line. Do not invent an input "
-            "to satisfy this.")
+            "You have declared no inputs and said nothing about it. Every "
+            "question either needed something Specified (a different answer "
+            "changes WHAT IS BEING BUILT -- ask it with `ask_specified`), "
+            "assumed something new (a different answer changes HOW ACCURATELY "
+            "it is modelled -- record it with `declare_input`, "
+            "source='guessed'), or inherited everything the chapter already "
+            "declares. If it is the last, say so in `inputs_none_because` in "
+            "one line. Do not invent an input to satisfy this.")
+    session.inputs_none_because = inputs_none_because.strip()
 
-    unasked = [i.name for i in proposal.inputs
+    unasked = [i.name for i in session.inputs.values()
                if i.source == "asked" and i.name not in session.asked]
     if unasked:
         raise ValueError(
@@ -536,107 +812,93 @@ def propose(session, **fields):
             f"ask_specified: {', '.join(unasked)}. Ask them, or record "
             f"source='decided' with your reason if you chose them yourself.")
 
-    # A scaffolded chapter still carrying its placeholder is a SLOT, and filling
-    # it is a chapter-level decision however the route is labelled. Without this
-    # a run routes `entry` into `01-first-chapter`, fills it correctly, and
-    # leaves the placeholder directory name -- which entry stems and freeze paths
-    # then bake in permanently. Checked here rather than in the schema because
-    # only the notebook knows which chapter is a stub, and raising sends the
-    # model a message it can act on instead of wasting the ask.
-    if proposal.chapter == session.notebook.claimable_stub() and not (
-            proposal.chapter_title and proposal.chapter_defines):
+    # Measured, not guessed: `aero_report()` prints what the probe's solves
+    # actually took. Asked of the model, this field came back 0.0.
+    session.render_cost_s = round(session.solve_seconds, 1)
+
+    corrected, rejected = confirm_assumptions(session)
+    if rejected:
+        # NOT THE END OF THE RUN any more. The conversation is alive, so the
+        # rejection is something to act on rather than something to restart
+        # from: re-probe under the method the user named, then open the entry
+        # again. This is the re-probe loop that was deleted for never firing,
+        # available for free because there is no longer a boundary to re-probe
+        # across.
+        tell(f"\n  {'─' * 70}\n  ASSUMPTION REJECTED — the entry is NOT open"
+             f"\n  {'─' * 70}")
+        for name, why in rejected:
+            tell(f"  {name}: {why}")
+        return ("The entry was NOT opened. The user rejected the APPROACH "
+                "behind these assumptions, not the numbers:\n\n"
+                + "\n".join(f"  {n}: {w}" for n, w in rejected)
+                + "\n\nEverything you computed under them is stale -- a "
+                  "corrected value would recompute at render time, but a "
+                  "rejected method does not. Probe again using the method they "
+                  "named, revise the assumption with `declare_input`, then "
+                  "call `open_entry` again. If you believe the rejection is "
+                  "mistaken, stop and say why rather than re-opening with the "
+                  "same premise.")
+    if corrected:
+        tell("  corrected " + "; ".join(f"{n}: {w} → {v}"
+                                        for n, w, v in corrected))
+
+    today = datetime.date.today().isoformat()
+    stem = _stem(notebook, session.chapter, title, today)
+    # THE CHAPTER ALREADY HOLDS THIS QUESTION under another date. `_stem`
+    # reuses a same-day file, which covers a resume on the same day and nothing
+    # else; this covers the rest. [14:] is the SLUG -- ten date characters, a
+    # dash, the two-digit within-day counter and a dash -- so a duplicate that
+    # happened to be the second entry of its day still matches the first entry
+    # of another.
+    twin = next((e for e in notebook.entries(session.chapter)
+                 if e.stem[14:] == stem[14:] and e.stem != stem), None)
+    if twin:
         raise ValueError(
-            f"chapters/{proposal.chapter}/ is an empty scaffold, not a chapter "
-            f"yet -- its name is a placeholder and its _model.py is bare. You "
-            f"are the first entry in it, so name it: give chapter_title (what "
-            f"the chapter holds, e.g. 'Trimmed glide' -- NOT this question) and "
-            f"chapter_defines (the aero method, the section, what is left out). "
-            f"The directory is renamed to match before you write.")
+            f"chapters/{session.chapter}/ already holds this question, as "
+            f"{twin.name}. Writing it would put a second copy under today's "
+            f"date. If that entry is wrong, the fix is a NEW question that "
+            f"supersedes it -- one that states the old value, the new one and "
+            f"why they differ -- never a duplicate. Stop and say so.")
 
-    # Measured, not guessed: aero_report() prints the solves the probe just ran.
-    proposal.render_cost_s = round(session.solve_seconds, 1)
+    session.stem = stem
+    session.entry_title = title
+    session.entry_path = (notebook.chapters_dir / session.chapter
+                          / f"{stem}.qmd")
+    # SIBLINGS, which this entry is not one of: the refactor gate re-proves
+    # them only if there are any, and counting the entry itself on a resume
+    # gated it against a baseline that cannot exist.
+    session.siblings = len([e for e in notebook.entries(session.chapter)
+                            if e.stem != stem])
+    if session.metrics is not None:
+        session.metrics.set(chapter=session.chapter, entry_stem=stem)
+    # THE WHOLE OF CRASH RECOVERY. `run.json` is already written atomically,
+    # already survives the process and is already read by the board, `nb answer`
+    # and `nb clean`; four more fields is all `proposal.json` was ever doing
+    # that nothing else does.
+    runstate.write(notebook, chapter=session.chapter, stem=stem, title=title,
+                   question=session.question,
+                   pool_left=(round(session.probe_left, 1)
+                              if session.probe_left is not None else None),
+                   pool_total=(round(session.probe_pool, 1)
+                               if session.probe_pool else None),
+                   ceiling=session.render_ceiling)
+    say(f"  entry     {session.chapter}/{stem}.qmd")
 
-    # Every input the user ACTUALLY answered, whether or not the model listed
-    # it. The check above catches the opposite error -- claiming an ask that
-    # never happened -- but nothing caught an ask that happened and went
-    # unrecorded, so "replace the current model", the answer that caused a whole
-    # chapter to exist, reached the entry nowhere. Which questions were put to
-    # the user is a fact about the run, not a judgement, so it is bookkeeping:
-    # done here rather than asked of the model, because a model asked to copy
-    # a list forward will sometimes improve it instead.
-    recorded = {i.name for i in proposal.inputs}
-    for name, value in session.asked.items():
-        if name in recorded:
-            continue
-        delegated = str(value).strip().lower() in DELEGATED
-        proposal.inputs.append(Input(
-            name=name, source="decided" if delegated else "asked",
-            value=None if delegated else str(value),
-            why="delegated by the user" if delegated else "asked during the probe"))
-
-    session.notebook.run.mkdir(parents=True, exist_ok=True)
-    # `_pool_left` is written beside the proposal, not into it: the write phase
-    # -- resumed in-process or from the terminal hours later -- needs to know
-    # what is left of the pool the user agreed to, and a Proposal FIELD would
-    # show up in the `propose` tool schema as a number the model is invited to
-    # choose for itself. The underscore says so to a reader editing the file.
-    out = proposal.model_dump()
-    if session.probe_left is not None:
-        out["_pool_left"] = round(session.probe_left, 1)
-        # The GRANT as well as the remainder, so the write phase can report the
-        # question's total spend against the number the user actually typed.
-        # Reporting against the remainder made one question read as two budgets.
-        out["_pool_total"] = round(session.probe_pool, 1)
-    # The render ceiling the USER granted, carried across to the write phase so
-    # the entry can declare the number it was given rather than one of its own.
-    if getattr(session, "render_ceiling", None) is not None:
-        out["_render_ceiling"] = session.render_ceiling
-    # What an `ask_specified(replaces=...)` answer displaces. Private, like the
-    # budgets: it is a fact about the run, not a field the model fills in.
-    if getattr(session, "replaced", None):
-        out["_replaces"] = [{"name": n, "chapter": c, "id": i}
-                            for n, (c, i) in session.replaced.items()]
-    session.notebook.proposal_path.write_text(json.dumps(out, indent=2) + "\n")
-    raise Terminal(proposal)
-
-
-def render_stop(proposal, notebook):
-    """
-    Why the run stopped, what saying yes commits to, and how to continue.
-
-    This replaced a box that printed the proposal -- title, chapter, cost,
-    figures, inputs -- and then `nb write <notebook>`. Everything in it was
-    true and none of it said the run had STOPPED or why, so the reason had to
-    be inferred from the contents, and inferred wrongly: the guess was that a
-    new chapter forces a whole-chapter re-render. It does not. A new chapter
-    has no siblings, and `check` re-renders siblings only when `_model.py`
-    moves. The stop is a structural commitment, not a spend.
-
-    The proposal itself is still on disk, and is still the thing to read and
-    edit. What the terminal owes is the decision, which is not the same
-    document.
-    """
-    return "\n".join([
-        "",
-        "─" * 72,
-        "STOPPED — this needs a NEW CHAPTER",
-        "─" * 72,
-        f"  {proposal.chapter}",
-        f'  "{proposal.title}"',
-        "",
-        "  Later entries build on its _model.py — changing it then means",
-        "  re-solving all of them. That commitment is yours, not the entry.",
-        "",
-        f"  proposal  {notebook.proposal_path}",
-        "",
-        # A COMMAND ON ITS OWN LINE, never in the right-hand column. Every
-        # other row of that column is information, so a command there reads as
-        # information too and gets copied whole -- label and all. `continue` is
-        # the worst possible label for it: zsh's loop keyword, so the paste
-        # fails with "continue: too many arguments", which says nothing about
-        # the real mistake. Observed, four times in a row.
-        "  continue:",
-        f"    uv run --group nb python -m nb resume {notebook.root.name}",
-        "─" * 72,
-        "",
-    ])
+    import lint as _lint
+    default_solve, default_ceiling = _lint._defaults(notebook.root)
+    ceiling = session.render_ceiling
+    total = session.probe_pool or 0.0
+    left = session.probe_left if session.probe_left is not None else 0.0
+    listing = "\n".join(
+        f"  [{'Specified' if i.source != 'guessed' else 'Assumed'}] {i.name}"
+        f"{f': {i.value}' if i.value else ''} — {i.why}"
+        for i in session.inputs.values())
+    return briefs.WRITE.format(
+        chapter=session.chapter, stem=stem, today=today,
+        ceiling=f"{(ceiling if ceiling is not None else default_ceiling or 200.0):.1f}",
+        solve=f"{(default_solve or 60.0):.1f}",
+        pool=f"{total:.1f}", spent=f"{max(0.0, total - left):.1f}",
+        cost=f"{session.render_cost_s:.1f}", left=f"{left:.0f}",
+        inputs=(f"What you recorded, which is what the callouts state:\n\n"
+                f"{listing}" if listing else
+                f"You recorded no inputs: {session.inputs_none_because}"))

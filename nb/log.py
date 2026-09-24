@@ -20,7 +20,7 @@ without committing has to say so on the terminal or it ends in silence.
 Deliberately NOT a JSONL event protocol. A coordinating agent reads prose
 natively, and JSON costs more: the turn line is ~18 tokens as prose against ~30
 as an object, with keys repeated on every line and a schema to keep in step in
-two places. Anything that must be exact is a FILE read by path -- `proposal.json`
+two places. Anything that must be exact is a FILE read by path -- `run.json`
 already works that way -- not a message to be parsed out of a stream.
 """
 

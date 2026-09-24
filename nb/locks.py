@@ -90,7 +90,7 @@ def claim(path):
     two failures are not alike: a contended RENDER is a few seconds of waiting
     and a retry, while a contended CHAPTER is another agent editing the same
     `_analysis.py` -- which no amount of waiting makes safe, and which is worth
-    refusing early, while the proposal is still on disk to resume from.
+    refusing early, before a turn is spent on a chapter someone else owns.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     # A path this process already claimed is still ours. Without this the

@@ -34,9 +34,16 @@ def declared(notebook, chapter):
     return spec, len(items) - spec
 
 
-def ancestry(notebook, chapter):
+def ancestry(notebook, chapter, parent=None):
     """
     `[parent, grandparent, ...]` from the `_fork.yml` chain. Empty for a root.
+
+    `parent` SEEDS the walk, for a chapter that does not exist yet. That is the
+    case the inheritance review is for and the case it never handled: it runs
+    before `create_chapter`, so `chapters/<chapter>/_fork.yml` is not there,
+    the walk returned empty, and every new chapter -- fork or not -- was
+    offered the notebook's brief instead of its parent's declarations. The
+    fallback was doing the work of the lookup, silently and always.
 
     Cycles are impossible by construction -- `create_chapter` only ever names
     an EARLIER chapter -- but a hand-edited file could make one, and a lint run
@@ -44,6 +51,10 @@ def ancestry(notebook, chapter):
     number of chapters.
     """
     out, seen, cur = [], {chapter}, chapter
+    if parent and parent != chapter and (notebook.chapters_dir / parent).is_dir():
+        out.append(parent)
+        seen.add(parent)
+        cur = parent
     for _ in range(len(notebook.chapters())):
         f = notebook.chapters_dir / cur / "_fork.yml"
         try:
@@ -60,7 +71,7 @@ def ancestry(notebook, chapter):
     return out
 
 
-def inherited(notebook, chapter):
+def inherited(notebook, chapter, parent=None):
     """
     [(kind, item, from_chapter)] a new chapter would carry forward.
 
@@ -85,7 +96,7 @@ def inherited(notebook, chapter):
     mechanical and the dropped set is reported rather than silently missing.
     """
     out, dropped = [], []
-    chain = ancestry(notebook, chapter)
+    chain = ancestry(notebook, chapter, parent)
     if chain:
         import lint
         gone = lint.departures(notebook.root, notebook.chapters())
