@@ -135,11 +135,14 @@ cell, and in each other. They are not modules and are not importable;
 `from _analysis import solve_it` raises ModuleNotFoundError at render (rule 29).
 Call the name directly.
 
-`_analysis.py` IS YOURS TO EDIT, and adding a function to it is free — that is
-how a chapter grows, and it is what rule 2 means by promoting repeated code.
-`_model.py` is the guarded one: a write to it is refused once the chapter has
-entries, and the refusal says what to do. If you EDIT a function that was
-already in either file, `declare_refactor` one line saying what changed.
+ADDING a function to `_model.py` or `_analysis.py` is free — that is how a
+chapter grows, and it is what rule 2 means by promoting repeated code. CHANGING
+the body of one that was already there is a refactor: every sibling entry that
+reaches it gets re-solved to prove its answers held, so the run stops and asks
+the user the moment you do it. Call `declare_refactor` with one line saying what
+changed BEFORE you make the edit — they are shown it beside the decision, and
+"(nothing — declare_refactor was not called)" is a poor case to put to someone
+being asked for minutes of solving.
 
 A number taken from ANOTHER chapter is assigned in your code cell with a comment
 naming the entry it came from, and your prose links that entry:

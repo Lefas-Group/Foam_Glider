@@ -75,7 +75,7 @@ PRODUCTIVE = frozenset({
     "probe",                                         # something was measured
     "fork_chapter", "declare_input", "open_entry",   # the run advanced
     "ask_specified",
-    "declare_refactor", "request_refactor",          # a commitment was made
+    "declare_refactor",                              # a commitment was made
 })
 
 BARREN_LIMIT = 8

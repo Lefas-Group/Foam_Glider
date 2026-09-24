@@ -108,6 +108,32 @@ def main(path, title=None, subject=None, chapter="01-first-chapter",
 
     title = title or root.name.replace("-", " ").title()
     subject = subject or "the aircraft"
+    # THE TITLE IS SUBSTITUTED INTO FOUR FILES BY BLIND STRING REPLACEMENT, and
+    # `_render` is deliberately blunt about it. Nothing downstream catches a bad
+    # one: rule 24's placeholder regex looks for `<...>`, so a title carrying a
+    # shell comment renders, lints clean and ships. RADICAL-GLIDER did exactly
+    # that -- `_quarto.yml` still reads
+    #
+    #     title: "RADICAL GLIDER # once per aircraft Notebook"
+    #
+    # from a command whose trailing comment landed inside the quotes. It is the
+    # site's heading, the browser tab and the description, and it is wrong in
+    # git for ever unless someone notices by eye.
+    #
+    # Refused rather than sanitised: stripping to the `#` would be a guess at
+    # what was meant, and the answer is one keystroke away at the prompt. `"`
+    # is here because these are YAML values, and a newline because it is a
+    # title.
+    bad = [c for c in ('#', '"', '\n', '\r') if c in title]
+    if bad or not title.strip() or len(title) > 60:
+        why = (f"contains {', '.join(repr(c) for c in bad)}" if bad
+               else "is empty" if not title.strip()
+               else f"is {len(title)} characters, and 60 is the cap")
+        tell(f"  the title {why}: {title!r}")
+        tell("  It becomes the site heading, the browser tab and the "
+             "description, in four files.")
+        tell('  Quote it as one argument:  nb new <dir> "Radical Glider"')
+        return 1
 
     (root / "chapters").mkdir(parents=True)
     (root / "_scratch").mkdir(parents=True)

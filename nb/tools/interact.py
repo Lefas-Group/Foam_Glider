@@ -29,7 +29,6 @@ it was reasonable to ask. Here the cap is only good manners.
 import json
 import re
 
-from ..loop import Refactor
 from ..schema import Input
 from ..log import say, tell
 
@@ -470,19 +469,59 @@ def declare_refactor(session, function, why):
             f"chapter is re-proved.")
 
 
-def request_refactor(session, chapter, why):
+def approve_refactor(session, filename, moved, siblings):
     """
-    Declare that the entry cannot be written without changing the vehicle.
+    A shared function just changed. Ask before the chapter is re-proved.
 
-    Reached only after a write to `_model.py` was refused, so by here the agent
-    has tried the cheap path. It ENDS THE RUN, which is the one place that
-    still happens from inside a tool: the decision is whether to pay for
-    re-proving every sibling entry, and that is not the agent's to make.
+    Returns None to proceed, or the refusal to hand back to the model.
+
+    THIS REPLACED `request_refactor`, which asked the model to predict that it
+    needed a refactor and then declare it. It was never once called in 75
+    recorded runs, and it could not have been: it was reachable only after a
+    `_model.py` write was refused, and that guard has never fired. The system
+    can now see the refactor happen, so nothing has to be predicted -- the same
+    correction `guards.py` made when it stopped asking for `render_cost_s` and
+    started measuring it.
+
+    UNDEFAULTED, like the new-chapter approval and for the same reason: this is
+    a commitment to spend, and a defaulted question would spend it for you
+    after five minutes of silence. Walk away and the run leaves the question on
+    disk and exits, resumable; be at the keyboard and it costs a keystroke.
+
+    `--allow-refactor` pre-authorises it, which is what a resumed run carries,
+    and one approval covers the rest of the run -- a fix that touches two
+    functions is one decision, not two.
     """
-    err = Refactor(why)
-    err.chapter, err.why = chapter, why
-    err.entries = len(session.notebook.entries(chapter))
-    raise err
+    listing = ", ".join(moved)
+    body = "\n".join([
+        f"  {filename}   {listing}",
+        "",
+        f"  {siblings} sibling entr{'y' if siblings == 1 else 'ies'} in "
+        f"chapters/{session.chapter} reach this code.",
+        "  Saying yes means re-solving them to prove their answers did not",
+        "  move — minutes — and you will be shown anything that did.",
+        "",
+        '  Enter (or anything else) allows it. "no — <why>" puts the file back.',
+    ])
+    tell(f"\n{'─' * 72}\nREFACTOR — a function the chapter already uses has "
+         f"changed\n{'─' * 72}")
+    tell(body)
+    tell(f"  waiting for an answer — {MAILBOX.notebook.question_path}")
+    answer = str(MAILBOX.ask("refactor", filename, body) or "").strip()
+    if answer.lower().startswith(("no", "n ", "reject", "don't", "do not")):
+        say(f"  refactor  REFUSED — {filename} restored")
+        return (f"refused: the user will not re-prove chapters/"
+                f"{session.chapter} for this. {answer}\n"
+                f"{filename} has been RESTORED to what it was, so your edit to "
+                f"{listing} is gone. Write this entry against the chapter as it "
+                f"stands -- ADDING a function to _analysis.py is always allowed "
+                f"and is how a chapter grows, so a new helper beside the old one "
+                f"is usually the way through. If the entry genuinely cannot be "
+                f"written without changing that function, stop and say why.")
+    say(f"  refactor  allowed — {filename}:{listing}"
+        + (f" — {answer}" if answer else ""))
+    tell(f"  refactor  allowed — the chapter will be re-proved before commit")
+    return None
 
 
 def _new_chapter_approval(notebook, parent, chapter, title, defines):

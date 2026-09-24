@@ -1,38 +1,63 @@
 """
-What the agent may not write, and why refusing beats predicting.
+What the agent may not change without asking, and why asking beats predicting.
 
-Editing a chapter's `_model.py` when the chapter already has entries is a
-REFACTOR, not an entry: every sibling execs that file through `_model.qmd`, and
+Editing a function that a chapter's siblings already call is a REFACTOR, not an
+entry: every one of them execs the shared modules through `_model.qmd`, and
 Quarto's freeze tracks the page rather than its includes, so their committed
 output silently stops matching the code that produces it. `check.py` exists to
-prove a refactor moved nothing -- it deletes the freeze, re-renders and diffs --
-and for a seven-entry chapter that is tens of minutes of re-solving.
+prove a refactor moved nothing -- it moves the freeze aside, re-renders and
+diffs -- and for a seven-entry chapter that is minutes of re-solving.
 
-That cost is worth approving BEFORE it is paid, which makes it one of the two
-stops that survive the gate's removal. The problem is that the agent cannot
-predict it will touch `_model.py` until it is writing, and asking it to predict
-yields the quality of `render_cost_s: 0.0`.
+ASK BEFORE PAYING, WHICH IS THE WHOLE POINT. The gate after the loop used to be
+the only one: it ran `check` (56-173 s, measured) and THEN showed the user the
+diff and asked whether to accept. That is the permission question asked after
+the thing it authorises has been paid for. Now the question comes at the moment
+the body moves -- before the entry is built, before anything is re-solved -- and
+the post-loop gate keeps its own job, which is a different question: not "may
+this change happen" but "here is what it did to the answers".
 
-So do not predict -- refuse at the boundary. The agent then either adapts and
-writes the entry without touching the vehicle, or declares that it genuinely
-needs the refactor, and the run stops with the price attached. The stop happens
-because the agent was refused, not because anything guessed.
+IT COVERS BOTH FILES, which it did not before, and the asymmetry was the bug.
+`_model.py` was guarded by a blanket refusal on any write once the chapter had
+entries; `_analysis.py` was not guarded at all, because "telling an add from a
+body change needs the post-edit content, which `edit_file` does not hand over".
+Measured across every retained transcript: the `_model.py` guard has NEVER
+fired -- three writes ever, all to chapters with zero entries, where writing is
+correct -- and all three real refactors were in `_analysis.py`. The file that
+asked permission never needed to; the file that needed to never asked.
 
-`_analysis.py` is deliberately NOT guarded here. Adding a function is additive
-and safe -- rule 2 promotion explicitly leaves sibling entries untouched -- and
-telling an add from a body change needs the post-edit content, which `edit_file`
-does not hand over. It is caught after the fact instead, by comparing function
-bodies before and after the loop and running `check` if any moved.
+The post-edit content is available one line later. So the write goes through,
+the bodies are compared against the snapshot taken before the model's first
+turn, and a CHANGED body is what triggers the question -- an ADDED function
+triggers nothing, which is what rule 2 promotion is and is why the blanket
+refusal was wrong in the other direction too.
+
+A refusal RESTORES the file from the text read immediately before the write, so
+"no" leaves the chapter exactly as it was. Rolling back from the startup
+snapshot would have clobbered every legitimate addition made since.
 """
 
 import ast
+import pathlib
 
 
-def _guarded(notebook, chapter, path):
-    """Is `path` this chapter's `_model.py`, in a chapter that has entries?"""
-    if not str(path).endswith("_model.py"):
-        return False
-    return bool(notebook.entries(chapter)) if chapter else False
+SHARED = ("_model.py", "_analysis.py")
+
+
+def _refactor(session, path):
+    """
+    (names, siblings) for bodies this write CHANGED, or (None, 0).
+
+    Compared against `session.before_bodies`, snapshotted before the model's
+    first turn -- so it is the chapter as it was COMMITTED, not as the run has
+    left it. Names present in both whose source moved; anything added is not a
+    refactor and is not reported.
+    """
+    f = pathlib.Path(path)
+    if f.name not in SHARED or not session.siblings:
+        return None, 0
+    before = session.before_bodies.get(f.name, {})
+    moved = changed_bodies(before, bodies(session.notebook.chapters_dir / path))
+    return (moved or None), session.siblings
 
 
 # The only files a run may write. Everything else is scratch, and scratch goes
@@ -88,35 +113,46 @@ def _allowed(session, path):
 
 
 def wrap_writes(handlers, session):
-    """Refuse a write outside the chapter's own files, or to `_model.py` in an
-    established chapter."""
+    """Refuse a write outside the chapter's own files, and stop to ask before
+    one that changes a function the chapter's siblings already call."""
     notebook = session.notebook
 
     def guard(name, inner):
         def call(**kw):
             path = kw.get("path", "")
-            chapter = str(path).strip("/").split("/")[0] if path else None
             ok, why = _allowed(session, path)
             if not ok:
                 return {"error": f"refused: {why}"}
-            if not session.allow_refactor and _guarded(notebook, chapter, path):
-                n = len(notebook.entries(chapter))
-                return {"error":
-                        f"refused: chapters/{chapter}/_model.py already has "
-                        f"{n} entr{'y' if n == 1 else 'ies'} built on it, so "
-                        f"changing it is a refactor, not an entry. Every one of "
-                        f"them would have to be re-solved to prove the answers "
-                        f"did not move. Either write this entry against the "
-                        f"vehicle as it is, or call request_refactor to say why "
-                        f"it must change -- that stops the run for approval."}
+            # READ BEFORE WRITING, so a refusal can put it back exactly. Only
+            # for the two shared files; an entry is never rolled back.
+            f = notebook.chapters_dir / str(path).strip("/")
+            watched = f.name in SHARED
+            restore = f.read_text() if watched and f.exists() else None
+
+            out = inner(**kw)
+            if isinstance(out, dict) and out.get("error"):
+                return out
+
+            if watched and not session.allow_refactor:
+                moved, siblings = _refactor(session, path)
+                if moved:
+                    from .interact import approve_refactor
+                    refused = approve_refactor(session, f.name, moved, siblings)
+                    if refused:
+                        if restore is not None:
+                            f.write_text(restore)
+                        return {"error": refused}
+                    # Approved once, for the rest of the run: the user has
+                    # agreed to re-prove this chapter, and asking again for the
+                    # second function of the same fix would be asking the same
+                    # question twice.
+                    session.allow_refactor = True
             # Every successful write, counted. `lint_chapter` compares this
             # against the count at its last call, so it can say "nothing has
-            # changed" instead of re-deriving the same answer: write runs spend
-            # 2-5 lint calls in 8-16 turns, and the transcript shows
-            # consecutive calls with no edit between them.
-            out = inner(**kw)
-            if not (isinstance(out, dict) and out.get("error")):
-                session.writes = getattr(session, "writes", 0) + 1
+            # changed" instead of re-deriving the same answer: runs spend 2-5
+            # lint calls in 8-16 turns, and the transcript shows consecutive
+            # calls with no edit between them.
+            session.writes = getattr(session, "writes", 0) + 1
             return out
         return call
 

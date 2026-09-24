@@ -6,7 +6,7 @@ project:
   execute-dir: project
 
 website:
-  title: "RADICAL GLIDER # once per aircraft Notebook"
+  title: "Radical Glider Notebook"
   description: "A chronological record of questions asked about the aircraft."
   # Next/Previous links in each page footer, so entries read straight through.
   # Only true once the chapters are ordered -- see the sidebar note below.

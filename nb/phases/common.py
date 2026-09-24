@@ -57,7 +57,7 @@ CALL_ARG = {
     "api_search": "query", "api_signature": "path", "api_list": "area",
     "read_reference": "name", "read_figure": "stem",
     "ask_specified": "name",
-    "declare_refactor": "function", "request_refactor": "why",
+    "declare_refactor": "function",
     "fork_chapter": "name", "declare_input": "name", "open_entry": "title",
 }
 

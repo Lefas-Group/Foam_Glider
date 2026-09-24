@@ -15,6 +15,13 @@ prefix position 0, so a list that changes at a transition invalidates the cached
 prefix from that point, and at a measured 67% implicit hit rate that is re-paying
 full rate for the whole accumulated history to save a few hundred tokens.
 
+**`request_refactor` is gone.** It asked the model to predict that it needed a
+refactor and declare it, after a `_model.py` write was refused -- and it was
+never once called in 75 recorded runs, because the guard it hung off has never
+fired. `guards.py` now SEES the refactor happen and asks on the model's behalf,
+at the moment the body moves, so there is nothing left to predict. The same
+correction `render_cost_s` got: stop asking, start measuring.
+
 `check` has no declaration AND its handler refuses. A full chapter check
 re-solves every entry, which is minutes inside a loop -- measured, one run
 called it five times through `bash` and spent thirteen of its twenty-seven
@@ -260,18 +267,6 @@ def native_declarations():
                "why": dict(S, description=(
                    "What changed and why, in one line"))},
               ("function", "why")),
-        _decl("request_refactor",
-              "Declare that this entry cannot be written without changing the "
-              "chapter's _model.py, after a write to it was refused. ENDS THE "
-              "RUN: every existing entry in the chapter would have to be "
-              "re-solved to prove its answers did not move, and that is the "
-              "user's call. Use it only when the vehicle is genuinely wrong or "
-              "missing something the question needs -- not to restructure code "
-              "you would rather have written differently.",
-              {"chapter": S, "why": dict(S, description=(
-                  "What must change and why the entry cannot be written "
-                  "without it"))},
-              ("chapter", "why")),
     ]
 
 
@@ -310,8 +305,6 @@ def build(session, fs):
             interact.declare_input(session, name, value, source, why)),
         "open_entry": lambda title, inputs_none_because="": (
             interact.open_entry(session, title, inputs_none_because)),
-        "request_refactor": lambda chapter, why: interact.request_refactor(
-            session, chapter, why),
         "declare_refactor": lambda function, why: interact.declare_refactor(
             session, function, why),
     })

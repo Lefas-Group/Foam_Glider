@@ -1,5 +1,5 @@
 ---
-title: "RADICAL GLIDER # once per aircraft"
+title: "Radical Glider"
 ---
 
 ```{python}

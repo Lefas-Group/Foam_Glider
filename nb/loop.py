@@ -30,19 +30,6 @@ from .log import thought
 from .stuck import Detector
 
 
-class Refactor(Exception):
-    """
-    Declared in `tools/interact.py`; defined here so `loop` can let it through.
-
-    A handler that ends the run rather than returning to it, which the loop's
-    catch-all would otherwise turn into a tool error the model would try to
-    work around. It is the last of its kind: `Terminal` went with `propose`,
-    because the loop no longer needs a way to be interrupted with a payload --
-    it ends when a turn calls no tool, and what the run produced is on the
-    session.
-    """
-
-
 class Stopped(Exception):
     """
     Someone asked this run to stop -- `nb stop`, or a coordinator.
@@ -104,7 +91,7 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
     """
     Drive the loop until the model stops calling tools, or a Terminal fires.
 
-    Returns nothing. A stop RAISES -- `Refactor` and `Stopped` carry the
+    Returns nothing. A stop RAISES -- `Stopped` carries the
     and the caller catches it -- so the three-tuple this used to return had a
     third element that was None on every path that reached a `return`, and
     nothing read any of it.
@@ -172,8 +159,6 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
                 continue
             try:
                 out = fn(**dict(c.args))
-            except Refactor:
-                raise                  # a declared stop, not a tool failure
             except Stopped:
                 # Someone asked this run to stop, from inside a tool -- the
                 # mailbox raises it when a question is waiting and `nb stop`

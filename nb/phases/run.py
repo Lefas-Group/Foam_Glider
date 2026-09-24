@@ -33,7 +33,7 @@ import datetime
 import sys
 
 from ..config import MAX_LINT_ATTEMPTS, MAX_RENDER_FIXES, MAX_TURNS, PROBE_POOL
-from ..loop import Refactor, Stopped, run as drive
+from ..loop import Stopped, run as drive
 from ..session import Session
 from ..preflight import check as preflight
 from ..tools import guards, verifiers
@@ -512,19 +512,6 @@ def _execute(notebook, session, contents, run_metrics, fs, handlers,
                f"    uv run --group nb python -m nb resume "
                f"{notebook.root.name} {notebook.run_id}\n")
         raise
-    except Refactor as r:
-        # The agent tried to change the vehicle, was refused, and said why.
-        # Ending here is the point: re-proving a chapter is minutes of solves,
-        # and whether to spend them is not the agent's call.
-        run_metrics.close("needs_refactor")
-        tell(f"\n  {'─' * 70}\n  REFACTOR NEEDED — nothing committed\n"
-             f"  {'─' * 70}\n"
-             f"  chapter   {r.chapter}  ({r.entries} entr"
-             f"{'y' if r.entries == 1 else 'ies'} would be re-proved)\n"
-             f"  why       {r.why}\n\n  If that is right:\n"
-             f"    uv run --group nb python -m nb resume "
-             f"{notebook.root.name} {notebook.run_id} --allow-refactor\n")
-        return 2
     finally:
         fs.stop()
 
