@@ -178,7 +178,10 @@ def alive(run_dir):
     started or predates this. Both are things to clean up rather than wait for.
     """
     import fcntl
-    p = pathlib.Path(run_dir) / LOCK
+    # A Notebook is not a run directory, and passing one used to raise inside
+    # `pathlib` with a message about `__fspath__` -- three call sites away from
+    # the mistake. `nb stop` shipped with exactly that.
+    p = pathlib.Path(getattr(run_dir, "run", run_dir)) / LOCK
     if not p.exists():
         return False
     try:

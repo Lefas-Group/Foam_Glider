@@ -102,6 +102,17 @@ def _start(notebook, quiet, answers):
     # still going asks whether this lock is still held, so it has to be taken
     # before the run can be asked about -- which means before its first
     # question, its first turn and its first `run.json` the board will read.
+    # THE LOCK BEFORE THE STATE, and that order is load-bearing. `alive()`
+    # reads "no lock file" as dead, which is right for a run that never started
+    # and wrong for one that is starting: the board runs in the PARENT and
+    # begins polling the instant the fork returns, so a `run.json` written
+    # before the child takes its lock is a run the board reads as dead,
+    # announces as "died without a word", and leaves. Observed on the first
+    # live run after the board learned to announce endings.
+    #
+    # Writing the state second closes it with no timing guess: until the lock
+    # exists there is no `run.json` either, `_runs` skips the directory, and
+    # the board's "all my runs have ended" test requires a non-empty list.
     runstate.hold(notebook)
     runstate.write(notebook, detail=DETAIL)
     detach_output()
@@ -129,9 +140,9 @@ def main(notebook_path, question, verbose=True,
         tell(f"  no chapter {chapter!r} in {notebook.root.name}.")
         tell(f"  It has: {', '.join(known) if known else '(none)'}")
         return 2
+    _start(notebook, quiet, answers)          # forks; takes the lock first
     runstate.write(notebook, phase="run", question=question,
                    chapter=chapter, turn=0, waiting_on=None)
-    _start(notebook, quiet, answers)
     open_log(notebook, "run", question)
     run_metrics = metrics.Run(notebook, "run", question)
 
@@ -236,8 +247,8 @@ def resume(notebook_path, run_id=None, allow_refactor=False,
              f"{notebook.root.name} \"{state.get('question', '<question>')}\"")
         return 2
 
-    runstate.write(notebook, phase="run")
     _start(notebook, quiet, answers)
+    runstate.write(notebook, phase="run")
     title = state.get("title") or stem[14:].replace("-", " ")
     question = state.get("question") or title
     open_log(notebook, "resume", title)

@@ -83,7 +83,7 @@ def main(argv):
         tell(f"  no such run: {run_id}")
         return 1
     state = runstate.read(target)
-    if runstate.alive(target) is False:
+    if runstate.alive(target.run) is False:
         tell(f"  {run_id} has already ended"
              f"{' — ' + state['outcome'] if state.get('outcome') else ''}")
         return 0
