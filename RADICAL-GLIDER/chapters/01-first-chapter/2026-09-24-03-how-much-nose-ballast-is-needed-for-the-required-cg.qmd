@@ -1,0 +1,42 @@
+---
+title: "How much nose ballast is needed for the required CG?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 150.0        # s granted for the probe
+PROBE_SPENT = 33.1      # s the probe actually used
+
+plane = get_airplane()
+total_mass, cg_unballasted = get_mass_properties(plane)
+
+# Inherited from earlier entry
+req_cg = 0.267
+
+# Assume ballast at nose
+nose_x = plane.fuselages[0].xsecs[0].xyz_c[0]
+
+ballast_mass = total_mass * (cg_unballasted[0] - req_cg) / (req_cg - nose_x)
+```
+
+::: {.hero}
+[`{python} f"{ballast_mass*1000:.1f} g"`]{.hero-value}
+[ballast required at the nose]{.hero-label}
+:::
+
+**Answer.** The unballasted aircraft has a mass of [`{python} f"{total_mass*1000:.1f}"`]{.key} g and its CG rests at [`{python} f"{cg_unballasted[0]:.3f}"`]{.key} m aft of the datum. To bring the balance point forward to the [required CG](2026-09-24-02-where-is-the-neutral-point-and-the-required-cg.qmd), we need [`{python} f"{ballast_mass*1000:.1f}"`]{.key} g of ballast at the nose tip (`x=`[`{python} f"{nose_x:.3f}"`]{.key} m).
+
+::: {.callout-note}
+## New assumptions
+1. **Mass model: fuse solid, wings sheet**, from volumes.
+2. **Ballast location: nose tip**, best for gliders.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+footer(get_mass_properties)
+```
