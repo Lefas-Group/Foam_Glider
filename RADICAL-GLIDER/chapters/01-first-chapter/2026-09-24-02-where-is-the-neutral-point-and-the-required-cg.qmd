@@ -30,14 +30,7 @@ cg_x = x_np - 0.10 * mac
 [Required CG location]{.hero-label}
 :::
 
-**Answer.** The X-Wing's neutral point sits at $x = $ [`{python} f"{x_np:.3f}"`]{.key} m from the nose reference. For pitch stability, placing the center of gravity at a 10% static margin requires it to be located at $x = $ [`{python} f"{cg_x:.3f}"`]{.key} m.
-
-::: {.callout-tip}
-## New user specifications
-Asked of the user, 2026-09-24:
-
-1. **static margin: 10% of MAC** — dictates CG placement.
-:::
+**Answer.** The X-Wing's neutral point sits at $x =$ [`{python} f"{x_np:.3f}"`]{.key} m from the nose reference. For pitch stability, placing the center of gravity at a 10% static margin requires it to be located at $x =$ [`{python} f"{cg_x:.3f}"`]{.key} m.
 
 ```{python}
 #| label: fig-three-view

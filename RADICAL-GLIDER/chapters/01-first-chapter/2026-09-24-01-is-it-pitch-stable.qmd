@@ -39,13 +39,6 @@ trim_alpha = float(interp1d(aero["Cm"], alphas)(0))
 
 **Answer.** Yes, but it will dive. With the center of gravity placed for a 10% static margin ([`{python} f"{x_cg * 1000:.0f}"`]{.key} mm), the aircraft is statically stable in pitch ($\partial C_m / \partial \alpha =$ [`{python} f"{Cma:.2f}"`]{.key} rad⁻¹). However, because the main fuselage is curved upwards and the wings are symmetric flat plates, the aircraft has a negative pitching moment at zero angle of attack. It therefore trims at [`{python} f"{trim_alpha:.1f}"`]{.key}° with negative lift, meaning it dives rather than gliding (@fig-cm-alpha).
 
-::: {.callout-tip}
-## New user specifications
-Asked of the user, 2026-09-24:
-
-1. **center of gravity (or static margin): 10%** — User specified.
-:::
-
 ```{python}
 #| label: fig-cm-alpha
 #| fig-cap: "Pitching moment coefficient against angle of attack. The negative intercept means the stable trim point is at a negative angle."

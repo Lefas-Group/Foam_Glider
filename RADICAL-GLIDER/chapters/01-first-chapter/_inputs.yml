@@ -5,6 +5,7 @@ defines: FliteTest X-Wing airframe cut from 5.0 mm foam at 174.4 g/m2, flat plat
 
 specified:
   - dihedral: 20 degrees determines the cross-angle of the X-wing.
+  - static-margin: 10% of the mean aerodynamic chord, which fixes the CG.
 
 assumed:
   - wing_pos: Wing position x=0.25m, z=0.0381m, not given on plan.
