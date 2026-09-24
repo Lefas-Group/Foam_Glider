@@ -905,14 +905,27 @@ def chapter_inputs(chapter):
 
     # Grouped by the chapter that DECLARED the item, not by the parent: 04
     # forks from 03 but overwrites 01's items.
+    # TWO SOURCES, ONE CALLOUT. `_fork.yml` records what this chapter broke in
+    # an ANCESTOR, which is what forking means; `_inputs.yml` records what a
+    # later entry here superseded in an earlier one, which needs no fork and no
+    # approval -- an assumption is the writer's to revise. They are the same
+    # fact at two scales, so they render together.
+    #
+    # A bare handle with no `/` is one of THIS chapter's own -- an entry stem,
+    # since a chapter item would simply have been rewritten rather than
+    # overwritten.
+    own = _blocks(_pathlib.Path("chapters") / chapter / "_inputs.yml")
     gone = {}
-    for target, why in (fork.get("overwrites") or []):
+    for target, why in ((fork.get("overwrites") or [])
+                        + (own.get("overwrites") or [])):
         src, _, item_id = target.partition("/")
-        if item_id:
-            gone.setdefault(src, []).append((_item_text(src, item_id), why))
+        if not item_id:
+            src, item_id = chapter, src
+        gone.setdefault(src, []).append((_item_text(src, item_id), why))
     for src, rows in gone.items():
         print("::: {.callout-warning}")
-        print(f"## Overwritten from {_chapter_title(src)}\n")
+        print("## Overwritten" + ("" if src == chapter
+                                  else f" from {_chapter_title(src)}") + "\n")
         for n, (text, why) in enumerate(rows, 1):
             print(f"{n}. {text}" + (f" — {why}" if why else ""))
         print(":::\n")
