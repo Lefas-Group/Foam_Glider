@@ -147,12 +147,6 @@ def wrap_writes(handlers, session):
                     # second function of the same fix would be asking the same
                     # question twice.
                     session.allow_refactor = True
-            # Every successful write, counted. `lint_chapter` compares this
-            # against the count at its last call, so it can say "nothing has
-            # changed" instead of re-deriving the same answer: runs spend 2-5
-            # lint calls in 8-16 turns, and the transcript shows consecutive
-            # calls with no edit between them.
-            session.writes = getattr(session, "writes", 0) + 1
             return out
         return call
 

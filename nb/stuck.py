@@ -67,7 +67,7 @@ hundred turns to finish.
 # errored produced nothing; counting it as progress is how a detector goes blind
 # to exactly the failure it was built for, wearing a different tool's name.
 # NOTE `create_chapter` is deliberately absent: it is not a tool. Chapter
-# creation goes through `open_chapter`, which calls the handler directly, so a
+# creation goes through `fork_chapter`, which calls the handler directly, so a
 # name here that no model can emit is a line that looks like coverage and is
 # not -- see `tools/__init__.py`.
 PRODUCTIVE = frozenset({

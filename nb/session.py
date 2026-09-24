@@ -38,10 +38,16 @@ class Session:
         self.stem = None
         self.entry_path = None
         self.entry_title = ""
-        # Snapshotted by `open_chapter`, before the model may write anything:
-        # {filename: {function: source}}. The refactor gate compares this
-        # against the same files after the loop, which is the only way to tell
-        # an added `_analysis.py` helper from a changed one.
+        # The chapter digest at the last `lint` call, so a second call over
+        # unchanged bytes can say so instead of re-deriving the same answer.
+        # Runs spend 2-5 lint calls in 8-16 turns and the transcripts show
+        # consecutive ones with no edit between them.
+        self._lint_at = None
+        # Snapshotted at STARTUP, before the model's first turn, so it is the
+        # chapter as it was committed: {filename: {function: source}}. The
+        # write guard compares against it on every edit to a shared file, which
+        # is the only way to tell an added `_analysis.py` helper from a changed
+        # one -- and the difference is a refactor the user has to approve.
         self.before_bodies = {}
         self.siblings = 0
         # Solve seconds the PROBE cost, frozen at open_entry. Measured, never

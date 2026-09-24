@@ -6,7 +6,7 @@ on it WAS the `propose` declaration, 44% of the whole tool surface. Weighed, it
 was mostly not a schema: four descriptions (`figures`, `route`, `forked_from`,
 `title`) were 57% of all its field text and every one restated doctrine that is
 already in `system_instruction.md`, shared and cached once. It is gone with the
-gate it fed; `open_chapter` and `open_entry` take the few parameters that are
+gate it fed; `fork_chapter` and `open_entry` take the few parameters that are
 genuinely per-call and point at the instruction for the rest.
 
 `Input` stays, and pydantic still earns its place twice on it: the validator is

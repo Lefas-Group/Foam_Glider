@@ -78,27 +78,61 @@ def _word_budgets(notebook, chapter):
     return ("\n\nprose budgets (rule 6):\n" + "\n".join(lines)) if lines else ""
 
 
+def _chapter_digest(notebook, chapter):
+    """
+    One hash over everything in the chapter that lint reads.
+
+    Sorted by name, and the NAME is hashed with the bytes -- otherwise renaming
+    an entry, or adding an empty one, leaves the digest unmoved. Unreadable
+    files hash as absent, which is the same answer lint gives them.
+    """
+    import hashlib
+    h = hashlib.blake2b(digest_size=16)
+    d = notebook.chapters_dir / chapter
+    for f in sorted(d.iterdir() if d.is_dir() else []):
+        if not f.is_file():
+            continue
+        h.update(f.name.encode())
+        try:
+            h.update(f.read_bytes())
+        except OSError:
+            pass
+    return h.hexdigest()
+
+
 def lint_chapter(notebook, chapter, session=None):
     """
     Lint one chapter. Scoped to the chapter, not the entry, because rule 2
     (repeated code) and rule 10 (sibling links) are cross-entry by nature.
 
-    Answers "nothing has changed" when no file has been written since the last
-    call. Re-running a pure function over unchanged inputs cannot produce a
-    different answer, and a model that asks anyway is spending a turn to be told
-    what it already knows -- which the transcripts show happening two or three
-    times a run.
+    Answers "nothing has changed" when the chapter's CONTENT is byte-identical
+    to the last call. Re-running a pure function over unchanged inputs cannot
+    produce a different answer, and a model that asks anyway is spending a turn
+    to be told what it already knows -- which the transcripts show happening two
+    or three times a run.
+
+    A CONTENT HASH, where this used to count writes. `session.writes` was
+    incremented by `guards.wrap_writes`, so the cache key was "how many times
+    did a write go through these two handlers" -- a counter someone has to
+    remember to increment, which is the shape of cache key that eventually
+    disagrees with the thing it is caching. It already had one near miss: the
+    refactor guard RESTORES a file when the user refuses, which is a real
+    change to disk that the counter never sees, and it came out right only
+    because the restore put the file back to what it was at the last lint.
+    A hash needs no such argument -- it is the same test lint itself would
+    make, over the same bytes.
 
     The word counts are here for the same reason: rule 6 is a budget, and the
     model twice shelled out to `bash` to count against it by hand. A budget you
     have to measure yourself is a budget you measure wrong.
     """
     if session is not None:
-        writes = getattr(session, "writes", 0)
-        if getattr(session, "_lint_at", None) == writes:
-            return ("lint: nothing has been written since your last call, so "
-                    "the answer is unchanged. Edit something, or move on.")
-        session._lint_at = writes
+        digest = _chapter_digest(notebook, chapter)
+        if session._lint_at == digest:
+            return ("lint: nothing in this chapter has changed since your last "
+                    "call, so the answer is unchanged. Edit something, or move "
+                    "on.")
+        session._lint_at = digest
 
     blocking, warnings = _problems(notebook.root, [chapter])
     budgets = _word_budgets(notebook, chapter)

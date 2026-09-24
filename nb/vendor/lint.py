@@ -2290,7 +2290,7 @@ def parse_inputs(path):
     That used to be prose in `index.qmd` and was removed from the page for good
     reason (measured across six chapters it restated the fork in half of them
     and the front page in the other half), which left it with nowhere to live:
-    `defines` is a required argument of `open_chapter` for a new one, and was
+    `defines` is a required argument of `fork_chapter` and of `nb new`, and was
     being written into a placeholder that no longer existed. It is not rendered.
     Its readers are the PREFIX, which needs it to route a question to the right
     chapter, and `claimable_stub`, which needs its placeholder to tell a

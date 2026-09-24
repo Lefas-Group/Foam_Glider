@@ -5,7 +5,7 @@ There used to be two phases with a gate between them, and `proposal.json` in
 the middle. The gate is gone. It was not mainly a document: it was the single
 point where a run committed to a chapter, a title and a set of inputs, and it
 enforced four refusals there. Those refusals still exist -- they moved to
-`open_chapter` and `open_entry`, where each becomes true at the moment the
+`fork_chapter` and `open_entry`, where each becomes true at the moment the
 model decides it rather than as a field filled in afterwards.
 
 WHAT THE STOP COST, measured across the ten runs still on disk: seven of ten

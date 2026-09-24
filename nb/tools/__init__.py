@@ -63,7 +63,7 @@ record is append-only and the refactor gate already prints the diff of exactly
 the functions that moved, so this is not being replaced on anticipation. If a
 run stalls for want of it, `git_diff(path)` is a two-line tool to add then.
 
-**`create_chapter` is deliberately NOT here.** `open_chapter` is a declaration
+**`create_chapter` is deliberately NOT here.** `fork_chapter` is a declaration
 of intent that the system acts on, and the system does the creating. A
 `create_chapter` tool could only ever return `rejected: already exists`, and it
 made ownership ambiguous on the one path that is structurally irreversible -- an

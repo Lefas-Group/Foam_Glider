@@ -1,7 +1,7 @@
 """
 The tools that talk to the human, and the three that move the run forward.
 
-`open_chapter`, `declare_input` and `open_entry` replaced `propose`, which was
+`fork_chapter`, `declare_input` and `open_entry` replaced `propose`, which was
 a fifteen-field document the model filled in at the end and a second process
 read back. None of that survived contact: 44% of the whole tool surface was one
 declaration, most of it doctrine already in the system instruction; four of
@@ -287,7 +287,7 @@ def confirm_inherited(notebook, chapter, parent=None):
     model was told neither: the answer was persisted and read by nothing, so
     striking an item changed a log line and nothing else.
 
-    At `open_chapter`, beside the approval, because that is the only moment
+    At `fork_chapter`, beside the approval, because that is the only moment
     both halves are known and it is the one place the run already stops. The
     approval names the chapter and its title; what it INHERITS is the substance
     of the commitment, and it used to be shown nowhere.
