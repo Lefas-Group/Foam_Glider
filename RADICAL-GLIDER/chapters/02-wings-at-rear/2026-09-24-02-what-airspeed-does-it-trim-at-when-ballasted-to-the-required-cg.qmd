@@ -1,0 +1,67 @@
+---
+title: "What airspeed does it trim at when ballasted to the required CG?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 26.9      # s the probe actually used
+
+mass, cg = get_mass_properties(get_airplane())
+mac = get_airplane().c_ref
+
+op1 = asb.OperatingPoint(velocity=10, alpha=0)
+aero1 = asb.AeroBuildup(airplane=get_airplane(), op_point=op1).run()
+op2 = asb.OperatingPoint(velocity=10, alpha=1)
+aero2 = asb.AeroBuildup(airplane=get_airplane(), op_point=op2).run()
+
+CL_alpha = (aero2["CL"] - aero1["CL"]) / np.radians(1)
+Cm_alpha = (aero2["Cm"] - aero1["Cm"]) / np.radians(1)
+
+x_np = get_airplane().xyz_ref[0] - mac * Cm_alpha / CL_alpha
+req_cg = float(np.array(x_np - 0.1 * mac).flatten()[0])
+
+op_trim = asb.OperatingPoint(velocity=10, alpha=0)
+aero_trim = asb.AeroBuildup(airplane=get_airplane(), op_point=op_trim, xyz_ref=[req_cg, 0, get_airplane().xyz_ref[2]]).run()
+cm_0 = float(np.array(aero_trim["Cm"]).flatten()[0])
+```
+
+::: {.hero}
+None
+[Cannot trim upright]{.hero-label}
+:::
+
+**Answer.** It cannot trim at any airspeed. With a symmetric flat-plate wing and no incidence, the pitching moment at zero lift is [`{python} f"{cm_0:.3f}"`]{.key}. Combined with a stable 10% static margin, the aircraft requires a negative lift coefficient to achieve zero pitching moment, meaning it cannot produce the upward lift required to balance its weight in level flight.
+
+```{python}
+#| label: fig-pitching-moment
+#| fig-cap: "Pitching moment versus lift coefficient at the required CG. The aircraft crosses zero pitching moment only at negative lift, precluding upright trim."
+import matplotlib.pyplot as plt
+
+alphas = np.linspace(-5, 10, 16)
+cms = []
+cls = []
+for a in alphas:
+    op = asb.OperatingPoint(velocity=10, alpha=a)
+    aero = asb.AeroBuildup(airplane=get_airplane(), op_point=op, xyz_ref=[req_cg, 0, get_airplane().xyz_ref[2]]).run()
+    cms.append(float(np.array(aero["Cm"]).flatten()[0]))
+    cls.append(float(np.array(aero["CL"]).flatten()[0]))
+
+fig, ax = plt.subplots(figsize=(6, 4))
+ax.plot(cls, cms, 'k.-')
+ax.axhline(0, color='gray', linestyle='--')
+ax.axvline(0, color='gray', linestyle='--')
+ax.set_xlabel("Lift coefficient $C_L$")
+ax.set_ylabel("Pitching moment $C_m$")
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(get_mass_properties)
+```
