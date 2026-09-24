@@ -7,7 +7,8 @@ it DISPLAYS at ten; nothing capped what was on disk.
 
 Two rules, and the second is the one that matters:
 
-  * a live run is never touched -- `runstate.alive()` reads the pid, and a run
+  * a live run is never touched -- `runstate.alive()` asks whether the run
+    still holds its lock, and a run
     mid-probe would lose its question and its log underneath it;
   * a run whose CHAPTER still has uncommitted changes is reported, never
     deleted, however old it is.
@@ -103,7 +104,7 @@ def main(argv):
     drop, held, seen = [], [], 0
     for d in runs:
         state = runstate.read(d)
-        alive = runstate.alive(state)
+        alive = runstate.alive(d)
         chapter = state.get("chapter")
         if alive is not False:
             held.append((d, "running"))

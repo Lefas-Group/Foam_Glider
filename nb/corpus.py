@@ -94,7 +94,7 @@ EXPECTED = {
 def counts(root):
     import lint
     problems = lint.check(root, lint.chapters_of(root))
-    blocking = [m for _, m in problems if "(warning)" not in m]
+    blocking = [m for _, _, m in problems if "(warning)" not in m]
     return len(blocking), len(problems)
 
 

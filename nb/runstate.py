@@ -26,6 +26,7 @@ place in the system where a reader and a writer are guaranteed to race.
 
 import json
 import os
+import pathlib
 import time
 
 
@@ -135,62 +136,63 @@ def _stat(pid):
     return got[0] if got else ""
 
 
-def _seconds(etime):
-    """`[[dd-]hh:]mm:ss` as seconds. Parsed right to left, so the optional
-    halves need no cases of their own."""
-    days, _, rest = etime.rpartition("-")
+LOCK = "run.lock"
+
+
+def hold(notebook):
+    """
+    Take this run's liveness lock, for the life of the process.
+
+    Called once, in the child, immediately after the fork. Everything that asks
+    "is this run still going?" asks whether this lock is still held.
+    """
+    from .locks import claim
+    return claim(notebook.run / LOCK)
+
+
+def alive(run_dir):
+    """
+    True if the run still holds its lock, False if it does not.
+
+    THE KERNEL IS THE WITNESS. This used to be pid archaeology: `os.kill(pid, 0)`
+    to see whether a process existed, a `ps` call to tell a ZOMBIE from a live
+    process (a zombie answers `kill(0)` exactly as a live one does), and then
+    `_is_ours` -- comparing that process's uptime against the run's `pid_at`
+    with a 120-second slack, because pids are RECYCLED and a run directory
+    outlives its process. Ninety-three lines and two magic constants to work
+    out something the operating system already knows.
+
+    `locks.py` has said so all along: "fcntl.flock rather than a lock FILE with
+    a pid in it: the kernel releases it when the process dies, so a killed
+    agent cannot leave a lock behind. That is the failure mode hand-rolled
+    locks are made of." Two modules here hand-rolled one anyway, and each grew
+    a heuristic to patch exactly the failure that sentence predicts.
+
+    A flock has none of it. It is released on exit, on SIGKILL, and when a
+    zombie is reaped; it is per-file, so pid reuse cannot confuse it; and the
+    probe is one syscall rather than a subprocess -- which `nb board` makes 2N
+    of a second, refreshing twice a second across N runs.
+
+    NO LOCK FILE MEANS DEAD. A live run takes it before it can do anything
+    else, including asking a question, so a run without one either never
+    started or predates this. Both are things to clean up rather than wait for.
+    """
+    import fcntl
+    p = pathlib.Path(run_dir) / LOCK
+    if not p.exists():
+        return False
     try:
-        parts = [int(x) for x in rest.split(":")]
-    except ValueError:
-        return None
-    while len(parts) < 3:
-        parts.insert(0, 0)
-    h, m, sec = parts[-3:]
-    return ((int(days) if days else 0) * 86400) + h * 3600 + m * 60 + sec
-
-
-def _elapsed(pid):
-    """Seconds since the process started, or None if it cannot be told."""
-    got = _ps(pid, "etime")
-    return _seconds(got[0]) if got else None
-
-
-# How much younger than its run a process may look and still be believed. `ps`
-# rounds `etime` to the second and `started` is written a moment after the
-# process begins, so the two disagree by a little, always in the same
-# direction. Generous on purpose: this test exists to catch a pid that is
-# YEARS out, not to adjudicate seconds.
-PID_SLACK = 120.0
-
-
-def _is_ours(state, elapsed=None):
-    """
-    False when the pid exists but cannot be this run's process.
-
-    A run directory outlives its process, and pids are recycled -- 99998 of
-    them on a mac, which a busy week gets through. Inherit one and the board
-    calls a finished run `running` for ever, `nb clean` refuses to drop it
-    because it looks alive, and the board will sit offering to answer a
-    question on its behalf.
-
-    Told apart by AGE: a process that has been up for less time than the pid
-    has been recorded cannot be the process that recorded it. Nothing else is
-    needed -- the impostor is almost always far younger, since it got the pid
-    only after ours released it.
-
-    Against `pid_at` and not `started`: a resumed run keeps the run's start
-    time and takes a new process, so `started` would make every resume look
-    like an impostor. Runs written before `pid_at` existed fall back to
-    `started`, which is right for them -- they never resumed.
-    """
-    pid = state.get("pid")
-    started = state.get("pid_at") or state.get("started")
-    if not started or not pid:
-        return True                  # nothing to check against; do not guess
-    up = _elapsed(pid) if elapsed is None else elapsed
-    if up is None:
-        return True
-    return up + PID_SLACK >= (time.time() - started)
+        fh = open(p, "a+")
+    except OSError:
+        return None                 # cannot tell; do not guess
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(fh, fcntl.LOCK_UN)
+        return False                # nobody was holding it
+    except OSError:
+        return True                 # somebody is
+    finally:
+        fh.close()
 
 
 def stopped(state):
@@ -211,39 +213,3 @@ def stopped(state):
         return None
     st = _stat(pid)
     return st.startswith("T") if st else None
-
-
-def alive(state):
-    """True if the pid exists, False if not, None if we cannot tell."""
-    pid = state.get("pid")
-    if not pid:
-        return None
-    try:
-        os.kill(pid, 0)
-        # Two ways a live-looking pid is not a live run, both checked only on
-        # the path that would otherwise say yes, so the cheap test still
-        # carries the common case.
-        #
-        # A ZOMBIE answers os.kill exactly as a live process does, and is not
-        # alive in any sense that matters: it has exited, and it lingers only
-        # until its parent shell reaps it. Seen straight after killing a
-        # suspended run -- the process was <defunct> and the board would have
-        # gone on calling it `running`.
-        #
-        # And the pid may belong to someone else entirely: see `_is_ours`.
-        #
-        # ONE `ps` call for both. `nb board` re-reads every run twice a second,
-        # so a second subprocess here is 2N of them per second for a fact that
-        # arrives in the same line as the first.
-        got = _ps(pid, "stat", "etime")
-        if not got:
-            return False             # gone between the kill() and the ps
-        if got[0].startswith("Z"):
-            return False
-        return _is_ours(state, _seconds(got[1]) if len(got) > 1 else None)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    except OSError:
-        return None

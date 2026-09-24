@@ -77,6 +77,12 @@ def _start(notebook, quiet, answers):
             from .board import follow
             board = lambda: follow(notebook, only=notebook.run_id)
         detach_process(notebook, parent=board)
+    # IN THE CHILD, and before anything else can happen: `detach_process`
+    # never returns in the parents. Everything that asks whether this run is
+    # still going asks whether this lock is still held, so it has to be taken
+    # before the run can be asked about -- which means before its first
+    # question, its first turn and its first `run.json` the board will read.
+    runstate.hold(notebook)
     detach_output()
 
 

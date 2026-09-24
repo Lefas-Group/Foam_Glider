@@ -44,7 +44,7 @@ def main(argv):
     runs = []
     for d in notebook.runs():
         state = runstate.read(d)
-        if state and runstate.alive(state) is not False:
+        if state and runstate.alive(d) is not False:
             runs.append((d.name, state))
 
     # Matched against EVERY run, not just the live ones. Matching only live runs
@@ -83,7 +83,7 @@ def main(argv):
         tell(f"  no such run: {run_id}")
         return 1
     state = runstate.read(target)
-    if runstate.alive(state) is False:
+    if runstate.alive(target) is False:
         tell(f"  {run_id} has already ended"
              f"{' — ' + state['outcome'] if state.get('outcome') else ''}")
         return 0

@@ -489,6 +489,20 @@ def _notebook_drift(root):
     # while the scaffold that creates the next one still held the old text --
     # drift invisible precisely because nothing compared them.
     problems = []
+
+    # (rule, where, message). THE NUMBER IS A FIELD NOW, not something a caller
+    # greps out of the prose. `verifiers._problems` had to drop rule 12 before
+    # a render -- the render IS its fix, so gating the render on it deadlocks --
+    # and the only handle it had was `FREEZE_STALE = "but the freeze is not"`, a
+    # substring of the message. Reword the message and the filter silently stops
+    # working; what comes back is the deadlock, which cost three runs in a row.
+    # This repo already learned that once: rules 35 and 39 key on the function
+    # call rather than on comment wording, after keying on prose went stale.
+    #
+    # `None` where a check still bundles several rules -- `_budget_rules` covers
+    # 16, 17, 18 and 28 between them, and attributing per finding means
+    # splitting the function. The table below is therefore also the list of what
+    # is left to split, which is the honest version of a gap.
     for canonical_name, local_name in (("notebook.py", "_notebook.py"),
                                        ("probe_base.py", "_scratch/_probe_base.py")):
         problems += _one_drift(pathlib.Path(__file__).parent / canonical_name,
@@ -1060,13 +1074,54 @@ def _stale_freeze(root, chapters):
         return []
     dirty = {line[3:].strip().strip('"') for line in out.stdout.splitlines()}
 
+    # WHAT GIT TRACKS, for the absence half below. One call, reused per chapter.
+    try:
+        listed = subprocess.run(["git", "ls-files"], cwd=root,
+                                capture_output=True, text=True, timeout=10)
+        tracked = set(listed.stdout.split()) if not listed.returncode else None
+    except (OSError, subprocess.SubprocessError):
+        tracked = None
+
     found = []
     for c in chapters:
+        # A COMMITTED PAGE WITH NO FREEZE AT ALL, which the staleness test below
+        # cannot see: it compares a freeze against the code, and `if not frozen:
+        # continue` means absence was silent. That is the one failure the rule
+        # exists to catch, and it has happened twice -- a chapter lost its index
+        # freeze and stayed that way through several commits, and a commit swept
+        # nine of chapter 04's freeze files out of git.
+        #
+        # Silence there is expensive in a way staleness is not. A stale freeze
+        # publishes a wrong number; a missing one makes the site RE-EXECUTE the
+        # page, which for an entry is hundreds of seconds of aero solves, and
+        # makes a fresh clone unrenderable without them.
+        #
+        # SCOPED TO WHAT GIT TRACKS, which is what makes it quiet in the cases
+        # that should be quiet: a scaffolded notebook has no entries, and an
+        # entry being written right now is untracked until it commits.
+        #
+        # A WARNING, not a block. The missing freeze usually belongs to a
+        # SIBLING, and holding an unrelated entry hostage over it would be a new
+        # way to wedge a run -- the remedy is a render, which the reader can
+        # choose when to pay for.
+        if tracked is not None:
+            for e in sorted((root / "chapters" / c).glob("*.qmd")):
+                if not ENTRY_FILE.match(e.name):
+                    continue
+                if f"chapters/{c}/{e.name}" not in tracked:
+                    continue
+                if not (root / "_freeze" / "chapters" / c / e.stem
+                        / "execute-results" / "html.json").exists():
+                    found.append((e, (
+                        "(warning) is committed but has no freeze — the site "
+                        "will RE-EXECUTE it rather than serve it, and a fresh "
+                        "clone cannot render without re-solving. "
+                        f"`quarto render chapters/{c}/{e.name}` rebuilds it")))
         frozen = list((root / "_freeze" / "chapters" / c).glob(
             "*/execute-results/html.json")) if (
             root / "_freeze" / "chapters" / c).exists() else []
         if not frozen:
-            continue                        # no freeze serves nothing stale
+            continue                        # nothing frozen: nothing to be stale
         touched = sorted(
             # `_inputs.yml` and `_fork.yml` joined the list when the chapter
             # index stopped carrying its callouts and started RENDERING them:
@@ -2497,7 +2552,14 @@ def _departure_targets(root, chapters):
     meant to appear in.
     """
     out = []
-    known = set(chapters)
+    # EVERY CHAPTER IN THE NOTEBOOK, not the subset being checked. An
+    # `overwrites:` row points at ANOTHER chapter by construction, so scoping
+    # the set of known names to the chapters under examination made a correct
+    # row look broken: `check.py glider-notebook 04-thinner-foam` reported
+    # `overwrites '01-foam-glider', which is not a chapter of this notebook`
+    # and failed the lint gate. A cross-chapter reference has to be resolved
+    # against the whole notebook, whatever slice is being linted.
+    known = set(chapters_of(root))
     for c in chapters:
         fork = read_fork(root, c) or {}
         where = root / "chapters" / c / "_fork.yml"
@@ -2708,7 +2770,7 @@ RULES = {
     9: "one prose section",
     10: "a sibling entry is linked, never named in bare prose",
     11: "`_notebook.py` and `_probe_base.py` byte-match the canonical copies",
-    12: "the freeze is not older than the model that froze it",
+    12: "a committed page has a freeze, and it is not older than its model",
     13: "every `_analysis.py` function the entry calls is passed to `footer(…)`",
     14: "one visual per entry (two, if one draws the aircraft)",
     15: "a table is at most 6x4",
@@ -2740,6 +2802,11 @@ RULES = {
 }
 
 
+def _tag(rule, rows):
+    """`[(where, msg)]` -> `[(rule, where, msg)]`."""
+    return [(rule, where, msg) for where, msg in rows]
+
+
 def check(root, chapters):
     entries = [f for c in chapters
                for f in sorted((root / "chapters" / c).glob("*.qmd"))
@@ -2755,29 +2822,29 @@ def check(root, chapters):
     # helpers, and one chapter's `trim` says nothing about another's.
     aero = {c: aero_calls_of(root / "chapters" / c) for c in chapters}
 
-    problems += _notebook_drift(root)
-    problems += _empty_model(root, chapters, entries)
-    problems += _shared_hygiene(root, chapters, entries)
-    problems += _loud_solves(root, chapters, entries)
-    problems += _unfinished_index(root, chapters, entries)
-    problems += _prose_enumeration(pages)
-    problems += _title_is_a_question(entries)
-    problems += _shadowed_machinery(root, chapters, entries)
-    problems += _stale_freeze(root, chapters)
-    problems += _budget_rules(root, chapters, entries)
-    problems += _visuals_and_tables(root, chapters, entries)
-    problems += _composition(root, chapters, entries)
-    problems += _transcribed(root, chapters, entries)
-    problems += _fork_provenance(root, chapters, entries)
-    problems += _empty_callouts(root, chapters, entries)
-    problems += _index_ordering(root, chapters)
-    problems += _index_shape(root, chapters, entries)
-    problems += _input_item_budget(root, chapters, entries)
-    problems += _root_index_freeze(root, chapters, entries)
-    problems += _book_index(root, chapters)
-    problems += _chapter_index_blocks(root, chapters)
-    problems += _citation_targets(root, chapters, entries)
-    problems += _sidebar_lists_chapters(root, chapters)
+    problems += _tag(11, _notebook_drift(root))
+    problems += _tag(19, _empty_model(root, chapters, entries))
+    problems += _tag(None, _shared_hygiene(root, chapters, entries))
+    problems += _tag(23, _loud_solves(root, chapters, entries))
+    problems += _tag(24, _unfinished_index(root, chapters, entries))
+    problems += _tag(25, _prose_enumeration(pages))
+    problems += _tag(26, _title_is_a_question(entries))
+    problems += _tag(27, _shadowed_machinery(root, chapters, entries))
+    problems += _tag(12, _stale_freeze(root, chapters))
+    problems += _tag(None, _budget_rules(root, chapters, entries))
+    problems += _tag(None, _visuals_and_tables(root, chapters, entries))
+    problems += _tag(None, _composition(root, chapters, entries))
+    problems += _tag(None, _transcribed(root, chapters, entries))
+    problems += _tag(31, _fork_provenance(root, chapters, entries))
+    problems += _tag(32, _empty_callouts(root, chapters, entries))
+    problems += _tag(33, _index_ordering(root, chapters))
+    problems += _tag(39, _index_shape(root, chapters, entries))
+    problems += _tag(8, _input_item_budget(root, chapters, entries))
+    problems += _tag(40, _root_index_freeze(root, chapters, entries))
+    problems += _tag(34, _book_index(root, chapters))
+    problems += _tag(35, _chapter_index_blocks(root, chapters))
+    problems += _tag(37, _citation_targets(root, chapters, entries))
+    problems += _tag(38, _sidebar_lists_chapters(root, chapters))
 
     # Rule 13. Scoped to `_analysis.py`: `_model.py` is rendered in full by the
     # chapter index, and `_notebook.py` is deliberately invisible, so requiring
@@ -2958,7 +3025,10 @@ def check(root, chapters):
                            f"({', '.join(sorted(_label(n)[:23] for n in where))}) — promote "
                            f"to {chapter}/_analysis.py:\n        "
                            + "\n        ".join(block)))
-    return problems
+    # The inline blocks below still append `(where, msg)`; normalise so every
+    # caller sees one shape. They are the next candidates for `_tag`, and the
+    # `None`s are what says so.
+    return [p if len(p) == 3 else (None, p[0], p[1]) for p in problems]
 
 
 def _label(name):
@@ -2977,7 +3047,7 @@ def main(argv):
 
     chapters = argv[1:] or chapters_of(root)
     found = check(root, chapters)
-    for where, msg in found:
+    for _rule, where, msg in found:
         label = "" if where is None else (
             _label(where.name) if ENTRY_FILE.match(where.name)
             else f"{where.parent.name}/{where.name}")
@@ -2985,7 +3055,7 @@ def main(argv):
     # Warnings are reported and do not fail. Only rule 17's lower tier uses
     # this: wall clock swings with machine load, so a message about it is worth
     # printing and not worth failing a render over.
-    blocking = [p for p in found if "(warning)" not in p[1]]
+    blocking = [p for p in found if "(warning)" not in p[2]]
     warned = len(found) - len(blocking)
     tail = f", {warned} warning(s)" if warned else ""
     print(f"\n{len(blocking)} problem(s){tail} in {', '.join(chapters)}")

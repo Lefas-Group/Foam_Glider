@@ -37,7 +37,6 @@ import ast
 import contextlib
 import fcntl
 import io
-import json
 import os
 import pathlib
 import re
@@ -84,8 +83,9 @@ def _take_render_lock(root, timeout=900):
     Proceeds WITHOUT it on timeout, following `nb/locks.py`: a check refused
     outright leaves the caller with no verdict, while a check that races loses
     a render it can retry. Released by `_drop_render_lock` in `main`'s
-    `finally`; the kernel dropping it on death is the backstop, and `_unstash`
-    already recovers the stash a killed check leaves behind.
+    `finally`; the kernel dropping it on death is the backstop, and a killed
+    check leaves nothing to recover -- it leaves freezes missing, which rule 12
+    reports.
     """
     global _LOCK_FH
     # IDEMPOTENT, and that is not cosmetic: `flock` is per open file
@@ -338,84 +338,38 @@ def _freeze_targets(root, chapters, force_all):
 # Where a freeze goes while the render that replaces it is still in doubt.
 # Under `_scratch/`, which is gitignored, so a half-finished check cannot turn
 # into a commit.
-FREEZE_STASH = pathlib.Path("_scratch") / "freeze-stash"
-
-
-def _stash(root, rels):
+def _drop(root, rels):
     """
-    Move the freezes aside rather than deleting them.
+    Delete the freezes a render must rebuild, and return what went.
 
-    Deleting first and rebuilding second is only safe if the rebuild always
-    happens. It does not: a render that fails leaves the chapter with no freeze
-    at all, and the caller may stop before it ever renders again -- which is how
-    one chapter lost its index freeze, invisibly, and stayed that way through
-    several commits. The deletion lives only in the working tree, so `git
-    restore` was the recovery, and nothing said so.
+    DELETED, NOT MOVED ASIDE. This used to stash them under `_scratch/` with a
+    manifest, and put them back file by file if the render failed -- three
+    functions, an on-disk manifest for crash recovery, and a merge that had to
+    be per-file because "one rebuilt page made the chapter directory exist and
+    every page the render never reached was left unrestored". All of it existed
+    because a failed render would otherwise leave a chapter with no freeze,
+    INVISIBLY: one chapter lost its index freeze and stayed that way through
+    several commits.
 
-    A manifest goes in beside the moved trees so `_unstash` works after a crash
-    as well as after a caught failure. A list held in memory would not survive
-    the kill that most needs it.
+    It is not invisible any more. Rule 12 reports a committed page with no
+    freeze, which is the same fact the restore was protecting against, said by
+    the contract instead of repaired by recovery code. The freezes are also
+    COMMITTED, so `git checkout --` recovers them at any point, from any kind
+    of death, without a manifest -- the restore was re-implementing git over a
+    directory git already tracks.
+
+    So a failed check now leaves the freezes gone, lint says so on the next
+    run, and a render or a `git checkout` fixes it. Ninety lines of recovery
+    for a path that has never executed, replaced by a rule that cannot be
+    skipped.
     """
-    stash = root / FREEZE_STASH
-    shutil.rmtree(stash, ignore_errors=True)
-    moved = []
+    gone = []
     for rel in rels:
-        src = root / "_freeze" / "chapters" / rel
-        if not src.is_dir():
-            continue
-        dst = stash / "trees" / rel
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(src), str(dst))
-        moved.append(str(rel))
-    if moved:
-        (stash / "manifest.json").write_text(json.dumps(moved, indent=1))
-    return moved
-
-
-def _discard(root):
-    """
-    Throw the stash away. Only ever after a render that SUCCEEDED.
-
-    Not `_unstash`: a successful render rebuilds every page that should exist,
-    so anything still in the stash is a page that should NOT -- an entry renamed
-    or removed since. Merging it back would resurrect the freeze of a page that
-    is gone, and hand freezediff something to compare that has no source.
-    """
-    shutil.rmtree(root / FREEZE_STASH, ignore_errors=True)
-
-
-def _unstash(root):
-    """
-    Put back whatever `_stash` moved, and return what was restored.
-
-    Merged FILE BY FILE, not tree by tree. Quarto writes a freeze only once its
-    page has executed, so anything already present is a real result and the
-    stashed copy is the older of the two -- but a failed render typically
-    rebuilds SOME of a chapter's pages and not others. Comparing whole trees,
-    one rebuilt page made the chapter directory exist and every page the render
-    never reached was left unrestored: the original bug, reintroduced one level
-    down. Found by testing exactly that case.
-    """
-    stash = root / FREEZE_STASH
-    if not (stash / "manifest.json").exists():
-        shutil.rmtree(stash, ignore_errors=True)
-        return []
-    trees = stash / "trees"
-    back = set()
-    for src in sorted(trees.rglob("*")):
-        if src.is_dir():
-            continue
-        rel = src.relative_to(trees)
-        dst = root / "_freeze" / "chapters" / rel
-        if dst.exists():
-            continue
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(src), str(dst))
-        # The page is the directory holding execute-results/ or figure-html/,
-        # which is what a reader counts -- not the files inside it.
-        back.add(str(rel.parent.parent))
-    shutil.rmtree(stash, ignore_errors=True)
-    return sorted(back)
+        d = root / "_freeze" / "chapters" / rel
+        if d.is_dir():
+            shutil.rmtree(d, ignore_errors=True)
+            gone.append(str(rel))
+    return gone
 
 
 def main(argv):
@@ -448,24 +402,6 @@ def _main(argv):
         return 2
     chapters = argv[1:] or lint.chapters_of(root)
 
-    # A stash left by a previous run means that run was KILLED between moving
-    # the freezes and rebuilding them -- SIGKILL, a closed lid, a machine that
-    # slept. Neither the failure branch nor the `except` above got to run, so
-    # recovery has to happen the next time anyone looks. Before the lint, since
-    # rule 12 reads the freeze.
-    #
-    # Under the lock when there IS something to recover, and not otherwise: this
-    # moves freeze trees back, which is as disruptive to another render as the
-    # stash itself, but it happens only after a killed check -- so taking the
-    # lock unconditionally here would serialise every cheap `--no-render` pass
-    # for a branch that almost never runs.
-    if (root / FREEZE_STASH).exists():
-        _take_render_lock(root)
-    recovered = _unstash(root)
-    if recovered:
-        print(f"freeze     restored {len(recovered)} tree(s) left by an "
-              f"interrupted check")
-
     # 1. Lint, cheaply, before spending a render on an entry that will fail it.
     #
     # Rule 12 ("the freeze is older than the model") is excluded from THIS pass
@@ -492,40 +428,27 @@ def _main(argv):
     # Quarto's own freeze then re-executes the pages whose .qmd changed, which
     # is the new or edited entry, so nothing here needs to handle that case.
     whole, pages, why = _freeze_targets(root, chapters, force_all)
-    # BEFORE the stash, and held past the citation pass below: the window that
-    # has to be exclusive is the whole time the freeze is not where it belongs,
-    # not just the two render calls inside it.
+    # HELD PAST THE CITATION PASS BELOW: the window that has to be exclusive is
+    # the whole time the freeze is not where it belongs, not just the two render
+    # calls inside it. Nothing is set aside any more, so there is no recovery
+    # pass before it either -- rule 12 is what notices.
     _take_render_lock(root)
-    _stash(root, list(whole) + list(pages))
+    _drop(root, list(whole) + list(pages))
     served = [c for c in chapters if c not in whole]
-    print(f"freeze     set aside {len(whole)} chapter(s), {len(pages)} page(s)"
+    print(f"freeze     dropped {len(whole)} chapter(s), {len(pages)} page(s)"
           f"; {len(served)} chapter(s) served from cache — {why}")
     shutil.rmtree(root / ".quarto", ignore_errors=True)
-    try:
-        r = lint.render_quarto(root, root)
-    except BaseException:
-        # Including KeyboardInterrupt: a Ctrl-C during a two-minute render is
-        # the likeliest way to be left with nothing, and the least likely
-        # moment to remember that the freeze was moved.
-        back = _unstash(root)
-        print(f"freeze     restored {len(back)} tree(s) — render interrupted")
-        raise
+    r = lint.render_quarto(root, root)
     blob = r.stdout + r.stderr
     if r.returncode:
         # Show the traceback and the cell it came from, not Quarto's chatter.
         keep = [l for l in blob.splitlines()
                 if re.search(r"error|Error|ERROR|Traceback|assert", l)]
         print("\n".join(keep[:30]) or blob[-2000:])
-        # Put back what the failed render did not rebuild. A page it DID reach
-        # keeps its new freeze; the rest go back to what they were, so a failed
-        # check leaves the notebook exactly as it found it.
-        back = _unstash(root)
-        if back:
-            print(f"freeze     restored {len(back)} tree(s) the render "
-                  f"did not rebuild")
-        print("\nrender     FAILED")
+        print("\nrender     FAILED — any page this render did not reach now "
+              "has no freeze.\n           Rule 12 names each of them; a render "
+              "or `git checkout -- _freeze`\n           puts them back.")
         return 1
-    _discard(root)          # the render rebuilt everything that should exist
 
     # SECOND PASS, for citations only. `cite()` reads the cited page's freeze,
     # and this run discarded the freezes it was about to rebuild -- so a citing
@@ -542,21 +465,16 @@ def _main(argv):
     if citing:
         print(f"cite       re-rendering {len(citing)} citing page(s) now that "
               f"what they quote is current")
-        _stash(root, citing)
-        try:
-            r2 = lint.render_quarto(root, root)
-        except BaseException:
-            _unstash(root)
-            raise
+        _drop(root, citing)
+        r2 = lint.render_quarto(root, root)
         if r2.returncode:
             blob2 = r2.stdout + r2.stderr
             keep = [l for l in blob2.splitlines()
                     if re.search(r"error|Error|ERROR|Traceback|assert", l)]
             print("\n".join(keep[:30]) or blob2[-2000:])
-            _unstash(root)
-            print("\nrender     FAILED on the citation pass")
+            print("\nrender     FAILED on the citation pass — rule 12 names "
+                  "any page left without a freeze")
             return 1
-        _discard(root)
     # Count what was actually executed, not Quarto's chatter -- it prints
     # "Output created:" once for the whole project, not once per page.
     pages = sum(len(list((root / "_freeze" / "chapters" / c).glob(

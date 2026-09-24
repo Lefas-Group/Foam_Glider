@@ -451,8 +451,11 @@ def _resolve(notebook_path, run_id):
         # inside one process, handing it the run id it has been writing all
         # along -- so without this the phase would refuse to run the moment it
         # was reached the normal way.
-        if (state and runstate.alive(state) is True
-                and state.get("pid") != os.getpid()):
+        # No pid comparison any more. It was here because a resume reads the
+        # run it is about to take over and would have called itself live;
+        # the lock answers that directly -- we have not taken it yet, and the
+        # process that did is gone.
+        if state and runstate.alive(d) is True:
             live.append((d.name, state))
 
     if run_id is None and len(live) > 1:

@@ -35,7 +35,11 @@ from ..log import say
 # enforced afterwards, by check.py's own post-render pass and by `nb lint`; and
 # the run's own render refreshes the chapter's freeze, which is what actually
 # resolves it.
-FREEZE_STALE = "but the freeze is not"
+# Rule 12, by NUMBER. It was `FREEZE_STALE = "but the freeze is not"`, matched
+# against the message text -- so rewording the message would have silently
+# turned the filter off, and what comes back then is the deadlock it exists to
+# prevent. `lint.check` yields the rule now, so this cannot go stale.
+FREEZE_STALE_RULE = 12
 
 
 def _problems(root, chapters, pre_render=True):
@@ -46,12 +50,13 @@ def _problems(root, chapters, pre_render=True):
     the unit, and `"(warning)"` is an in-string marker rather than a field, so
     severity is split exactly the way check.py splits it.
 
-    `pre_render` drops rule 12, which no edit can satisfy. See `FREEZE_STALE`.
+    `pre_render` drops rule 12, which no edit can satisfy -- the render IS its
+    fix, and gating the render on it deadlocks. See `FREEZE_STALE_RULE`.
     """
     import lint
     blocking, warnings = [], []
-    for where, msg in lint.check(root, chapters):
-        if pre_render and FREEZE_STALE in msg:
+    for rule, where, msg in lint.check(root, chapters):
+        if pre_render and rule == FREEZE_STALE_RULE:
             continue
         label = "" if where is None else f"{where.name}: "
         (warnings if "(warning)" in msg else blocking).append(f"{label}{msg}")

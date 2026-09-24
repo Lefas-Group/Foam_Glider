@@ -50,7 +50,7 @@ def _runs(notebook, only=None):
         if not state:
             continue
         state["dir"] = d
-        state["alive"] = runstate.alive(state)
+        state["alive"] = runstate.alive(d)
         state["stopped"] = runstate.stopped(state) if state["alive"] else False
         state["question"] = mailbox.pending(d)
         out.append(state)

@@ -9,21 +9,13 @@ A new NOTEBOOK is not offered. That wants a fresh session, which is a process
 decision rather than the agent's.
 """
 
-import contextlib
-import os
 import re
 import shutil
-import time
 
 from ..config import SCAFFOLD
 from ..log import say
 
 NAME = re.compile(r"^\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$")
-
-# How long a number reservation may be held before it is a corpse.
-# An allocation is two `mkdir`s and a directory listing; a minute is
-# four orders of magnitude of slack.
-ALLOC_STALE = 60.0
 
 # What an undescribed chapter carries, as a last resort. Both callers supply
 # `defines`, so this should never reach disk -- and if it does, rule 24 refuses
@@ -36,75 +28,52 @@ SLUG = re.compile(r"^(?:\d{2}-)?(?P<slug>[a-z0-9]+(?:-[a-z0-9]+)*)$")
 
 def _allocate(notebook, slug, start=None):
     """
-    Create `chapters/NN-<slug>/` atomically, and return (name, path).
+    Create `chapters/NN-<slug>/` and return (name, path).
 
     The number is code's decision, not the model's: the model used to supply it
-    and a wrong guess aborted `nb write` outright, after the ask had been paid
-    for. The model owns the slug, which is judgement; the number is bookkeeping.
+    and a wrong guess aborted the run outright, after the ask had been paid
+    for. The model owns the slug, which is judgement; the number is
+    bookkeeping.
 
-    `mkdir` IS the allocator. Reading the directory and then creating is a
-    read-then-write race -- two runs compute the same max and both believe they
-    own it -- whereas `mkdir` fails with `EEXIST` and the loser simply takes the
-    next number. That needs no lock, no coordinator, and no knowledge that
-    another run exists, which is why it beats having a coordinator assign
-    numbers: a coordinator that guesses wrong can waste a whole run, and this
-    cannot.
+    UNDER ONE LOCK, which is what this used to hand-roll. `mkdir` alone is not
+    enough -- it guards the NAME and it is the NUMBER that must be unique, so
+    two runs proposing different slugs both succeed at the same number
+    (measured: eight concurrent allocations produced three chapters numbered
+    13). The answer was a reservation directory per number under `_scratch/`,
+    plus a re-read while holding it, plus a 60-second staleness sweep -- because
+    a reservation is released in a `finally` and a SIGKILL does not run one, so
+    a leaked marker skipped that number FOR EVER, silently, indistinguishably
+    from contention.
+
+    Every line of that was working around a lock this repo already had.
+    `locks.held` is `fcntl.flock`: the kernel releases it when the process
+    dies, including on SIGKILL, so there is no corpse to sweep and no age to
+    guess at. `locks.py` has said so all along -- "a lock FILE with a pid in
+    it... is the failure mode hand-rolled locks are made of" -- and this was
+    one, with the predicted failure patched by a heuristic.
+
+    An explicit `number` is still a hint rather than a demand: the scan happens
+    under the lock, so a caller that guesses wrong walks forward instead of
+    landing on top of an existing chapter.
     """
-    # `mkdir chapters/NN-slug` is NOT enough: it guards the NAME, and it is the
-    # NUMBER that must be unique -- two runs proposing different slugs both
-    # succeed at the same number. Measured: eight concurrent allocations
-    # produced three chapters numbered 13.
-    #
-    # So reserve the NUMBER, which is the thing being allocated. The marker
-    # lives under `_scratch/` rather than in `chapters/`, because `chapters_of`
-    # lists every directory it finds and a reservation is not a chapter. It is
-    # held only until the real directory exists, after which the directory
-    # itself is what makes the number visible to the next allocator.
-    held = notebook.scratch / ".alloc"
-    held.mkdir(parents=True, exist_ok=True)
-    used = [int(c[:2]) for c in notebook.chapters() if c[:2].isdigit()]
-    n = int(start) if start is not None else max(used, default=0) + 1
-    for _ in range(100):
-        marker = held / f"{n:02d}"
-        try:
-            marker.mkdir()
-        except FileExistsError:     # another run is mid-allocation on this one
-            # ...or a run that was SIGKILLed while holding it. The reservation
-            # is released in a `finally`, which a hard kill does not run, and
-            # the leaked directory then skipped that number for ever -- silent,
-            # permanent, and indistinguishable from contention. An allocation
-            # is milliseconds, so anything older than ALLOC_STALE is a corpse.
-            try:
-                age = time.time() - marker.stat().st_mtime
-            except OSError:
-                age = 0.0
-            if age > ALLOC_STALE:
-                with contextlib.suppress(OSError):
-                    marker.rmdir()
-                continue            # retry THIS number, now unheld
-            n += 1
-            continue
-        try:
-            # Re-read while HOLDING the number, not before. The starting guess
-            # came from a scan every concurrent run made at the same moment, so
-            # on its own it is stale by construction; checking here is what
-            # makes the marker mean anything, because every allocator for this
-            # number is serialised behind it. It is also what makes an explicit
-            # `number` safe to pass -- a wrong one walks forward instead of
-            # landing on top of an existing chapter.
+    from ..locks import held
+    with held(notebook.scratch / "alloc.lock", timeout=60):
+        used = [int(c[:2]) for c in notebook.chapters() if c[:2].isdigit()]
+        n = int(start) if start is not None else max(used, default=0) + 1
+        for _ in range(100):
+            target = notebook.chapters_dir / f"{n:02d}-{slug}"
             if any(c.startswith(f"{n:02d}-") for c in notebook.chapters()):
                 n += 1
                 continue
-            name = f"{n:02d}-{slug}"
             try:
-                (notebook.chapters_dir / name).mkdir(parents=True)
+                target.mkdir(parents=True)
             except FileExistsError:
                 n += 1
                 continue
-            return name, notebook.chapters_dir / name
-        finally:
-            marker.rmdir()
-    raise RuntimeError(f"no free chapter number for {slug!r} below {n}")
+            return target.name, target
+    raise RuntimeError(
+        f"no free chapter number for {slug!r} in 100 tries — "
+        f"chapters/ has {len(notebook.chapters())} directories")
 
 
 def _fork_sources(notebook, parent):

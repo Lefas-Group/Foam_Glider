@@ -219,7 +219,8 @@ def main(path, title=None, subject=None, chapter=None,
     # Prove it rather than claim it. A notebook that does not lint is a notebook
     # whose first `nb ask` fails at preflight, several minutes later.
     import lint
-    problems = [m for _, m in lint.check(root, [chapter]) if "(warning)" not in m]
+    problems = [m for _, _, m in lint.check(root, [chapter])
+                if "(warning)" not in m]
     tell(f"  lint      {'clean' if not problems else f'{len(problems)} problem(s)'}")
     for m in problems:
         tell(f"              {m}")

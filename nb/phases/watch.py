@@ -39,20 +39,21 @@ PID = re.compile(r"\bpid (\d+)\b")
 DEADLINE = re.compile(r"deadline (\d+(?:\.\d+)?) s")
 
 
-def _alive(pid):
+def _alive(run_dir):
     """
-    True if the process exists, False if not, None if we cannot tell.
+    True if the run still holds its lock, False if not.
 
     DELEGATED to `runstate.alive` rather than reimplemented. This was a second
     copy of the same `os.kill(pid, 0)`, and it went stale the moment the first
     learned that a ZOMBIE answers that call exactly as a live process does --
     so `nb watch` would still say "alive but not advancing" about a process
-    that had already exited. One implementation, one place to teach.
+    that had already exited. One implementation, one place to teach, and that
+    lesson is why it takes the RUN rather than a pid now.
     """
-    if pid is None:
+    if run_dir is None:
         return None
     from .. import runstate
-    return runstate.alive({"pid": pid})
+    return runstate.alive(run_dir)
 
 
 def _console():
@@ -85,8 +86,8 @@ def _emit(console, text):
             console.print(line, highlight=False, markup=False)
 
 
-def _quiet_note(idle, limit, pid):
-    live = _alive(pid)
+def _quiet_note(idle, limit, run_dir, pid):
+    live = _alive(run_dir)
     mins, secs = divmod(int(idle), 60)
     if live:
         # SUSPENDED is not STALLED, and only one of them has an action. A `&`
@@ -157,7 +158,7 @@ def follow(path, from_start=False, poll=0.25):
             idle = time.time() - last
             ceiling = limit if limit else DEFAULT_QUIET
             if idle > ceiling and not warned:
-                print(_quiet_note(idle, ceiling, pid), flush=True)
+                print(_quiet_note(idle, ceiling, path.parent, pid), flush=True)
                 warned = True               # once per stall, not once a second
 
             now = path.stat().st_size if path.exists() else 0
