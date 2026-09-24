@@ -1,4 +1,15 @@
+import aerosandbox as asb
 import numpy as np
+
+def get_cg_x(airplane):
+    op_point = asb.OperatingPoint(velocity=10, alpha=0)
+    aero_stab = asb.AeroBuildup(
+        airplane=airplane,
+        op_point=op_point
+    ).run_with_stability_derivatives()
+    x_np = aero_stab['x_np'][0]
+    mac = airplane.wings[0].mean_aerodynamic_chord()
+    return float(x_np - 0.10 * mac)
 
 def get_mass_properties(plane, area_density=0.1744, foam_thickness=0.005):
     vol_density = area_density / foam_thickness

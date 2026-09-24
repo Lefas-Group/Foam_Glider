@@ -1,0 +1,82 @@
+---
+title: "What wing incidence makes it trim at positive lift?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0
+SOLVE_BUDGET = 15.0
+PROBE_POOL = 200.0
+PROBE_SPENT = 70.2
+
+import matplotlib.pyplot as plt
+import scipy.optimize
+import aerosandbox.numpy as np
+
+airplane = get_airplane()
+
+cg_x = get_cg_x(airplane)
+airplane.xyz_ref = [cg_x, 0, airplane.xyz_ref[2]]
+
+def get_trim_CL(inc):
+    p2 = airplane.copy()
+    for w in p2.wings:
+        for xsec in w.xsecs:
+            xsec.twist = inc
+            
+    def get_Cm(alpha):
+        res = asb.AeroBuildup(
+            airplane=p2,
+            op_point=asb.OperatingPoint(velocity=5, alpha=alpha),
+        ).run()['Cm']
+        return float(np.atleast_1d(res)[0])
+        
+    try:
+        alpha_trim = scipy.optimize.root_scalar(get_Cm, bracket=[-20, 20]).root
+        aero_trim = asb.AeroBuildup(
+            airplane=p2,
+            op_point=asb.OperatingPoint(velocity=5, alpha=alpha_trim),
+        ).run()
+        return float(np.atleast_1d(aero_trim['CL'])[0])
+    except Exception:
+        return np.nan
+
+inc_zero_lift = scipy.optimize.root_scalar(get_trim_CL, bracket=[-4, -6]).root
+
+incidences = np.linspace(0, -10, 11)
+trim_cls = [get_trim_CL(i) for i in incidences]
+```
+
+::: {.hero}
+[`{python} f"<{inc_zero_lift:.1f}°"`]{.hero-value}
+[Incidence for positive trim lift]{.hero-label}
+:::
+
+**Answer.** The fuselage generates a pitch-down moment at zero angle of attack, which the wings must counter. Because the wing's aerodynamic center sits slightly behind the required center of gravity, it must produce negative lift to create a pitch-up moment. Consequently, a wing incidence more negative than [`{python} f"{inc_zero_lift:.1f}"`]{.key}° is required for the aircraft to trim at a positive lift coefficient (@fig-trim-cl).
+
+::: {.callout-note}
+## New assumptions
+1. **wing-incidence-model: Twist, leaving engines aligned**, Avoids rotating cylinders.
+:::
+
+```{python}
+#| label: fig-trim-cl
+#| fig-cap: "Trim lift coefficient as a function of wing incidence. An incidence more negative than the zero-crossing is required to maintain positive lift."
+fig, ax = plt.subplots(figsize=(6, 4))
+ax.plot(incidences, trim_cls, 'o-b')
+ax.axhline(0, color='k', linestyle='--', linewidth=1)
+ax.axvline(inc_zero_lift, color='r', linestyle='--', linewidth=1, label=f'Zero crossing ({inc_zero_lift:.1f}°)')
+ax.set_xlabel("Wing Incidence (°)")
+ax.set_ylabel("Trim Lift Coefficient ($C_L$)")
+ax.grid(True)
+ax.legend()
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(get_cg_x)
+```
