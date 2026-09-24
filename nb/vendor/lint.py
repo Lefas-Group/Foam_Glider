@@ -2358,6 +2358,43 @@ def declared_items(root, chapter):
     return out
 
 
+def entry_items(root, chapter):
+    """
+    [(kind, text, stem)] the chapter's ENTRIES declare, in order.
+
+    The other half of the register, and it was read by nothing. `_inputs.yml`
+    holds what is true of every entry; an entry's own callout holds what THAT
+    question introduced -- and an `ask_specified` answer lands in the second,
+    where the next run cannot see it.
+
+    Measured: the X-Wing chapter asked the user for a static margin, recorded
+    "center of gravity (or static margin): 10%" in its entry, and two entries
+    later asked for the same quantity again and recorded it a second time under
+    a different name. The register a run was shown held one item, from
+    `_inputs.yml`; the three its own entries had declared were invisible.
+
+    Reads the callouts rather than a data file because that is where an entry
+    puts them, by design: rule 39 keeps a CHAPTER's items out of markdown and
+    an ENTRY's items in it.
+    """
+    out = []
+    for e in sorted((root / "chapters" / chapter).glob("*.qmd")):
+        if not ENTRY_FILE.match(e.name):
+            continue
+        try:
+            text = e.read_text()
+        except OSError:
+            continue
+        for title, body in callouts_of(text):
+            if title not in INPUT_TITLES:
+                continue
+            kind = "Assumed" if "assum" in title.lower() else "Specified"
+            for item in re.findall(r"^\s*\d+\.\s+(.*(?:\n(?!\s*\d+\.).*)*)",
+                                   body, re.M):
+                out.append((kind, " ".join(item.split()), e.stem))
+    return out
+
+
 def input_ids(root, chapter):
     """{id: text} for a chapter with `_inputs.yml`, else {}."""
     data = read_inputs(root, chapter)

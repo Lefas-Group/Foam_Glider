@@ -34,6 +34,83 @@ def declared(notebook, chapter):
     return spec, len(items) - spec
 
 
+# Words too common to mean anything on their own. A name is matched on what is
+# distinctive in it, so "static margin" finds "center of gravity (or static
+# margin): 10%" and "wing" alone finds nothing useful.
+_NOISE = {"the", "a", "an", "of", "for", "and", "or", "in", "at", "to",
+          "value", "used", "per", "its"}
+
+
+def _words(text):
+    """Significant words, case-folded, punctuation gone."""
+    return {w for w in re.sub(r"[^a-z0-9]+", " ", str(text).lower()).split()
+            if len(w) > 2 and w not in _NOISE}
+
+
+def committed(notebook, chapter):
+    """
+    [(kind, text, where)] -- everything this chapter is already committed to.
+
+    BOTH TIERS, which is the whole point. `_inputs.yml` holds what is true of
+    every entry and `where` is the chapter; an entry's own callout holds what
+    that question introduced and `where` is its stem. Only the first was ever
+    read back, so an `ask_specified` answer -- which lands in the second --
+    was invisible to the next run, and the same quantity got asked twice.
+
+    Chapter items first, because they are the standing commitments; entries
+    after, in order, because a later one revising an earlier one is the
+    notebook's whole shape.
+    """
+    import lint
+    # `where` IS THE HANDLE: the `_inputs.yml` id for a chapter item, the stem
+    # for an entry's. Both consumers want the same thing -- where this was
+    # recorded and what to name it by -- and for a chapter item the id is also
+    # part of the item's IDENTITY, because the format is `- <id>: <text>` and
+    # the text never repeats the name. `- dihedral: 20 degrees determines the
+    # cross-angle` says nothing about dihedral except in its id, so matching on
+    # text alone let "dihedral angle" be asked again.
+    ids = {t: i for i, t in lint.input_ids(notebook.root, chapter).items()}
+    out = [(k, t, ids.get(t, chapter))
+           for k, t in lint.declared_items(notebook.root, chapter)]
+    standing = [_words(t) | _words(w) for _, t, w in out]
+    # An entry that introduced an item the chapter later took into its
+    # `_inputs.yml` still carries its own callout -- correctly, because that
+    # callout says what THAT entry introduced. Listing both says the same
+    # commitment twice, so the restatement is dropped: the chapter's wording is
+    # the standing one. Same subset test as `settled` below, which is the only
+    # notion of "these are the same quantity" this file has.
+    for kind, text, where in lint.entry_items(notebook.root, chapter):
+        words = _words(text)
+        if any(w and w <= words for w in standing):
+            continue
+        out.append((kind, text, where))
+    return out
+
+
+def settled(notebook, chapter, name):
+    """
+    The committed item this question is about, or None.
+
+    A QUANTITY IS SETTLED WHEN EVERY DISTINCTIVE WORD OF ITS NAME IS ALREADY IN
+    THE REGISTER. "static margin" matches "center of gravity (or static
+    margin): 10%", which is the case this was written for -- asked on one entry
+    and asked again, verbatim, two entries later.
+
+    Deliberately a subset test and not a similarity score. It fires when the
+    thing being asked about is named in something already agreed, which is
+    exactly when the user would be answering the same question twice; anything
+    looser starts refusing genuinely new inputs, and a refusal the model cannot
+    understand is worse than a duplicate.
+    """
+    want = _words(name)
+    if not want:
+        return None
+    for kind, text, where in committed(notebook, chapter):
+        if kind == "Specified" and want <= (_words(text) | _words(where)):
+            return kind, text, where
+    return None
+
+
 def ancestry(notebook, chapter, parent=None):
     """
     `[parent, grandparent, ...]` from the `_fork.yml` chain. Empty for a root.

@@ -62,26 +62,32 @@ def _inputs_notice(notebook, chapter):
     Says nothing when the chapter declares nothing -- a notice with no items in
     it is furniture.
     """
-    import lint
+    from ..inputs import committed
     if not chapter:
         return ""
-    data = lint.read_inputs(notebook.root, chapter)
-    rows = [(k, i, t) for k, label in (("specified", "Specified"),
-                                       ("assumed", "Assumed"))
-            for i, t in (data.get(k) or [])]
+    rows = committed(notebook, chapter)
     if not rows:
         return ""
-    listing = "\n".join(
-        f"    [{'Specified' if k == 'specified' else 'Assumed'}] {i}: {t}"
-        for k, i, t in rows)
-    return (f"\n[chapters/{chapter} is already committed to these. Every entry "
-            f"here inherits them and none restates them:\n\n{listing}\n\n"
+    # `where` is the handle already: the `_inputs.yml` id that
+    # `ask_specified(replaces=...)` takes, or the entry that introduced it.
+    # An id is shown whole -- it is the handle `replaces=` takes, and
+    # `foam-thick` is not one. An entry stem is shown as its DATE, which is
+    # what places it against the entries listed in the prefix.
+    import lint
+    where = lambda w: ("" if w == chapter else
+                       f"   ({w[:10]})" if lint.ENTRY_FILE.match(w) else f"   ({w})")
+    listing = "\n".join(f"    [{k}] {t}{where(w)}" for k, t, w in rows)
+    return (f"\n[chapters/{chapter} is already committed to these -- from its "
+            f"_inputs.yml and from the entries already written in it. Every "
+            f"entry here inherits them and none restates them:\n\n{listing}\n\n"
             f"Does THIS question change one of them? A changed SPECIFIED item "
             f"is `ask_specified` now, before the next probe, with "
-            f"`replaces=\"<id>\"`. A changed ASSUMED item is yours: assume the "
-            f"new value, `declare_input` it with source='guessed', and say "
-            f"which id it replaces in the entry. Changing none of them is the "
-            f"common answer and needs nothing.]")
+            f"`replaces=\"<id>\"` where one is shown. A changed ASSUMED item is "
+            f"yours: assume the new value, `declare_input` it with "
+            f"source='guessed', and say which it replaces in the entry. "
+            f"Changing none of them is the common answer and needs nothing -- "
+            f"and asking again for one already listed is the mistake this "
+            f"exists to prevent.]")
 
 
 def run_probe(notebook, chapter, question, session=None, budget_s=None):

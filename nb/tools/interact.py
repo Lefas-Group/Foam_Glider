@@ -423,6 +423,45 @@ def ask_specified(session, name, why, kind="specified", options="",
     # `why` is held to rule 8's ten words now, not twenty turns later.
     Input(name=name, source="asked", value=None, why=why)
 
+    # ALREADY SETTLED, and asking again puts the same question to the user
+    # twice. Measured on the X-Wing chapter: a static margin was asked,
+    # answered and recorded in one entry, and asked again -- verbatim -- two
+    # entries later, because the register a run is shown held only
+    # `_inputs.yml`, and the answer had landed in an entry's callout. Both
+    # tiers are read now; this is the backstop for when the model reads them
+    # and asks anyway.
+    #
+    # NOT when `replaces` is given: that IS the deliberate change, and naming
+    # the item is how you say so.
+    from ..inputs import settled
+    already = None if replaces else settled(
+        session.notebook, session.chapter, name)
+    if already:
+        _kind, text, where = already
+        # `where` is an `_inputs.yml` id, an entry stem, or the chapter itself
+        # when a frozen notebook keeps its items as index callouts. Only the
+        # first is something `replaces=` can name. Told apart by the date
+        # prefix every entry stem carries, not by guessing at the string: an id
+        # may legally start with a digit.
+        import lint
+        this_id = (None if lint.ENTRY_FILE.match(where) or where == session.chapter
+                   else where)
+        raise ValueError(
+            f"chapters/{session.chapter} has already settled this. In force:\n"
+            f"    {text}\n"
+            f"  recorded " + (f"as `{this_id}` in _inputs.yml"
+                              if this_id else f"by entry {where}") + ".\n"
+            f"Use that value -- it is a commitment this chapter has already "
+            f"put to the user, and asking again asks them the same question "
+            f"twice. If THIS question genuinely changes it, that is a "
+            f"different call: "
+            + (f"ask again with replaces=\"{this_id}\"."
+               if this_id else
+               "record the new value with `declare_input` and say in your "
+               "entry that it corrects the earlier one, naming and linking "
+               "that entry (rule 10).")
+            + " If you only need to state it, it is already stated and you "
+              "inherit it.")
     body = f"  {name}\n  {why}"
     if replaces:
         import lint
