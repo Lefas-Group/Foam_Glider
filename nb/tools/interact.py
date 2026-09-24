@@ -747,7 +747,8 @@ def _inherited_note(session):
     return "\n".join(lines)
 
 
-def declare_input(session, name, value="", source="guessed", why=""):
+def declare_input(session, name, value="", source="guessed", why="",
+                  replaces=""):
     """
     One input, recorded at the moment it is assumed.
 
@@ -766,6 +767,15 @@ def declare_input(session, name, value="", source="guessed", why=""):
     A DICT keyed by name, so declaring the same quantity twice corrects it
     rather than listing it twice -- which is what a probe that revises its own
     assumption three turns later would otherwise produce.
+
+    `replaces` names something the chapter is ALREADY committed to, by the
+    handle the register reports. Assumptions are the model's to revise without
+    asking anyone -- that is what separates them from specifications, which
+    `ask_specified` puts to the user -- but revising one silently left the
+    register holding both: a chapter that assumed 5 m/s in one entry and 8 m/s
+    in a later one told the next run it assumed two different velocities, with
+    no way to tell which was in force. `_fork.yml`'s `overwrites:` fixed
+    exactly this between CHAPTERS; this is the same fact between entries.
     """
     name = " ".join(str(name).split())
     if source == "asked" and not session.was_asked(name):
@@ -777,6 +787,34 @@ def declare_input(session, name, value="", source="guessed", why=""):
     # assembled around it. `Input` raises on eleven.
     item = Input(name=name, value=str(value) or None, source=source,
                  why=" ".join(str(why).split()))
+    if replaces:
+        from ..inputs import committed, short
+        rows = committed(session.notebook, session.chapter)
+        hit = next((r for r in rows if r[2] == replaces), None)
+        if hit is None:
+            raise ValueError(
+                f"replaces={replaces!r} is not something "
+                f"chapters/{session.chapter} is committed to. The handles are "
+                f"listed beside each item after your first probe; they are "
+                f"either an `_inputs.yml` id or `<chapter>/<handle>` for "
+                f"something inherited. In force here: "
+                + ", ".join(sorted(short(r[2], session.chapter) or "-"
+                                   for r in rows))
+                + ". Omit `replaces` if this is a new input.")
+        if hit[0] == "Specified":
+            raise ValueError(
+                f"{replaces!r} is a SPECIFIED item -- the user chose it:\n"
+                f"    {hit[1]}\n"
+                f"Changing it is theirs, not yours. Put it to them with "
+                f"`ask_specified(name=..., why=..., replaces=\"{replaces}\")`, "
+                f"which carries the value in force into the question. "
+                f"`declare_input(replaces=...)` revises an ASSUMPTION, which "
+                f"needs nobody.")
+        session.replaced_assumptions[replaces] = (
+            hit[1], " ".join(str(why).split()))
+        say(f"  input     {replaces} no longer holds — "
+            f"{' '.join(str(name).split())} replaces it")
+
     # KEYED NORMALISED, valued with the name as written. Re-declaring a
     # quantity corrects it, and "Static margin" after "static margin" is a
     # correction, not a second input.
@@ -785,10 +823,19 @@ def declare_input(session, name, value="", source="guessed", why=""):
     session.inputs[key] = item
     say(f"  input     {'revised' if again else 'recorded'} {name} "
         f"[{source}]{f' = {item.value}' if item.value else ''}")
-    return (f"{'Revised' if again else 'Recorded'}: {name} [{source}]. "
-            f"{len(session.inputs)} input(s) so far. It goes in the entry's "
-            f"`## {'Specified' if source != 'guessed' else 'Assumed'}` callout "
-            f"when you write it.")
+    out = (f"{'Revised' if again else 'Recorded'}: {name} [{source}]. "
+           f"{len(session.inputs)} input(s) so far. It goes in the entry's "
+           f"`## {'Specified' if source != 'guessed' else 'Assumed'}` callout "
+           f"when you write it.")
+    if replaces:
+        out += (f"\n\n{replaces} no longer holds. Record that in "
+                f"`{session.chapter}/_inputs.yml` under `overwrites:`, as "
+                f"`- {replaces}: <why, in a few words>` -- otherwise the next "
+                f"entry is told this chapter is committed to both values and "
+                f"cannot tell which. It renders on the chapter's page as "
+                f"\"Overwritten\", and the entry you are writing should say in "
+                f"prose that it corrects the earlier one, linking it (rule 10).")
+    return out
 
 
 def _collect_inputs(session):

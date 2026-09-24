@@ -2598,6 +2598,29 @@ def _departure_targets(root, chapters):
     # against the whole notebook, whatever slice is being linted.
     known = set(chapters_of(root))
     for c in chapters:
+        # `_inputs.yml` CARRIES THEM TOO, for what a later entry here
+        # superseded in an earlier one -- no fork, no approval, an assumption
+        # is the writer's to revise. Same row shape, so the same checks, except
+        # that a bare handle means this chapter's own entry.
+        for raw in ((read_inputs(root, c) or {}).get("overwrites") or []):
+            # `read_inputs` splits `- <id>: <text>` into a pair, where
+            # `read_fork` hands back the raw line. Same file shape, two
+            # readers, and a row here is `- <handle>: <why>` -- so the handle
+            # is the first half either way.
+            target = str(raw[0] if isinstance(raw, tuple) else raw
+                         ).partition(":")[0].strip()
+            src = target.partition("/")[0] if "/" in target else c
+            stem = target.partition("/")[2] or target
+            where = root / "chapters" / c / "_inputs.yml"
+            if src not in known:
+                out.append((where, (
+                    f"overwrites {src!r}, which is not a chapter of this "
+                    f"notebook")))
+            elif (not (root / "chapters" / src / f"{stem}.qmd").exists()
+                  and stem not in input_ids(root, src)):
+                out.append((where, (
+                    f"overwrites {target!r}, which is neither an entry of "
+                    f"chapters/{src} nor an id it declares")))
         fork = read_fork(root, c) or {}
         where = root / "chapters" / c / "_fork.yml"
         for raw in (fork.get("overwrites") or []):

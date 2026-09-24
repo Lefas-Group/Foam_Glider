@@ -72,6 +72,11 @@ class Session:
         # `_model.py` is writable and the chapter will be re-proved before the
         # commit. Set by `nb resume --allow-refactor`, read by the write guard.
         self.allow_refactor = False
+        # handle -> (old text, why) for a declare_input that revises an
+        # ASSUMPTION the chapter already holds. Assumptions need nobody's
+        # approval, but the register has to know which value is in force --
+        # without this it reported both and the next run could not tell.
+        self.replaced_assumptions = {}
         # name -> (chapter, id) for an ask_specified that CHANGES
         # something the chapter already declares. The write phase turns
         # it into an `overwrites:` entry; without it the answer would be

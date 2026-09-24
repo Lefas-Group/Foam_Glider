@@ -235,7 +235,15 @@ def native_declarations():
                    "different answer changes HOW ACCURATELY it is modelled. If "
                    "the model or the plans already contain it, it is none of "
                    "these: compute it")),
-               "why": dict(S, description="TEN WORDS at most -- rule 8 counts them")},
+               "why": dict(S, description="TEN WORDS at most -- rule 8 counts them"),
+               "replaces": dict(S, description=(
+                   "The handle of an ASSUMPTION this chapter already holds "
+                   "that your value supersedes -- shown beside each item in "
+                   "the register after your first probe. Revising an "
+                   "assumption needs nobody's approval; naming what it "
+                   "replaces is what stops the next entry being told both "
+                   "values are in force. A Specified item is the user's: use "
+                   "ask_specified(replaces=...) for those"))},
               ["name", "source", "why"]),
 
         _decl("open_entry",
@@ -301,8 +309,8 @@ def build(session, fs):
             interact.ask_specified(session, name, why, kind, options, replaces)),
         "fork_chapter": lambda name, title, defines: (
             interact.fork_chapter(session, name, title, defines)),
-        "declare_input": lambda name, source, why, value="": (
-            interact.declare_input(session, name, value, source, why)),
+        "declare_input": lambda name, source, why, value="", replaces="": (
+            interact.declare_input(session, name, value, source, why, replaces)),
         "open_entry": lambda title, inputs_none_because="": (
             interact.open_entry(session, title, inputs_none_because)),
         "declare_refactor": lambda function, why: interact.declare_refactor(

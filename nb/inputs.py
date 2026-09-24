@@ -47,6 +47,16 @@ def _words(text):
             if len(w) > 2 and w not in _NOISE}
 
 
+def _pairs(block):
+    """`[(handle, why)]` from an `overwrites:` block, whatever shape it came in."""
+    out = []
+    for row in (block or []):
+        h, _, why = (row if isinstance(row, str) else
+                     f"{row[0]}: {row[1]}" if len(row) > 1 else row[0]).partition(":")
+        out.append((h.strip(), why.strip()))
+    return out
+
+
 def own(notebook, chapter, entries_before=None):
     """
     [(kind, text, handle)] this chapter declares ITSELF, both tiers.
@@ -71,7 +81,17 @@ def own(notebook, chapter, entries_before=None):
            for k, t in lint.declared_items(notebook.root, chapter)]
     standing = [_words(t) | _words(w) for _, t, w in out]
 
-    rows = lint.entry_items(notebook.root, chapter)
+    # WHAT THIS CHAPTER SAYS NO LONGER HOLDS. `_inputs.yml`'s `overwrites:`
+    # is the within-chapter twin of `_fork.yml`'s: an entry may revise an
+    # assumption without asking anyone, and the register has to know which
+    # value is in force rather than reporting both. Handles are dropped
+    # wherever they came from -- an entry's stem, or an inherited
+    # `<chapter>/<handle>`, which `_ancestral` checks separately.
+    data = lint.read_inputs(notebook.root, chapter) or {}
+    dead = {h for h, _ in _pairs(data.get("overwrites"))}
+
+    rows = [r for r in lint.entry_items(notebook.root, chapter)
+            if r[2] not in dead]
     if entries_before is not None:
         keep = {e.stem for e in notebook.entries(chapter)[:entries_before]}
         rows = [r for r in rows if r[2] in keep]
@@ -149,11 +169,19 @@ def _ancestral(notebook, chapter, parent=None):
     # yet and so could not have overwritten anything. Used for a chapter that
     # DOES exist, an item it had already struck came straight back.
     breakers = {c for c, _ in chain} | {chapter}
+    # An inherited item this chapter overwrote in its own `_inputs.yml`, by the
+    # `<ancestor>/<handle>` the register reports.
+    import lint as _l
+    mine = {h for h, _ in _pairs(
+        (_l.read_inputs(notebook.root, chapter) or {}).get("overwrites"))}
     carried, dropped = [], []
     for c, at in chain:
         ids = lint.input_ids(notebook.root, c)
         for kind, text, handle in own(notebook, c, entries_before=at):
             if any(t == text for _, t, _, _ in carried):
+                continue
+            if f"{c}/{handle}" in mine:
+                dropped.append((kind, text, c, chapter))
                 continue
             item_id = next((i for i, t in ids.items() if t == text), None)
             by = gone.get((c, item_id)) if item_id else None
