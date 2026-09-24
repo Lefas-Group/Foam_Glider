@@ -708,7 +708,7 @@ def declare_input(session, name, value="", source="guessed", why=""):
     assumption three turns later would otherwise produce.
     """
     name = " ".join(str(name).split())
-    if source == "asked" and name not in session.asked:
+    if source == "asked" and not session.was_asked(name):
         raise ValueError(
             f"'{name}' is recorded as source='asked' but was never put through "
             f"ask_specified. Ask it, or record source='decided' with your "
@@ -717,8 +717,12 @@ def declare_input(session, name, value="", source="guessed", why=""):
     # assembled around it. `Input` raises on eleven.
     item = Input(name=name, value=str(value) or None, source=source,
                  why=" ".join(str(why).split()))
-    again = name in session.inputs
-    session.inputs[name] = item
+    # KEYED NORMALISED, valued with the name as written. Re-declaring a
+    # quantity corrects it, and "Static margin" after "static margin" is a
+    # correction, not a second input.
+    key = session.key(name)
+    again = key in session.inputs
+    session.inputs[key] = item
     say(f"  input     {'revised' if again else 'recorded'} {name} "
         f"[{source}]{f' = {item.value}' if item.value else ''}")
     return (f"{'Revised' if again else 'Recorded'}: {name} [{source}]. "
@@ -741,10 +745,10 @@ def _collect_inputs(session):
     list forward will sometimes improve it instead.
     """
     for name, value in session.asked.items():
-        if name in session.inputs:
+        if session.key(name) in session.inputs:
             continue
         delegated = str(value).strip().lower() in DELEGATED
-        session.inputs[name] = Input(
+        session.inputs[session.key(name)] = Input(
             name=name, source="decided" if delegated else "asked",
             value=None if delegated else str(value),
             why="delegated by the user" if delegated else "asked during the probe")
@@ -809,7 +813,7 @@ def open_entry(session, title, inputs_none_because=""):
     session.inputs_none_because = inputs_none_because.strip()
 
     unasked = [i.name for i in session.inputs.values()
-               if i.source == "asked" and i.name not in session.asked]
+               if i.source == "asked" and not session.was_asked(i.name)]
     if unasked:
         raise ValueError(
             f"These are recorded as source='asked' but were never put through "

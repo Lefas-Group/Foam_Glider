@@ -131,5 +131,30 @@ class Session:
             return None
         return max(0.0, self.probe_pool - self.probe_spent)
 
+    @staticmethod
+    def key(name):
+        """
+        The name, normalised: case-folded and single-spaced.
+
+        A QUANTITY IS THE SAME QUANTITY WHATEVER ITS CAPITALS. The model asked
+        `ask_specified("static margin")`, the user answered, and then
+        `declare_input("Static margin", source="asked")` was REFUSED -- "was
+        never put through ask_specified" -- because the two were compared as
+        raw strings. One wasted turn, and the refusal accused it of inventing
+        an ask it had genuinely made, which is the worst kind of wrong message:
+        the model reads it, believes it, and cannot see the difference.
+        Observed live on 2026-09-24.
+
+        Every comparison between an asked name and a declared one goes through
+        here, so there is one answer to "is this the same input" rather than
+        one per call site.
+        """
+        return " ".join(str(name).split()).casefold()
+
     def record_answer(self, name, value):
         self.asked[name] = value
+
+    def was_asked(self, name):
+        """True if this quantity was put through `ask_specified`, any casing."""
+        k = self.key(name)
+        return any(self.key(n) == k for n in self.asked)

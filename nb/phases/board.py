@@ -95,11 +95,19 @@ def _asking(runs, answered=()):
 
 
 def _table(runs):
+    """
+    One row per run. No `phase` column: there is one phase.
+
+    It read `ask` or `write` when a question was two processes with a gate
+    between them, and knowing which half you were in was most of knowing what
+    was happening. A question is one conversation now, so the column said `run`
+    on every row -- and `resume`, on the rare row that was one, which the `for`
+    column already tells you by being older than the work.
+    """
     from rich.table import Table
     t = Table(box=None, pad_edge=False, expand=True)
     for col, style, justify in (("run", "grey50", "left"),
                                 ("chapter", "", "left"),
-                                ("phase", "", "left"),
                                 ("turn", "", "right"),
                                 ("for", "grey50", "right"),
                                 ("waited", "grey50", "right"),
@@ -135,7 +143,7 @@ def _table(runs):
         q = r.get("question") or {}
         asked = q.get("asked_at")
         t.add_row(r.get("run", "?"), r.get("chapter") or "—",
-                  r.get("phase", "?"), str(r.get("turn", "")),
+                  str(r.get("turn", "")),
                   _ago(since), _ago(time.time() - asked) if asked else "",
                   state)
     return t
@@ -291,22 +299,32 @@ def follow(notebook, only=None):
                 asking = _asking(runs, answered)
                 live.update(_table(runs), refresh=True)
 
-                # ENDINGS, once each. Stopped before printing for the same
-                # reason the question panel is: a panel written under a live
-                # region is overdrawn by the next refresh.
-                for r in runs:
-                    if _ended(r) and r["run"] not in shown:
-                        shown.add(r["run"])
-                        live.stop()
-                        console.print(_ending_panel(r))
-                        live.start()
-                # A board attached to ONE run leaves when that run does. It
-                # used to spin on a table of a finished run until somebody
-                # pressed Ctrl-C -- and `nb ask` forks this as the parent, so
-                # that was every run.
-                if only and runs and all(_ended(r) for r in runs):
+                # ENDINGS, once each, printed with the live region STOPPED
+                # and not restarted until they are all out. Restarting between
+                # them redraws the table straight over the panel just written
+                # -- the table appeared inside the entry, between the figure
+                # caption and the panel's bottom border. The question panel
+                # above already carries this lesson: "the panel is written at a
+                # clean cursor with nothing live below it, so it cannot be
+                # overdrawn -- which is what happened when the display was
+                # restarted over the top of it."
+                #
+                # A board attached to ONE run also leaves when that run does,
+                # so the restart is skipped entirely on the way out: it used to
+                # spin on a table of a finished run until somebody pressed
+                # Ctrl-C, and `nb ask` forks this as the parent, so that was
+                # every run.
+                ending = [r for r in runs
+                          if _ended(r) and r["run"] not in shown]
+                leaving = bool(only) and runs and all(_ended(r) for r in runs)
+                if ending or leaving:
                     live.stop()
-                    return 0
+                    for r in ending:
+                        shown.add(r["run"])
+                        console.print(_ending_panel(r))
+                    if leaving:
+                        return 0
+                    live.start()
 
                 if asking:
                     run = asking[0]
