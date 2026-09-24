@@ -1,0 +1,98 @@
+---
+title: "At what airspeed does it fly at best glide?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0
+SOLVE_BUDGET = 15.0
+PROBE_POOL = 200.0
+PROBE_SPENT = 23.2
+
+import aerosandbox.numpy as np
+import matplotlib.pyplot as plt
+
+# Inherited from earlier entries
+req_cg = 0.267
+nose_x = 0.0
+
+plane = get_airplane()
+total_mass, cg_unballasted = get_mass_properties(plane)
+ballast_mass = total_mass * (cg_unballasted[0] - req_cg) / (req_cg - nose_x)
+flying_mass = total_mass + ballast_mass
+weight = flying_mass * 9.81
+S = plane.s_ref
+rho = 1.225
+
+opti = asb.Opti()
+alpha = opti.variable(init_guess=5.0, lower_bound=0, upper_bound=15)
+velocity = opti.variable(init_guess=5.0, lower_bound=1, upper_bound=20)
+
+aero = asb.AeroBuildup(
+    airplane=plane,
+    op_point=asb.OperatingPoint(velocity=velocity, alpha=alpha)
+).run()
+
+CL = aero["CL"]
+CD = aero["CD"]
+LD = CL / CD
+
+q = 0.5 * rho * velocity**2
+L = q * S * CL
+D = q * S * CD
+total_force = (L**2 + D**2)**0.5
+
+opti.subject_to(total_force == weight)
+opti.minimize(-LD)
+
+sol = opti.solve(verbose=False)
+v_best = sol(velocity)
+alpha_best = sol(alpha)
+ld_best = sol(LD)
+```
+
+::: {.hero}
+[`{python} f"{v_best:.2f} m/s"`]{.hero-value}
+[Best glide airspeed]{.hero-label}
+:::
+
+**Answer.** With a flying mass of [`{python} f"{flying_mass * 1000:.1f}"`]{.key} g (including the 3.0 g of nose ballast from [How much nose ballast is needed for the required CG?](2026-09-24-03-how-much-nose-ballast-is-needed-for-the-required-cg.qmd)), the X-Wing glides best at [`{python} f"{v_best:.2f}"`]{.key} m/s. This yields a maximum lift-to-drag ratio of [`{python} f"{ld_best:.2f}"`]{.key} at an angle of attack of [`{python} f"{alpha_best:.1f}"`]{.key}°.
+
+```{python}
+#| label: fig-ld-vs-airspeed
+#| fig-cap: "Lift-to-drag ratio across trim airspeeds. Slower flight requires higher angles of attack, which quickly increases drag."
+
+alphas = np.linspace(2, 12, 61)
+aero_initial = asb.AeroBuildup(
+    airplane=plane,
+    op_point=asb.OperatingPoint(velocity=5.0, alpha=alphas)
+).run()
+
+# Equilibrium velocity at each alpha, L ~= W
+v_eq = np.sqrt(2 * weight / (rho * S * aero_initial["CL"]))
+
+# Re-evaluate with exact equilibrium velocities to capture Reynolds effects
+aero_exact = asb.AeroBuildup(
+    airplane=plane,
+    op_point=asb.OperatingPoint(velocity=v_eq, alpha=alphas)
+).run()
+ld_exact = aero_exact["CL"] / aero_exact["CD"]
+
+fig, ax = plt.subplots(figsize=(6, 4))
+ax.plot(v_eq, ld_exact, label="L/D")
+ax.plot(v_best, ld_best, 'ro', label="Best Glide")
+ax.set_xlabel("Airspeed (m/s)")
+ax.set_ylabel("Lift-to-Drag Ratio (L/D)")
+ax.set_xlim(3, 10)
+ax.set_ylim(bottom=0)
+ax.grid(True)
+ax.legend()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(get_mass_properties)
+```
