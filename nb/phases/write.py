@@ -43,6 +43,23 @@ def _stem(notebook, chapter, title, today):
     return f"{today}-{n:02d}-{slug}"
 
 
+def frozen_markdown(notebook, chapter, stem):
+    """
+    The entry's rendered markdown, with every inline expression resolved.
+
+    The one place the finished entry can be read: rule 1 forces the numbers in
+    prose to be `{python} …`, so the SOURCE contains none of the entry's actual
+    claims. Three readers now -- the render cost, the prose, and the one-line
+    answer recorded for a coordinator -- where there were two copies of the
+    same four lines.
+    """
+    p = notebook.freeze / chapter / stem / "execute-results" / "html.json"
+    try:
+        return json.loads(p.read_text())["result"]["markdown"]
+    except (OSError, ValueError, KeyError):
+        return None
+
+
 def _render_cost(notebook, chapter, stem):
     """
     (solves, seconds) from the entry's own footer line, or None.
@@ -53,11 +70,8 @@ def _render_cost(notebook, chapter, stem):
     same line, through the same regex in `lint`. Two sources for one quantity is
     how they come to disagree.
     """
-    import re
-    p = (notebook.freeze / chapter / stem / "execute-results" / "html.json")
-    try:
-        md = json.loads(p.read_text())["result"]["markdown"]
-    except (OSError, ValueError, KeyError):
+    md = frozen_markdown(notebook, chapter, stem)
+    if md is None:
         return None
     import lint
     secs = lint.RUNTIME_SECONDS.search(md)
@@ -236,10 +250,8 @@ def rendered_prose(notebook, chapter, stem):
     Code cells stripped, which is most of the bytes and none of the argument:
     measured 5,624 tokens full against 851 without.
     """
-    f = notebook.freeze / chapter / stem / "execute-results" / "html.json"
-    try:
-        md = json.loads(f.read_text())["result"]["markdown"]
-    except (OSError, ValueError, KeyError):
+    md = frozen_markdown(notebook, chapter, stem)
+    if md is None:
         return None
     md = CODE_CELL.sub("", md)
     # Quarto writes a figure's path relative to the chapter directory, so it
@@ -331,6 +343,32 @@ def _readable(md, width=76):
         out += textwrap.wrap(line, width=width, initial_indent=indent,
                              subsequent_indent=indent) or [""]
     return "\n".join(out).strip()
+
+
+def answer_line(notebook, chapter, stem):
+    """
+    The entry's hero value and what it measures, as one line, or None.
+
+    WHAT THE RUN CONCLUDED, for whoever is reading `run.json` rather than
+    watching. `outcome: committed` and a sha say the work happened; they do not
+    say it came out at 5.38. A coordinator deciding what to ask next needs the
+    answer, and until now the only place it existed in words was the prose
+    printed into `status.log` -- a timestamped text file nothing parses.
+
+    The hero pair is one fact written as two spans so the page can style them,
+    which is why it is joined here before the spans are stripped: after `SPAN`
+    runs they are indistinguishable from ordinary prose.
+
+    None for an entry with no hero, which is a real and legitimate state -- an
+    entry whose answer is a drawing, or a comparison, has no single number.
+    """
+    md = frozen_markdown(notebook, chapter, stem)
+    m = HERO.search(md) if md else None
+    if not m:
+        return None
+    clean = lambda t: ESCAPED.sub(r"\1", t).replace("**", "").strip()
+    value, label = clean(m.group(1)), clean(m.group(2))
+    return f"{value} — {label}" if label else value or None
 
 
 def _commit_with_lock_retry(repo, title, paths, attempts=3):

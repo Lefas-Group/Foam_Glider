@@ -44,11 +44,14 @@ FREEZE_STALE_RULE = 12
 
 def _problems(root, chapters, pre_render=True):
     """
-    (blocking, warnings) as message strings.
+    (blocking, warnings), each `[(rule, message)]`.
 
-    There is no rule number anywhere in lint's output -- the message string IS
-    the unit, and `"(warning)"` is an in-string marker rather than a field, so
-    severity is split exactly the way check.py splits it.
+    THE RULE TRAVELS WITH THE MESSAGE. It used to be dropped here -- callers
+    got strings, and `"(warning)"` is an in-string marker rather than a field,
+    so severity is split exactly the way check.py splits it. Keeping the number
+    is what let the pre-render filter stop matching on prose, and it is what
+    lets a run that fails lint record WHICH rules blocked it in `run.json`
+    rather than only in a log line saying "3 blocking".
 
     `pre_render` drops rule 12, which no edit can satisfy -- the render IS its
     fix, and gating the render on it deadlocks. See `FREEZE_STALE_RULE`.
@@ -59,7 +62,8 @@ def _problems(root, chapters, pre_render=True):
         if pre_render and rule == FREEZE_STALE_RULE:
             continue
         label = "" if where is None else f"{where.name}: "
-        (warnings if "(warning)" in msg else blocking).append(f"{label}{msg}")
+        (warnings if "(warning)" in msg else blocking).append(
+            (rule, f"{label}{msg}"))
     return blocking, warnings
 
 
@@ -141,15 +145,15 @@ def lint_chapter(notebook, chapter, session=None):
     out = []
     if blocking:
         out.append(f"{len(blocking)} blocking problem(s) -- fix all of these:")
-        out += [f"  {p}" for p in blocking]
+        out += [f"  {m}" for _, m in blocking]
     if warnings:
         out.append(f"{len(warnings)} warning(s), not blocking:")
-        out += [f"  {w}" for w in warnings]
+        out += [f"  {m}" for _, m in warnings]
     return tail("\n".join(out)) + budgets
 
 
 def is_clean(notebook, chapter):
-    """True when nothing blocking remains. The mandatory step after the loop."""
+    """(clean, `[(rule, message)]`). The mandatory step after the loop."""
     blocking, _ = _problems(notebook.root, [chapter])
     return not blocking, blocking
 

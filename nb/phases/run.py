@@ -43,8 +43,28 @@ from .view import site
 from .common import setup, report, spoken_calls
 from .write import (_ceiling_problem, _commit, _refresh_index_freeze,
                     _refresh_root_index, _render_cost, _resolve, _why_and_diff,
-                    rendered_prose)
+                    answer_line, rendered_prose)
 from ..log import detach_output, detached, open_log, say, tell
+
+
+# The rendered entry, capped, for `run.json`. Measured at 616 characters on a
+# real entry; the cap is for the pathological one, not the normal one. `run.json`
+# is polled twice a second by the board, so it stays a document you can read in
+# one go rather than a place to put everything.
+PROSE_CAP = 4000
+
+# WHERE THE DETAIL IS, said once rather than guessed at. A reader of `run.json`
+# should not have to sift the model's reasoning to find out what happened --
+# `answer`, `prose` and `findings` are there so it never has to. This says where
+# to look on the occasions it wants to.
+DETAIL = {
+    "log": "status.log — every turn, stamped. The model's reasoning is in the "
+           "lines beginning `│`; nothing else needs reading.",
+    "turns": "transcript.jsonl — one line per model turn (role: model) and one "
+             "per batch of tool results (role: tool), in order. `thought` "
+             "parts are the reasoning; skip them unless you want it.",
+    "probe": "probe.py — the last probe this run executed.",
+}
 
 
 def _start(notebook, quiet, answers):
@@ -83,6 +103,7 @@ def _start(notebook, quiet, answers):
     # before the run can be asked about -- which means before its first
     # question, its first turn and its first `run.json` the board will read.
     runstate.hold(notebook)
+    runstate.write(notebook, detail=DETAIL)
     detach_output()
 
 
@@ -319,13 +340,20 @@ def _execute(notebook, session, contents, run_metrics, fs, handlers,
                             if getattr(c, "role", None) == "model")
 
     def problems_now():
-        """Lint, plus the one thing lint cannot see: no entry file at all."""
+        """`(clean, [(rule, message)])` -- lint, plus the one thing lint cannot
+        see: no entry file at all."""
         clean, problems = verifiers.is_clean(notebook, session.chapter)
         if not session.entry_path.exists():
-            return False, [f"chapters/{session.chapter}/{session.stem}.qmd does "
-                           f"not exist. You opened the entry and never wrote "
-                           f"it -- `write_file` it, then lint."] + list(problems)
+            return False, [
+                (None, f"chapters/{session.chapter}/{session.stem}.qmd does "
+                       f"not exist. You opened the entry and never wrote it "
+                       f"-- `write_file` it, then lint.")] + list(problems)
         return clean, problems
+
+    def blocked(problems):
+        """Record WHICH rules stopped the run, for whoever reads run.json."""
+        runstate.write(notebook, findings=[
+            {"rule": r, "message": m} for r, m in problems])
 
     first_pass = None
     try:
@@ -371,11 +399,12 @@ def _execute(notebook, session, contents, run_metrics, fs, handlers,
                     break
                 contents.append({"role": "user", "parts": [{"text":
                     "Lint is not clean. Fix every one of these, then stop:\n\n"
-                    + "\n".join(f"  {p}" for p in problems)}]})
+                    + "\n".join(f"  {m}" for _, m in problems)}]})
             else:
                 tell(f"  lint      still failing after {MAX_LINT_ATTEMPTS} "
                      f"attempts. Nothing committed; the entry is on disk to "
                      f"fix by hand.")
+                blocked(problems)
                 run_metrics.close("lint_failed")
                 return 1
 
@@ -394,6 +423,7 @@ def _execute(notebook, session, contents, run_metrics, fs, handlers,
             if not clean:
                 tell(f"  lint      {len(problems)} blocking after the ceiling "
                      f"fix; stopping. The entry is on disk.")
+                blocked(problems)
                 run_metrics.close("lint_failed")
                 return 1
 
@@ -412,6 +442,7 @@ def _execute(notebook, session, contents, run_metrics, fs, handlers,
             buildable = note.startswith(verifiers.BUILD_FAILED)
             if not buildable or renders >= MAX_RENDER_FIXES:
                 tell(f"  build     could not run — {note}")
+                runstate.write(notebook, failure=note[:2000])
                 run_metrics.close("build_failed")
                 return 1
             renders += 1
@@ -430,6 +461,7 @@ def _execute(notebook, session, contents, run_metrics, fs, handlers,
             if not clean:
                 tell(f"  lint      {len(problems)} blocking after the render "
                      f"fix; stopping. The entry is on disk.")
+                blocked(problems)
                 run_metrics.close("lint_failed")
                 return 1
 
@@ -573,9 +605,20 @@ def _finish(notebook, session, run_metrics, first_pass, moved, accepted):
     # entry and wrote a SECOND copy of it under today's date -- a duplicate
     # that lints, renders and would have committed. Every other ending leaves
     # this unset, which is what makes them resumable.
+    #
+    # AND WHAT THE ENTRY CONCLUDED, beside it. `outcome: committed` and a sha
+    # say the work happened; they do not say it came out at 5.38, and a reader
+    # deciding what to ask next needs the answer rather than the bookkeeping.
+    # Until now the only place that existed in words was the prose printed into
+    # `status.log` -- a timestamped text file nothing parses, interleaved with
+    # the model's reasoning. Both are read off the FREEZE, so they are the
+    # numbers the published page shows.
+    prose = rendered_prose(notebook, chapter, stem)
     runstate.write(notebook, committed={
         "sha": sha, "entry": stem,
-        "at": datetime.datetime.now().isoformat(timespec="seconds")})
+        "at": datetime.datetime.now().isoformat(timespec="seconds")},
+        answer=answer_line(notebook, chapter, stem),
+        prose=(prose[:PROSE_CAP] if prose else None))
     n_paths = len(detail.split(", "))
     committed = f"  commit    {sha} · {n_paths} file{'s' if n_paths != 1 else ''}"
     say(f"  commit    {sha}  ({detail})")
@@ -588,9 +631,9 @@ def _finish(notebook, session, run_metrics, first_pass, moved, accepted):
     run_metrics.close("committed_refactor" if accepted else "committed")
 
     # The entry itself, with real numbers. Conversation, not telemetry: it is
-    # the thing to read, and with no gate before it this is where a reader --
-    # human or coordinating agent -- first sees what was actually claimed.
-    prose = rendered_prose(notebook, chapter, stem)
+    # the thing to read, and with no gate before it this is where a reader
+    # watching the log first sees what was actually claimed. A reader who is
+    # not watching gets it from `run.json`, above.
     if prose:
         tell(f"\n{'─' * 72}\n{prose}\n{'─' * 72}")
     tell(committed)

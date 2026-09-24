@@ -66,6 +66,31 @@ class Mailbox:
         self.answers = dict(answers or {})
         self.wait = wait
 
+    def _record(self, kind, name, why, value, source):
+        """
+        Append one question and its answer to `run.json`.
+
+        WHAT THE USER ACTUALLY DECIDED, kept. `question.json` is DELETED the
+        moment it is answered -- that is what stops a stale reply being taken
+        for a fresh one -- so the exchange survived only as a line in
+        `status.log`, interleaved with the model's reasoning and parseable by
+        nothing. A coordinator, and anyone reading a run afterwards, needs the
+        decisions: they are the half of the entry that no computation produced.
+
+        `source` says where the answer came from -- a person, `--answers`, or
+        the default nobody overrode -- because "the user chose 150 s" and
+        "nobody replied and 150 s is the default" are different facts and the
+        record must not blur them.
+
+        `why` is capped rather than dropped: it is the question as the user saw
+        it, and a bare name and value cannot be read back six runs later.
+        """
+        from . import runstate
+        got = runstate.read(self.notebook).get("answered") or []
+        got.append({"kind": kind, "name": name, "why": " ".join(why.split())[:300],
+                    "value": str(value), "source": source, "at": time.time()})
+        runstate.write(self.notebook, answered=got)
+
     def ask(self, kind, name, why="", options="", default=None, wait=None):
         """
         Put a question and block until answered, or until `wait` expires.
@@ -83,7 +108,9 @@ class Mailbox:
         """
         from . import runstate
         if name in self.answers:
-            return str(self.answers.pop(name))
+            value = str(self.answers.pop(name))
+            self._record(kind, name, why, value, "answers-file")
+            return value
 
         # `default` goes IN the file, not just into this call's fallback. The
         # board renders the question from the file, so a budget question
@@ -141,7 +168,9 @@ class Mailbox:
                     time.sleep(POLL)
                     continue
                 self.notebook.question_path.unlink(missing_ok=True)
-                return str(a.get("value", ""))
+                value = str(a.get("value", ""))
+                self._record(kind, name, why, value, a.get("by") or "reply")
+                return value
         finally:
             runstate.write(self.notebook, waiting_on=None)
 
@@ -149,6 +178,7 @@ class Mailbox:
         # stopped run a coordinator can resume rather than an answer invented
         # on the run's behalf.
         if default is not None:
+            self._record(kind, name, why, default, "default (unanswered)")
             return str(default)
         raise SystemExit(
             f"\n  no answer to {name!r} after "

@@ -70,11 +70,25 @@ def _spoken(turn):
     return types.Content(role=turn.role, parts=keep)
 
 
-def _log(path, turn, extra=None):
+# One tool result, capped. A probe already truncates itself to TRUNCATE before
+# it is returned, so this is the belt to that braces -- and the record is for
+# reconstructing a run, not for replaying it.
+RESULT_CAP = 4000
+
+
+def _write(path, rec):
     if path is None:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    rec = {"parts": [
+    with path.open("a") as f:
+        f.write(json.dumps(rec, default=str) + "\n")
+
+
+def _log(path, turn, extra=None):
+    """One MODEL turn: its thinking, its text, and the calls it made."""
+    if path is None:
+        return
+    rec = {"role": "model", "parts": [
         {"thought": p.text} if getattr(p, "thought", None) else
         {"text": p.text} if p.text else
         {"function_call": {"name": p.function_call.name,
@@ -82,8 +96,38 @@ def _log(path, turn, extra=None):
         for p in (turn.parts or []) if p.text or p.function_call]}
     if extra:
         rec.update(extra)
-    with path.open("a") as f:
-        f.write(json.dumps(rec) + "\n")
+    _write(path, rec)
+
+
+def _log_results(path, results):
+    """
+    What the tools ANSWERED, which makes this a transcript rather than half of
+    one.
+
+    It recorded model turns and nothing else, so the file said what the model
+    said and never what it was replying to. You could not tell from it what
+    lint reported, whether the first-probe notice fired, or what a user
+    answered -- and each of those has been wanted: confirming a prompt had
+    fired at all needed a `say()` line added specially, because the transcript
+    could not show it.
+
+    Written as its own line with `role: "tool"`, after the model turn it
+    answers, so a reader walks the file in order and sees call then result.
+    Images are noted rather than embedded -- the bytes are already on disk
+    under the freeze, and a base64 blob in a log is unreadable either way.
+    """
+    if path is None or not results:
+        return
+    out = []
+    for call, result in results:
+        if isinstance(result, dict) and "_image" in result:
+            body = {"image": result.get("name"), "bytes": len(result["_image"])}
+        elif isinstance(result, dict):
+            body = {k: v for k, v in result.items() if k != "_image"}
+        else:
+            body = {"result": str(result)[:RESULT_CAP]}
+        out.append({"name": call.name, "response": body})
+    _write(path, {"role": "tool", "results": out})
 
 
 def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
@@ -189,6 +233,7 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
 
         # All responses in ONE turn. Splitting them degrades parallel calling.
         contents.append(types.Content(role="user", parts=parts))
+        _log_results(transcript, results)
 
         # AFTER the responses, never between a call and its answer: an
         # unanswered function_call is a 400 on the next request. It also needs
