@@ -41,8 +41,8 @@ relative to the repo root.
 uv run --group nb python -m nb ask glider-notebook \
   --chapter 01-foam-glider "How heavy is the wing alone?"
 
-# a new aircraft, named once, at creation
-uv run --group nb python -m nb new PAPER-DART "Paper Dart" \
+# a new aircraft, named once, at creation. The title is the directory name.
+uv run --group nb python -m nb new paper-dart \
   --chapter-title "Folded wing" \
   --defines "AVL at fixed alpha, flat plate, fuselage drag neglected." \
   --spec "**A4 80 gsm paper**, folded, no glue."

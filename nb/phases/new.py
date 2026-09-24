@@ -128,7 +128,21 @@ def main(path, title=None, subject=None, chapter=None,
         tell(f"  {chapter!r} is not NN-kebab-case — check --chapter-title")
         return 1
 
-    title = title or root.name.replace("-", " ").title()
+    # THE TITLE IS THE DIRECTORY NAME, and that is the whole of it. It always
+    # defaulted to this; what it also had was a POSITIONAL free-text argument,
+    # which is how `RADICAL GLIDER # once per aircraft` became the site heading
+    # in four files -- "everything that is not a flag" swallowed a trailing
+    # shell comment. A name you have already chosen, typed twice, is a name
+    # that can disagree with itself.
+    #
+    # `-notebook` IS STRIPPED, because `_quarto.yml` appends " Notebook". Three
+    # of the four notebooks here are named `*-notebook` and each was given an
+    # explicit title at creation, which is the only reason nobody ever saw
+    # "Aircraft Notebook Notebook".
+    if not title:
+        title = root.name.replace("-", " ").replace("_", " ").title()
+        if title.lower().endswith(" notebook"):
+            title = title[:-len(" notebook")]
     subject = subject or "the aircraft"
     # THE TITLE IS SUBSTITUTED INTO FOUR FILES BY BLIND STRING REPLACEMENT, and
     # `_render` is deliberately blunt about it. Nothing downstream catches a bad

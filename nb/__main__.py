@@ -1,7 +1,9 @@
 """
-    nb new   <notebook> [title]              scaffold a notebook, then prove it
+    nb new   <notebook>                      scaffold a notebook, then prove it
              --chapter-title "…" --defines "…" …the first chapter, named now
              [--spec "…"] [--assume "…"]      …the brief, repeatable
+             [--title "…"]                    …only if the directory name is
+                                              …not the aircraft's name
     nb ask   <notebook> --chapter NN-name    probe, write, render, commit
              "<question>"                      …the chapter is REQUIRED
              [--pool N] [--ceiling N]         …budgets, instead of being asked
@@ -73,13 +75,6 @@ def _repeated(argv, flag):
             if a == flag and i + 1 < len(argv)]
 
 
-def _free(argv, flags):
-    """Words that are neither a flag nor a flag's value."""
-    taken = {i + 1 for i, a in enumerate(argv) if a in flags}
-    return [a for i, a in enumerate(argv)
-            if i not in taken and not a.startswith("--")]
-
-
 def _opt(argv, flag, number=True):
     """`--flag value`, or None. A budget nobody set is asked for, as before."""
     if flag not in argv:
@@ -119,9 +114,12 @@ def main(argv):
         # and the prefix is built once at `nb ask` -- so forgetting meant a
         # first run with no notebook level in front of the model at all.
         specs, assumes = _repeated(rest, "--spec"), _repeated(rest, "--assume")
-        FLAGS = ("--spec", "--assume", "--chapter-title", "--defines")
-        title = " ".join(_free(rest[1:], FLAGS)) or None
-        return new(rest[0], title, specs=specs, assumes=assumes,
+        # No positional title: it defaults to the directory name and always
+        # did, so typing it again could only ever disagree with itself -- and
+        # "everything that is not a flag" is what swept a trailing shell
+        # comment into a site heading. A flag cannot do that.
+        return new(rest[0], _opt(rest, "--title", number=False),
+                   specs=specs, assumes=assumes,
                    chapter_title=_opt(rest, "--chapter-title", number=False),
                    defines=_opt(rest, "--defines", number=False))
 
