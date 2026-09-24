@@ -272,7 +272,12 @@ uninstrumented. `check` is refused for the same reason: re-proving a chapter is
 minutes, and the run does it once, automatically, when a shared function
 actually moved.
 
-`board` shows every run and prompts you for whichever is asking. `nb stop` asks
+`board` shows every run, prompts you for whichever is asking, and prints each
+run's ending as it happens — the answer in bold, then the rendered entry with
+its real numbers, or the rules that blocked it and where the work is on disk. A
+board attached to one run (which is what `nb ask` draws) leaves when that run
+does. It reads `run.json` for all of it, which is the same document a
+coordinator reads; nothing parses `status.log`. `nb stop` asks
 a run to end: cooperative, checked before each turn and while blocked on a
 question, so it exits through its own door and records `stopped` rather than
 looking like a crash. It reverts nothing.

@@ -158,6 +158,110 @@ def _question_panel(run):
                  border_style="yellow")
 
 
+# What an ending looks like. `committed` is the one worth reading in full; the
+# rest are told in a line, because what a reader needs from them is which one it
+# was and where the work is.
+ENDINGS = {
+    "committed":              ("green",  "committed"),
+    "committed_refactor":     ("green",  "committed, with an accepted refactor"),
+    "no_entry":               ("yellow", "ended without opening an entry"),
+    "lint_failed":            ("red",    "lint would not come clean"),
+    "build_failed":           ("red",    "the page would not build"),
+    "ceiling_changed":        ("red",    "the entry changed its granted ceiling"),
+    "refactor_moved_answers": ("yellow", "a refactor moved sibling answers"),
+    "chapter_locked":         ("yellow", "another run owns the chapter"),
+    "already_written":        ("yellow", "the chapter already holds this question"),
+    "max_turns":              ("red",    "out of turns"),
+    "no_answer":              ("yellow", "a question went unanswered"),
+    "stopped":                ("yellow", "stopped"),
+    "commit_failed":          ("red",    "the commit failed"),
+}
+
+
+def _ending_panel(run):
+    """
+    How a run FINISHED, including what its entry concluded.
+
+    THE POINT OF THE WHOLE SYSTEM WAS LANDING IN A LOG FILE. This drew a table
+    from `run.json` and question panels from `question.json`, and never read
+    `status.log` -- which is where `tell()` writes once a run detaches, and
+    every run detaches. So the rendered entry, with its real numbers, was
+    printed by the run into a file nothing displayed, and the README's promise
+    that "the terminal carries the conversation -- the questions, the
+    milestones, the finished entry" was true of the first two.
+
+    It reads `run.json` rather than the log, because the run now records
+    `answer` and `prose` there, off the freeze. So this needs no parsing, and
+    a coordinator reads exactly the same fields.
+    """
+    from rich.panel import Panel
+    outcome = run.get("outcome") or "died"
+    colour, said = ENDINGS.get(outcome, ("red", "died without a word"))
+    body = []
+    answer = run.get("answer")
+    prose = run.get("prose")
+    if answer:
+        body.append(f"[bold]{answer}[/bold]\n")
+        # `_readable` already joins the hero pair into the prose, so showing
+        # both puts the answer on screen twice. Dropped by VALUE, which is the
+        # half the two spellings share -- the panel says "5.38 — Best L/D" and
+        # the prose "5.38  Best L/D".
+        value = answer.split("\u2014")[0].strip()
+        if prose and value:
+            prose = "\n".join(l for l in prose.splitlines()
+                               if l.strip() != value and
+                               not (l.strip().startswith(value) and
+                                    len(l.strip()) < len(answer) + 4))
+    if prose:
+        import re
+        body.append(re.sub(r"\n{3,}", "\n\n", prose).strip())
+    for f in (run.get("findings") or [])[:6]:
+        rule = f" [dim](rule {f['rule']})[/dim]" if f.get("rule") else ""
+        body.append(f"  \u2022 {f.get('message', '')}{rule}")
+    if run.get("failure"):
+        body.append(run["failure"][:600])
+    if not body:
+        # The footer already says where the entry is, so repeating the stem
+        # here fills a panel with the one thing beside it.
+        body.append("[dim]nothing was recorded[/dim]")
+    # WHERE THE WORK IS, under every ending that left some. A commit is found
+    # by its sha; everything else left an entry on disk and the next question
+    # is always where.
+    sha = (run.get("committed") or {}).get("sha")
+    foot = sha or (f"chapters/{run['chapter']}/{run['stem']}.qmd"
+                   if run.get("stem") and run.get("chapter") else None)
+    return Panel("\n".join(body), border_style=colour,
+                 title=f"{run.get('chapter') or run['run']} \u2014 {said}",
+                 subtitle=f"[dim]{foot}[/dim]" if foot else None)
+
+
+def _ended(run):
+    """A run that has stopped for good: it said so, or it is not alive."""
+    return bool(run.get("outcome")) or run.get("alive") is False
+
+
+def _seen_already(notebook, only):
+    """
+    Endings that predate this board, so it announces only what ends while it
+    is watching.
+
+    A whole-notebook board would otherwise open by printing a panel for every
+    run that ever finished -- nine of them here. `_runs` keeps finished runs
+    for context and caps them, which is right for a table and wrong for a panel
+    each.
+
+    EMPTY WHEN FOLLOWING ONE RUN. `nb ask` forks the board before the child has
+    written an outcome, so this is normally empty anyway -- but a run that dies
+    in its first second would be pre-seeded as already-seen and the board would
+    exit having shown nothing at all. Both entry points take this, which they
+    did not when the rule lived in one of them: the piped path fell through to
+    `_follow_plain` and went silent.
+    """
+    if only:
+        return set()
+    return {r["run"] for r in _runs(notebook, only) if _ended(r)}
+
+
 def follow(notebook, only=None):
     """Draw the table, surface questions, and take answers. Ctrl-C to leave."""
     from rich.console import Console
@@ -179,12 +283,30 @@ def follow(notebook, only=None):
     # -- each question, each answer, in order -- and the table lives at the
     # bottom of the screen where it belongs.
     answered = set()          # (run, asked_at) -- see `_asking`
+    shown = _seen_already(notebook, only)
     with Live(console=console, refresh_per_second=4, transient=True) as live:
         try:
             while True:
                 runs = _runs(notebook, only)
                 asking = _asking(runs, answered)
                 live.update(_table(runs), refresh=True)
+
+                # ENDINGS, once each. Stopped before printing for the same
+                # reason the question panel is: a panel written under a live
+                # region is overdrawn by the next refresh.
+                for r in runs:
+                    if _ended(r) and r["run"] not in shown:
+                        shown.add(r["run"])
+                        live.stop()
+                        console.print(_ending_panel(r))
+                        live.start()
+                # A board attached to ONE run leaves when that run does. It
+                # used to spin on a table of a finished run until somebody
+                # pressed Ctrl-C -- and `nb ask` forks this as the parent, so
+                # that was every run.
+                if only and runs and all(_ended(r) for r in runs):
+                    live.stop()
+                    return 0
 
                 if asking:
                     run = asking[0]
@@ -221,12 +343,18 @@ def follow(notebook, only=None):
 
 def _follow_plain(notebook, console, only=None):
     """No cursor to steer: print the table only when a row changes."""
-    last = None
+    last, shown = None, _seen_already(notebook, only)
     try:
         while True:
             runs = _runs(notebook, only)
             key = [(r.get("run"), r.get("phase"), r.get("turn"),
                     r.get("outcome"), bool(r.get("question"))) for r in runs]
+            for r in runs:
+                if _ended(r) and r["run"] not in shown:
+                    shown.add(r["run"])
+                    console.print(_ending_panel(r))
+            if only and runs and all(_ended(r) for r in runs):
+                return 0
             if key != last:
                 console.print(_table(runs))
                 for r in _asking(runs):
