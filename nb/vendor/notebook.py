@@ -720,13 +720,33 @@ def _blocks(path):
     return out
 
 
-def _chapter_title(chapter):
-    index = _pathlib.Path("chapters") / chapter / "index.qmd"
+def _page_title(path, fallback):
+    """The `title:` from a page's front matter, or `fallback`."""
     try:
-        m = _re.search(r'^title:\s*"(.+)"\s*$', index.read_text(), _re.M)
+        m = _re.search(r'^title:\s*"(.+)"\s*$', path.read_text(), _re.M)
     except OSError:
-        return chapter
-    return m.group(1) if m else chapter
+        return fallback
+    return m.group(1) if m else fallback
+
+
+def _chapter_title(chapter):
+    return _page_title(_pathlib.Path("chapters") / chapter / "index.qmd", chapter)
+
+
+def _ordinal(n):
+    """1st, 2nd, 3rd, 4th -- and 11th through 13th, which break the pattern."""
+    tail = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(
+        n % 10, "th")
+    return f"{n}{tail}"
+
+
+def _entries_of(chapter):
+    """The chapter's entries, chronological. Dated `.qmd` files, sorted."""
+    d = _pathlib.Path("chapters") / chapter
+    try:
+        return sorted(p for p in d.glob("*.qmd") if _STEM.match(p.name))
+    except OSError:
+        return []
 
 
 # An item declared by an ENTRY rather than by the chapter. `2026-09-23-01-...`
@@ -782,16 +802,45 @@ def _item_text(chapter, item_id):
 
 
 def chapter_lineage(chapter):
-    """Where this chapter's vehicle came from."""
+    """
+    Where this chapter's vehicle came from, and from WHEN.
+
+    `_fork.yml` records `at_entry:` -- how many entries the parent had written
+    when the copy was taken -- and that is the one fact that places a fork in
+    its parent's history. It decides what this chapter inherited, and it was
+    recorded and then shown nowhere: the line said only which chapter, so a
+    reader could not tell whether the fork predated the parent's most
+    interesting entry or followed it.
+
+    LINKED TO THE `.qmd`, NOT THE DIRECTORY. It used to print `(../<parent>/)`,
+    a bare directory that Quarto does not rewrite -- so the link resolved to
+    nothing and the only working route to the parent was the sidebar. Quarto
+    rewrites a link whose target is a source file, which is also why rule 10
+    has entries cite each other by `.qmd`.
+    """
     fork = _pathlib.Path("chapters") / chapter / "_fork.yml"
     try:
         text = fork.read_text()
     except OSError:
         return
-    parent = _re.search(r"^parent:\s*(.+?)\s*$", text, _re.M)
-    if parent:
-        print(f"Forked from [{_chapter_title(parent.group(1))}]"
-              f"(../{parent.group(1)}/).\n")
+    m = _re.search(r"^parent:\s*(.+?)\s*$", text, _re.M)
+    if not m:
+        return
+    parent = m.group(1).strip()
+    line = f"Forked from [{_chapter_title(parent)}](../{parent}/index.qmd)"
+
+    at = _re.search(r"^at_entry:\s*(\d+)\s*$", text, _re.M)
+    entries = _entries_of(parent)
+    if at and entries:
+        # CLAMPED: a recorded count can outrun the parent if an entry was
+        # removed, and a link to an entry that is not there is worse than no
+        # link. The front page's lineage diagram clamps the same number for the
+        # same reason.
+        n = max(1, min(int(at.group(1)), len(entries)))
+        e = entries[n - 1]
+        line += (f", after its {_ordinal(n)} entry — "
+                 f"[{_page_title(e, e.stem)}](../{parent}/{e.name})")
+    print(line + ".\n")
 
 
 def notebook_inputs():
