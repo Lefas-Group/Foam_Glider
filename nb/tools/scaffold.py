@@ -25,8 +25,10 @@ NAME = re.compile(r"^\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$")
 # four orders of magnitude of slack.
 ALLOC_STALE = 60.0
 
-# What an undescribed chapter's index carries. Doubles as the marker that nobody
-# has claimed the chapter yet -- see `Notebook.claimable_stub`.
+# What an undescribed chapter carries, as a last resort. Both callers supply
+# `defines`, so this should never reach disk -- and if it does, rule 24 refuses
+# the chapter the moment it has an entry. It used to double as the marker that
+# nobody had claimed the chapter yet; nothing is unclaimed now.
 PLACEHOLDER = ("<one sentence, then a bullet list: the aero method, the section, "
                "what is left out>")
 SLUG = re.compile(r"^(?:\d{2}-)?(?P<slug>[a-z0-9]+(?:-[a-z0-9]+)*)$")
@@ -105,35 +107,6 @@ def _allocate(notebook, slug, start=None):
     raise RuntimeError(f"no free chapter number for {slug!r} below {n}")
 
 
-def _claim(notebook, slug):
-    """
-    Take over an untouched scaffold chapter atomically, or return None.
-
-    `os.rename` on a directory is atomic, so it is the claim: the winner gets
-    the directory, the loser's rename raises and it falls through to allocating
-    a fresh number. The previous version called `claimable_stub()` and then
-    `rmtree`, which meant two runs could both decide the same stub was theirs
-    and the loser died on an unhandled `FileNotFoundError`.
-
-    Rename first, rewrite the templated files after -- `_model.qmd` and
-    `index.qmd` bake the chapter path in, so the contents are only valid once
-    the directory has its final name.
-    """
-    stub = notebook.claimable_stub()
-    if stub is None:
-        return None
-    name = f"{stub[:2]}-{slug}"
-    target = notebook.chapters_dir / name
-    try:
-        os.rename(notebook.chapters_dir / stub, target)
-    except OSError:
-        return None                 # someone else claimed it, or it moved
-    # The stub's index may already have been rendered and frozen. Left behind is
-    # a freeze for a chapter that no longer exists, which nothing ever collects.
-    shutil.rmtree(notebook.freeze / stub, ignore_errors=True)
-    return stub, name, target
-
-
 def _fork_sources(notebook, parent):
     """
     A parent chapter's `_model.py` and `_analysis.py` AT THE LAST COMMIT.
@@ -174,8 +147,7 @@ def _sidebar_add(notebook, name):
     turning a silent omission into a lint failure.
 
     Rewrites the whole block sorted rather than appending: allocation can walk
-    past a collision, a claimed stub is renamed, and appending would put those
-    out of order. Never raises -- a sidebar line is not worth failing a chapter
+    past a collision, and appending would put that out of order. Never raises -- a sidebar line is not worth failing a chapter
     that has already been created on disk, and rule 38 will say so.
     """
     cfg = notebook.root / "_quarto.yml"
@@ -208,8 +180,8 @@ def _sidebar_add(notebook, name):
         pass
 
 
-def create_chapter(notebook, name, title, defines="", claim=True,
-                   number=None, fork_from="", overwrites=()):
+def create_chapter(notebook, name, title, defines="", number=None,
+                   fork_from="", overwrites=()):
     """
     Create `chapters/<name>/` with index.qmd, _model.qmd, _model.py, _analysis.py.
 
@@ -217,10 +189,22 @@ def create_chapter(notebook, name, title, defines="", claim=True,
     promotion from an entry that needed them a second time, never by
     anticipation.
 
-    With `claim`, an untouched scaffold chapter is taken over rather than left
-    beside the new one -- see `Notebook.claimable_stub`. Both paths allocate
-    ATOMICALLY (`rename` to claim, `mkdir` to create), so two concurrent runs
-    cannot end up believing they own the same directory.
+    Allocation is ATOMIC (`mkdir`), so two concurrent runs cannot end up
+    believing they own the same directory.
+
+    THERE IS NO LONGER A STUB TO CLAIM. `nb new` used to create
+    `01-first-chapter` with `__WHAT_DEFINES_THE_CHAPTER__` in its `_inputs.yml`
+    -- Quarto's `auto: "chapters"` dies on an empty `chapters/`, so a chapter
+    had to exist before anyone knew what it held -- and the first real chapter
+    then took it over: `claimable_stub()` tested three independent conditions,
+    `_claim()` renamed the directory atomically, re-templated the files that
+    baked the old path in, and swept the orphaned freeze. `fork_chapter` needed
+    a special case for it.
+
+    `nb new` now requires `--chapter-title` and `--defines`, so the first
+    chapter is named at birth and nothing is ever a placeholder. A chapter
+    whose directory name gets renamed underneath entry stems and freeze paths
+    stopped being a state this system can be in.
 
     `number` forces a starting number rather than deriving one. It is a hint,
     not a demand: allocation still walks past a collision, so a caller that
@@ -232,12 +216,7 @@ def create_chapter(notebook, name, title, defines="", claim=True,
                       f"NN-kebab-case, e.g. '05-boom-structure'.")
     slug = m.group("slug")
 
-    stub = None
-    claimed = _claim(notebook, slug) if claim else None
-    if claimed:
-        stub, name, target = claimed
-    else:
-        name, target = _allocate(notebook, slug, start=number)
+    name, target = _allocate(notebook, slug, start=number)
     if not NAME.match(name):
         return name, f"rejected: {name!r} is not NN-kebab-case"
 
@@ -343,10 +322,8 @@ def create_chapter(notebook, name, title, defines="", claim=True,
         f"create_chapter; the book index re-executes on the next render")
     _sidebar_add(notebook, name)
 
-    what = (f"claimed the empty scaffold chapters/{stub}/ as chapters/{name}/"
-            if stub else f"created chapters/{name}/")
     return name, (
-            f"{what} with index.qmd, _model.qmd, _model.py and an empty "
+            f"created chapters/{name}/ with index.qmd, _model.qmd, _model.py and an empty "
             f"_analysis.py.{forked}\n\n"
             f"If you build this chapter's _model.py by COPYING an earlier "
             f"chapter's, declare it in chapters/{name}/_fork.yml before you "

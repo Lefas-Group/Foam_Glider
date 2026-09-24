@@ -40,6 +40,12 @@ relative to the repo root.
 ```bash
 uv run --group nb python -m nb ask glider-notebook \
   --chapter 01-foam-glider "How heavy is the wing alone?"
+
+# a new aircraft, named once, at creation
+uv run --group nb python -m nb new PAPER-DART "Paper Dart" \
+  --chapter-title "Folded wing" \
+  --defines "AVL at fixed alpha, flat plate, fuselage drag neglected." \
+  --spec "**A4 80 gsm paper**, folded, no glue."
 ```
 
 That is the whole system. It probes the aircraft model, opens an entry, writes

@@ -91,20 +91,42 @@ def _brief(specs, assumes):
     return "\n".join(out) + "\n"
 
 
-def main(path, title=None, subject=None, chapter="01-first-chapter",
-         chapter_title="First chapter", verbose=True,
+def main(path, title=None, subject=None, chapter=None,
+         chapter_title=None, defines=None, verbose=True,
          specs=(), assumes=()):
     root = pathlib.Path(path).resolve()
     if root.exists() and any(root.iterdir()):
         tell(f"  {root} exists and is not empty")
         return 1
-    if not CHAPTER_NAME.match(chapter):
-        tell(f"  {chapter!r} is not NN-kebab-case, e.g. '01-first-chapter'")
+    # THE FIRST CHAPTER IS NAMED AT BIRTH, which is what removed the stub.
+    # Quarto's `auto: "chapters"` dies on an empty `chapters/`, so this command
+    # must create a chapter before anyone has asked a question -- and it used
+    # to create `01-first-chapter` carrying a placeholder, which the first real
+    # chapter then took over by renaming the directory underneath itself. That
+    # bought three conditions in `claimable_stub`, an atomic rename, a
+    # re-templating pass, a freeze sweep and a special case in `fork_chapter`,
+    # all to avoid asking one question at the only moment it is cheap.
+    #
+    # So it is asked. A notebook is created once per aircraft; whoever runs
+    # this knows what its first chapter holds.
+    if not (chapter_title or "").strip() or not (defines or "").strip():
+        tell("  --chapter-title and --defines are required.")
+        tell("  Quarto cannot render a notebook with no chapters, so this "
+             "command creates the")
+        tell("  first one — and a chapter created without a name is one that "
+             "gets renamed")
+        tell("  later, underneath entry stems and freeze paths. Name it now:")
+        tell('\n    nb new <dir> "<Title>" --chapter-title "Trimmed glide" \\')
+        tell('      --defines "AVL at fixed alpha, NACA4405, fuselage drag '
+             'neglected."\n')
         return 1
-    # The first chapter of a new notebook is 01 by construction. Normalise here
-    # rather than let create_chapter renumber later -- the name is substituted
-    # into _quarto.yml and the probe scaffold below, before it is created.
-    chapter = "01-" + chapter[3:]
+    # Derived from the title, so there is one name to give rather than two.
+    # Always 01: it is the first chapter by construction.
+    slug = "-".join(w for w in re.split(r"[^a-z0-9]+", chapter_title.lower()) if w)
+    chapter = chapter or f"01-{slug[:40].rstrip('-')}"
+    if not CHAPTER_NAME.match(chapter):
+        tell(f"  {chapter!r} is not NN-kebab-case — check --chapter-title")
+        return 1
 
     title = title or root.name.replace("-", " ").title()
     subject = subject or "the aircraft"
@@ -170,11 +192,7 @@ def main(path, title=None, subject=None, chapter="01-first-chapter",
         (root / dest).write_text(text)
 
     notebook = Notebook(root)
-    # claim=False: there is nothing to claim in a notebook this command just
-    # made, and the chapter name here is the caller's, not a model's guess.
-    # No `defines`: the placeholder create_chapter substitutes instead is also
-    # the marker that says this chapter is still claimable.
-    chapter, msg = create_chapter(notebook, chapter, chapter_title, claim=False)
+    chapter, msg = create_chapter(notebook, chapter, chapter_title, defines)
     if msg.startswith("rejected"):
         tell(f"  {msg}")
         return 1
@@ -214,9 +232,9 @@ def main(path, title=None, subject=None, chapter="01-first-chapter",
             tell(f"              {line}")
 
     if not problems and not bad and ok:
-        tell(f"\n  Fill chapters/{chapter}/_model.py with the vehicle, and say in"
-              f"\n  its _inputs.yml what defines the chapter. Then:"
-              f"\n\n    uv run --group nb python -m nb ask {root.name} \"<question>\"\n")
+        tell(f"\n  Fill chapters/{chapter}/_model.py with the vehicle. Then:"
+              f"\n\n    uv run --group nb python -m nb ask {root.name} \\"
+              f"\n      --chapter {chapter} \"<question>\"\n")
     return 1 if (problems or bad or not ok) else 0
 
 

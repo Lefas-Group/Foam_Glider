@@ -13,6 +13,11 @@ rendered and committed for you.
 | `open_entry` | probing is over and the question is answered | the filename, your assumptions confirmed, and the instructions for writing |
 | `fork_chapter` | only if `_model.py` would have to differ | a NEW chapter, copied from yours. Stops the run for the user's approval |
 
+A shared function you **add** to `_model.py` or `_analysis.py` is free. One you
+**change** is a refactor: every sibling entry that reaches it gets re-solved to
+prove its answers held, so the run stops and asks the user the moment you make
+the edit. `declare_refactor` first — your line is shown beside the decision.
+
 Writes are confined to your chapter's own files — its entries, `_model.py`,
 `_analysis.py`, `_inputs.yml`, `_fork.yml` and `index.qmd`. Scratch code is
 `probe`, which runs in the run directory and leaves nothing behind.

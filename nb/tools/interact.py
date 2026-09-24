@@ -584,10 +584,6 @@ def fork_chapter(session, name, title, defines):
     missing declaration costs: the lineage diagram drew two unconnected trees
     and the notebook read as two projects.
 
-    The exception is a notebook whose assigned chapter is still a claimable
-    stub. There is nothing to fork from there: the stub IS this chapter, so it
-    is claimed and renamed rather than left beside a new one.
-
     `create_chapter` stays out of the model's hands. This is a declaration of
     intent that the system acts on -- the distinction `tools/__init__.py` has
     always drawn, and the reason `create_chapter` was never a tool: it could
@@ -612,9 +608,7 @@ def fork_chapter(session, name, title, defines):
             f"question -- finish this entry, and ask the next one against the "
             f"chapter it belongs in.")
 
-    # A stub is a SLOT, not a parent. Claim and rename it rather than leaving a
-    # dead 01 beside a real 02.
-    parent = "" if session.chapter == notebook.claimable_stub() else session.chapter
+    parent = session.chapter
     refused = _new_chapter_approval(notebook, parent, name, title, defines)
     if refused:
         raise ValueError(

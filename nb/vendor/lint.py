@@ -673,7 +673,9 @@ def _unfinished_index(root, chapters, entries):
     something has been written into it.
 
     This also catches a chapter that acquired entries while still carrying the
-    `claimable_stub` placeholder -- the same failure one tier up.
+    scaffold placeholder for `defines:` -- the same failure one tier up, and
+    the only thing that still catches an undescribed chapter now that nothing
+    renames one.
     """
     out = []
     for c in chapters:

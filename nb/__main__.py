@@ -1,7 +1,7 @@
 """
     nb new   <notebook> [title]              scaffold a notebook, then prove it
+             --chapter-title "…" --defines "…" …the first chapter, named now
              [--spec "…"] [--assume "…"]      …the brief, repeatable
-             [--chapter-title "…"]            …name the first chapter
     nb ask   <notebook> --chapter NN-name    probe, write, render, commit
              "<question>"                      …the chapter is REQUIRED
              [--pool N] [--ceiling N]         …budgets, instead of being asked
@@ -119,11 +119,11 @@ def main(argv):
         # and the prefix is built once at `nb ask` -- so forgetting meant a
         # first run with no notebook level in front of the model at all.
         specs, assumes = _repeated(rest, "--spec"), _repeated(rest, "--assume")
-        chapter_title = _opt(rest, "--chapter-title", number=False)
-        title = " ".join(_free(rest[1:], ("--spec", "--assume",
-                                          "--chapter-title"))) or None
+        FLAGS = ("--spec", "--assume", "--chapter-title", "--defines")
+        title = " ".join(_free(rest[1:], FLAGS)) or None
         return new(rest[0], title, specs=specs, assumes=assumes,
-                   **({"chapter_title": chapter_title} if chapter_title else {}))
+                   chapter_title=_opt(rest, "--chapter-title", number=False),
+                   defines=_opt(rest, "--defines", number=False))
 
     if cmd == "ask":
         if len(rest) < 2:

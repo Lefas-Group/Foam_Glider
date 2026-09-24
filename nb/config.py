@@ -235,50 +235,6 @@ class Notebook:
         import lint
         return lint.chapters_of(self.root)
 
-    def claimable_stub(self):
-        """
-        A scaffolded chapter nothing has been written into yet, or None.
-
-        `nb new` must create a chapter -- `_quarto.yml`'s `auto: "chapters"` dies
-        on an empty `chapters/` -- and that chapter's `_model.py` is empty, so
-        the first `ask` correctly refuses to build on it and routes
-        `new_chapter`. Without this the notebook ends up with a dead 01 beside a
-        real 02. The stub is a slot, not a corpse: the first real chapter takes
-        it over, keeping its number.
-
-        Emptiness is judged by `module_summary`, the same test whose output the
-        model is shown, so the two can never disagree about what empty means.
-
-        An empty `_model.py` is NOT sufficient on its own -- a chapter that has
-        just been created and described has one too, and would otherwise be
-        clobbered by the next chapter created after it. The index still carrying
-        the scaffold's placeholder is what says nobody has claimed this yet.
-        """
-        from .prefix import module_summary
-        from .tools.scaffold import PLACEHOLDER
-        for name in self.chapters():
-            d = self.chapters_dir / name
-            try:
-                if any(d.glob("[0-9]*.qmd")):
-                    continue
-                if any(module_summary(d / "_model.py")):
-                    continue
-                # `_inputs.yml`, not `index.qmd`. The placeholder used to sit in
-                # the page, under a "what defines this chapter" heading that was
-                # removed when the index stopped carrying standing prose -- and
-                # it went with it, so `claimable_stub` silently returned None
-                # for every fresh notebook and the first real chapter would have
-                # allocated 02 beside a dead 01.
-                marker = (d / "_inputs.yml").read_text()
-            except OSError:
-                # Renamed or removed while being inspected -- another run
-                # claiming it, which is exactly the answer we wanted.
-                continue
-            if PLACEHOLDER not in marker:
-                continue
-            return name
-        return None
-
     def entries(self, chapter):
         """Entry .qmd files, date-prefixed, in chronological order."""
         import lint
