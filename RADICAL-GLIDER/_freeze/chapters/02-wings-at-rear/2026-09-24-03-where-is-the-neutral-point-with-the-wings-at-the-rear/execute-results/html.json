@@ -1,0 +1,12 @@
+{
+  "hash": "007659bc70c1e68f18b1911d102896a4",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: \"Where is the neutral point with the wings at the rear?\"\n---\n\n\n::: {#aa19ba23 .cell execution_count=2}\n``` {.python .cell-code}\nENTRY_CEILING = 90.0   # s for this render, granted by the user\nSOLVE_BUDGET = 15.0     # s for any one solve\nPROBE_POOL = 200.0        # s granted for the probe\nPROBE_SPENT = 7.8      # s the probe actually used\n\nplane = get_airplane()\nop = asb.OperatingPoint(velocity=5, alpha=0)\naero = asb.AeroBuildup(airplane=plane, op_point=op).run_with_stability_derivatives(alpha=True)\n\nx_np = aero['x_np'][0]\n```\n:::\n\n\n::: {.hero}\n[0\\.445 m]{.hero-value}\n[from the nose]{.hero-label}\n:::\n\n**Answer.** The neutral point moves back to [0\\.445 m]{.key} when the wings are placed at the rear of the fuselage.\n\n[Rendered in 0.7 s (limit 90 s) · explored in 8 s (limit 200 s)]{.runtime}\n\n\n",
+    "supporting": [
+      "2026-09-24-03-where-is-the-neutral-point-with-the-wings-at-the-rear_files"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}

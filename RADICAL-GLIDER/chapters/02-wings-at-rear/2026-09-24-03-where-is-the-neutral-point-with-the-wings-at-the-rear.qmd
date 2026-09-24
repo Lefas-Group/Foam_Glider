@@ -1,0 +1,31 @@
+---
+title: "Where is the neutral point with the wings at the rear?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 7.8      # s the probe actually used
+
+plane = get_airplane()
+op = asb.OperatingPoint(velocity=5, alpha=0)
+aero = asb.AeroBuildup(airplane=plane, op_point=op).run_with_stability_derivatives(alpha=True)
+
+x_np = aero['x_np'][0]
+```
+
+::: {.hero}
+[`{python} f"{x_np:.3f} m"`]{.hero-value}
+[from the nose]{.hero-label}
+:::
+
+**Answer.** The neutral point moves back to [`{python} f"{x_np:.3f} m"`]{.key} when the wings are placed at the rear of the fuselage.
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```
