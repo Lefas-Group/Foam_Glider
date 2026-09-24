@@ -139,20 +139,20 @@ def native_declarations():
 
         _decl("api_search",
               "Search the INSTALLED AeroSandbox by name and full docstring, "
-              "across functions, classes and methods. Ask this before writing any "
-              "geometry or aerodynamic calculation: areas, spans, aspect ratios, "
-              "chords, volumes, wetted areas, stability derivatives and neutral "
+              "across functions, classes and methods. Search BEFORE writing any "
+              "geometry or aero calculation, and the moment a name you guessed "
+              "raises: areas, volumes, centroids, mass properties, inertias, "
+              "spans, chords, wetted areas, stability derivatives and neutral "
               "points all exist already.",
               {"query": S, "kind": dict(S, enum=["all", "function", "class", "method"])},
               ["query"]),
 
         _decl("api_list",
-              "Browse the installed AeroSandbox by AREA, when you do not yet "
-              "know the name to search for. With no `area` it returns the "
-              "index -- every area with a count -- and naming one returns the "
-              "paths, summaries and constructor parameters in it. Use it "
-              "BEFORE writing anything geometric or aerodynamic: 46 classes "
-              "and 291 functions already exist.",
+              "Browse the installed AeroSandbox by AREA, when you do not know "
+              "the word to search for. With no `area` it returns the index -- "
+              "every area with a count -- and naming one returns the paths, "
+              "summaries and constructor parameters in it. The pair to "
+              "`api_search`: 46 classes and 291 functions already exist.",
               {"kind": dict(S, enum=["classes", "functions"]),
                "area": dict(S, description=(
                    "e.g. geometry, aerodynamics, dynamics, weights, "

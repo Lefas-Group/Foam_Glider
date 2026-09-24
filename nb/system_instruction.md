@@ -112,14 +112,24 @@ This is the rule broken most. When in doubt, write less.
 
 # Use AeroSandbox's own functions
 
-Before writing any geometry or aerodynamic calculation, ask what already exists.
-`api_search` matches full docstrings across methods too, which is the only way to
-find things whose name gives no clue. `api_list` is the other half: it browses by
-AREA, for when you do not yet know the name to search for — 46 classes and 291
-functions are already there.
+`api_search` matches names AND full docstrings, across functions, classes and
+methods. `api_list` browses by area when you do not know the word to search for.
+46 classes and 291 functions already exist.
 
-1. **Use the library's function.** Areas, spans, aspect ratios, chords, volumes,
-   wetted areas, stability derivatives and neutral points all exist already.
+**Search when any of these is true, and search BEFORE you write:**
+
+- you are about to loop over `xsecs`, sections or panels, or integrate anything
+- you want a property of a shape — area, volume, centroid, mass, CG, inertia,
+  wetted area, span, chord, a stability derivative, a neutral point
+- **a name you guessed just raised.** That is the signal to search, not to write
+  your own.
+
+One run wanted a fuselage CG, guessed `area_projected()`, caught the exception,
+and spent NINE probes writing its own volume integration. `Fuselage.volume()`,
+`Fuselage.x_centroid_projected()` and `MassProperties` — which adds, so
+components sum — were each one `api_search` away. It never searched.
+
+1. **Use the library's function.**
 2. **If you reimplement anyway, say why, at the point of deviation.**
 3. **Where both exist, compute both and compare.** The disagreement is the
    finding; agreement costs one line and becomes a regression test.
