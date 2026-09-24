@@ -14,36 +14,22 @@ opening one. A module either of them can import is the way to keep that from
 being a cycle.
 """
 
-ROUTING_FREE = """\
-Pick the chapter from what is above, and OPEN IT with `open_chapter` before you
-write anything. If two look plausible, `probe` is how you tell them apart --
-load one and look at the names it defines. That is one turn; reading files to
-infer it is many."""
-
-# Pinned by `--chapter`. Routing to an EXISTING chapter is a coordinator's
-# instruction, not a finding -- it costs probe turns to rediscover and getting
-# it wrong answers about a different aircraft. Creating a chapter is a
-# different decision and stays the user's, at `open_chapter`.
-ROUTING_PINNED = """\
-The chapter is already decided: **{chapter}**. `open_chapter` it, probe it,
-write into it, and do not route elsewhere. If the question genuinely does not
-belong there, say so in the entry's rationale rather than moving it."""
-
 BRIEF = """\
 The question:
 
     {question}
 
-**Everything about this notebook is already in front of you.** Every chapter's
-`index.qmd` is quoted above, in full, along with every `_analysis.py` signature
-and every entry that already exists with the answer it reached. Do not go
-looking for what you have already been given -- re-reading an index.qmd, listing
-directories to see which chapters exist, or grepping for a term costs turns and
-tells you nothing new.
+You are in **chapters/{chapter}**. It is settled, it is claimed for this run,
+and its model is quoted above in full. Probe it and write into it.
 
-{routing}
+**Everything about this notebook is already in front of you.** Your chapter's
+`_model.py` is quoted in full; every chapter's specifications, assumptions and
+lineage are listed as data; every `_analysis.py` signature is given; and every
+entry that exists is there with the answer it reached. Do not go looking for
+what you have already been given -- reading `_model.py`, listing directories,
+or grepping for a term costs turns and tells you nothing new.
 
-Then probe for the answer. `probe` takes Python with the chapter already loaded
+Probe for the answer. `probe` takes Python with the chapter already loaded
 and the solve budget already armed: do not import the chapter, and do not use it
 to explore the filesystem. `chapter` is required -- the wrong one silently
 answers about a different aircraft. End your probes with `aero_report()`.
@@ -51,17 +37,19 @@ answers about a different aircraft. End your probes with `aero_report()`.
 `bash` is an escape hatch for when something breaks, not a way to look around.
 Git archaeology is almost never the answer to a design question.
 
-# The three calls that move the run forward
+# The calls that move the run forward
 
-    open_chapter   which aircraft this is about. FIRST -- nothing may be
-                   written until it has been called, and a new one stops the
-                   run for the user's approval.
     declare_input  one input, the moment you assume or decide it. Not a list
                    you fill in at the end: four of eight recorded runs reached
                    the end having declared nothing at all.
     open_entry     probing is over, this is the question. It allocates the
                    filename, puts your assumptions to the user, and hands back
                    the instructions for writing.
+    fork_chapter   ONLY if answering this would need a different `_model.py`
+                   from the one quoted above. It stops the run for the user's
+                   approval. A new objective, different bounds, a multistart,
+                   a finer sweep or any new measurement of the SAME aircraft
+                   is not a fork -- it belongs where you already are.
 
 `ask_specified` is the fourth, and it is not on that list because it has no
 place in the sequence: call it the moment you hit an input where a different
@@ -79,9 +67,8 @@ separately.
 # How to spend your turns
 
 You have {max_turns} for the whole run -- probing AND writing. A well-run
-question uses five or six to reach `open_entry`: pick the chapter, probe for
-the answer, probe once more to check it, declare what you assumed, open the
-entry. Spending twenty on orientation is the failure mode this brief exists to
+question uses four or five to reach `open_entry`: probe for the answer, probe
+once more to check it, declare what you assumed, open the entry. Spending twenty on orientation is the failure mode this brief exists to
 prevent.
 
 Before your first call, decide two things and say them in one sentence: which

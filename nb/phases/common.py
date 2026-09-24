@@ -34,7 +34,7 @@ def setup(session, verbose=True):
     The caller must stop the filesystem when done -- it owns a subprocess.
     """
     notebook = session.notebook
-    text = prefix_mod.build(notebook)
+    text = prefix_mod.build(notebook, session.chapter)
     fs = FileSystem(notebook.chapters_dir).start()
     tools, handlers = build_tools(session, fs)
 
@@ -58,7 +58,7 @@ CALL_ARG = {
     "read_reference": "name", "read_figure": "stem",
     "ask_specified": "name",
     "declare_refactor": "function", "request_refactor": "why",
-    "open_chapter": "chapter", "declare_input": "name", "open_entry": "title",
+    "fork_chapter": "name", "declare_input": "name", "open_entry": "title",
 }
 
 

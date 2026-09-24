@@ -2,9 +2,9 @@
     nb new   <notebook> [title]              scaffold a notebook, then prove it
              [--spec "…"] [--assume "…"]      …the brief, repeatable
              [--chapter-title "…"]            …name the first chapter
-    nb ask   <notebook> "<question>"         probe, write, render, commit
+    nb ask   <notebook> --chapter NN-name    probe, write, render, commit
+             "<question>"                      …the chapter is REQUIRED
              [--pool N] [--ceiling N]         …budgets, instead of being asked
-             [--chapter NN-name]              …route here, do not go looking
              [--quiet] [--answers f.json]     …no board on this terminal;
                                               …replies keyed by question name:
                                               …a quantity, or a chapter name
@@ -135,8 +135,27 @@ def main(argv):
         # `--quiet` means. It is in old scripts and old muscle memory.
         quiet = "--quiet" in rest or "--detach" in rest
         answers = _answers(rest)
-        pool, ceiling, chapter = _opt(rest, "--pool"), _opt(rest, "--ceiling"), \
-            _opt(rest, "--chapter", number=False)
+        pool, ceiling = _opt(rest, "--pool"), _opt(rest, "--ceiling")
+        # REQUIRED, and refused here rather than after preflight and a fork.
+        # A question is about an aircraft, and the aircraft is the chapter: the
+        # model used to work it out from six chapters' worth of context, which
+        # cost a turn on every run and made the fork criterion a six-way
+        # classification instead of one comparison. Naming it is the caller's
+        # half of the question.
+        chapter = _opt(rest, "--chapter", number=False)
+        if not chapter:
+            from .config import Notebook
+            try:
+                known = Notebook(rest[0]).chapters()
+            except Exception:
+                known = []
+            print(f"  --chapter is required: a question is about an aircraft, "
+                  f"and the aircraft is the chapter.")
+            print(f"  {rest[0]} has: {', '.join(known) if known else '(none)'}")
+            print(f"\n  If this question needs a chapter that does not exist "
+                  f"yet, name the one it\n  comes FROM — the run stops and asks "
+                  f"before creating anything.")
+            return 2
         # Everything that is not a flag or a flag's value is the question.
         taken = set()
         for f in ("--pool", "--ceiling", "--chapter", "--answers"):

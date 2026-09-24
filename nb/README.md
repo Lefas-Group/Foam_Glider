@@ -38,7 +38,8 @@ relative to the repo root.
 ## Running it
 
 ```bash
-uv run --group nb python -m nb ask glider-notebook "How heavy is the wing alone?"
+uv run --group nb python -m nb ask glider-notebook \
+  --chapter 01-foam-glider "How heavy is the wing alone?"
 ```
 
 That is the whole system. It probes the aircraft model, opens an entry, writes
@@ -113,13 +114,21 @@ question per ask — there was a `queue` that carried extra questions into
 follow-on runs, and it was never used in 34 recorded asks; two questions are two
 `nb ask` calls, which get two pools and run in parallel.
 
-Three calls move the run forward, and they are the only structure there is:
+**`--chapter` is required.** A question is about an aircraft, and the aircraft
+is the chapter — so the caller names it and the run settles it before the first
+token: the name is validated, the lock is claimed, the shared modules are
+snapshotted for the refactor gate, and the chapter's `_model.py` goes into the
+prefix. The model used to work all that out on turn 1, which cost a turn on
+every run, left `_model.py` the second-most-read file in the record, and made
+the fork test a six-way classification instead of one comparison.
+
+Two calls move the run forward, and a third only when the vehicle must change:
 
 | call | what it settles |
 |---|---|
-| `open_chapter` | which aircraft. First — nothing is writable before it |
 | `declare_input` | one input, recorded the moment it is assumed |
 | `open_entry` | the filename, the assumption check, and the write brief |
+| `fork_chapter` | a new chapter, parent implicit. ~15% of runs |
 
 **It used to be two processes** with `proposal.json` between them — a fifteen
 -field document the model filled in at the end and a second command read back.
@@ -183,8 +192,8 @@ notebook renders under belongs to the notebook, and a second copy of it in
 
 `--chapter NN-name` pins the run to an existing chapter. Routing to one is a
 coordinator's instruction rather than a finding: it costs probe turns to
-rediscover and the wrong answer is about a different aircraft. `open_chapter`
-refuses another chapter, so it is a pin and not a hint. Creating a NEW chapter
+rediscover and the wrong answer is about a different aircraft. The write guard
+refuses a path outside it, so it is a pin and not a hint. Creating a NEW chapter
 is a different decision and still stops for approval.
 
 They belong to the entry, never the chapter, and print in its footer:
@@ -236,8 +245,9 @@ suspended mid-question.
 
 **One agent per chapter, and it is enforced.** `_analysis.py` is shared and
 rule 2 compares code across entries, so a second run entering a chapter someone
-is writing is refused before it spends a turn, at `open_chapter`, and
-`nb resume <notebook> <run>` picks it up when the first finishes. Different
+is writing is refused before it spends a single token — the lock is claimed at
+startup, not on turn 1 — and the question can be asked again when the first
+finishes. Different
 chapters run side by side; they meet only at the render, which is locked.
 
 Launch both anyway when you have two questions: if they pick different chapters

@@ -192,7 +192,43 @@ def chapter_context(notebook):
     return "\n".join(out)
 
 
-def build(notebook):
+def this_chapter(notebook, chapter):
+    """
+    The assigned chapter's `_model.py`, in full. LAST in the prefix.
+
+    It was never here before, and could not be: the prefix is built once,
+    before turn 1, and until `--chapter` became mandatory nothing knew which
+    chapter the run was in. So the vehicle -- the single thing a question is
+    most about -- was the one file the model had to go and fetch. Measured
+    across every retained transcript: `_model.py` is 13 of 50 `read_text_file`
+    calls, second only to `_analysis.py`, while the brief told it not to go
+    looking for what it had already been given. The brief was wrong, and this
+    is the half that makes it right.
+
+    It is CHEAP. Mean `_model.py` across this project's chapters is 1,429
+    characters, ~357 tokens, and it is cached at a measured 67%.
+
+    APPENDED, never inserted. Everything above it is identical for every run in
+    the notebook, so the implicit cache matches the whole shared head and
+    diverges only here -- which is the cheapest place for a per-run difference
+    to live.
+    """
+    src = notebook.chapters_dir / chapter / "_model.py"
+    try:
+        text = src.read_text().strip()
+    except OSError:
+        return ""
+    if not text:
+        return ""
+    return (f"\n# The vehicle you are working on\n\n"
+            f"`chapters/{chapter}/_model.py`, in full. `_model.qmd` execs it "
+            f"into every page in the chapter, so every name below is already "
+            f"in scope in your entry cell -- it is not a module and importing "
+            f"it is rule 29. Do not read this file; it is here.\n\n"
+            f"```python\n{text}\n```\n")
+
+
+def build(notebook, chapter=None):
     parts = [
         SYSTEM_INSTRUCTION.read_text().strip(),
         "\n\n# This notebook\n",
@@ -212,6 +248,8 @@ def build(notebook):
         notebook_context(notebook),
         chapter_context(notebook),
     ]
+    if chapter:
+        parts.append(this_chapter(notebook, chapter))
     return "\n".join(parts)
 
 

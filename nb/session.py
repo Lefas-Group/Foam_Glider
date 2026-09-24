@@ -29,10 +29,11 @@ class Session:
         # only reads a model already built has nothing of its own; an empty
         # list with no claim is an omission, and nothing could tell them apart.
         self.inputs_none_because = ""
-        # Set by `open_chapter` and `open_entry`, and read by the write guard,
-        # the post-loop sequence and `run.json`. They are the whole of the run
-        # state that used to be a fifteen-field document on disk.
-        self.chapter_open = False
+        # Set by `fork_chapter` and `open_entry`, and read by the post-loop
+        # sequence and `run.json`. `chapter_open` used to live here too, gating
+        # every write until the chapter was settled; `--chapter` is required
+        # now and settles it before the first token, so there is no ordering
+        # left to enforce.
         self.chapter_msg = ""
         self.stem = None
         self.entry_path = None
@@ -61,7 +62,6 @@ class Session:
         # `allow_refactor` existed only on the resume path, and the merged
         # phase read it on both.
         self.render_ceiling = None
-        self.pinned_chapter = None
         self.pool_total = None
         # `_model.py` is writable and the chapter will be re-proved before the
         # commit. Set by `nb resume --allow-refactor`, read by the write guard.

@@ -59,25 +59,19 @@ def _allowed(session, path):
     """(ok, why not) for a write to `path`, which is relative to chapters/."""
     import lint
     notebook = session.notebook
-    # NOTHING IS WRITTEN BEFORE THE CHAPTER IS SETTLED. `open_chapter` is where
-    # the `--chapter` pin is enforced, where a new chapter stops for approval,
-    # where the lock is claimed and where the shared modules are snapshotted
-    # for the refactor gate -- so a write that arrives before it has bypassed
-    # all four, and the snapshot in particular would then include the model's
-    # own edits and report that nothing moved.
-    if not session.chapter_open:
-        return False, ("no chapter is open. Call `open_chapter` first -- it "
-                       "settles which aircraft this is about, claims the "
-                       "chapter so two runs cannot edit it at once, and stops "
-                       "for the user's approval if it is a new one. Until it "
-                       "has run there is nowhere for this to go")
+    # NO RUN-STATE CHECK HERE ANY MORE. It used to refuse every write until
+    # `open_chapter` had run, because until then nothing knew which chapter the
+    # run was in or had claimed it. `--chapter` is required now and both happen
+    # before the first token, so the chapter is known for the whole life of the
+    # process and this is a pure path check -- no ordering, no state, nothing
+    # that can be in the wrong sequence.
     parts = [p for p in str(path).strip("/").split("/") if p]
     if len(parts) != 2:
         return False, (f"writes go inside a chapter, as `<chapter>/<file>`. "
                        f"{path!r} is not one")
     chapter, name = parts
     if chapter != session.chapter:
-        return False, (f"this run opened chapters/{session.chapter}, and "
+        return False, (f"this run is in chapters/{session.chapter}, and "
                        f"{path!r} is not in it. One question, one chapter: a "
                        f"write into another is either a refactor of somebody "
                        f"else's work or a misroute, and both want a different "

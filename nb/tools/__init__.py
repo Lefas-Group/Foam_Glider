@@ -155,29 +155,26 @@ def native_declarations():
               "chapter already loaded and writes nothing into the notebook.",
               {"command": S}, ["command"]),
 
-        _decl("open_chapter",
-              "Settle which chapter this question belongs to. FIRST -- no file "
-              "may be written until it has run. An EXISTING chapter is opened "
-              "and claimed. A NEW one stops the run for the user's approval, "
-              "then is scaffolded for you, so `title` and `defines` are "
-              "required for it. The test for needing one is whether `_model.py` "
-              "would differ -- see the Scope section of your instructions.",
-              {"chapter": dict(S, description=(
-                  "Chapter directory name, e.g. '04-chosen-throw'. For a new "
-                  "one, NN-kebab-case; the number is reallocated if it clashes")),
+        _decl("fork_chapter",
+              "This question needs a chapter that does not exist yet. The "
+              "parent is the chapter you are already in -- you do not name it. "
+              "STOPS THE RUN for the user's approval, then scaffolds the "
+              "chapter and copies the parent's _model.py for you. The test for "
+              "needing one is whether `_model.py` would differ from the one in "
+              "front of you -- see the Scope section of your instructions. Do "
+              "not call it for a new objective, different bounds, a finer "
+              "sweep or any new measurement of the same aircraft.",
+              {"name": dict(S, description=(
+                  "Directory name for the new chapter, NN-kebab-case. The "
+                  "number is reallocated if it clashes")),
                "title": dict(S, description=(
-                   "New chapters only. The CHAPTER's name, two or three words "
-                   "in the style of 'Flight path' — not this question")),
+                   "The CHAPTER's name, two or three words in the style of "
+                   "'Flight path' — not this question")),
                "defines": dict(S, description=(
-                   "New chapters only. What defines the chapter: the aero "
-                   "method, the section, what is left out. It goes in "
-                   "index.qmd and is the one place those are stated")),
-               "forked_from": dict(S, description=(
-                   "New chapters only, and only when this vehicle is a COPY of "
-                   "an existing one: the chapter directory it comes from. The "
-                   "copy is made for you, from the last commit, with _fork.yml "
-                   "written. Empty for a genuinely new aircraft"))},
-              ["chapter"]),
+                   "What defines it: the aero method, the section, what is "
+                   "left out. It goes in index.qmd and is the one place those "
+                   "are stated"))},
+              ["name", "title", "defines"]),
 
         _decl("declare_input",
               "Record one input this question needed that was not already "
@@ -265,8 +262,8 @@ def build(session, fs):
                                 replaces="": (
             interact.ask_specified(session, name, why, kind, options, replaces)),
         "bash": lambda command: shell.bash(nb, command),
-        "open_chapter": lambda chapter, title="", defines="", forked_from="": (
-            interact.open_chapter(session, chapter, title, defines, forked_from)),
+        "fork_chapter": lambda name, title, defines: (
+            interact.fork_chapter(session, name, title, defines)),
         "declare_input": lambda name, source, why, value="": (
             interact.declare_input(session, name, value, source, why)),
         "open_entry": lambda title, inputs_none_because="": (

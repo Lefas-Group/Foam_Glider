@@ -91,6 +91,17 @@ def main(notebook_path, question, verbose=True,
 
     from ..config import Notebook, new_run_id
     notebook = Notebook(notebook_path, run_id=run_id or new_run_id())
+    # THE CHAPTER IS SETTLED BEFORE THE FIRST TOKEN, which is the whole point
+    # of requiring it. Everything that used to happen inside `open_chapter` on
+    # turn 1 -- validating the name, claiming the lock, snapshotting the shared
+    # modules -- happens here instead, where it costs nothing and cannot fail
+    # halfway through a conversation. A collision now costs zero tokens rather
+    # than a turn plus a 10k prefix.
+    known = notebook.chapters()
+    if chapter not in known:
+        tell(f"  no chapter {chapter!r} in {notebook.root.name}.")
+        tell(f"  It has: {', '.join(known) if known else '(none)'}")
+        return 2
     runstate.write(notebook, phase="run", question=question,
                    chapter=chapter, turn=0, waiting_on=None)
     _start(notebook, quiet, answers)
@@ -118,21 +129,37 @@ def main(notebook_path, question, verbose=True,
 
     session = Session(notebook, question, chapter=chapter,
                       metrics=run_metrics, probe_pool=pool)
-    # The pin, for `open_chapter` to hold the model to. On the session rather
-    # than threaded through, because `open_chapter` already reaches the session
-    # for every other thing it checks.
-    session.pinned_chapter = chapter
     session.render_ceiling = ceiling
+    run_metrics.set(chapter=chapter)
+
+    # ONE WRITER PER CHAPTER, claimed before a single token is spent. Refused
+    # rather than queued: two agents in one chapter edit the same
+    # `_analysis.py` and the refactor gate then blames whichever asks first.
+    from ..locks import claim_chapter
+    holder = claim_chapter(notebook, chapter)
+    if holder:
+        tell(f"\n  {'─' * 70}\n  CHAPTER IS BEING WRITTEN — nothing started\n"
+             f"  {'─' * 70}\n"
+             f"  chapter   {chapter}\n  held by   pid {holder}\n\n"
+             f"  Different chapters run side by side; they meet only at the "
+             f"render, which is locked.\n  When that run ends, ask again.\n")
+        run_metrics.close("chapter_locked")
+        return 2
+    # The baseline the refactor gate compares against, taken before the model
+    # may write anything. Free -- two AST parses.
+    session.before_bodies = {
+        n: guards.bodies(notebook.chapters_dir / chapter / n)
+        for n in ("_model.py", "_analysis.py")}
+    session.siblings = len(notebook.entries(chapter))
 
     say(f"  notebook  {notebook.root.name}")
+    say(f"  chapter   {chapter}")
     fs, handlers, make_config = setup(session)
     notebook.run.mkdir(parents=True, exist_ok=True)
     notebook.transcript_path.write_text("")
 
     contents = [{"role": "user", "parts": [{"text": briefs.BRIEF.format(
-        question=question, max_turns=MAX_TURNS,
-        routing=(briefs.ROUTING_PINNED.format(chapter=chapter) if chapter
-                 else briefs.ROUTING_FREE))}]}]
+        question=question, max_turns=MAX_TURNS, chapter=chapter)}]}]
     return _execute(notebook, session, contents, run_metrics, fs, handlers,
                     make_config, verbose, accept_refactor=False)
 
@@ -204,7 +231,6 @@ def resume(notebook_path, run_id=None, allow_refactor=False,
     # Accepting implies allowing: you cannot accept a diff you were never
     # permitted to produce.
     session.allow_refactor = allow_refactor or accept_refactor
-    session.chapter_open = True
     session.stem, session.entry_title = stem, title
     session.entry_path = notebook.chapters_dir / chapter / f"{stem}.qmd"
     session.before_bodies = {
@@ -324,9 +350,7 @@ def _execute(notebook, session, contents, run_metrics, fs, handlers,
                     run_metrics.close("no_entry")
                     tell("\n  The loop ended without opening an entry. Nothing "
                          "was committed.")
-                    if session.chapter_open:
-                        tell(f"  chapters/{session.chapter} was opened and is "
-                             f"otherwise untouched.")
+                    tell(f"  chapters/{session.chapter} is otherwise untouched.")
                     return 1
                 clean, problems = problems_now()
                 if first_pass is None:

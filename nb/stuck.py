@@ -73,7 +73,7 @@ hundred turns to finish.
 PRODUCTIVE = frozenset({
     "write_file", "edit_file",                       # the entry moved
     "probe",                                         # something was measured
-    "open_chapter", "declare_input", "open_entry",   # the run advanced
+    "fork_chapter", "declare_input", "open_entry",   # the run advanced
     "ask_specified",
     "declare_refactor", "request_refactor",          # a commitment was made
 })

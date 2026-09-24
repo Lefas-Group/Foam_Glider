@@ -483,33 +483,32 @@ def request_refactor(session, chapter, why):
     raise err
 
 
-def _new_chapter_approval(notebook, chapter, title, defines, forked_from):
+def _new_chapter_approval(notebook, parent, chapter, title, defines):
     """
     The one stop that survives. Undefaulted, so nobody is needed for it to end
     safely.
 
     A chapter is a structural commitment later entries build on -- far harder
     to undo than an entry, which a `git revert` removes -- and it is decided
-    BEFORE any of the work it authorises is paid for. That was worth ending a
-    process over when ending the process was the only way to ask; it is worth
-    one keystroke now.
+    BEFORE any of the work it authorises is paid for.
 
     `default=None` is the whole safety of it. A defaulted question takes its
     default after DEFAULTED_WAIT and carries on; an undefaulted one waits the
     full hour and then raises SystemExit with the question still on disk --
-    which is exactly what the old stop did. Walk away and you get the old
-    outcome, resumable. Be at the keyboard and you pay a keystroke instead of a
-    second command.
+    which is exactly what the old process-ending stop did. Walk away and you
+    get the old outcome, resumable. Be at the keyboard and you pay a keystroke
+    instead of a second command.
 
     A "no" is NOT the end of the run. The conversation is alive, so a refusal
-    goes back as a tool error the model reads and acts on -- route into an
-    existing chapter, or say why it cannot. Ending the process on a refusal
-    would throw away the probe that justified the request.
+    goes back as a tool error the model reads and acts on -- write the entry
+    into the chapter it was given, or say why it cannot. Ending the process on
+    a refusal would throw away the probe that justified the request.
     """
     body = "\n".join([
         f"  {chapter}", f'  "{title}"', "",
         f"  defines   {' '.join(defines.split())[:400]}",
-    ] + ([f"  forked    from {forked_from}"] if forked_from else []) + [
+    ] + ([f"  forked    from {parent}, whose _model.py it copies"]
+         if parent else ["  the notebook's first named chapter"]) + [
         "",
         "  Later entries build on its _model.py — changing it then means",
         "  re-solving all of them. That commitment is yours, not the entry's.",
@@ -527,127 +526,103 @@ def _new_chapter_approval(notebook, chapter, title, defines, forked_from):
     return None
 
 
-def open_chapter(session, chapter, title="", defines="", forked_from=""):
+def fork_chapter(session, name, title, defines):
     """
-    Settle which aircraft this run is about. Nothing may be written until it
-    has been called.
+    The question needs a chapter that does not exist yet. Make one from this one.
 
-    It carries `propose`'s whole routing half -- the `--chapter` pin, the
-    claimable-stub refusal, the new-chapter approval and the inheritance review
-    -- moved to the moment the model actually decides, instead of a field it
-    filled in afterwards and a second process acted on.
+    ONE JOB, where `open_chapter` had six. The run already knows which chapter
+    it is in -- `--chapter` is required and the lock was claimed before the
+    first token -- so the pin check, the lock and the module snapshot are all
+    gone from here, and the common case (an entry in the chapter you were
+    given) needs no tool call at all. That was turn 1 of every run.
 
-    `create_chapter` STAYS OUT OF THE MODEL'S HANDS, and that is not an
-    oversight. This is a declaration of intent that the system acts on, which
-    is the distinction `tools/__init__.py` has always drawn: a `create_chapter`
-    tool could only ever return `rejected: already exists`, and it made
-    ownership ambiguous on the one path that is structurally irreversible.
+    THE PARENT IS ALWAYS THE ASSIGNED CHAPTER, never a parameter. The question
+    was asked about that aircraft, so that is where the design comes from, and
+    a lineage that is derived cannot be mis-declared -- `forked_from` was a
+    free-text field naming any chapter, and 05-fully-optimized shows what a
+    missing declaration costs: the lineage diagram drew two unconnected trees
+    and the notebook read as two projects.
+
+    The exception is a notebook whose assigned chapter is still a claimable
+    stub. There is nothing to fork from there: the stub IS this chapter, so it
+    is claimed and renamed rather than left beside a new one.
+
+    `create_chapter` stays out of the model's hands. This is a declaration of
+    intent that the system acts on -- the distinction `tools/__init__.py` has
+    always drawn, and the reason `create_chapter` was never a tool: it could
+    only ever return `rejected: already exists`, and it made ownership
+    ambiguous on the one path that is structurally irreversible.
     """
     from ..locks import claim_chapter
     from ..tools.guards import bodies
     from ..tools.scaffold import create_chapter
     notebook = session.notebook
-    chapter = str(chapter or "").strip().strip("/")
-
-    if session.chapter_open:
-        if chapter == session.chapter:
-            return (f"chapters/{session.chapter} is already open. "
-                    f"{'Write the entry.' if session.stem else 'Carry on.'}")
+    name = str(name or "").strip().strip("/")
+    if not (title.strip() and defines.strip()):
         raise ValueError(
-            f"chapters/{session.chapter} is already open and claimed by this "
-            f"run. One question, one chapter: if {chapter!r} is where this "
-            f"belongs, that is a different ask.")
-
-    # The `--chapter` pin, enforced rather than suggested. The brief asks; this
-    # is what makes it a pin. A flag that only advises is a flag that reports
-    # the wrong chapter half the time, which is the misroute it exists to stop.
-    pinned = session.pinned_chapter
-    if pinned and chapter != pinned:
+            "A new chapter needs `title` (what the CHAPTER holds, e.g. "
+            "'Trimmed glide' -- not this question) and `defines` (the aero "
+            "method, the section, what is left out). Those are what the index "
+            "states, and they are the one place those assumptions live.")
+    if session.stem:
         raise ValueError(
-            f"This run is pinned to chapters/{pinned}/ and you opened "
-            f"{chapter!r}. Open {pinned}. If the question genuinely does not "
-            f"belong there, open it anyway and say so in the entry's "
-            f"rationale -- moving it is the caller's decision, not yours.")
+            f"The entry is already open at {session.chapter}/{session.stem}.qmd. "
+            f"A fork decided after the filename is allocated is a different "
+            f"question -- finish this entry, and ask the next one against the "
+            f"chapter it belongs in.")
 
-    known = notebook.chapters()
-    stub = notebook.claimable_stub()
-    # A scaffolded chapter still carrying its placeholder is a SLOT, and
-    # filling it is a chapter-level decision however it is labelled. Without
-    # this a run opens `01-first-chapter`, fills it correctly, and leaves the
-    # placeholder directory name -- which entry stems and freeze paths then
-    # bake in permanently.
-    fresh = chapter not in known or chapter == stub
-    if fresh and not (title.strip() and defines.strip()):
-        where = ("is an empty scaffold, not a chapter yet -- its name is a "
-                 "placeholder and its _model.py is bare" if chapter == stub
-                 else "does not exist yet")
+    # A stub is a SLOT, not a parent. Claim and rename it rather than leaving a
+    # dead 01 beside a real 02.
+    parent = "" if session.chapter == notebook.claimable_stub() else session.chapter
+    refused = _new_chapter_approval(notebook, parent, name, title, defines)
+    if refused:
         raise ValueError(
-            f"chapters/{chapter}/ {where}. You are the first entry in it, so "
-            f"name it: give `title` (what the CHAPTER holds, e.g. 'Trimmed "
-            f"glide' -- not this question) and `defines` (the aero method, the "
-            f"section, what is left out). The directory is renamed to match "
-            f"before you write, and creating one stops the run for the user's "
-            f"approval.")
+            f"The user REFUSED a new chapter: {refused}\n"
+            f"Do not ask again. Write this entry into chapters/"
+            f"{session.chapter} as the vehicle stands -- a new objective, "
+            f"different bounds, a finer sweep or any new measurement of the "
+            f"same aircraft all belong there -- or stop and say why it cannot "
+            f"be written without a new chapter.")
 
-    if fresh:
-        refused = _new_chapter_approval(notebook, chapter, title, defines,
-                                        forked_from)
-        if refused:
-            raise ValueError(
-                f"The user REFUSED a new chapter: {refused}\n"
-                f"Do not ask again. Either open the existing chapter this "
-                f"question belongs in -- the test is whether `_model.py` would "
-                f"differ, and a new objective, different bounds or a finer "
-                f"sweep all belong in the chapter that already holds that "
-                f"vehicle -- or stop and say why it cannot be written without "
-                f"one.")
-        # THE STRIKE IS THE SUPERSESSION, and it is resolved here because this
-        # is the only moment both halves are known: the ancestor an item came
-        # from, and the fact that this chapter breaks it. `create_chapter`
-        # writes it straight into `_fork.yml` under `overwrites:`.
-        kept, struck = confirm_inherited(notebook, chapter,
-                                        parent=forked_from or None)
-        struck_ids = []
-        if struck:
-            import lint
-            for _kind, item, src in struck:
-                for _id, _text in lint.input_ids(notebook.root, src).items():
-                    if _text == item:
-                        struck_ids.append((src, _id))
-        session.inherited_kept, session.inherited_struck = kept, struck
-        chapter, msg = create_chapter(
-            notebook, chapter, title, defines, fork_from=forked_from,
-            overwrites=struck_ids)
-        tell(f"  chapter   {msg.splitlines()[0]}")
-        if msg.startswith("rejected"):
-            raise ValueError(msg)
-        session.chapter_msg = msg
-    else:
-        msg = f"chapters/{chapter}/ already exists. Write into it."
+    # THE STRIKE IS THE SUPERSESSION, resolved here because this is the only
+    # moment both halves are known: the ancestor an item came from, and the
+    # fact that this chapter breaks it. `create_chapter` writes it straight
+    # into `_fork.yml` under `overwrites:`.
+    kept, struck = confirm_inherited(notebook, name, parent=parent or None)
+    struck_ids = []
+    if struck:
+        import lint
+        for _kind, item, src in struck:
+            for _id, _text in lint.input_ids(notebook.root, src).items():
+                if _text == item:
+                    struck_ids.append((src, _id))
+    session.inherited_kept, session.inherited_struck = kept, struck
 
-    # ONE WRITER PER CHAPTER, claimed as soon as the name is settled and held
-    # until this process exits. Refused rather than queued, and refused HERE,
-    # before anything is written: two agents in one chapter edit the same
-    # `_analysis.py` and the refactor gate then blames whichever asks first.
-    holder = claim_chapter(notebook, chapter)
+    name, msg = create_chapter(notebook, name, title, defines,
+                               fork_from=parent, overwrites=struck_ids)
+    tell(f"  chapter   {msg.splitlines()[0]}")
+    if msg.startswith("rejected"):
+        raise ValueError(msg)
+
+    holder = claim_chapter(notebook, name)
     if holder:
         raise ValueError(
-            f"chapters/{chapter} is being written by another run (pid "
-            f"{holder}). Two agents in one chapter edit the same _analysis.py "
-            f"and the refactor gate then blames whichever asks first. Stop "
-            f"here and say so -- this is not something to work around.")
-
-    session.chapter = chapter
-    session.chapter_open = True
-    # BEFORE the model may write anything, which is what makes the comparison
-    # after the loop mean something. `_allowed` refuses every write until this
-    # call has happened, so this snapshot is of the chapter as it was committed.
-    d = notebook.chapters_dir / chapter
+            f"chapters/{name} was created but is held by another run (pid "
+            f"{holder}). Stop here and say so.")
+    session.chapter = name
+    session.chapter_msg = msg
+    # A NEW BASELINE. The one taken at startup belongs to the parent; this
+    # chapter's `_model.py` is a fresh copy, and the gate must compare against
+    # what was COMMITTED here, which for a new chapter is nothing.
+    d = notebook.chapters_dir / name
     session.before_bodies = {n: bodies(d / n)
                              for n in ("_model.py", "_analysis.py")}
+    session.siblings = len(notebook.entries(name))
     from .. import runstate
-    runstate.write(notebook, chapter=chapter)
-    say(f"  chapter   {chapter} open")
+    runstate.write(notebook, chapter=name)
+    if session.metrics is not None:
+        session.metrics.set(chapter=name)
+    say(f"  chapter   {name} created and claimed")
     return msg + _inherited_note(session)
 
 
@@ -760,12 +735,6 @@ def open_entry(session, title, inputs_none_because=""):
     notebook = session.notebook
     title = " ".join(str(title).split())
 
-    if not session.chapter_open:
-        raise ValueError(
-            "No chapter is open. Call `open_chapter` first -- it settles which "
-            "aircraft this is about, claims the chapter and, for a new one, "
-            "stops for the user's approval. Nothing can be written until it "
-            "has run.")
     if session.stem:
         return (f"The entry is already open at "
                 f"{session.chapter}/{session.stem}.qmd. Write it.")
