@@ -1,0 +1,61 @@
+---
+title: "Where is the neutral point and the required CG?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0
+SOLVE_BUDGET = 15.0
+PROBE_POOL = 150.0
+PROBE_SPENT = 5.2
+
+import matplotlib.pyplot as plt
+
+airplane = get_airplane()
+op_point = asb.OperatingPoint(velocity=10, alpha=0)
+
+aero_stab = asb.AeroBuildup(
+    airplane=airplane,
+    op_point=op_point
+).run_with_stability_derivatives()
+
+x_np = aero_stab['x_np'][0]
+mac = airplane.wings[0].mean_aerodynamic_chord()
+cg_x = x_np - 0.10 * mac
+```
+
+::: {.hero}
+[`{python} f"{cg_x:.3f} m"`]{.hero-value}
+[Required CG location]{.hero-label}
+:::
+
+**Answer.** The X-Wing's neutral point sits at $x = $ [`{python} f"{x_np:.3f}"`]{.key} m from the nose reference. For pitch stability, placing the center of gravity at a 10% static margin requires it to be located at $x = $ [`{python} f"{cg_x:.3f}"`]{.key} m.
+
+::: {.callout-tip}
+## New user specifications
+Asked of the user, 2026-09-24:
+
+1. **static margin: 10% of MAC** — dictates CG placement.
+:::
+
+```{python}
+#| label: fig-three-view
+#| fig-cap: "Three-view of the X-Wing, with the center of gravity and neutral point marked on the top and side profiles."
+axs = airplane.draw_three_view(show=False)
+fig = axs[0, 0].figure
+fig.set_size_inches(8, 8)
+
+for ax in [axs[0, 0], axs[1, 0]]:
+    ax.plot([x_np], [0], [0], 'ro', markersize=6, label="Neutral Point")
+    ax.plot([cg_x], [0], [0], 'bo', markersize=6, label="Required CG")
+
+axs[0, 0].legend(loc="upper right")
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```
