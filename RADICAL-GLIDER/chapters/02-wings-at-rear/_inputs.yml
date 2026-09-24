@@ -15,5 +15,5 @@ defines: Wings moved to the rear of the fuselage to examine stability and ballas
 # HAVE? A number one question produced belongs in that entry. Leave a block
 # empty rather than inventing an item -- an empty callout is never rendered.
 specified:
-  wing-placement: Wing root trailing edge at fuselage rear.
+  - wing-placement: Wing root trailing edge at the fuselage rear.
 assumed:

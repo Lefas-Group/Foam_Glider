@@ -8,6 +8,9 @@ specified:
   - static-margin: 10% of the mean aerodynamic chord, which fixes the CG.
 
 assumed:
+  - wing-position: Wing leading edge at x=0.25 m, mid-fuselage.
+  - engine-gun-position: Engines at the wing root, guns at the tip.
+  - airfoil: NACA0006, a proxy for 5 mm flat plate.
   - wing_pos: Wing position x=0.25m, z=0.0381m, not given on plan.
   - engines_guns: Engines near root, guns at tip, placed visually.
   - airfoil: NACA0006 as proxy for 5mm thick flat plate.

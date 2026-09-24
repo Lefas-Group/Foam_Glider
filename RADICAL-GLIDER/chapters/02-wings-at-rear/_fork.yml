@@ -20,3 +20,4 @@ changes:
 # keeps its own items: they are its premise and stay true
 # under it.
 overwrites:
+  - 01-first-chapter/wing-position: the wings are at the rear here.

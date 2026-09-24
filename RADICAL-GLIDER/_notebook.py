@@ -729,13 +729,55 @@ def _chapter_title(chapter):
     return m.group(1) if m else chapter
 
 
+# An item declared by an ENTRY rather than by the chapter. `2026-09-23-01-...`
+_STEM = _re.compile(r"^\d{4}-\d{2}-\d{2}-")
+_ITEM = _re.compile(r"^\s*\d+\.\s+(.*(?:\n(?!\s*\d+\.).*)*)", _re.M)
+# Any callout, with its heading, so the title test is a lookup rather than a
+# pattern to keep in step with `lint.INPUT_TITLES`.
+_CALLOUT = _re.compile(r"^::: *\{\.callout-[\w-]+\}[^\n]*\n##\s*([^\n]+)\n(.*?)^:::",
+                       _re.S | _re.M)
+_INPUT_TITLES = ("specified", "assumed", "new user specifications",
+                 "new assumptions", "initial user specifications",
+                 "initial assumptions")
+
+
 def _item_text(chapter, item_id):
-    """One item's prose, from that chapter's `_inputs.yml`."""
+    """
+    One item's prose, by handle.
+
+    TWO KINDS OF HANDLE, because there are two places an item can be declared.
+    A chapter's own commitments live in `_inputs.yml` as `- <id>: <text>` and
+    the handle is the id. An assumption a single ENTRY made lives in that
+    entry's callout and has no id, so the handle is the entry's stem -- which
+    is unique within the chapter and is what the register already reports.
+
+    Without the second, an `overwrites:` row naming an entry-level assumption
+    rendered as its own filename. A fork that moves the wings breaks "Wing
+    position: near mid-fuselage", and that assumption is exactly the sort that
+    lives in an entry: it was made once, while building the vehicle the fork
+    copied.
+
+    An entry that declared several returns them joined, because the handle
+    names the declaration and not one line of it -- and a fork that breaks an
+    entry's premise usually breaks the set.
+    """
     b = _blocks(_pathlib.Path("chapters") / chapter / "_inputs.yml")
     for key in ("specified", "assumed"):
         for i, t in (b.get(key) or []):
             if i == item_id:
                 return t
+    if _STEM.match(item_id):
+        f = _pathlib.Path("chapters") / chapter / f"{item_id}.qmd"
+        try:
+            text = f.read_text()
+        except OSError:
+            return item_id
+        found = [" ".join(m.split())
+                 for title, body in _CALLOUT.findall(text)
+                 if title.strip().lower() in _INPUT_TITLES
+                 for m in _ITEM.findall(body)]
+        if found:
+            return "; ".join(found)
     return item_id
 
 

@@ -15,20 +15,6 @@ airplane = get_airplane()
 
 **Answer.** The FliteTest X-Wing model is assembled using two asymmetric flat-plate wings rolled at [`{python} dihedral_deg`]{.key} and [`{python} -dihedral_deg`]{.key} degrees to represent the cross-lapped slots. Cosmetic engines and guns are modelled as cylindrical fuselages positioned visually based on the plan. The assembled model is visualised in (@fig-three-view).
 
-::: {.callout-tip}
-## New user specifications
-Asked of the user, 2026-09-23:
-
-1. **dihedral angle: 20 degrees** — Determines cross-angle of the X-wing.
-:::
-
-::: {.callout-note}
-## New assumptions
-1. **Wing position: x=[`{python} wing_x_le`]{.key}m, z=[`{python} wing_z`]{.key}m**, Placed near mid-fuselage.
-2. **Engine/gun position: Root and tip**, Placed visually on plan.
-3. **Airfoil profile: NACA0006**, Proxy to render 5mm flat plate.
-:::
-
 ```{python}
 #| label: fig-three-view
 #| fig-cap: "Three-view drawing of the assembled FliteTest X-Wing model, showing the fuselage slab, crossed asymmetric flat plate wings, and cosmetic engines and guns."
