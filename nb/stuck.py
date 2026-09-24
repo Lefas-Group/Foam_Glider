@@ -87,7 +87,7 @@ def failed(out):
 
     Three shapes, because three layers produce them: the loop's catch-all wraps
     an exception as {"error": ...}; a tool can answer with one itself; and
-    `bash` answers a disallowed command with a plain "rejected:" string rather
+    A refused tool answers with a plain "rejected:" string rather
     than raising, since that is guidance rather than a fault.
     """
     if isinstance(out, dict):

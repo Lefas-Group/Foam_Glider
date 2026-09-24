@@ -254,6 +254,18 @@ Launch both anyway when you have two questions: if they pick different chapters
 you have halved the wall clock, and if they collide the second refuses in
 seconds, which is still faster than waiting.
 
+**There is no shell tool.** `bash` was an allowlisted escape hatch and became
+the fourth most-used tool — 37 calls across 8 runs, of which every surviving
+category had a better-instrumented equivalent: `uv run python` is `probe`
+without the chapter loaded or the solve budget armed, `grep`/`ls`/`cat` are the
+file tools without path confinement, and `uv run quarto render` is `render`
+without the render lock or the deadline. It was never a security boundary and
+never claimed to be — `probe` runs arbitrary Python by design — so removing it
+changes nothing about what a run *can* do, only about what it can do
+uninstrumented. `check` is refused for the same reason: re-proving a chapter is
+minutes, and the run does it once, automatically, when a shared function
+actually moved.
+
 `board` shows every run and prompts you for whichever is asking. `nb stop` asks
 a run to end: cooperative, checked before each turn and while blocked on a
 question, so it exits through its own door and records `stopped` rather than

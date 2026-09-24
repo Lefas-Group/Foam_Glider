@@ -51,9 +51,9 @@ itself, once, after lint passes and the entry builds, and shows you every
 answer that moved.
 Re-proving re-solves every entry in the chapter — minutes — so doing it from a
 turn buys nothing and costs the run. There is no `check` tool for that reason,
-and `bash` refuses the checkers by name; one run called `check.py` five times
-and spent thirteen minutes of its twenty-seven on it, learning nothing the
-phase was not about to tell it.
+and naming it anyway is refused; one run reached it another way, called
+`check.py` five times, and spent thirteen minutes of its twenty-seven on it,
+learning nothing the phase was not about to tell it.
 
 What the phase runs, so you know what you are being judged against: it lints,
 deletes the freeze for whatever your edit can have invalidated, renders, and

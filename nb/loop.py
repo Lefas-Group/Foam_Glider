@@ -1,5 +1,5 @@
 """
-The agent loop. Used by both phases.
+The agent loop.
 
 The one invariant that matters: never RECONSTRUCT a model turn.
 
@@ -105,15 +105,15 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
     Drive the loop until the model stops calling tools, or a Terminal fires.
 
     Returns nothing. A stop RAISES -- `Refactor` and `Stopped` carry the
-    and both phases catch it -- so the three-tuple this used to return had a
+    and the caller catches it -- so the three-tuple this used to return had a
     third element that was None on every path that reached a `return`, and
-    neither caller read any of it.
+    nothing read any of it.
 
     `on_stuck(found)` is called when the run has gone `stuck.BARREN_LIMIT` turns
     without writing or measuring anything, and returns text to put to the model
-    (or raises to end the run). It lives here rather than in either phase
-    because this is the only place both phases share, and because a detector
-    that only runs while somebody has the board open is not a detector.
+    (or raises to end the run). It lives here rather than in the phase because
+    this is where the turns actually happen, and because a detector that only
+    runs while somebody has the board open is not a detector.
     """
     from google.genai import types
 

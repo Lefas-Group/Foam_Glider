@@ -34,9 +34,6 @@ and the solve budget already armed: do not import the chapter, and do not use it
 to explore the filesystem. `chapter` is required -- the wrong one silently
 answers about a different aircraft. End your probes with `aero_report()`.
 
-`bash` is an escape hatch for when something breaks, not a way to look around.
-Git archaeology is almost never the answer to a design question.
-
 # The calls that move the run forward
 
     declare_input  one input, the moment you assume or decide it. Not a list

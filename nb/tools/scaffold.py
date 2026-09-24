@@ -144,9 +144,10 @@ def _fork_sources(notebook, parent):
     And rule 31 makes the copy declare the commit it was taken at, so reading
     the tree would make that header a lie even single-threaded.
 
-    The CODE shells to git, never the agent: `shell.py` keeps `git show` off
-    the allowlist because the first run of this system spent eight turns on git
-    archaeology. This is the same bargain check.py already makes.
+    The CODE shells to git, never the agent: there is no shell tool at all now,
+    and there was not one that allowed `git show` before that -- the first run
+    of this system spent eight turns on git archaeology. This is the same
+    bargain check.py already makes.
     """
     import subprocess
     repo = notebook.repo

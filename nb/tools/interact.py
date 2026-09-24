@@ -147,8 +147,8 @@ def ask_render_ceiling(default, source=""):
     escalation the probe pool uses -- which is what keeps one number in force
     instead of two that can disagree.
 
-    It is a PER-RENDER ceiling, not a pool: the write phase may render several
-    times behind lint and build retries, and each attempt gets the same
+    It is a PER-RENDER ceiling, not a pool: a run may render several times
+    behind lint and build retries, and each attempt gets the same
     deadline, because the number describes what one render of this entry ought
     to cost. It is also what rule 17 checks against the recorded seconds.
     """
@@ -177,17 +177,19 @@ def confirm_assumptions(session):
     the cost, and silent about the premise, so "point-mass with fixed alpha"
     went into the record unexamined and an entry was built on it.
 
-    THE TWO ANSWERS ARE DIFFERENT KINDS OF THING, and the split is what let the
-    re-probe loop go. A corrected VALUE is safe to carry forward: rule 1 forces
-    every number in prose to be a `{python}` expression, so the entry
-    RECOMPUTES at render time, and the write phase given the new value produces
-    a genuinely correct entry -- the stale `findings` are context it is told to
-    distrust. A rejected APPROACH is not: `working_code` cannot be adapted to a
-    method that was not probed, so the run ends and the question is re-asked.
+    THE TWO ANSWERS ARE DIFFERENT KINDS OF THING, and saying which is the
+    user's half of it. A corrected VALUE is safe to carry straight forward:
+    rule 1 forces every number in prose to be a `{python}` expression, so the
+    entry RECOMPUTES at render time and the new value is simply used.
 
-    The old loop re-probed both, three rounds deep, because nothing could tell
-    them apart. The person correcting it can, so they say which. In 67 recorded
-    runs the loop never once executed.
+    A rejected APPROACH used to END THE RUN, because the probe's findings had
+    been computed under the old premise and the conversation that produced them
+    was already gone. It does not any more: `open_entry` hands the rejection
+    back as a refusal and the run carries on, because the conversation IS still
+    alive -- "the user rejected the point-mass assumption, probe again with
+    trim" is something the model can act on. The three-round re-probe loop that
+    was deleted for never firing in 67 runs is free here, and it is free
+    precisely because there is no longer a boundary to re-probe across.
 
     BATCHED, not asked one at a time, because per-assumption asking makes the
     model judge which of its assumptions are load-bearing -- the judgement rule

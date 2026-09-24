@@ -15,10 +15,46 @@ prefix position 0, so a list that changes at a transition invalidates the cached
 prefix from that point, and at a measured 67% implicit hit rate that is re-paying
 full rate for the whole accumulated history to save a few hundred tokens.
 
-`check` has no declaration at all: a full chapter check re-solves every entry,
-which is minutes inside a loop, and its own description told the model not to use
-it. The handler remains -- the refactor gate runs it, and a model that somehow
-names it gets a real answer rather than a KeyError.
+`check` has no declaration AND its handler refuses. A full chapter check
+re-solves every entry, which is minutes inside a loop -- measured, one run
+called it five times through `bash` and spent thirteen of its twenty-seven
+minutes learning what the phase was about to tell it anyway.
+
+The handler used to run it, on the reasoning that "a model that somehow names it
+gets a real answer rather than a KeyError". That was borrowed from `loop.py`,
+where the hazard is telling a model that a tool it SHOULD use does not exist.
+`check` is one it should never use, so the borrowed argument pointed the wrong
+way -- and `references/refactoring.md` had been telling the model "there is no
+`check` tool" while the handler sat wired and callable. One of those had to
+become true.
+
+It REFUSES rather than being deleted, because a bare "no such tool" teaches
+nothing: `loop.py` has the failure that comes of a model looking for another
+tool when one is denied. The refusal says what the phase does instead. Nothing
+internal is affected -- the refactor gate calls `verifiers.check` directly.
+
+**`bash` is gone, and it is not coming back as a convenience.** It was an
+allowlisted escape hatch and became the fourth most-used tool: 37 calls across
+8 runs. Replayed against the allowlist as it stood at the end, 17 would still
+have run, and every category of those had a better-instrumented equivalent --
+`uv run python` is `probe` without the chapter loaded, the solve budget armed,
+a wall-clock grant or a watchdog; `grep`/`ls`/`cat` are the file tools without
+path confinement in a separate process; and `uv run quarto render`, four of the
+seventeen, is `render` WITHOUT THE RENDER LOCK OR THE DEADLINE -- which is the
+one cross-run mutual-exclusion mechanism in the system, and a race there
+presents as a bug in an entry that is correct.
+
+It was never a security boundary and never claimed to be: `probe` runs
+arbitrary Python by design, so removing this changes nothing about what a run
+CAN do -- only about what it can do UNINSTRUMENTED. The cwd was its own
+footgun: `bash` ran in the repo root while the file tools are relative to
+`<notebook>/chapters/`, so `rm chapters/test*.py` silently removed nothing and
+left three scratch files behind.
+
+What is genuinely lost is `git status` and `git diff` -- 3 of the 37. The
+record is append-only and the refactor gate already prints the diff of exactly
+the functions that moved, so this is not being replaced on anticipation. If a
+run stalls for want of it, `git_diff(path)` is a two-line tool to add then.
 
 **`create_chapter` is deliberately NOT here.** `open_chapter` is a declaration
 of intent that the system acts on, and the system does the creating. A
@@ -37,7 +73,7 @@ after `references/forking.md` had changed. A pointer cannot go stale.
 
 from google.genai import types
 
-from . import api, figures, guards, interact, probe, refs, shell, verifiers
+from . import api, figures, guards, interact, probe, refs, verifiers
 
 
 def _decl(name, description, properties=None, required=()):
@@ -103,6 +139,20 @@ def native_declarations():
               {"query": S, "kind": dict(S, enum=["all", "function", "class", "method"])},
               ["query"]),
 
+        _decl("api_list",
+              "Browse the installed AeroSandbox by AREA, when you do not yet "
+              "know the name to search for. With no `area` it returns the "
+              "index -- every area with a count -- and naming one returns the "
+              "paths, summaries and constructor parameters in it. Use it "
+              "BEFORE writing anything geometric or aerodynamic: 46 classes "
+              "and 291 functions already exist.",
+              {"kind": dict(S, enum=["classes", "functions"]),
+               "area": dict(S, description=(
+                   "e.g. geometry, aerodynamics, dynamics, weights, "
+                   "structures, atmosphere, numpy, library/aerodynamics. "
+                   "Omit for the index"))},
+              ["kind"]),
+
         _decl("api_signature",
               "Signature and docstring for a dotted path; set methods=true for "
               "every method of a class.",
@@ -141,19 +191,6 @@ def native_declarations():
                    "context above. Naming it puts the value in force into the "
                    "question, which is what the user needs to answer it."))},
               ["name", "why", "kind"]),
-
-        _decl("bash",
-              "Run an allowlisted command: uv run quarto, uv run python, git "
-              "status, git diff. The escape hatch, not the default path.\n"
-              "IT RUNS IN THE REPO ROOT, which is the PARENT of the notebook -- "
-              "not where the file tools write. A path you gave write_file is "
-              "relative to <notebook>/chapters/, so the same string means a "
-              "different file here: `rm chapters/x.py` from bash silently "
-              "removes nothing, because the file is at "
-              "<notebook>/chapters/x.py. Do not use this to run scratch code "
-              "-- that is `probe`, which runs in the run directory with the "
-              "chapter already loaded and writes nothing into the notebook.",
-              {"command": S}, ["command"]),
 
         _decl("fork_chapter",
               "This question needs a chapter that does not exist yet. The "
@@ -251,9 +288,15 @@ def build(session, fs):
         "lint": lambda chapter: verifiers.lint_chapter(nb, chapter, session),
         "render": lambda target="": verifiers.render(
             nb, target, why="the agent asked", session=session),
-        "check": lambda chapter="", force_all=False: verifiers.check(
-            nb, chapter, force_all),
+        "check": lambda chapter="", force_all=False: {"error": (
+            "refused: re-proving a chapter is the run's job, not a turn's. It "
+            "deletes the freeze and re-solves every entry that reaches what you "
+            "changed -- minutes -- and the run does it once, automatically, "
+            "after lint passes and the entry builds, then shows you every "
+            "answer that moved and names the figures whose bytes changed. "
+            "There is nothing here for you to run. Carry on with the entry.")},
         "api_search": lambda query, kind="all": api.api_search(query, kind),
+        "api_list": lambda kind, area="": api.api_list(kind, area),
         "api_signature": lambda path, methods=False: api.api_signature(path, methods),
         "read_reference": lambda name: refs.read_reference(name),
         "read_figure": lambda chapter, stem, name="": figures.read_figure(
@@ -261,7 +304,6 @@ def build(session, fs):
         "ask_specified": lambda name, why, kind="specified", options="",
                                 replaces="": (
             interact.ask_specified(session, name, why, kind, options, replaces)),
-        "bash": lambda command: shell.bash(nb, command),
         "fork_chapter": lambda name, title, defines: (
             interact.fork_chapter(session, name, title, defines)),
         "declare_input": lambda name, source, why, value="": (

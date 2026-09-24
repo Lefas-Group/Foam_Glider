@@ -7,20 +7,27 @@ Vendored from the design-notebook skill's MCP server, with the FastMCP
 transport stripped: nb imports these functions in-process, so the tool
 decorators and stdio `main()` bought nothing but an `mcp` dependency.
 
+STRIPPING THE TRANSPORT ORPHANED TWO OF THEM. `api.py` wired `search`,
+`get_docstring` and `get_methods`, and `list_classes`/`list_functions` -- the
+BROWSE half -- were simply never given a tool, so 46 classes and 291 functions
+across 35 areas sat unreachable while the agent was being told to ask what
+already exists. They answer the question you have BEFORE you know what to
+search for, which is the one that precedes reimplementing `Wing.area()`.
+`api_list` exposes both now.
+
 The question this exists to answer is "does aerosandbox already have this?",
 asked before any geometry or aero code gets written. It is answered by walking
 the INSTALLED package, so the inventory is always the version actually imported
 by the notebook. Nothing here is curated by hand, and there are no generated
 data files to go stale.
 
-Tools:
-- search:         find something by name or docstring, across functions,
-                  classes AND methods. The entry point when you know what you
-                  want but not where it lives.
-- list_classes:   every class, grouped by area
-- list_functions: every function, grouped by area
-- get_docstring:  docstring + signature for any dotted path
-- get_methods:    every method of a class
+What `nb` exposes, and as what:
+- search          -> api_search       by name or docstring, across functions,
+                                      classes AND methods
+- list_classes    -> api_list         every class, grouped by area
+- list_functions  -> api_list         every function, grouped by area
+- get_docstring   -> api_signature    docstring + signature for a dotted path
+- get_methods     -> api_signature(methods=True)
 """
 
 import contextlib

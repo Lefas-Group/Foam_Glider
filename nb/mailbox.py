@@ -22,8 +22,8 @@ run two, answer from another terminal with `nb answer`, or let an agent write
 the file: the run neither knows nor cares.
 
 On timeout the run does not block for ever -- it leaves the question on disk and
-exits, which is the shape the two existing stops already have, and `nb write`
-resumes from `run.json` exactly as it does for them.
+exits, which is the shape the two stops already have, and `nb resume` picks it
+up from `run.json` exactly as it does for them.
 
 THE KEYS, which are what `--answers file.json` is keyed on and what a
 coordinator writes. `name` is the key; it is in `question.json`, and every

@@ -6,7 +6,7 @@ that page into `_site/` and regenerates neither `index.html` nor the sidebar, so
 until something renders the PROJECT there is no site to open -- which is exactly
 what happened the first time a notebook was built from scratch.
 
-The reason this is guarded rather than folded into the write phase is the
+The reason this is guarded rather than folded into the run's own renders is the
 freeze. A
 project render does not fail on a missing freeze, it silently RE-EXECUTES it,
 and an entry's freeze is hundreds of seconds of aero solves. `aircraft-notebook`

@@ -21,8 +21,8 @@ from ..log import say
 #   "it is a complaint that the render about to happen is exactly the fix, so
 #    gating the render on it deadlocks."
 #
-# That is precisely what happened here. Rule 12 is blocking, the write phase's
-# lint gate demands zero blocking problems, and the render that would clear it
+# That is precisely what happened here. Rule 12 is blocking, the run's lint
+# gate demands zero blocking problems, and the render that would clear it
 # does not run until lint passes. For a while the deadlock was hidden: the
 # message used to name `check.py`, and running it re-rendered and rewrote the
 # freeze -- so the model was not wasting thirteen minutes on a checker out of
@@ -33,7 +33,7 @@ from ..log import say
 #
 # So it is filtered out BEFORE the render rather than rewritten. It is still
 # enforced afterwards, by check.py's own post-render pass and by `nb lint`; and
-# the phase's render refreshes the chapter's freeze, which is what actually
+# the run's own render refreshes the chapter's freeze, which is what actually
 # resolves it.
 FREEZE_STALE = "but the freeze is not"
 
@@ -278,9 +278,9 @@ def build_entry(notebook, chapter, stem, entry_path, session=None):
     caught.
 
     `session` so this render is COUNTED. The first live run recorded
-    `renders=1` for a write phase that rendered twice -- the agent's own call
+    `renders=1` for a run that rendered twice -- the agent's own call
     and this one -- because only the tool handler passed a session. A cost
-    metric that misses the render the phase always does is the wrong number in
+    metric that misses the render the run always does is the wrong number in
     the direction that flatters.
     """
     if entry_path is not None:

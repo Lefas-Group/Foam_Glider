@@ -109,7 +109,9 @@ This is the rule broken most. When in doubt, write less.
 
 Before writing any geometry or aerodynamic calculation, ask what already exists.
 `api_search` matches full docstrings across methods too, which is the only way to
-find things whose name gives no clue.
+find things whose name gives no clue. `api_list` is the other half: it browses by
+AREA, for when you do not yet know the name to search for — 46 classes and 291
+functions are already there.
 
 1. **Use the library's function.** Areas, spans, aspect ratios, chords, volumes,
    wetted areas, stability derivatives and neutral points all exist already.

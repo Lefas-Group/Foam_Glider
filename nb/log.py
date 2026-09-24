@@ -53,8 +53,8 @@ def detached():
     """
     True once `detach_output` has fired.
 
-    Read by the write phase, which `ask` calls IN THE SAME PROCESS after
-    detaching it -- so without this the run would fork a second time, change
+    Read by `_start`, which both `nb ask` and `nb resume` go through -- so a
+    process that has already forked itself does not fork a second time, change
     its pid mid-question for no reason, and orphan whatever the board was
     watching.
     """

@@ -143,6 +143,19 @@ def main(argv=()):
     if broken:
         print(f"\n{len(broken)} module(s) do not import — fix those first.")
         return 1
+
+    # THE CONTRACT'S OWN HEALTH, beside the counts. A rule nobody wrote a
+    # reason for is a rule nobody can argue with, which is how a contract
+    # accumulates lines that fire on things that look fine -- and it used to be
+    # an impression rather than a number. `lint.WHY` and the `Rule N.`
+    # docstrings are the two homes; this counts what is in neither.
+    import lint
+    gaps = lint.unexplained()
+    if gaps:
+        print(f"\n  {len(gaps)} of {len(lint.RULES)} rules have no recorded "
+              f"reason, in lint.WHY or a check's docstring:")
+        for n in gaps:
+            print(f"    {n:3}  {lint.RULES[n]}")
     if not bad:
         print("\ncorpus unchanged.")
         return 0

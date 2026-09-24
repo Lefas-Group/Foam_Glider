@@ -152,7 +152,7 @@ def new_run_id():
     The TIME is in it, not just the date. A first version used `%Y%m%d-` plus
     four random hex, so two runs on the same day sorted by their random suffix
     and "the most recent run" resolved to whichever happened to sort last --
-    which `nb write` then resumed. Caught by a detached run being answered into
+    which `nb resume` then resumed. Caught by a detached run being answered into
     the wrong directory.
     """
     import datetime
@@ -177,8 +177,9 @@ class Notebook:
         # agents probing within a second and one runs the other's code,
         # attributing the answer to the wrong question, silently.
         #
-        # `run_id=None` resolves to the most recent existing run, so `nb write`
-        # stays one command and a single-agent session never sees an id.
+        # `run_id=None` resolves to the most recent existing run, so
+        # `nb resume` stays one command and a single-agent session never sees
+        # an id.
         self.run_id = run_id or self._latest_run() or new_run_id()
         self.run = self.scratch / "runs" / self.run_id
         # freezediff resolves git paths against the notebook's parent.
@@ -190,7 +191,7 @@ class Notebook:
 
         Belt and braces with the sortable id above: an id is only as ordered as
         the clock that made it, and a directory copied or restored keeps its
-        name while getting a new mtime. What `nb write` wants is "the run I was
+        name while getting a new mtime. What `nb resume` wants is "the run I was
         just in", which is a fact about the filesystem.
         """
         d = self.scratch / "runs"

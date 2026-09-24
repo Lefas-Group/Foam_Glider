@@ -5,9 +5,12 @@ does not change during a run.
 Whole-notebook, not just the target chapter. All four `index.qmd` come to ~1,900
 tokens and all four signature lists to ~1,200 -- cheap, and it makes the prefix
 IDENTICAL for every run in the notebook, so one cache object serves them all
-until the manifest changes. Targeting one chapter would mean knowing the chapter
-before the cache is built, which was the only real argument for a separate
-routing call.
+until the manifest changes. The chapter IS known before the prefix is built now
+-- `--chapter` is required and settled at startup -- which is what let the
+chapter's own `_model.py` be appended to it (see `this_chapter`). Scoping the
+rest of the prefix to one chapter's lineage is the obvious next step and is not
+taken yet: the shared head is 70% of it and caches identically for every run in
+the notebook, so the saving is real but small until the manifest grows.
 
 `index.qmd` is mandatory context rather than optional: it states what defines
 each chapter and the assumptions that live at chapter level, which entry prose

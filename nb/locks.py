@@ -117,7 +117,7 @@ def claim(path):
 
 def claim_chapter(notebook, chapter):
     """
-    One writer per chapter, for the length of a write phase.
+    One writer per chapter, for the length of the run that claims it.
 
     Measured, on 2026-09-18: two runs entered `04-thinner-foam` five minutes
     apart and spent seventeen minutes editing one `_analysis.py` between them.
