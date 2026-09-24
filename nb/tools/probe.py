@@ -68,15 +68,16 @@ def _inputs_notice(notebook, chapter):
     rows = committed(notebook, chapter)
     if not rows:
         return ""
-    # `where` is the handle already: the `_inputs.yml` id that
-    # `ask_specified(replaces=...)` takes, or the entry that introduced it.
-    # An id is shown whole -- it is the handle `replaces=` takes, and
-    # `foam-thick` is not one. An entry stem is shown as its DATE, which is
-    # what places it against the entries listed in the prefix.
-    import lint
-    where = lambda w: ("" if w == chapter else
-                       f"   ({w[:10]})" if lint.ENTRY_FILE.match(w) else f"   ({w})")
-    listing = "\n".join(f"    [{k}] {t}{where(w)}" for k, t, w in rows)
+    # `where` is the handle already: what `ask_specified(replaces=...)` and
+    # `_fork.yml`'s `overwrites:` both take, prefixed by the ancestor when the
+    # item is inherited rather than this chapter's own. `short` keeps an id
+    # whole -- it IS the handle, and `foam-thick` is not one -- and reduces an
+    # entry stem to its date, which places it against the entries the prefix
+    # already lists.
+    from ..inputs import short
+    listing = "\n".join(
+        f"    [{k}] {t}" + (f"   ({h})" if h else "")
+        for k, t, w in rows for h in [short(w, chapter)])
     return (f"\n[chapters/{chapter} is already committed to these -- from its "
             f"_inputs.yml and from the entries already written in it. Every "
             f"entry here inherits them and none restates them:\n\n{listing}\n\n"

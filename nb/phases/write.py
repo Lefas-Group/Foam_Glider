@@ -446,6 +446,23 @@ def _commit(notebook, chapter, stem, entry_path, title, extra_paths=()):
             if changed:
                 paths.append(rel(f))
 
+    # THE SIDEBAR, which is notebook-level and which creating a chapter edits.
+    # `create_chapter` calls `_sidebar_add` to put `- auto: "chapters/NN-name"`
+    # into `_quarto.yml`, and this list covered only the six files INSIDE a
+    # chapter -- so every fork committed the chapter and left its navigation
+    # entry dirty in the working tree. A fresh clone would then render the
+    # chapter with no way to reach it, which is the state rule 38 exists to
+    # call loud rather than invisible.
+    #
+    # Same shape as the `_inputs.yml`/`_fork.yml` omission before it: the
+    # commit knew about a chapter's own files and missed the one a chapter
+    # creation writes somewhere else.
+    cfg = notebook.root / "_quarto.yml"
+    if cfg.exists() and subprocess.run(
+            ["git", "status", "--porcelain", "--", rel(cfg)],
+            cwd=repo, capture_output=True, text=True).stdout.strip():
+        paths.append(rel(cfg))
+
     add = subprocess.run(["git", "add", "--"] + paths, cwd=repo,
                          capture_output=True, text=True)
     if add.returncode != 0:

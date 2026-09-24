@@ -47,44 +47,174 @@ def _words(text):
             if len(w) > 2 and w not in _NOISE}
 
 
-def committed(notebook, chapter):
+def own(notebook, chapter, entries_before=None):
     """
-    [(kind, text, where)] -- everything this chapter is already committed to.
+    [(kind, text, handle)] this chapter declares ITSELF, both tiers.
 
-    BOTH TIERS, which is the whole point. `_inputs.yml` holds what is true of
-    every entry and `where` is the chapter; an entry's own callout holds what
-    that question introduced and `where` is its stem. Only the first was ever
-    read back, so an `ask_specified` answer -- which lands in the second --
-    was invisible to the next run, and the same quantity got asked twice.
+    `_inputs.yml` holds what is true of every entry here and the handle is its
+    id; an entry's callout holds what that question introduced and the handle
+    is its stem. Only the first was ever read back, so an `ask_specified`
+    answer -- which lands in the second -- was invisible to the next run, and
+    the same quantity got asked twice.
 
-    Chapter items first, because they are the standing commitments; entries
-    after, in order, because a later one revising an earlier one is the
-    notebook's whole shape.
+    `entries_before` takes only the first N entries, for an ancestor seen
+    through a fork: see `_lineage`.
     """
     import lint
-    # `where` IS THE HANDLE: the `_inputs.yml` id for a chapter item, the stem
-    # for an entry's. Both consumers want the same thing -- where this was
-    # recorded and what to name it by -- and for a chapter item the id is also
-    # part of the item's IDENTITY, because the format is `- <id>: <text>` and
-    # the text never repeats the name. `- dihedral: 20 degrees determines the
-    # cross-angle` says nothing about dihedral except in its id, so matching on
-    # text alone let "dihedral angle" be asked again.
+    # THE HANDLE IS ALSO PART OF THE IDENTITY for a chapter item, because the
+    # format is `- <id>: <text>` and the text never repeats the name.
+    # `- dihedral: 20 degrees determines the cross-angle` says nothing about
+    # dihedral except in its id, so matching on text alone let "dihedral angle"
+    # be asked again.
     ids = {t: i for i, t in lint.input_ids(notebook.root, chapter).items()}
     out = [(k, t, ids.get(t, chapter))
            for k, t in lint.declared_items(notebook.root, chapter)]
     standing = [_words(t) | _words(w) for _, t, w in out]
+
+    rows = lint.entry_items(notebook.root, chapter)
+    if entries_before is not None:
+        keep = {e.stem for e in notebook.entries(chapter)[:entries_before]}
+        rows = [r for r in rows if r[2] in keep]
     # An entry that introduced an item the chapter later took into its
     # `_inputs.yml` still carries its own callout -- correctly, because that
     # callout says what THAT entry introduced. Listing both says the same
     # commitment twice, so the restatement is dropped: the chapter's wording is
     # the standing one. Same subset test as `settled` below, which is the only
     # notion of "these are the same quantity" this file has.
-    for kind, text, where in lint.entry_items(notebook.root, chapter):
+    for kind, text, where in rows:
         words = _words(text)
         if any(w and w <= words for w in standing):
             continue
         out.append((kind, text, where))
     return out
+
+
+def _lineage(notebook, chapter, parent=None):
+    """
+    [(ancestor, entries_at_the_fork)] nearest first, or [] for a root.
+
+    THE CUTOFF IS THE POINT OF IT. `_fork.yml` records `at_entry:` -- how many
+    entries the parent had written when the copy was taken -- and that is
+    exactly what decides which of the parent's assumptions this chapter was
+    built on. An entry written in the parent AFTERWARDS was never part of what
+    this chapter inherited: nobody reviewed it at the fork, and the human who
+    approved the inheritance approved the set that existed then.
+
+    It compounds down a chain: C sees B's entries up to C's `at_entry`, and A's
+    up to B's. Each step carries its own cutoff, which is the one its own
+    `_fork.yml` recorded.
+
+    `parent` seeds the walk for a chapter that does not exist yet, which is
+    what the fork-time review needs -- there is no `_fork.yml` to read until
+    `create_chapter` has run.
+    """
+    import lint
+    out, seen, cur = [], {chapter}, chapter
+    if parent and parent != chapter and (notebook.chapters_dir / parent).is_dir():
+        out.append((parent, None))     # not forked yet: everything it has
+        seen.add(parent)
+        cur = parent
+    for _ in range(len(notebook.chapters())):
+        fork = lint.read_fork(notebook.root, cur) or {}
+        nxt = (fork.get("parent") or "").strip()
+        if not nxt or nxt in seen or not (notebook.chapters_dir / nxt).is_dir():
+            break
+        try:
+            at = int(fork.get("at_entry") or 0) or None
+        except (TypeError, ValueError):
+            at = None
+        seen.add(nxt)
+        out.append((nxt, at))
+        cur = nxt
+    return out
+
+
+def _ancestral(notebook, chapter, parent=None):
+    """
+    (carried, dropped) from this chapter's ancestors. The one walk both
+    `committed` and `inherited` project from.
+
+    `carried` is [(kind, text, ancestor, handle)]: the ancestor is what the
+    review groups by, and the handle is the id or entry stem WITHIN it. Both
+    are needed and neither substitutes -- `<ancestor>/<handle>` is exactly the
+    `overwrites:` syntax, and the handle alone is what carries an item's
+    identity when its text does not (`- dihedral: 20 degrees…` names dihedral
+    only in its id).
+    """
+    import lint
+    chain = _lineage(notebook, chapter, parent)
+    gone = lint.departures(notebook.root, notebook.chapters())
+    # THIS CHAPTER'S OWN OVERWRITES COUNT. The test was against the ancestors
+    # alone -- written when this only ever ran for a chapter that did not exist
+    # yet and so could not have overwritten anything. Used for a chapter that
+    # DOES exist, an item it had already struck came straight back.
+    breakers = {c for c, _ in chain} | {chapter}
+    carried, dropped = [], []
+    for c, at in chain:
+        ids = lint.input_ids(notebook.root, c)
+        for kind, text, handle in own(notebook, c, entries_before=at):
+            if any(t == text for _, t, _, _ in carried):
+                continue
+            item_id = next((i for i, t in ids.items() if t == text), None)
+            by = gone.get((c, item_id)) if item_id else None
+            if by and by in breakers:
+                dropped.append((kind, text, c, by))
+                continue
+            carried.append((kind, text, c, handle))
+    return carried, dropped
+
+
+def committed(notebook, chapter):
+    """
+    [(kind, text, where)] -- everything in force for an entry written here.
+
+    THE CHAPTER'S OWN, AND ITS ANCESTORS'. A fork COPIES its parent's
+    `_model.py`, so every assumption the parent's entries made while building
+    that vehicle comes across in the most literal way there is -- and this used
+    to read the current chapter alone, so the first entry in a fresh fork was
+    shown nothing at all. Measured on 02-wings-at-rear: it inherits eight items
+    and `committed` reported zero.
+
+    An ancestor's item keeps `<ancestor>/<handle>` as its `where`, so the
+    register SHOWS provenance rather than asserting the item as this chapter's
+    own -- and that string is the one `overwrites:` takes. The distinction is
+    what makes including an ancestor's ENTRY-level assumptions safe: "velocity:
+    5 m/s (from 01-first-chapter)" is a fact about where to look, not a claim
+    that every entry here assumes it. Promoting the same item into this
+    chapter's `_inputs.yml` WOULD be that claim, and would be false for roughly
+    half of them.
+    """
+    out = list(own(notebook, chapter))
+    # NOT the notebook's brief, which `inherited` falls back to for a chapter
+    # with no ancestor. It is true of every chapter equally, the prefix quotes
+    # it under its own heading, and a root chapter picking it up here while a
+    # forked one did not would make the register mean two different things
+    # depending on where you stood.
+    have = [_words(t) | _words(w) for _, t, w in out]
+    for kind, text, anc, handle in _ancestral(notebook, chapter)[0]:
+        words = _words(text) | _words(handle)
+        if any(w and w <= words for w in have):
+            continue          # this chapter restates it; its wording wins
+        out.append((kind, text, f"{anc}/{handle}"))
+    return out
+
+
+def short(handle, chapter=""):
+    """
+    A handle as it reads in a listing: an id whole, an entry as its date.
+
+    An id IS the thing `replaces=` and `overwrites:` take, so truncating it
+    makes it useless -- `foam-thick` is not a handle. An entry stem is 70
+    characters of slug whose front is a date, and the date is what places it
+    against the entries the prefix already lists.
+    """
+    import lint
+    if handle == chapter:
+        return ""
+    anc, _, tail = handle.rpartition("/")
+    tail = f"{anc}/{tail[:10]}" if anc and lint.ENTRY_FILE.match(tail) else (
+        handle[:10] if lint.ENTRY_FILE.match(handle) else handle)
+    return tail
 
 
 def settled(notebook, chapter, name):
@@ -150,7 +280,7 @@ def ancestry(notebook, chapter, parent=None):
 
 def inherited(notebook, chapter, parent=None):
     """
-    [(kind, item, from_chapter)] a new chapter would carry forward.
+    (kept, dropped) -- what this chapter carries from its ANCESTORS.
 
     COMPUTED, not asked. With the parent named in `_fork.yml` the candidate set
     is a lookup -- no model judgement and no turn. What cannot be computed is
@@ -159,46 +289,31 @@ def inherited(notebook, chapter, parent=None):
     produces the list and the human strikes what the fork invalidates, which is
     a review rather than an open question.
 
-    A chapter with no parent inherits from the NOTEBOOK instead -- the front
-    page states what the aircraft is, and a new aircraft in an existing notebook
-    is where the most is open, not the least.
+    BOTH TIERS, through `own`. It read `_inputs.yml` alone, which is half of
+    what a fork actually carries: measured on the fork that moved the X-Wing's
+    wings to the rear, it was offered two items and inherited eight, and the
+    one it explicitly broke ("Wing position: x=0.25 m, placed near
+    mid-fuselage") was not among the two. The human could not strike what they
+    were never shown.
 
-    Returns (kept, dropped). `dropped` is [(kind, item, from, overwritten_by)] --
-    items an ancestor declared and a LATER ancestor replaced. They used to be in
-    the list: chapter 06 was offered "Foam thickness: 3 mm" (04) beside "Foam
-    5 mm, 174.4 g/m² sheet throughout" (01) as thirteen peers, along with
-    "Fuselage neglected" that 02 had contradicted by adding one. The union was
-    doing the work of an override because nothing recorded which item replaced
-    which. `_fork.yml`'s `overwrites:` records it now, so the override is
-    mechanical and the dropped set is reported rather than silently missing.
+    Each ancestor is seen AS OF THE FORK, via `_lineage`'s cutoff: an entry
+    written in the parent afterwards was never part of what this chapter was
+    built on.
+
+    A chapter with no ancestor inherits from the NOTEBOOK instead -- the front
+    page states what the aircraft is, and a new aircraft in an existing
+    notebook is where the most is open, not the least.
+
+    `dropped` is [(kind, item, from, overwritten_by)] -- items an ancestor
+    declared that a LATER chapter replaced. They used to be in the list:
+    chapter 06 was offered "Foam thickness: 3 mm" (04) beside "Foam 5 mm,
+    174.4 g/m2 sheet throughout" (01) as thirteen peers. `_fork.yml`'s
+    `overwrites:` records the override now, so it is mechanical and the dropped
+    set is reported rather than silently missing.
     """
-    out, dropped = [], []
-    chain = ancestry(notebook, chapter, parent)
-    if chain:
-        import lint
-        gone = lint.departures(notebook.root, notebook.chapters())
-        ids = {c: lint.input_ids(notebook.root, c) for c in chain}
-        for c in chain:
-            for kind, item in _declared_items(notebook, c):
-                if any(i == item for _, i, _ in out):
-                    continue
-                item_id = next((i for i, t in ids[c].items() if t == item), None)
-                by = gone.get((c, item_id)) if item_id else None
-                # Only an ancestor's supersession counts. A chapter outside this
-                # lineage replacing one of its own ancestors' items says nothing
-                # about what THIS fork carries.
-                if by and by in chain:
-                    dropped.append((kind, item, c, by))
-                    continue
-                out.append((kind, item, c))
-        return out, dropped
     import lint
-    for kind, item in lint.notebook_items(notebook.root):
-        out.append((kind, item, notebook.root.name))
-    return out, dropped
-
-
-def _declared_items(notebook, chapter):
-    """[(kind, item)] from one chapter, via lint's dual-source reader."""
-    import lint
-    return lint.declared_items(notebook.root, chapter)
+    if not _lineage(notebook, chapter, parent):
+        return [(k, t, notebook.root.name)
+                for k, t in lint.notebook_items(notebook.root)], []
+    carried, dropped = _ancestral(notebook, chapter, parent)
+    return [(k, t, c) for k, t, c, _h in carried], dropped

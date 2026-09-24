@@ -716,13 +716,34 @@ def _inherited_note(session):
                   "rule 39 and the Specified/Assumed callouts exist to prevent:"]
         lines += [f"  [{k}] {i}   (from {s})" for k, i, s in kept]
     if struck:
+        # RECORDED ONLY WHERE THERE IS AN ID. `overwrites:` rows are
+        # `<chapter>/<id>` and resolve through the parent's `_inputs.yml`, so a
+        # standing commitment can be pointed at and an assumption one ENTRY
+        # made cannot -- it has no id to name. Both are struck; only the first
+        # renders as "Overwritten from …". Saying otherwise would tell the
+        # model its work was done when half of it was not.
+        import lint
         lines += ["", "STRUCK — the user says this chapter BREAKS these, so "
-                  "they do NOT carry forward. Each is already recorded in "
-                  "`_fork.yml` under `overwrites:`, which lists them on this "
-                  "chapter's page as no longer holding. Where this chapter "
-                  "needs its own value for one of them, that value is NEW and "
-                  "goes in this chapter's `_inputs.yml`:"]
-        lines += [f"  [{k}] {i}   (was from {s})" for k, i, s in struck]
+                  "they do NOT carry forward. Where this chapter needs its own "
+                  "value for one of them, that value is NEW and goes in this "
+                  "chapter's `_inputs.yml`:"]
+        rows, loose = [], []
+        for k, i, s_ in struck:
+            ids = lint.input_ids(session.notebook.root, s_)
+            (rows if any(t == i for t in ids.values()) else loose).append(
+                f"  [{k}] {i}   (was from {s_})")
+        if rows:
+            lines += ["", "Recorded in `_fork.yml` under `overwrites:`, which "
+                      "lists them on this chapter's page as no longer holding:"]
+            lines += rows
+        if loose:
+            lines += ["", "These were assumptions a single ENTRY made, so they "
+                      "have no id and nothing can point at them. Nothing was "
+                      "recorded for them: state what is true HERE in this "
+                      "chapter's `_inputs.yml`, and say in your entry that it "
+                      "corrects the earlier one, naming and linking that entry "
+                      "(rule 10):"]
+            lines += loose
     return "\n".join(lines)
 
 

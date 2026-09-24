@@ -2636,6 +2636,17 @@ def _departure_targets(root, chapters):
                     f"existed when it was written")))
                 continue
             theirs = input_ids(root, parent)
+            # AN ENTRY STEM IS A HANDLE TOO. An assumption a single entry made
+            # has no `_inputs.yml` id -- nothing to point at but the entry that
+            # made it -- and those are exactly the ones a fork breaks: "Wing
+            # position: near mid-fuselage" was declared while building the
+            # vehicle the fork copied. `_item_text` resolves both.
+            if ENTRY_FILE.match(item_id):
+                if not (root / "chapters" / parent / f"{item_id}.qmd").exists():
+                    out.append((where, (
+                        f"overwrites {parent}/{item_id!r}, which is not an "
+                        f"entry of chapters/{parent}")))
+                continue
             if item_id not in theirs:
                 out.append((where, (
                     f"overwrites {parent}/{item_id!r}, which is not an id in "
