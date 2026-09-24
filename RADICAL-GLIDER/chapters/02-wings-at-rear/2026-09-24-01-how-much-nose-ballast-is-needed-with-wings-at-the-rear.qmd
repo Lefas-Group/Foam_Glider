@@ -1,0 +1,46 @@
+---
+title: "How much nose ballast is needed with wings at the rear?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0
+SOLVE_BUDGET = 15.0
+PROBE_POOL = 200.0
+PROBE_SPENT = 24.1
+
+import aerosandbox as asb
+
+plane = get_airplane()
+m, cg = get_mass_properties(plane)
+
+buildup = asb.AeroBuildup(
+    airplane=plane,
+    op_point=asb.OperatingPoint(
+        velocity=6.0,
+        alpha=0.0
+    )
+).run_with_stability_derivatives()
+np_x = float(buildup["x_np"][0])
+
+mac = plane.wings[0].mean_aerodynamic_chord()
+req_cg = np_x - 0.1 * mac
+
+x_t = 0.5080 # rear of fuselage
+m_t = m * (req_cg - cg[0]) / (x_t - req_cg)
+nose_ballast = 0.0
+```
+
+::: {.hero}
+[`{python} f"{nose_ballast:.1f}"`]{.hero-value}
+[g of nose ballast needed]{.hero-label}
+:::
+
+**Answer.** None. Moving the wings to the back shifts the neutral point so far aft that the aircraft becomes extremely nose-heavy, with the airframe's natural center of gravity at [`{python} f"{cg[0]:.3f}"`]{.key} m, well ahead of the required CG at [`{python} f"{req_cg:.3f}"`]{.key} m. Rather than nose ballast, it would require [`{python} f"{m_t*1000:.1f}"`]{.key} g of tail ballast to achieve the specified 10% static margin.
+
+```{python}
+#| echo: false
+#| output: asis
+footer(get_mass_properties)
+```

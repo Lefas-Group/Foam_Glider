@@ -35,6 +35,7 @@ website:
       # navigation. So each chapter is named, and the rule makes a chapter
       # missing from here loud rather than invisible.
       - auto: "chapters/01-first-chapter"
+      - auto: "chapters/02-wings-at-rear"
 
 format:
   html:

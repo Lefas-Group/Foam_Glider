@@ -1,0 +1,19 @@
+# What this chapter IS, for routing a question to it. Not rendered -- the page
+# says it with its title, its fork link and its items. One sentence: the aero
+# method, the section, what is left out.
+defines: Wings moved to the rear of the fuselage to examine stability and ballast requirements.
+
+# What this chapter NEWLY committed to and NEWLY assumed. Rendered into its
+# index.qmd by `chapter_inputs()` -- do NOT write those callouts by hand, or
+# every item appears on the page twice.
+#
+# `- <id>: <text>` — the id is a handle, not prose, and need only be unique
+# within this file. It is how another chapter names this item when it replaces
+# it. Rule 8: ten words per item.
+#
+# The test for what belongs here: IS IT TRUE OF EVERY ENTRY THIS CHAPTER WILL
+# HAVE? A number one question produced belongs in that entry. Leave a block
+# empty rather than inventing an item -- an empty callout is never rendered.
+specified:
+  wing-placement: Wing root trailing edge at fuselage rear.
+assumed:

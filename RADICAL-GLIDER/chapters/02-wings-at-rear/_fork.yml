@@ -1,0 +1,22 @@
+# What this chapter changed, and from what. Read by rule 31,
+# by the chapter index, and by the lineage diagram on the
+# book index -- one source, three readers.
+parent: 01-first-chapter
+at: e763916
+at_entry: 5
+summary: "Wings moved to the rear"
+changes:
+  - Moved `wing_x_le` so the wing root trailing edge aligns with the rear of the fuselage (x=0.5080)
+# What this chapter OVERWROTE: items an EARLIER
+# chapter declared that no longer hold here, as
+# `<chapter>/<their id>`, with an optional reason after a
+# colon. What REPLACED them is this chapter's own
+# _inputs.yml -- do not restate it here, and do not force a
+# 1:1 link: one overwritten assumption is often replaced by
+# several new items.
+#
+# It renders HERE, as "Overwritten from <chapter>" -- on
+# the page that made the change. The chapter overwritten
+# keeps its own items: they are its premise and stay true
+# under it.
+overwrites:

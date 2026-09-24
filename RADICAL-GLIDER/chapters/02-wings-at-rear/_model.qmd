@@ -1,0 +1,25 @@
+```{python}
+#| include: false
+# The chapter lives in two files next to this one -- _model.py (the vehicle)
+# and _analysis.py (how the chapter measures it). exec rather than import,
+# because every chapter names its model `_model` and real imports would collide
+# in sys.modules. Paths are relative to the notebook root -- _quarto.yml sets
+# `execute-dir: project`, so that is always the cwd.
+import pathlib
+
+# There is no _budget.py. Budgets belong to the ENTRY, which declares its own
+# SOLVE_BUDGET and ENTRY_CEILING in its first cell (rule 28) -- the entry is the
+# unit of work and the unit the user is asked about, since the render ceiling is
+# granted at the prompt. A chapter-level file had to be kept separate from
+# _model.py and _analysis.py precisely so a fork could not inherit it; nothing
+# is inherited now, because nothing is chapter-scoped.
+for _p in ["_notebook.py",
+           "chapters/02-wings-at-rear/_model.py",
+           "chapters/02-wings-at-rear/_analysis.py"]:
+    if pathlib.Path(_p).exists():
+        exec(compile(pathlib.Path(_p).read_text(), _p, "exec"))
+
+# Start the entry's clock and zero the solve counter, both read by footer().
+_T0 = time.perf_counter()
+aero_cost.update(calls=0, seconds=0.0)
+```
