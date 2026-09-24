@@ -1,0 +1,59 @@
+---
+title: "How far does it glide when hand-launched from a standing throw?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 38.6      # s the probe actually used
+
+import aerosandbox as asb
+
+plane = get_airplane()
+mass, cg = get_mass_properties(plane)
+weight = mass * 9.81
+
+opti = asb.Opti()
+alpha = opti.variable(init_guess=6.0, lower_bound=-5.0, upper_bound=15.0)
+velocity = opti.variable(init_guess=5.0, lower_bound=1.0, upper_bound=20.0)
+
+op_point = asb.OperatingPoint(
+    velocity=velocity,
+    alpha=alpha
+)
+
+aero = asb.AeroBuildup(
+    airplane=plane,
+    op_point=op_point
+).run()
+
+opti.subject_to(aero["L"] == weight)
+opti.minimize(aero["D"])
+
+sol = opti.solve(verbose=False)
+max_LD = sol.value(aero["L"]) / sol.value(aero["D"])
+
+launch_height = 1.5
+glide_distance = launch_height * max_LD
+```
+
+::: {.hero}
+[`{python} f"{glide_distance:.1f} m"`]{.hero-value}
+[glide distance from shoulder height]{.hero-label}
+:::
+
+**Answer.** From a typical standing throw, the aircraft glides approximately [`{python} f"{glide_distance:.1f}"`]{.key} meters. This assumes a release from [`{python} f"{launch_height:.1f}"`]{.key} m and an optimal launch that immediately achieves steady flight at its maximum lift-to-drag ratio of [`{python} f"{max_LD:.2f}"`]{.key}.
+
+::: {.callout-note}
+## New assumptions
+1. **launch height: 1.5 m**, shoulder height for standing throw.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+footer(get_mass_properties)
+```
