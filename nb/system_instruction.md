@@ -186,8 +186,9 @@ back what looks like it belongs. `edit_file` them. 34, 38 and 40 are usually
 maintained for you; they are listed so that breaking one is recognisable rather
 than mysterious.
 
-`read_reference("why")` has the failure behind each one. Read it when a rule
-looks arbitrary, or before arguing one away.
+Each violation names its own fix. A rule that looks arbitrary is one whose
+failure is recorded in `nb/vendor/lint.py` beside the rule -- for a person to
+read, not you: fix what the message says.
 
 Rule 2 is a one-entry fix: promote the shared logic to `_analysis.py` and call it
 from your entry. The earlier entry is not touched.

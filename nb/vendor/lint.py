@@ -1,13 +1,13 @@
 """
 Format checks for notebook entries. One copy, shared by every notebook.
 
-    uv run python <skill>/lint.py <notebook-dir> [chapter ...]
+    uv run python nb/vendor/lint.py <notebook-dir> [chapter ...]
 
 Defaults to every chapter except those a notebook opts out of. Exits non-zero if
 anything is flagged, so it can gate a commit.
 
-This lives in the skill rather than in each notebook because it is a CHECKER: it
-runs at authoring time, reads the notebook and writes nothing. Nothing it does
+This lives in `nb/vendor/` rather than in each notebook because it is a CHECKER:
+it runs at authoring time, reads the notebook and writes nothing. Nothing it does
 ends up in the rendered site, so a notebook does not need it present to render.
 `_notebook.py` is the opposite -- exec'd into every page at render time, with its
 output baked into the published HTML -- which is why that one stays vendored in
@@ -20,48 +20,16 @@ sibling entry is matched generically, and a chapter opts out with a `_lint-skip`
 file whose contents say why. A freshly scaffolded notebook has none of these,
 and lints correctly with nothing added.
 
-Eighteen rules, each earned by a failure that actually happened. The failure
-behind each one is in `references/why.md` -- read that when a rule looks
-arbitrary, or before arguing one away. SKILL.md carries the same list, so an
-entry can be written compliant rather than corrected afterwards.
+Thirty-nine rules, each earned by a failure that actually happened. `RULES`
+below is the registry -- the numbers, one line each -- and `WHY` beside it is
+the failure that earned each one. This docstring used to carry a THIRD copy of
+the list, which said "Eighteen rules", stopped at 38, and had disagreed with
+`RULES` for months: nothing compared them, because a docstring is not something
+a check can hold to anything.
 
-     1  no hand-typed number in prose -- use `{python} …` (2+ decimals)
-     2  no 3 consecutive code lines repeated across entries
-     3  `**Answer.**` comes before the last code cell
-     4  no sweeping a decision that should have been asked
-     5  no `for … in range(…)` around an aero solve
-     6  prose <= 100 words for the whole entry, warnings included
-     7  figure caption <= 50 words
-     8  each declared input item <= 10 words
-     9  one prose section -- no second `**Heading.**` or `##`
-    10  a sibling entry is linked, never named in bare prose
-    11  `_notebook.py` and `_probe_base.py` byte-match the skill's copies
-    12  the freeze is not older than the model that froze it
-    13  every `_analysis.py` function the entry calls is passed to `footer(…)`
-    14  one visual per entry (two, if one draws the aircraft)
-    15  a table is at most 6x4, excluding the header
-    16  a budgeted chapter does not override SOLVE_BUDGET at a call site
-    17  a frozen entry stays under its chapter's ENTRY_CEILING
-    18  the solve budget in force is declared in the chapter's index
-    19  a chapter with an entry defines its vehicle in `_model.py`
-    20  an entry-local function that reaches the vehicle belongs in `_analysis.py`
-    21  an `_analysis.py` function nothing calls is dead
-    22  an `_analysis.py` function called only internally is private (`_name`)
-    23  every `solve()` passes `verbose` explicitly
-    24  a chapter with an entry has no unfilled index placeholder
-    25  no sentence enumerates more than five computed values — table it
-    26  the title is ONE question, at most 18 words
-    27  never assign to a name `_notebook.py` owns at cell top level
-    28  every entry declares ENTRY_CEILING and SOLVE_BUDGET
-    29  never import `_model`, `_analysis` or `_notebook` -- already in scope
-    30  a chapter index renders its own `_model.py`
-    31  a fork declares parent, commit and differences in `_fork.yml`
-    32  no empty callout -- delete it rather than write `None.`
-    33  a chapter index declares `order:` matching its directory
-    34  the notebook has a front page that draws its own chapter graph
-    35  a chapter index lists its entries and prints its lineage
-    37  a `cite()` names an entry that exists and publishes an answer
-    38  every chapter is named in the sidebar
+`preflight` compares `RULES` against the list in `system_instruction.md`, which
+is the model's copy and is hand-written on purpose -- its wording is tuned for
+drafting rather than for diagnosis. That check is what keeps the two in step.
 
 Two details the list cannot carry. A value written as an inline expression counts
 as ONE word, so tightening prose is never at odds with computing the numbers in
@@ -501,12 +469,12 @@ def code_of(text):
 
 def _notebook_drift(root):
     """
-    Rule 11: the notebook's `_notebook.py` matches the skill's canonical copy.
+    Rule 11: the notebook's `_notebook.py` matches the canonical copy.
 
     `_notebook.py` is VENDORED into each notebook rather than shared from here,
     unlike this file. It is exec'd into every page at render time and its output
     is baked into the published HTML, so sharing it would make a notebook
-    unrenderable without the skill installed, and would put a render-affecting
+    unrenderable without `nb` installed, and would put a render-affecting
     file outside the Quarto project -- where freeze cannot see edits to it, which
     is the failure mode that has already served stale pages here three times.
 
@@ -540,7 +508,7 @@ def _one_drift(canonical, local):
     n = next((i for i, (a, b) in enumerate(zip(want, got), 1) if a != b),
              min(len(want), len(got)) + 1)
     return [(local, f"differs from {canonical} (first at line {n}) — copy the "
-                    f"skill's version down, or promote the local change up so "
+                    f"canonical version down, or promote the local change up so "
                     f"every notebook gets it")]
 
 
@@ -2595,6 +2563,137 @@ def _departure_targets(root, chapters):
 # 36 IS ABSENT ON PURPOSE. It checked `_categories.yml`, and the categories
 # system was retired; the number is not reused, because rule numbers appear in
 # commit messages, in `corpus.py`'s recorded counts and in the references.
+# THE FAILURE BEHIND EACH RULE. One home, beside the numbers.
+#
+# It used to be `references/why.md`, a model-facing document reachable through
+# `read_reference`. Two things were wrong with that. It was never once read --
+# zero calls across every retained transcript, because a model that trips a rule
+# reads the message and fixes it rather than going to argue with the rule. And
+# it had drifted to covering 20 of 39, with the missing 19 being exactly the
+# ones added after it was written, while its own tool description promised "the
+# failure behind each lint rule".
+#
+# So it is here, where the numbers are, and it is for a PERSON -- deciding
+# whether a rule still earns its place, or why one fires on something that looks
+# fine. The model's channel is the violation message, which names its own fix.
+#
+# A RULE MISSING HERE IS NOT NECESSARILY UNEXPLAINED: seventeen of them carry
+# their reason in the docstring of the check that enforces it, which opens
+# `Rule N.` -- that is the better home when the reason is about the MECHANICS of
+# detecting it rather than about the failure. `unexplained()` below reports the
+# ones in neither place, so the gap is a number rather than an impression. It is
+# six: 20, 21, 22, 28, 29, 30.
+WHY = {
+    1: "Three corrections were needed in one session where an entry's prose "
+       "disagreed with its own rendered output. An inline expression makes the "
+       "number BE the computation rather than a copy of it. Two decimals reads "
+       "as a result; one decimal is usually a condition (6 m/s, 0.5 deg) and "
+       "flagging those is noise.",
+    2: "Four subtly different neutral points were written in one chapter, one "
+       "of which took its moment reference from the wrong station and put "
+       "wrong numbers in front of the reader.",
+    3: "An entry is read to find out what was learned; the working is there to "
+       "be checked afterwards.",
+    4: "'Where does the ballast go?' was answered with three static margins "
+       "because nobody asked which was wanted -- turning a missing input into "
+       "extra analysis, which is worse than either asking or assuming. The "
+       "failure looks like diligence, which is why the rule needs its reason.",
+    5: "`trim()` was written `for _ in range(60)` around a fixed point that "
+       "settles in 9 to 13, so every call spent ~20 s re-deriving an answer it "
+       "already had, at a dozen call sites. A round number also hides "
+       "non-convergence: a loop that never converged returns exactly like one "
+       "that did.",
+    6: "Entries drift long one clause at a time, and the fix is always the "
+       "same -- the sentence explaining WHY a number is what it is belongs in "
+       "the figure caption or a code comment. A `callout-warning` counts "
+       "against the budget: moving a paragraph into a coloured box does not "
+       "make it shorter.",
+    7: "Same failure as rule 6, in the one place prose is allowed to explain "
+       "itself.",
+    8: "One entry recorded a static margin with three lines of justification, "
+       "which reads as hedging a decision that was actually made.",
+    9: "A second headed block reads as its own little essay with its own "
+       "budget, which is how an entry inside 100 words in each part ends up "
+       "long overall.",
+    10: "'The previous entry' in bare prose is the same defect as a hand-typed "
+        "number: it points at something that can be retitled, reordered or "
+        "deleted, and nothing notices. Later entries revising earlier ones IS "
+        "the notebook's structure, so those references are structure, not "
+        "decoration.",
+    11: "See `_notebook_drift`. Vendoring costs propagation; this rule buys it "
+        "back.",
+    12: "Freeze tracks the page, not its includes, so editing `_model.py` "
+        "leaves every entry serving values the current model does not produce, "
+        "silently. A fuselage ply count changed, nothing re-executed, and an "
+        "entry went on rendering a duration the model no longer gave -- it "
+        "surfaced only because that entry happened to carry an `assert`.",
+    13: "Moving code into `_analysis.py` must not move the method out of "
+        "sight; the notebook exists to be reviewed. Only what the entry NAMES, "
+        "never the transitive closure -- that would reproduce the whole file in "
+        "every entry, and make splitting a function break entries whose "
+        "conclusions never changed.",
+    14: "Three entries printed a grid directly beneath a plot showing the same "
+        "quantities; one was 72 numbers under a figure plotting four of its "
+        "eight columns. See `_visuals_and_tables` for the two-visual "
+        "loosening.",
+    15: "Past 6x4 a table stops being something a reader takes in and becomes "
+        "a grid to be searched. Raised from 3x4: six optimisation variables "
+        "against their bounds had no legal form, and the entry wrote fifteen "
+        "numbers into one sentence instead -- the same grid, minus the "
+        "alignment. Rule 25 closes that escape.",
+    16: "A local `max_runtime=` at one of five call sites re-opens the hole "
+        "silently and nothing downstream shows it. OPT-OUT, and the first "
+        "version had this backwards -- it applied only to chapters that bound "
+        "SOLVE_BUDGET, so a new chapter that never bound it ran unprotected, "
+        "and forgetting is the failure the mechanism exists to catch. A guard "
+        "you skip by inaction is not a guard.",
+    17: "One entry reached 599 s and nothing anywhere said so; the cost of a "
+        "notebook was invisible until `footer()` started recording it. Blocks "
+        "past a ceiling the USER set and only warns below it, because wall "
+        "clock is not reproducible -- the same solve measured 533.9 s against a "
+        "145 s baseline purely from machine load.",
+    18: "A chapter was forked from another and silently inherited "
+        "`SOLVE_BUDGET = None`, carried in a file nobody re-reads, with a "
+        "comment -- 'its pages are already frozen' -- that was untrue of a "
+        "chapter with no pages at all. A budget is a decision about what the "
+        "work may cost, so it belongs where every other brief is.",
+    25: "The other half of 15. Prose had no row limit, so when a table was "
+        "illegal the values went into a run-on sentence and read worse than "
+        "the table would have. Across 32 entries the most any sentence carried "
+        "was five, falling away hard above three; the sentence that earned "
+        "this rule carried fifteen.",
+    26: "The schema demanded the ask VERBATIM, which is right for a question "
+        "and wrong for a brief: a 70-character filename, a sidebar entry and a "
+        "title that restated what index.qmd already said. Measured across 35 "
+        "entries: 34 are one sentence ending in '?', median eight words, "
+        "longest legitimate eighteen.",
+}
+
+def unexplained():
+    """
+    Rule numbers with no recorded reason, in `WHY` or in a check's docstring.
+
+    A rule nobody wrote a reason for is a rule nobody can argue with, which is
+    how a contract accumulates lines that fire on things that look fine. This
+    counts them instead of leaving it to impression -- it was an impression for
+    a long time, and the impression was that `references/why.md` covered them
+    all. It covered 20 of 39.
+    """
+    import ast
+    import re
+    try:
+        src = pathlib.Path(__file__).read_text()
+    except OSError:
+        return []
+    documented = set(WHY)
+    for n in ast.walk(ast.parse(src)):
+        if isinstance(n, ast.FunctionDef):
+            m = re.match(r"\s*Rules? ([0-9, and]+)[.:]", ast.get_docstring(n) or "")
+            if m:
+                documented |= {int(x) for x in re.findall(r"\d+", m.group(1))}
+    return sorted(set(RULES) - documented)
+
+
 RULES = {
     1: "no hand-typed number in prose",
     2: "no 3 consecutive code lines repeated across entries",

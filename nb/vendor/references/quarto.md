@@ -31,7 +31,7 @@ output needs extracting.
   prose in the HTML, not `<pre><code>`. For "did anything change?", go at
   `_freeze/**/execute-results/html.json` instead: its `result.markdown` holds
   every number already evaluated, and it is committed, so `git diff` is the
-  comparison. See "Where machinery lives" in SKILL.md for the workflow.
+  comparison. `read_reference("refactoring")` has the workflow.
 - Scraping the HTML of a full page is a trap worth naming: a code cell closes
   with a **single** `</div>` (`<div class="sourceCode…">…</pre></div>`), so a
   `</div></div>` pattern runs past the block and silently eats the following
@@ -75,8 +75,7 @@ the evidence: compute in one folded cell, answer, then show tables and figures.
 
 ## Tables
 
-**Two questions come before any of this** (SKILL.md has them as rules, and
-`lint.py` checks them). A table counts as a figure, so an entry shows one or the
+**Two questions come before any of this** (rules 14 and 15, which lint checks). A table counts as a figure, so an entry shows one or the
 other, never both — a grid under a plot that already shows the same quantities is
 the failure. And a table is at most 6×4 excluding the header.
 

@@ -16,7 +16,6 @@ DOCS = {
     # then spent four probes rediscovering a return type this page states
     # outright. A description the model has to classify itself into is one it
     # will classify itself out of.
-    "why": "The failure behind each lint rule. Read before arguing one away.",
     "refactoring": "Which of _model.py and _analysis.py you may edit, and how "
                    "to prove a change to either moved no answer.",
     "forking": "When a model change earns a new chapter, and how to copy one.",

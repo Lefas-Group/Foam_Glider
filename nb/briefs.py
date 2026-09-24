@@ -96,134 +96,88 @@ If a probe errors, read the traceback and fix the probe. Do not go looking
 through the notebook for why -- the traceback already says.
 """
 
-# Returned by `open_entry`, as its result. It is the same text the write phase
-# used to open with, minus the parts that only made sense across a process
-# boundary: there is no proposal to quote, because the conversation above IS
-# the proposal, and no "the probe that produced this is gone", because it is
-# not.
+# Returned by `open_entry`, as its result.
+#
+# RE-COSTED once the phases merged, and it needed it. Under the split this was
+# the opening user turn of a fresh 15-turn conversation -- sent once, cheap.
+# Merged, it sits in a conversation that re-sends its whole history every turn,
+# so at 7,259 chars it was ~1,814 tokens paid on every turn after `open_entry`:
+# about 21,800 tokens across a 25-turn run, more than the entire cached prefix.
+#
+# WHAT CAME OUT, on two tests:
+#
+#   * anything the CACHED PREFIX already says. `system_instruction.md` renders
+#     at position 0 and is matched by implicit caching at a measured 67%; this
+#     is re-sent uncached. A paragraph in both is paid twice, and the second
+#     copy is the expensive one. The `_inputs.yml`/`_fork.yml` mechanics, the
+#     empty-callout rule and the attribution guidance are all in "Entry format"
+#     already.
+#
+#   * anything LINT CATCHES AND HANDS BACK WITH THE FIX. Rules 1, 2, 13, 19,
+#     23, 24, 29, 30 and 32 each had a paragraph here teaching what their own
+#     violation message says better, at the moment it matters, about the actual
+#     line. Measured: first-pass violations run at 0.03 across 33 write runs,
+#     so this text was insurance against something that was not happening.
+#
+# WHAT STAYED is per-run DATA (the path, the four literals, the measured probe
+# cost, the recorded inputs) and the two things neither channel carries: how a
+# chapter COMPOSES, which costs a failed render to learn, and that ENTRY_CEILING
+# is not the model's to choose, which costs a refused commit.
 WRITE = """\
-The entry is open. Write it at `{chapter}/{stem}.qmd`.
+The entry is open. Write it at `{chapter}/{stem}.qmd` — `write_file` once, then
+`edit_file`. It is the ONLY file you create; `index.qmd`, `_model.py` and
+`_analysis.py` are scaffolded already, so edit those.
 
 {inputs}
 
-1. Use `write_file` for the initial version, then `edit_file` for every change
-   after that. The entry is the ONLY file you create: `index.qmd`, `_model.py`
-   and `_analysis.py` already exist, scaffolded, so `edit_file` them. A
-   `write_file` over `index.qmd` silently drops the `## The model` block it
-   ships with, which is the only place a reader sees the aircraft (rule 30).
-   Its FIRST code cell must open with exactly these four lines (rule 28):
+Its FIRST code cell opens with exactly these four lines (rule 28):
 
-       ENTRY_CEILING = {ceiling}   # s for this render, granted by the user
-       SOLVE_BUDGET = {solve}     # s for any one solve
-       PROBE_POOL = {pool}        # s granted for the probe
-       PROBE_SPENT = {spent}      # s the probe actually used
+    ENTRY_CEILING = {ceiling}   # s for this render, granted by the user
+    SOLVE_BUDGET = {solve}     # s for any one solve
+    PROBE_POOL = {pool}        # s granted for the probe
+    PROBE_SPENT = {spent}      # s the probe actually used
 
-   Your probes cost {cost} s of solving, timed rather than estimated -- size
-   SOLVE_BUDGET from that. A 0.0 means you ran no solves at all, so it tells
-   you nothing about what this entry will cost; it does not mean free.
+Your probes cost {cost} s of solving, timed rather than estimated — size
+SOLVE_BUDGET from that. A 0.0 means you ran no solves at all, so it tells you
+nothing about what this entry will cost; it does not mean free. ENTRY_CEILING is
+NOT yours to choose: the commit is refused if you change it, and it is the
+execution time the render is killed at, with no slack. If the work genuinely
+needs more, `ask_specified` for it rather than writing a different number.
 
-   ENTRY_CEILING is not yours to choose -- it is what the user granted at the
-   prompt, the commit is refused if you change it, and it is the execution time
-   the render is killed at, directly and with no slack. SOLVE_BUDGET is yours:
-   pick what one solve needs, knowing it cannot outlive the render that
-   contains it. `footer()` prints all four at the foot of the page, so they do
-   NOT go in the `## Specified` callout -- that callout is for what the DESIGN
-   was committed to, and budgets in it crowd out the thing it exists for
-   (rule 18).
+HOW THE CHAPTER COMPOSES, because nothing else will tell you and a new chapter
+has no sibling to copy: `_model.qmd` EXECS both `_model.py` and `_analysis.py`
+into the page namespace. Every name in them is already in scope — in your entry
+cell, and in each other. They are not modules and are not importable;
+`from _analysis import solve_it` raises ModuleNotFoundError at render (rule 29).
+Call the name directly.
 
-   OMIT a callout that would be empty. A box containing the word "None." is
-   furniture: it takes a heading and four lines to say that nothing happened,
-   and a reader scanning for what was assumed has to read it to find that out.
-   No Specified inputs and no Assumptions means neither callout appears.
-   If the work genuinely cannot fit, ask for more with `ask_specified` rather
-   than writing a different number.
-2. Its code must recompute the answer, not restate it. Every number in prose is
-   an inline `{{python}}` expression, never typed out (rule 1).
-3. Call `lint` with chapter `{chapter}` and fix what it reports. Each message
-   names its own fix. Lint runs again after you stop regardless, so there is
-   nothing to gain by stopping early.
-4. If your entry repeats three or more consecutive code lines from a sibling
-   (rule 2), promote them to `{chapter}/_analysis.py` and call from there --
-   change only YOUR entry, never the earlier one -- then pass the promoted
-   function to `footer(...)` (rule 13).
-5. The vehicle lives in `{chapter}/_model.py`, never in the entry cell (rule
-   19). If that file is still the bare scaffold, fill it: the aircraft, its
-   operating conditions, its derived quantities. A parametric vehicle is a
-   FUNCTION there taking the design variables and returning the `Airplane`;
-   the entry calls it.
+`_analysis.py` IS YOURS TO EDIT, and adding a function to it is free — that is
+how a chapter grows, and it is what rule 2 means by promoting repeated code.
+`_model.py` is the guarded one: a write to it is refused once the chapter has
+entries, and the refusal says what to do. If you EDIT a function that was
+already in either file, `declare_refactor` one line saying what changed.
 
-   HOW THE CHAPTER COMPOSES, because nothing else will tell you and a brand new
-   chapter has no sibling to copy: `_model.qmd` EXECS both `_model.py` and
-   `_analysis.py` into the page namespace. Every name in them is already in
-   scope -- in your entry cell, and in each other. They are not modules and are
-   not importable; `from _analysis import solve_it` raises ModuleNotFoundError
-   at render and is rule 29. Call the name directly.
+A number taken from ANOTHER chapter is assigned in your code cell with a comment
+naming the entry it came from, and your prose links that entry:
+[its title](YYYY-MM-DD-NN-slug.qmd). Nothing recomputes it, so the link is the
+only trail back when someone asks where 0.36 came from.
 
-   A number taken from ANOTHER chapter is assigned in your code cell with a
-   comment naming the entry it came from, and your prose names and links that
-   entry: [its title](YYYY-MM-DD-NN-slug.qmd). There is no mechanism that
-   recomputes it, so the link is the only trail back when someone asks where
-   0.36 came from -- and the only warning anyone gets if that chapter is
-   re-rendered and the number moves.
+Attribute each input to where it came from. "Asked of the user, {today}" covers
+ONLY what was put to them and answered — which includes any `ask_specified`
+answer from this run. Anything inherited from an earlier chapter, or read out of
+the question, is stated without a claim that anyone was asked.
 
-   Comments in those two files explain the MODEL, not your reasoning about
-   where to put things. They are rendered verbatim by the chapter index.
+Anything interesting you were NOT asked about goes to the human in your final
+message, never into the entry.
 
-   `_analysis.py` IS YOURS TO EDIT. Adding a function to it is free and is how
-   a chapter grows; `_model.py` is the guarded one, and a write to it is
-   refused once the chapter has entries. Rule 2 tells you to promote repeated
-   code INTO _analysis.py -- it has been read backwards, as a ban on touching
-   it, which leaves each entry carrying its own copy of the same workaround.
+`probe` is still available and is how you try something out — it runs in the run
+directory with `{chapter}` loaded and writes nothing here. {left} s of pool left.
 
-   If you EDIT a function that was already in either file -- as opposed to
-   adding a new one -- call `declare_refactor` with one line saying what
-   changed and why. Editing one means every sibling entry that reaches it gets
-   re-solved to prove its answers held, and the user decides whether to accept
-   that; they are shown your line beside the diff. Adding a function needs
-   nothing, which is the cheaper path when it is available.
-
-6. A helper that solves takes `verbose=False` and passes it to `opti.solve()`
-   (rule 23). IPOPT prints a sixty-line convergence table otherwise, and an
-   entry that publishes one has buried its answer under the working. Keep it a
-   PARAMETER rather than hard-coding False, so a probe can still turn it on.
-
-7. Anything true of EVERY entry in `{chapter}` belongs to the CHAPTER, not to
-   your entry -- the section, the objective, the fixed dimensions, what is left
-   out. Your entry keeps what THIS question produced. If the index still holds
-   template placeholders, fill them (rule 24).
-
-   The chapter's Specified and Assumed items live in
-   `{chapter}/_inputs.yml`, as `- <id>: <text>` under `specified:` and
-   `assumed:`. The index RENDERS them; it does not contain them. Do not write
-   those callouts into index.qmd -- rule 39 refuses it, because an item in both
-   places is on the page twice. If this chapter replaces something an earlier
-   chapter declared, name it in `{chapter}/_fork.yml` under `overwrites:` as
-   `NN-name/their-id`. It renders on THIS chapter's page as "Overwritten
-   from …", listing the OLD item only — what replaced it is your own
-   `_inputs.yml`, so do not restate it. The chapter you overwrote keeps its own
-   items, because they are still true under it. Your ENTRY's own callouts are
-   still markdown, written in the entry.
-
-   Attribute each item to where it actually came from. "Asked of the user,
-   {today}:" covers ONLY what was put to them and answered -- which includes
-   any `ask_specified` answer from this run, and that answer belongs in a
-   Specified callout, because it is usually the reason the chapter exists at
-   all. Commitments inherited from an earlier chapter, or read out of the
-   question, are stated without a claim that anyone was asked.
-
-8. Interesting things you were NOT asked about go to the human at the end of
-   the run, in your final message. They do not go in the entry: an entry
-   answers the question asked and stops.
-
-`probe` IS STILL AVAILABLE, and it is how you try something out. It runs your
-Python in the run directory with `{chapter}` already loaded, prints what you
-ask it to, and writes nothing into the notebook. Never write a scratch file
-into the notebook -- a write to anything but this chapter's own files is
-refused. What is left of the probe pool is {left} s.
-
-Today is {today}, so the entry stem is already dated for you. Stop when lint is
-clean; rendering and committing are handled after you finish.
+Today is {today}. Call `lint` with chapter `{chapter}` and fix what it reports;
+each message names its own fix. Stop when it is clean — rendering and committing
+are handled after you finish.
 """
+
 
 # `nb resume`, which is now only the crash path and the two approvals. It gets
 # no conversation -- nothing persists one across a process boundary -- so it

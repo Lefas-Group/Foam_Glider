@@ -1,7 +1,7 @@
 # Scratch probe mechanics
 
-SKILL.md carries the rule — probe in `_scratch/` before writing an entry, reach
-for `probe.py` first, overwrite per question. This is the machinery, read when a
+Your instructions carry the rule — probe before writing an entry, and use the
+`probe` tool rather than writing a script. This is the machinery, read when a
 probe misbehaves or a figure is needed.
 
 ## `probe.py` and `_probe_base.py`

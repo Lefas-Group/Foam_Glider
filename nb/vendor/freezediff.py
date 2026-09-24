@@ -1,7 +1,7 @@
 """
 Did any rendered number move? One copy, shared by every notebook.
 
-    uv run python <skill>/freezediff.py <notebook-dir> [chapter ...] [--ref REF]
+    uv run python nb/vendor/freezediff.py <notebook-dir> [chapter ...] [--ref REF]
 
 Compares every entry's rendered output against a git ref (default HEAD) and
 reports what changed. Exits non-zero if anything did, so it can gate a commit.
@@ -25,7 +25,7 @@ JSON string, so a single changed digit -- or merely the runtime line -- reports
 the entire page as modified. This parses both sides and diffs the markdown as
 text.
 
-It lives in the skill rather than in each notebook for the same reason `lint.py`
+It lives in `nb/vendor/` rather than in each notebook for the same reason `lint.py`
 does: it is a CHECKER. It runs at authoring time, reads the notebook, and writes
 nothing into the rendered site, so a notebook does not need it present to render.
 `_notebook.py` is the opposite, which is why that one is vendored and this is not.
@@ -37,7 +37,7 @@ artefact:
 
     rm -rf <notebook>/_freeze/chapters/<chapter> <notebook>/.quarto
     quarto render <notebook>
-    uv run python <skill>/freezediff.py <notebook>
+    uv run python nb/vendor/freezediff.py <notebook>
 
 There is no `--no-freeze` flag. `stale()` below catches the case anyway, because
 that false pass has already happened here once.

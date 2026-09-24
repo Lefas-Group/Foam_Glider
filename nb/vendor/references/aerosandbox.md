@@ -178,13 +178,14 @@ answer. Whichever you use, state the angle or the band.
 `aerosandbox-book/` is "The AeroSandbox Book" by Peter Sharpe, vendored as text
 to read, not to execute — the `.qmd` files import a `_common` module that is not
 included, so they will not render standalone. Filenames say what each chapter
-covers; `SKILL.md` names the ones that come up most.
+covers, and `read_reference` lists them.
 
 Upstream, to refresh the copy: <https://github.com/peterdsharpe/AeroSandbox>
 
 ## Where "compute both and compare" caught something
 
-SKILL.md carries the three rules; these are the cases that earned the third one.
+Your instructions carry the three rules; these are the cases that earned the
+third one.
 Neither was caught by reading the code.
 
 - **`Wing.area()` against a traced integral** exposed a wing built 2.75% too

@@ -1,8 +1,8 @@
 # Forking a chapter, and starting a notebook
 
-SKILL.md carries the routing table and the rule that a new notebook is never
-built by reading an existing one. This is the detail: when a model change earns a
-new chapter, and how to make one cheaply.
+Your instructions carry the routing test — would `_model.py` differ — and the
+rule that a new notebook is never built by reading an existing one. This is the
+detail: when a model change earns a new chapter, and how to make one cheaply.
 
 ## The fork criterion is a change to the MODEL
 

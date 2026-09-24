@@ -1,8 +1,8 @@
 # Changing shared code without changing the answers
 
-SKILL.md carries the rules — the tier table, "an entry that calls shared
-machinery must render it", and "deleting the freeze is not optional". This is the
-workflow and the reasoning behind it. Read it before touching a chapter's
+Your instructions carry the rules — "an entry that calls shared machinery must
+render it" (rule 13) and "deleting the freeze is not optional" (rule 12). This is
+the workflow and the reasoning behind it. Read it before touching a chapter's
 `_model.py` or `_analysis.py`.
 
 
