@@ -1,0 +1,37 @@
+---
+title: "What does the airframe look like with the cosmetic cannons and nacelles removed?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 9.5      # s the probe actually used
+
+airplane = get_airplane()
+```
+
+**Answer.** The airframe is reduced to the fuselage and the crossed flat wings, with all external cosmetic elements stripped.
+
+```{python}
+#| label: fig-three-view
+#| fig-cap: "Three-view of the X-Wing airframe without cannons or nacelles."
+import matplotlib.pyplot as plt
+import aerosandbox.numpy as np
+
+fig = plt.figure(figsize=(8, 6))
+axs = np.array([
+    [fig.add_subplot(2, 2, 1, projection='3d'), fig.add_subplot(2, 2, 2, projection='3d')],
+    [fig.add_subplot(2, 2, 3, projection='3d'), fig.add_subplot(2, 2, 4, projection='3d')]
+])
+airplane.draw_three_view(axs=axs, show=False)
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```

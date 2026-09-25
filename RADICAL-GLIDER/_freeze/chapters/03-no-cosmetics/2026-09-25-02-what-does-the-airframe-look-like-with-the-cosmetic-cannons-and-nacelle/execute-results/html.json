@@ -1,0 +1,12 @@
+{
+  "hash": "85afb5d89b1657750d77d9129e2deca9",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: \"What does the airframe look like with the cosmetic cannons and nacelles removed?\"\n---\n\n\n::: {#7ac5591d .cell execution_count=2}\n``` {.python .cell-code}\nENTRY_CEILING = 90.0   # s for this render, granted by the user\nSOLVE_BUDGET = 15.0     # s for any one solve\nPROBE_POOL = 200.0        # s granted for the probe\nPROBE_SPENT = 9.5      # s the probe actually used\n\nairplane = get_airplane()\n```\n:::\n\n\n**Answer.** The airframe is reduced to the fuselage and the crossed flat wings, with all external cosmetic elements stripped.\n\n::: {#cell-fig-three-view .cell execution_count=3}\n``` {.python .cell-code}\nimport matplotlib.pyplot as plt\nimport aerosandbox.numpy as np\n\nfig = plt.figure(figsize=(8, 6))\naxs = np.array([\n    [fig.add_subplot(2, 2, 1, projection='3d'), fig.add_subplot(2, 2, 2, projection='3d')],\n    [fig.add_subplot(2, 2, 3, projection='3d'), fig.add_subplot(2, 2, 4, projection='3d')]\n])\nairplane.draw_three_view(axs=axs, show=False)\nplt.show()\n```\n\n::: {.cell-output .cell-output-display}\n![Three-view of the X-Wing airframe without cannons or nacelles.](2026-09-25-02-what-does-the-airframe-look-like-with-the-cosmetic-cannons-and-nacelle_files/figure-html/fig-three-view-output-1.png){#fig-three-view width=1207 height=1074}\n:::\n:::\n\n\n[Rendered in 3.0 s (limit 90 s) · explored in 10 s (limit 200 s)]{.runtime}\n\n\n",
+    "supporting": [
+      "2026-09-25-02-what-does-the-airframe-look-like-with-the-cosmetic-cannons-and-nacelle_files"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}
