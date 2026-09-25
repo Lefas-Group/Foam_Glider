@@ -78,3 +78,65 @@ def get_mass_properties(plane, area_density=0.1744, foam_thickness=0.005):
         total_moment += m * cg
         
     return total_mass, total_moment / total_mass
+
+import scipy.optimize
+
+def get_cg_x(airplane):
+    op1 = asb.OperatingPoint(velocity=10, alpha=0)
+    aero1 = asb.AeroBuildup(airplane=airplane, op_point=op1).run()
+    op2 = asb.OperatingPoint(velocity=10, alpha=1)
+    aero2 = asb.AeroBuildup(airplane=airplane, op_point=op2).run()
+    
+    CL_alpha = (aero2["CL"] - aero1["CL"]) / np.radians(1)
+    Cm_alpha = (aero2["Cm"] - aero1["Cm"]) / np.radians(1)
+    mac = airplane.c_ref
+    x_np = airplane.xyz_ref[0] - mac * Cm_alpha / CL_alpha
+    return float(np.array(x_np - 0.1 * mac).flatten()[0])
+
+def apply_incidence(airplane, inc):
+    p2 = airplane.copy()
+    for w in p2.wings:
+        for xsec in w.xsecs:
+            xsec.twist = inc
+    return p2
+
+def get_trim_alpha(airplane, req_cg_x, cg_z, bracket=[-10, 80]):
+    def get_Cm(alpha):
+        res = asb.AeroBuildup(
+            airplane=airplane,
+            op_point=asb.OperatingPoint(velocity=5.0, alpha=alpha),
+            xyz_ref=[req_cg_x, 0, cg_z]
+        ).run()['Cm']
+        return float(np.atleast_1d(res)[0])
+    try:
+        return scipy.optimize.root_scalar(get_Cm, bracket=bracket).root
+    except Exception:
+        return np.nan
+
+def get_trimmed_flight_state(airplane, mass, req_cg_x, cg_z, alpha_trim):
+    mg = mass * 9.81
+    res_trim = asb.AeroBuildup(
+        airplane=airplane,
+        op_point=asb.OperatingPoint(velocity=5.0, alpha=alpha_trim),
+        xyz_ref=[req_cg_x, 0, cg_z]
+    ).run()
+    L_5 = float(np.atleast_1d(res_trim['L'])[0])
+    
+    if L_5 <= 0:
+        return np.nan, np.nan, np.nan
+        
+    v_trim = 5.0 * np.sqrt(mg / L_5)
+    
+    res_exact = asb.AeroBuildup(
+        airplane=airplane,
+        op_point=asb.OperatingPoint(velocity=v_trim, alpha=alpha_trim),
+        xyz_ref=[req_cg_x, 0, cg_z]
+    ).run()
+    L = float(np.atleast_1d(res_exact['L'])[0])
+    D = float(np.atleast_1d(res_exact['D'])[0])
+    
+    gamma = np.arctan2(D, L)
+    sink = v_trim * np.sin(gamma)
+    
+    return float(v_trim), float(L/D), float(sink)
+

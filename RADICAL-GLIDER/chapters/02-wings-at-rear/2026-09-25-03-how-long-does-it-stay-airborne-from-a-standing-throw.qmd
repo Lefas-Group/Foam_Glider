@@ -1,0 +1,89 @@
+---
+title: "How long does it stay airborne from a standing throw?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 141.5      # s the probe actually used
+
+import aerosandbox as asb
+import aerosandbox.numpy as np
+
+plane = get_airplane()
+mass, cg = get_mass_properties(plane)
+req_cg_x = get_cg_x(plane)
+
+incidences = np.linspace(-30, 0, 15)
+times = []
+for inc in incidences:
+    p2 = apply_incidence(plane, inc)
+    alpha_trim = get_trim_alpha(p2, req_cg_x, cg[2], bracket=[-5, 40])
+    if np.isnan(alpha_trim):
+        times.append(0.0)
+        continue
+    v_trim, ld, sink = get_trimmed_flight_state(p2, mass, req_cg_x, cg[2], alpha_trim)
+    if not np.isnan(sink) and sink > 0:
+        times.append(1.5 / sink)
+    else:
+        times.append(0.0)
+
+best_trimmed_time = max(times)
+best_inc = incidences[np.argmax(times)]
+
+# Untrimmed maximum time
+opt = asb.Opti()
+v = opt.variable(init_guess=4.0, lower_bound=1.0, upper_bound=20.0)
+alpha = opt.variable(init_guess=5.0, lower_bound=-10.0, upper_bound=20.0)
+
+aero = asb.AeroBuildup(
+    airplane=plane,
+    op_point=asb.OperatingPoint(velocity=v, alpha=alpha),
+).run()
+
+L = aero["L"]
+D = aero["D"]
+gamma = np.arctan(D / L)
+
+opt.subject_to(L * np.cos(gamma) + D * np.sin(gamma) == mass * 9.81)
+
+sink_rate = v * np.sin(gamma)
+opt.minimize(sink_rate)
+sol = opt.solve(verbose=False)
+
+untrimmed_time = 1.5 / float(sol.value(sink_rate))
+```
+
+::: {.hero}
+[`{python} f"{best_trimmed_time:.2f} s"`]{.hero-value}
+[Best trimmed flight time from 1.5 m]{.hero-label}
+:::
+
+**Answer.** From a standing throw of 1.5 m, the aircraft stays airborne for at most [`{python} f"{best_trimmed_time:.2f}"`]{.key} seconds. Trimming at a required 10% static margin demands significant negative incidence ([`{python} f"{best_inc:.1f}°"`]{.key}), and the associated trim drag severely degrades endurance. If it could fly at its theoretical minimum sink rate without trim considerations, it would achieve up to [`{python} f"{untrimmed_time:.2f}"`]{.key} s. Moving the wings rearward slightly improves both times over the [original configuration](../01-first-chapter/2026-09-25-01-does-it-meet-the-2-s-flight-time-target.qmd).
+
+```{python}
+#| label: fig-flight-time-rear
+#| fig-cap: "Trimmed flight time from 1.5 m against wing incidence. High negative incidence is required to balance the aircraft, severely impacting endurance compared to its theoretical untrimmed potential."
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(figsize=(6, 4))
+ax.plot(incidences, times, '-k', label='Trimmed Flight Time')
+ax.axhline(untrimmed_time, color='r', linestyle='--', label=f'Untrimmed Max ({untrimmed_time:.2f} s)')
+
+ax.set_xlabel("Wing Incidence (°)")
+ax.set_ylabel("Flight Time (s)")
+ax.set_ylim(0, 2.5)
+ax.grid(True)
+ax.legend()
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(get_mass_properties, get_cg_x, get_trim_alpha, get_trimmed_flight_state, apply_incidence)
+```
