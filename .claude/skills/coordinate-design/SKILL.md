@@ -53,8 +53,11 @@ uv run --group nb python -m nb ask <notebook> \
   The run recognises the fork itself and asks you to approve one.
 - **One question per ask**; a run refuses a second folded in.
 - **Several at once, one per chapter.** A same-chapter collision is refused at
-  startup, before a token is spent. Exit `0` committed, `2` bad arguments or
-  chapter locked, `1` everything else — with the reason in `run.json`.
+  turn 0, before a token is spent — but you will not see it in the exit code.
+- **The exit code only tells you the LAUNCH worked.** `--quiet` forks and
+  returns 0 as soon as the run is detached; everything after that — including
+  the chapter lock — is reported in `run.json`'s `outcome`. A non-zero exit
+  (`2` bad arguments, `1` preflight) means nothing started at all.
 
 ## Watch
 
@@ -78,8 +81,10 @@ with `kind`, `name`, `why`, `options`, `default`. `outcome` set means finished.
 uv run --group nb python -m nb answer <notebook> <run-id> "<value>"
 ```
 
-**Always pass the run id.** With several runs in flight, omitting it refuses
-and lists them.
+**Always pass the run id.** Omitting it refuses only when two runs are waiting
+at the same instant — and a run you answered a second ago still looks like the
+only one waiting until it consumes the reply. A second bare `nb answer` then
+overwrites the first, and the record says the user typed the second. Measured.
 
 | `kind` | `name` is | how to answer |
 |---|---|---|
@@ -96,8 +101,16 @@ different answer changes *what is being built*. Answer it yourself **only when
 the user's direction already settles it**, and say which part of their
 direction you used. Otherwise put it to the user in their own terms and wait.
 
-`specified`, `chapter` and `refactor` wait an hour, then exit with the work on
-disk for `nb resume`. The other four take a safe default after five minutes.
+`specified`, `chapter` and `refactor` wait an hour, then exit `no_answer`; the
+other four take a safe default after five minutes. **An hour is shorter than a
+person, so expect to miss it.** Never `nb answer` a timed-out run — it refuses
+with *"its question outlived it"* and discards the reply. Recover by where it
+stopped:
+
+- **`stem` null in `run.json`** — it asked before opening an entry, nothing is
+  on disk, and `resume` refuses. Re-ask with the answer pre-loaded, now that you
+  know the key: `--answers f.json` holding `{"<the name it asked>": "<value>"}`.
+- **`stem` set** — the page exists; `nb resume <nb> <run-id>` picks it up.
 
 `--answers file.json` pre-answers by `name`, once each — e.g.
 `{"assumptions": "", "_model.py": "", "static margin": "10% of MAC"}`. The
