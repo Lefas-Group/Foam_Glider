@@ -1,0 +1,90 @@
+---
+title: "What wing incidence makes it trim at positive lift?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 200.0      # s the probe actually used
+
+import scipy.optimize as opt
+import numpy as np
+import aerosandbox as asb
+
+plane = get_airplane()
+mass, cg = get_mass_properties(plane)
+mac = plane.c_ref
+
+op1 = asb.OperatingPoint(velocity=10, alpha=0)
+aero1 = asb.AeroBuildup(airplane=plane, op_point=op1).run()
+op2 = asb.OperatingPoint(velocity=10, alpha=1)
+aero2 = asb.AeroBuildup(airplane=plane, op_point=op2).run()
+
+CL_alpha = (aero2["CL"] - aero1["CL"]) / np.radians(1)
+Cm_alpha = (aero2["Cm"] - aero1["Cm"]) / np.radians(1)
+x_np = plane.xyz_ref[0] - mac * Cm_alpha / CL_alpha
+req_cg_x = float(np.array(x_np - 0.1 * mac).flatten()[0])
+
+def get_cm(alpha, inc):
+    p = get_airplane()
+    for w in p.wings:
+        for xsec in w.xsecs:
+            xsec.twist = inc
+    aero = asb.AeroBuildup(
+        airplane=p,
+        op_point=asb.OperatingPoint(velocity=10, alpha=alpha),
+        xyz_ref=[req_cg_x, 0, cg[2]]
+    ).run()
+    return float(np.array(aero["CL"]).flatten()[0]), float(np.array(aero["Cm"]).flatten()[0])
+
+def trim_cl_at_inc(inc):
+    def cm_obj(alpha):
+        return get_cm(alpha, inc)[1]
+    res = opt.root_scalar(cm_obj, bracket=[-20, 20], method='brentq')
+    return get_cm(res.root, inc)[0]
+
+res = opt.root_scalar(trim_cl_at_inc, bracket=[-2, 5], method='brentq')
+max_inc = float(res.root)
+```
+
+::: {.hero}
+[`{python} f"<{max_inc:.2f}°"`]{.hero-value}
+[Wing incidence]{.hero-label}
+:::
+
+**Answer.** The aircraft trims at positive lift when the wing incidence is less than [`{python} f"{max_inc:.2f}°"`]{.key}. With the wings at the rear acting as the tail, and the true vertical center of gravity at `z=0`, drag from the high wing creates a nose-up pitching moment. This allows it to trim upright even at zero incidence, contradicting the earlier finding in [What airspeed does it trim at when ballasted to the required CG?](2026-09-24-02-what-airspeed-does-it-trim-at-when-ballasted-to-the-required-cg.qmd) which placed the CG at the wing's height.
+
+```{python}
+#| label: fig-lift-crossover
+#| fig-cap: "Trim lift coefficient versus wing incidence. Positive lift requires incidence below the crossover point."
+import matplotlib.pyplot as plt
+
+incidences = np.linspace(-2, 3, 11)
+cls = []
+for inc in incidences:
+    def cm_obj(alpha):
+        return get_cm(alpha, inc)[1]
+    try:
+        r = opt.root_scalar(cm_obj, bracket=[-20, 20], method='brentq')
+        cls.append(get_cm(r.root, inc)[0])
+    except ValueError:
+        cls.append(np.nan)
+
+fig, ax = plt.subplots(figsize=(6, 4))
+ax.plot(incidences, cls, 'k.-')
+ax.axhline(0, color='gray', linestyle='--')
+ax.axvline(max_inc, color='gray', linestyle='--')
+ax.set_xlabel("Wing incidence (°)")
+ax.set_ylabel("Trim lift coefficient $C_L$")
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(get_mass_properties)
+```
