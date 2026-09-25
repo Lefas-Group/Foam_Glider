@@ -1,0 +1,84 @@
+---
+title: "Does it meet the 2 s flight-time target with the cosmetics removed?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0
+SOLVE_BUDGET = 15.0
+PROBE_POOL = 200.0
+PROBE_SPENT = 177.1
+
+import aerosandbox as asb
+import aerosandbox.numpy as np
+
+plane = get_airplane()
+mass, cg = get_mass_properties(plane)
+required_cg = get_cg_x(plane)
+
+ballast_mass = mass * (cg[0] - required_cg) / (required_cg - 0)
+total_mass = mass + max(0, ballast_mass)
+mg = total_mass * 9.81
+
+# 1. Untrimmed performance (Theoretical Maximum Flight Time)
+opt = asb.Opti()
+v = opt.variable(init_guess=4.0, lower_bound=1.0, upper_bound=20.0)
+alpha = opt.variable(init_guess=5.0, lower_bound=-10.0, upper_bound=20.0)
+
+aero_untrimmed = asb.AeroBuildup(
+    airplane=plane,
+    op_point=asb.OperatingPoint(velocity=v, alpha=alpha),
+).run()
+
+L = aero_untrimmed["L"]
+D = aero_untrimmed["D"]
+gamma = np.arctan(D / L)
+
+opt.subject_to(L * np.cos(gamma) + D * np.sin(gamma) == mg)
+
+sink_rate = v * np.sin(gamma)
+opt.minimize(sink_rate)
+sol = opt.solve(verbose=False)
+
+untrimmed_time = 1.5 / float(sol.value(sink_rate))
+
+# 2. Trimmed performance
+plane_with_cg = asb.Airplane(
+    name=plane.name,
+    xyz_ref=[required_cg, 0, plane.xyz_ref[2]],
+    wings=plane.wings,
+    fuselages=plane.fuselages
+)
+
+incidences = np.linspace(-30, 0, 31)
+trimmed_times = []
+
+for inc in incidences:
+    p2 = apply_incidence(plane_with_cg, inc)
+    alpha_trim = get_trim_alpha(p2, bracket=[-20, 80])
+    
+    if np.isnan(alpha_trim):
+        trimmed_times.append(0.0)
+        continue
+        
+    v_trim, ld_trim, sink_trim = get_trimmed_flight_state(p2, total_mass, alpha_trim)
+    if np.isnan(sink_trim):
+        trimmed_times.append(0.0)
+    else:
+        trimmed_times.append(1.5 / sink_trim)
+
+best_trimmed_time = np.max(trimmed_times)
+```
+
+::: {.hero}
+[`{python} f"No, {best_trimmed_time:.2f} s"`]{.hero-value}
+[Best trimmed flight time from 1.5 m]{.hero-label}
+:::
+
+**Answer.** It cannot fly at all. While the airframe has a theoretical, untrimmed flight time of [`{python} f"{untrimmed_time:.2f}"`]{.key} s, trimming it is impossible for positive lift. Removing the forward-mounted nacelles shifted the fuselage's pitching moment to be strongly nose-down. Because the required center of gravity sits slightly ahead of the wing's aerodynamic center, positive lift from the wing also produces a nose-down moment. With no way to generate a pitch-up moment, the aircraft can only trim at negative lift coefficients.
+```{python}
+#| echo: false
+#| output: asis
+footer(get_mass_properties, get_cg_x, get_trim_alpha, get_trimmed_flight_state, apply_incidence)
+```
