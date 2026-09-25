@@ -1,0 +1,61 @@
+---
+title: "What wing incidence makes it trim at positive lift?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0
+SOLVE_BUDGET = 15.0
+PROBE_POOL = 200.0
+PROBE_SPENT = 164.0
+
+import scipy.optimize
+import aerosandbox.numpy as np
+import matplotlib.pyplot as plt
+
+airplane = get_airplane()
+cg_x = get_cg_x(airplane)
+airplane.xyz_ref = [cg_x, 0, airplane.xyz_ref[2]]
+
+def get_trim_CL(inc):
+    p2 = apply_incidence(airplane, inc)
+    alpha_trim = get_trim_alpha(p2, bracket=[-50, 50])
+    if np.isnan(alpha_trim):
+        return np.nan
+    aero = asb.AeroBuildup(
+        airplane=p2,
+        op_point=asb.OperatingPoint(velocity=5.0, alpha=alpha_trim)
+    ).run()
+    return float(np.atleast_1d(aero['CL'])[0])
+
+incidences = np.linspace(-30, 0, 31)
+trim_cls = [get_trim_CL(i) for i in incidences]
+
+res = scipy.optimize.minimize_scalar(lambda x: -get_trim_CL(x), bounds=(-30, 0), method='bounded')
+max_cl = -res.fun
+max_inc = res.x
+```
+
+**Answer.** None. Without the forward cosmetic cannons and nacelles to provide a pitch-up moment at high angle of attack, the remaining fuselage always pitches down. Since the wing sits just 0.8 mm behind the new center of gravity, it has almost no moment arm and must generate negative lift to create the required nose-up trim moment. The highest possible trim lift coefficient is [`{python} f"{max_cl:.3f}"`]{.key}, occurring at an incidence of [`{python} f"{max_inc:.1f}"`]{.key}° (@fig-trim-cl).
+
+```{python}
+#| label: fig-trim-cl
+#| fig-cap: "Trim lift coefficient across wing incidence. With the destabilizing cosmetics removed, the aircraft can no longer be trimmed for positive lift at any incidence."
+fig, ax = plt.subplots(figsize=(6, 4))
+ax.plot(incidences, trim_cls, 'o-b')
+ax.axhline(0, color='k', linestyle='--', linewidth=1)
+ax.plot(max_inc, max_cl, 'r*', markersize=10, label=f'Maximum ($C_L$={max_cl:.3f})')
+ax.set_xlabel("Wing Incidence (°)")
+ax.set_ylabel("Trim Lift Coefficient ($C_L$)")
+ax.grid(True)
+ax.legend()
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(get_cg_x, apply_incidence, get_trim_alpha)
+```
