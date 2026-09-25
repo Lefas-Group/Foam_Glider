@@ -36,6 +36,7 @@ website:
       # missing from here loud rather than invisible.
       - auto: "chapters/01-first-chapter"
       - auto: "chapters/02-wings-at-rear"
+      - auto: "chapters/03-no-cosmetics"
 
 format:
   html:
