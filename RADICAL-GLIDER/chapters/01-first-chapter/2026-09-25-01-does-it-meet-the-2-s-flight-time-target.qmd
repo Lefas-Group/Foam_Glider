@@ -1,0 +1,116 @@
+---
+title: "Does it meet the 2 s flight-time target?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0
+SOLVE_BUDGET = 15.0
+PROBE_POOL = 200.0
+PROBE_SPENT = 118.8
+
+import aerosandbox as asb
+import aerosandbox.numpy as np
+
+plane = get_airplane()
+mass, cg = get_mass_properties(plane)
+required_cg = get_cg_x(plane)
+ballast_mass = mass * (cg[0] - required_cg) / (required_cg - 0)
+total_mass = mass + ballast_mass
+mg = total_mass * 9.81
+
+# 1. Untrimmed performance (Theoretical Maximum Flight Time)
+opt = asb.Opti()
+v = opt.variable(init_guess=4.0, lower_bound=1.0, upper_bound=20.0)
+alpha = opt.variable(init_guess=5.0, lower_bound=-10.0, upper_bound=20.0)
+
+aero_untrimmed = asb.AeroBuildup(
+    airplane=plane,
+    op_point=asb.OperatingPoint(velocity=v, alpha=alpha),
+).run()
+
+L = aero_untrimmed["L"]
+D = aero_untrimmed["D"]
+gamma = np.arctan(D / L)
+
+opt.subject_to(L * np.cos(gamma) + D * np.sin(gamma) == mg)
+
+sink_rate = v * np.sin(gamma)
+opt.minimize(sink_rate)
+sol = opt.solve(verbose=False)
+
+untrimmed_sink = float(sol.value(sink_rate))
+untrimmed_time = 1.5 / untrimmed_sink
+
+# 2. Trimmed performance
+plane_with_cg = asb.Airplane(
+    name=plane.name,
+    xyz_ref=[required_cg, 0, plane.xyz_ref[2]],
+    wings=plane.wings,
+    fuselages=plane.fuselages
+)
+
+incidences = np.linspace(-30, -5, 26)
+trimmed_times = []
+
+for inc in incidences:
+    p2 = apply_incidence(plane_with_cg, inc)
+            
+    alpha_trim = get_trim_alpha(p2, bracket=[-10, 80])
+    
+    if np.isnan(alpha_trim):
+        trimmed_times.append(0.0)
+        continue
+        
+    v_trim, ld_trim, sink_trim = get_trimmed_flight_state(p2, total_mass, alpha_trim)
+    if np.isnan(sink_trim):
+        trimmed_times.append(0.0)
+    else:
+        trimmed_times.append(1.5 / sink_trim)
+
+best_trimmed_time = np.max(trimmed_times)
+best_inc = incidences[np.argmax(trimmed_times)]
+
+```
+
+::: {.hero}
+[`{python} f"No, {best_trimmed_time:.2f} s"`]{.hero-value}
+[Best trimmed flight time from 1.5 m]{.hero-label}
+:::
+
+**Answer.** The aircraft cannot physically stay airborne for 2.0 s from a 1.5 m throw. Even flying untrimmed at its absolute maximum endurance, the theoretical best flight time is only [`{python} f"{untrimmed_time:.2f}"`]{.key} s. 
+
+Trimming it makes the sink rate significantly worse. The required nose-up pitching moment can only be achieved by raising the wing trailing edge to negative incidences. The longest possible trimmed flight time occurs at [`{python} f"{best_inc:.1f}"`]{.key}° of incidence, yielding [`{python} f"{best_trimmed_time:.2f}"`]{.key} s. The fuselage drag at this high trim angle ruins the lift-to-drag ratio.
+
+::: {.callout-tip}
+## New user specifications
+Asked of the user, 2026-09-25:
+
+1. **flight-time target: 2 s** — Determines if requirements are met
+:::
+
+```{python}
+#| label: fig-trimmed-time
+#| fig-cap: "Trimmed flight time from 1.5 m against wing incidence. Flying slower to reduce sink rate requires steep negative incidence to counter the fuselage's pitch-down moment, but extreme angles cause immense trim drag."
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(figsize=(6, 4))
+ax.plot(incidences, trimmed_times, '-k', label='Trimmed Flight Time')
+ax.axhline(untrimmed_time, color='r', linestyle='--', label=f'Untrimmed Max ({untrimmed_time:.2f} s)')
+ax.axhline(2.0, color='g', linestyle='-.', label='Target (2.0 s)')
+
+ax.set_xlabel("Wing Incidence (°)")
+ax.set_ylabel("Flight Time (s)")
+ax.set_ylim(0, 2.5)
+ax.grid(True)
+ax.legend()
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(get_mass_properties, get_cg_x, get_trim_alpha, get_trimmed_flight_state, apply_incidence)
+```

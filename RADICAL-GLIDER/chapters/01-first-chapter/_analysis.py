@@ -89,3 +89,50 @@ def get_mass_properties(plane, area_density=0.1744, foam_thickness=0.005):
         total_moment += m * cg
         
     return total_mass, total_moment / total_mass
+
+import scipy.optimize
+
+def apply_incidence(airplane, inc):
+    p2 = airplane.copy()
+    for w in p2.wings:
+        for xsec in w.xsecs:
+            xsec.twist = inc
+    return p2
+
+def get_trim_alpha(airplane, bracket=[-10, 80]):
+    def get_Cm(alpha):
+        res = asb.AeroBuildup(
+            airplane=airplane,
+            op_point=asb.OperatingPoint(velocity=5.0, alpha=alpha),
+        ).run()['Cm']
+        return float(np.atleast_1d(res)[0])
+    try:
+        return scipy.optimize.root_scalar(get_Cm, bracket=bracket).root
+    except Exception:
+        return np.nan
+
+def get_trimmed_flight_state(airplane, mass, alpha_trim):
+    mg = mass * 9.81
+    res_trim = asb.AeroBuildup(
+        airplane=airplane,
+        op_point=asb.OperatingPoint(velocity=5.0, alpha=alpha_trim),
+    ).run()
+    L_5 = float(np.atleast_1d(res_trim['L'])[0])
+    
+    if L_5 <= 0:
+        return np.nan, np.nan, np.nan
+        
+    v_trim = 5.0 * np.sqrt(mg / L_5)
+    
+    res_exact = asb.AeroBuildup(
+        airplane=airplane,
+        op_point=asb.OperatingPoint(velocity=v_trim, alpha=alpha_trim),
+    ).run()
+    L = float(np.atleast_1d(res_exact['L'])[0])
+    D = float(np.atleast_1d(res_exact['D'])[0])
+    
+    gamma = np.arctan2(D, L)
+    sink = v_trim * np.sin(gamma)
+    
+    return float(v_trim), float(L/D), float(sink)
+
