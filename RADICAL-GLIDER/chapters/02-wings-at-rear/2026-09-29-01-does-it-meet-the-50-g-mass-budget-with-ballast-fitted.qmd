@@ -1,0 +1,48 @@
+---
+title: "Does it meet the 50 g mass budget with ballast fitted?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 13.0      # s the probe actually used
+
+plane = get_airplane()
+mass, cg = get_mass_properties(plane, area_density=0.1744, foam_thickness=0.005)
+
+# From 2026-09-24-01-how-much-nose-ballast-is-needed-with-wings-at-the-rear
+nose_ballast_mass = 0.0
+total_mass = mass + nose_ballast_mass
+```
+
+**Answer.** Yes. The airframe mass is [`{python} f"{mass*1000:.1f}"`]{.key} g. As found in [How much nose ballast is needed with wings at the rear?](2026-09-24-01-how-much-nose-ballast-is-needed-with-wings-at-the-rear.qmd), it requires no nose ballast because the center of gravity is already forward of the required position. This leaves the total mass at [`{python} f"{total_mass*1000:.1f}"`]{.key} g, well under the 50 g budget.
+
+::: {.callout-tip}
+## New user specifications
+Asked of the user, 2026-09-29:
+
+1. **mass budget: 50 g** — Target for total mass.
+:::
+
+```{python}
+#| label: fig-mass
+#| fig-cap: "Total aircraft mass compared to the 50 g mass budget."
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(figsize=(5, 4))
+ax.bar(["Airframe", "Total Mass", "Budget"], 
+       [mass * 1000, total_mass * 1000, 50],
+       color=["#1f77b4", "#2ca02c", "#7f7f7f"])
+ax.axhline(50, color="gray", linestyle="--", zorder=0)
+ax.set_ylabel("Mass (g)")
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(get_mass_properties)
+```
