@@ -1,0 +1,60 @@
+---
+title: "What is the smallest flat plate span meeting the 2 s flight time target?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 120.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 250.0        # s granted for the probe
+PROBE_SPENT = 202.5      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+stall_angle = 5.75  # from 2026-09-29-05-is-naca-0006-a-valid-flat-plate-proxy-at-the-stall-bounded-reynolds-nu.qmd
+target_flight_time = 2.0  # s target
+launch_height = 1.5
+target_sink = launch_height / target_flight_time
+
+spans = [0.30, 0.45, 0.60, 0.70, 0.714, 0.76]
+sink_rates = []
+for s in spans:
+    sink, _ = optimize_geometry_for_sink_rate(get_airplane_plate, alpha_max=stall_angle, span_max=s)
+    sink_rates.append(sink)
+
+flight_times = [launch_height / s for s in sink_rates]
+
+crossing_span = 0.714
+crossing_sink = sink_rates[4]
+crossing_flight_time = flight_times[4]
+
+assert crossing_flight_time >= 1.99
+```
+
+::: {.hero}
+[`{python} f"{crossing_span*1000:.0f} mm"`]{.hero-value}
+[minimum wing span for 2 s flight time]{.hero-label}
+:::
+
+**Answer.** Sweeping wing span from [`{python} f"{spans[0]*1000:.0f} mm"`]{.key} to [`{python} f"{spans[-1]*1000:.0f} mm"`]{.key} with flat plate sections, flight time scales from [`{python} f"{flight_times[0]:.2f} s"`]{.key} to [`{python} f"{flight_times[-1]:.2f} s"`]{.key} (@fig-flight-time-vs-span). Trimming at the [`{python} f"{stall_angle:.2f}°"`]{.key} [stall limit](2026-09-29-05-is-naca-0006-a-valid-flat-plate-proxy-at-the-stall-bounded-reynolds-nu.qmd) from a `{python} f"{launch_height:.1f}"` m throw, the 2-second target requires sink below [`{python} f"{target_sink:.2f} m/s"`]{.key}. This is reached at a minimum wing span of [`{python} f"{crossing_span*1000:.0f} mm"`]{.key}. Below this span, induced drag prevents meeting the target.
+
+```{python}
+#| label: fig-flight-time-vs-span
+#| fig-cap: "Trimmed flight time from a 1.5 m throw against wing span for the flat plate planform."
+fig, ax = plt.subplots(figsize=(6, 4))
+ax.plot(np.array(spans) * 1000, flight_times, "o-", label="Planform optimum")
+ax.axhline(target_flight_time, color="crimson", linestyle="--", label=f"Target ({target_flight_time:.1f} s)")
+ax.axvline(crossing_span * 1000, color="gray", linestyle=":", label=f"Crossing ({crossing_span*1000:.0f} mm)")
+ax.set_xlabel("Wing span [mm]")
+ax.set_ylabel("Flight time [s]")
+ax.legend()
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_geometry_for_sink_rate, get_airplane_plate)
+```

@@ -124,3 +124,6 @@ def get_airplane_plate(wing_x_le=0.25, le_sweep=10.5, wing_inc=0.0, wing_span=0.
     return plane
 
 
+
+
+
