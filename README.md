@@ -11,6 +11,8 @@ Three layers, each one the previous one distilled:
 | **`nb`** | an agent. One command turns one question into one notebook entry |
 | **the notebooks** | Quarto sites. One entry per question, rendered from code that recomputes its own numbers |
 
+You watch it all from one place: `nb board`.
+
 ## `coordinate-design` — start here
 
 Give Claude a direction rather than a question, and the skill drives the rest:
@@ -21,10 +23,24 @@ reports what came back.
 It answers budgets, assumption reviews, new chapters and refactors on its own.
 **It will not invent a Specified input** — one where a different answer changes
 what is being built. If your direction settles it, the skill answers and says
-so; if not, it asks you.
+so; if not, it asks you **at the board** and waits.
 
 Several runs go at once, one per chapter. See
 [`.claude/skills/coordinate-design/SKILL.md`](.claude/skills/coordinate-design/SKILL.md).
+
+## `nb board` — where you sit
+
+```bash
+uv run --group nb python -m nb board RADICAL-GLIDER
+```
+
+The programme as a conversation: your direction, then every question an agent
+asked, every answer and who gave it, every decision the coordinator took, and
+every entry that committed — in order, with a live line per working agent at
+the bottom. Questions escalated to you arrive here, and you answer them here.
+
+It is a view, not a supervisor. Close it and the runs carry on; `nb answer`
+reaches them from any terminal.
 
 ## `nb` — one question, one entry
 
