@@ -17,6 +17,11 @@
     nb eval  <notebook>                      what each model actually did
     nb board <notebook>                      N agents, one terminal
     nb answer <notebook> [run] "<value>"     reply to a waiting run
+    nb note   <notebook> "<text>"            a line of the programme, for
+                                             the board
+    nb escalate <notebook> "<name>"          put a question to the human,
+             --prompt "<question>"           and return at once
+    nb await  <notebook> [--timeout N]       block for the answer, print it
     nb stop  <notebook> [run] ["why"]        ask a run to stop, and record it
     nb watch <notebook> [run] [--all]        follow the detail, live
     nb clean <notebook> [run] [--keep N]     drop spent run directories
@@ -195,6 +200,19 @@ def main(argv):
             return 2
         from .phases.board import main as board
         return board(rest)
+
+    if cmd in ("note", "escalate", "await"):
+        if not rest:
+            print(USAGE)
+            return 2
+        if cmd == "note":
+            from .phases.note import main as run_it
+        elif cmd == "escalate":
+            from .phases.escalate import main as run_it
+        else:
+            # `await` is a keyword, so the module cannot be named for it.
+            from .phases.await_ import main as run_it
+        return run_it(rest)
 
     if cmd == "answer":
         if len(rest) < 2:

@@ -4,7 +4,8 @@ Asking a question without a terminal.
 N agents cannot share one stdin, so a detached run writes its question to a file
 and waits for a file in reply:
 
-    _scratch/runs/<id>/question.json   {kind, name, why, options, asked_at}
+    _scratch/runs/<id>/question.json   {kind, name, prompt, why, how,
+                                        options, default, asked_at}
     _scratch/runs/<id>/answer.json     {value, answered_at, by, replying_to}
 
 `replying_to` carries the question's `asked_at`, so a reply cannot be taken as
@@ -91,7 +92,8 @@ class Mailbox:
                     "value": str(value), "source": source, "at": time.time()})
         runstate.write(self.notebook, answered=got)
 
-    def ask(self, kind, name, why="", options="", default=None, wait=None):
+    def ask(self, kind, name, why="", options="", default=None, wait=None,
+            prompt="", how=""):
         """
         Put a question and block until answered, or until `wait` expires.
 
@@ -117,6 +119,15 @@ class Mailbox:
         # arrived with no number on it -- the one thing the person answering
         # most needs, and the value they get by saying nothing.
         q = {"kind": kind, "name": name, "why": why, "options": options,
+             # THREE DIFFERENT JOBS, previously done by two fields and a
+             # newline. `name` is the KEY -- what `--answers` pops and what
+             # `waiting_on` reports -- and the docstring of `ask_specified`
+             # records what it cost to make it so. Nothing took over its
+             # DISPLAY job, so the board drew `assumptions` where a question
+             # belonged, and the how-to-reply block carried the framing the
+             # heading should have. `prompt` asks; `how` says how to reply in
+             # one line; `why` is the content between them.
+             "prompt": prompt or name, "how": how,
              "default": None if default is None else str(default),
              "asked_at": time.time(), "run": self.notebook.run_id}
         self.notebook.run.mkdir(parents=True, exist_ok=True)

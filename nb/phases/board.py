@@ -28,7 +28,7 @@ import time
 
 from ..config import Notebook
 from ..log import tell
-from .. import mailbox, runstate
+from .. import coordinator, mailbox, runstate
 
 REFRESH = 0.5
 SHOWN = 10         # rows: live runs always, then the most recent finished ones
@@ -80,7 +80,15 @@ def _asking(runs, answered=()):
     out = []
     for r in runs:
         q = r.get("question")
-        if not q or r["alive"] is False:
+        if not q:
+            continue
+        # A RUN's question dies with the run, because a run is one process
+        # suspended mid-conversation and an answer written after it exits has
+        # no reader. The COORDINATOR has no process between turns at all: its
+        # `answer.json` is picked up by a later turn, so the corpse this test
+        # exists to protect against cannot occur. Skipping it here would hide
+        # the one question on the board that only the human can settle.
+        if r["alive"] is False and not coordinator.is_coordinator(r["run"]):
             continue
         # A question is deleted by the RUN, when it reads the answer -- a
         # second later, at its poll interval. The board loops twice in that
@@ -114,7 +122,14 @@ def _table(runs):
                                 ("state", "", "left")):
         t.add_column(col, style=style or None, justify=justify)
     for r in runs:
-        if r["alive"] is False:
+        if coordinator.is_coordinator(r["run"]):
+            # Never `died`. It holds no lock by design, so the liveness test
+            # below reads it as dead on every refresh -- which would print the
+            # most alarming word on the board, permanently, against the row
+            # driving everything else on it.
+            state = ("[bold yellow]waiting[/bold yellow]" if r.get("question")
+                     else "[cyan]coordinating[/cyan]")
+        elif r["alive"] is False:
             # `outcome` is written by metrics.close(), so its absence means the
             # run never reached an ending the system chose: it crashed, was
             # killed, or the machine slept through its deadline. That is the one
@@ -151,18 +166,48 @@ def _table(runs):
 
 def _question_panel(run):
     from rich.panel import Panel
+    from rich.markup import escape
     q = run["question"]
-    body = [f"[bold]{q.get('name','')}[/bold]"]
+    # EVERY FIELD HERE IS DATA, and rich reads square brackets as style tags.
+    # `inherited` labels each item `[specified]` or `[assumed]`, and the panel
+    # ate both -- the list rendered as "1.  dihedral: 20 degrees", with the one
+    # word saying whether it is a commitment or a guess silently dropped, in
+    # the question that asks which of them a fork breaks. Escaped at the edge,
+    # so the only markup left in the panel is the markup this function adds.
+    # THE PROMPT ASKS; the name is the KEY. `name` is what `--answers` pops and
+    # what `waiting_on` reports, and `ask_specified`'s docstring records why it
+    # had to become the quantity rather than the banner -- but nothing took
+    # over its display job, so this drew `assumptions` where a question
+    # belonged and the how-to-reply block carried the framing instead. The
+    # fallback keeps a question asked by the old code renderable.
+    body = [f"[bold]{escape(q.get('prompt') or q.get('name',''))}[/bold]"]
     if q.get("why"):
-        body.append(q["why"])
+        body.append(escape(q["why"]))
     if q.get("options"):
-        body.append(f"options: {q['options']}")
-    if q.get("default") is not None:
-        # What Enter gets you, and what silence gets you. A question with a
-        # default is not really asking you to decide -- it is offering you the
-        # chance to disagree -- and it should look like it.
-        body.append(f"[dim]Enter takes {q['default']}[/dim]")
-    return Panel("\n".join(body), title=f"{run.get('chapter') or run['run']} asks",
+        body.append(f"options: {escape(str(q['options']))}")
+    default = q.get("default")
+    # What Enter gets you, and what silence gets you. A question with a default
+    # is not really asking you to decide -- it is offering you the chance to
+    # disagree -- and it should look like it.
+    #
+    # BLANK IS NOT A VALUE TO ANNOUNCE. `is not None` let the empty string
+    # through, so `assumptions` and `inherited` -- the two kinds where "" IS
+    # the acceptance -- both drew a dangling `Enter takes ` with nothing after
+    # it, under a `why` that had already said "Enter accepts." in full words.
+    # `str(...)` rather than a truth test so a real default of 0 survives.
+    #
+    # `how` SAYS IT BETTER when there is one: "Enter accepts · …" already
+    # states what Enter does, so printing `Enter takes ''` under it was the
+    # same sentence twice, the second time in a form that named no value.
+    if q.get("how"):
+        body.append(f"[dim]{escape(q['how'])}[/dim]")
+    elif default is not None and str(default).strip():
+        body.append(f"[dim]Enter takes {default}[/dim]")
+    # The KEY in the title, beside the chapter. It is what you type into
+    # `--answers` and what `nb answer` reports, so it has to stay visible --
+    # and with a real question on the first line, "asks" was saying nothing.
+    where = run.get("chapter") or run["run"]
+    return Panel("\n".join(body), title=f"{escape(where)} · {escape(q.get('name',''))}",
                  border_style="yellow")
 
 
@@ -270,6 +315,23 @@ def _seen_already(notebook, only):
     return {r["run"] for r in _runs(notebook, only) if _ended(r)}
 
 
+def _note_line(note):
+    """
+    One decision from the coordinator, for the scrollback.
+
+    NOT A PANEL and not a pane. A panel is for something that wants you or
+    tells you an outcome; a note is narration, and bordering it would give it
+    the same weight as the question it is explaining. A pane would be worse:
+    this module keeps the conversation in the scrollback and the table at the
+    bottom precisely so the order survives, and notes read as causes of the
+    questions that follow them -- which is exactly what a separately scrolling
+    pane destroys.
+    """
+    from rich.markup import escape
+    when = time.strftime("%H:%M", time.localtime(note.get("at", 0)))
+    return f"  [grey50]\u25c6 {when}[/grey50]  {escape(note.get('text', ''))}"
+
+
 def follow(notebook, only=None):
     """Draw the table, surface questions, and take answers. Ctrl-C to leave."""
     from rich.console import Console
@@ -292,6 +354,12 @@ def follow(notebook, only=None):
     # bottom of the screen where it belongs.
     answered = set()          # (run, asked_at) -- see `_asking`
     shown = _seen_already(notebook, only)
+    # From NOW, not from the beginning. A board opened mid-programme would
+    # otherwise replay every decision ever made into the scrollback before
+    # showing the one thing that is waiting -- the same reason `_seen_already`
+    # exists for endings. A board attached to one run shows no notes at all:
+    # they are about the programme, and `only` means this run.
+    last_note = time.time()
     with Live(console=console, refresh_per_second=4, transient=True) as live:
         try:
             while True:
@@ -314,11 +382,15 @@ def follow(notebook, only=None):
                 # spin on a table of a finished run until somebody pressed
                 # Ctrl-C, and `nb ask` forks this as the parent, so that was
                 # every run.
+                fresh = [] if only else coordinator.notes(notebook, last_note)
                 ending = [r for r in runs
                           if _ended(r) and r["run"] not in shown]
                 leaving = bool(only) and runs and all(_ended(r) for r in runs)
-                if ending or leaving:
+                if ending or leaving or fresh:
                     live.stop()
+                    for note in fresh:
+                        last_note = max(last_note, note.get("at", last_note))
+                        console.print(_note_line(note))
                     for r in ending:
                         shown.add(r["run"])
                         console.print(_ending_panel(r))

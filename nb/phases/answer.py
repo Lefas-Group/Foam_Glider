@@ -15,7 +15,7 @@ import sys
 
 from ..config import Notebook
 from ..log import tell
-from .. import mailbox, runstate
+from .. import coordinator, mailbox, runstate
 
 
 def waiting(notebook):
@@ -61,7 +61,11 @@ def main(argv):
     # reporting success for it. Refused rather than warned: the reply is
     # addressed to a corpse either way, and a warning that scrolls past is how
     # you come back an hour later to find the run never moved.
-    if runstate.alive(d) is False:
+    # THE RESERVED ID HAS NO PROCESS TO BE ALIVE, so the corpse test below
+    # would refuse every answer the coordinator is waiting for. See
+    # `coordinator.py`: its question is read by a later TURN rather than by a
+    # suspended reader, so there is nothing to address an answer to in vain.
+    if not coordinator.is_coordinator(run_id) and runstate.alive(d) is False:
         tell(f"  run {run_id} is not running — its question outlived it.")
         tell("  Nothing would read the answer. Drop the run with:")
         tell(f"    uv run --group nb python -m nb clean {notebook.root.name} "

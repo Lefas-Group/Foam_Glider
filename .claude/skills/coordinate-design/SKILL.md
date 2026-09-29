@@ -99,7 +99,9 @@ overwrites the first, and the record says the user typed the second. Measured.
 **A Specified input is the one you may not invent.** It is an input where a
 different answer changes *what is being built*. Answer it yourself **only when
 the user's direction already settles it**, and say which part of their
-direction you used. Otherwise put it to the user in their own terms and wait.
+direction you used. Otherwise **escalate — see below**. The reply syntax for
+every kind is in `question.json`'s `how`; the board shows only a one-line
+version of it.
 
 `specified`, `chapter` and `refactor` wait an hour, then exit `no_answer`; the
 other four take a safe default after five minutes. **An hour is shorter than a
@@ -116,6 +118,40 @@ stopped:
 `{"assumptions": "", "_model.py": "", "static margin": "10% of MAC"}`. The
 refactor key is the filename, so it is predictable; the chapter key is the slug
 the model invents, so it is not.
+
+## Escalate what the direction does not settle
+
+The user watches the **board**, not this conversation. Put the question where
+they are sitting — two commands, because posting must not be able to fail:
+
+```bash
+uv run --group nb python -m nb escalate <nb> "<name>" \
+  --prompt "<the question, in their terms>" --why "<why the run is stuck>"
+uv run --group nb python -m nb await <nb>          # RUN THIS IN THE BACKGROUND
+```
+
+**Background the `await`.** A foreground call is capped at ten minutes, which
+is shorter than a person; backgrounded it survives, and its exit is what wakes
+you to relay the answer. `escalate` returns at once, so the question is safely
+on the board either way — if a wait times out, just wait again.
+
+Then relay it to the run that needed it, with `nb answer <nb> <run-id>`, and
+`nb note` what you did.
+
+**Do not ask the user directly in this conversation.** Measured: run
+`20260925-082733-5d8d` was asked that way, the answer took longer than the
+run's hour, and the entry was lost.
+
+## Narrate every decision
+
+```bash
+uv run --group nb python -m nb note <nb> "<one line>"
+```
+
+The board is the user's only view of your reasoning — the runs publish
+themselves, you do not. Note what you asked and why, what a finished run
+changed, and what you chose next. One line each, in the scrollback beside the
+questions they explain.
 
 ## Read what came back
 

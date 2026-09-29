@@ -30,7 +30,7 @@ import sys
 
 from ..config import Notebook
 from ..log import tell
-from .. import runstate
+from .. import coordinator, runstate
 
 KEEP = 5
 # A run id is a timestamp and a suffix; anything shaped like one was MEANT as
@@ -106,7 +106,12 @@ def main(argv):
         state = runstate.read(d)
         alive = runstate.alive(d)
         chapter = state.get("chapter")
-        if alive is not False:
+        if coordinator.is_coordinator(d):
+            # It holds no lock, so every other test here reads it as a spent
+            # run -- and dropping it would take the programme log and any
+            # question the human has not answered yet with it.
+            held.append((d, "the coordinator"))
+        elif alive is not False:
             held.append((d, "running"))
         elif chapter and chapter in dirty:
             held.append((d, f"{chapter} has uncommitted changes"))

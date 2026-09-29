@@ -62,7 +62,9 @@ def ask_stuck(found, phase):
         tell(f"  waiting up to {stuck.ASK_WAIT / 60:.0f} min — "
              f"{MAILBOX.notebook.question_path}")
         return MAILBOX.ask("stuck", "NO PROGRESS", why, options,
-                           default=default, wait=stuck.ASK_WAIT)
+                           default=default, wait=stuck.ASK_WAIT,
+                           prompt="No progress — carry on?",
+                           how='Enter continues · "stop" ends it · or give advice')
 
     return stuck.escalate(found, phase, asker)
 
@@ -87,7 +89,8 @@ def _prompt(banner, name, body):
     tell(f"\n{'─' * 72}\n{banner}\n{'─' * 72}")
     tell(body)
     tell(f"  waiting for an answer — {MAILBOX.notebook.question_path}")
-    return MAILBOX.ask("specified", name, body)
+    return MAILBOX.ask("specified", name, body,
+                       prompt=f"What is the {name}?")
 
 
 # What counts as handing the decision back. Named because `_collect_inputs`
@@ -118,7 +121,8 @@ def ask_budget(title, body, default, source=""):
         f" — {source}" if source else "")
     tell(f"\n{'─' * 72}\n{title}\n{'─' * 72}")
     tell(body + "\n")
-    got = MAILBOX.ask("budget", title, body, default=default)
+    got = MAILBOX.ask("budget", title, body, default=default,
+                      prompt=f"How long for the {title.lower()}?")
     try:
         value = float(str(got).strip())
     except ValueError:
@@ -217,8 +221,11 @@ def confirm_assumptions(session):
     tell(f"\n{how}")
     # A confirmation with a safe default: accepting is the right answer if
     # nobody replies, so an unattended run is never stranded by one.
-    answer = MAILBOX.ask("assumptions", "assumptions",
-                         f"{listing}\n\n{how}", default="").strip()
+    answer = MAILBOX.ask(
+        "assumptions", "assumptions", listing, default="",
+        prompt="Are these assumptions sound?",
+        how='Enter accepts · "1: 2.5e-4" corrects · "1: redo — why" rejects',
+    ).strip()
     if not answer:
         say("  answered   (accepted as stated)")
         return [], []
@@ -366,8 +373,11 @@ def confirm_inherited(notebook, chapter, parent=None):
             tell(f"      [{kind}] {item}")
             tell(f"          {src} → replaced by {by}")
     tell(f"\n{how}")
-    answer = MAILBOX.ask("inherited", "inherited", f"{body}\n\n{how}",
-                         default="").strip()
+    answer = MAILBOX.ask(
+        "inherited", "inherited", body, default="",
+        prompt="Does this fork break any of these?",
+        how='Enter keeps all · "3" or "3; 5" strikes',
+    ).strip()
     if not answer:
         say(f"  answered   (all {len(items)} carried forward)")
         return items, []
@@ -539,14 +549,17 @@ def approve_refactor(session, filename, moved, siblings):
         f"chapters/{session.chapter} reach this code.",
         "  Saying yes means re-solving them to prove their answers did not",
         "  move — minutes — and you will be shown anything that did.",
-        "",
-        '  Enter (or anything else) allows it. "no — <why>" puts the file back.',
     ])
+    how = '  Enter (or anything else) allows it. "no — <why>" puts the file back.'
     tell(f"\n{'─' * 72}\nREFACTOR — a function the chapter already uses has "
          f"changed\n{'─' * 72}")
     tell(body)
+    tell(f"\n{how}")
     tell(f"  waiting for an answer — {MAILBOX.notebook.question_path}")
-    answer = str(MAILBOX.ask("refactor", filename, body) or "").strip()
+    answer = str(MAILBOX.ask(
+        "refactor", filename, body,
+        prompt=f"Allow this change to {filename}?",
+        how='Enter allows · "no — why" restores it') or "").strip()
     if answer.lower().startswith(("no", "n ", "reject", "don't", "do not")):
         say(f"  refactor  REFUSED — {filename} restored")
         return (f"refused: the user will not re-prove chapters/"
@@ -592,14 +605,17 @@ def _new_chapter_approval(notebook, parent, chapter, title, defines):
         "",
         "  Later entries build on its _model.py — changing it then means",
         "  re-solving all of them. That commitment is yours, not the entry's.",
-        "",
-        '  Enter (or anything else) creates it. "no — <why>" sends it back.',
     ])
+    how = '  Enter (or anything else) creates it. "no — <why>" sends it back.'
     tell(f"\n{'─' * 72}\nNEW CHAPTER — approve before it is created"
          f"\n{'─' * 72}")
     tell(body)
+    tell(f"\n{how}")
     tell(f"  waiting for an answer — {MAILBOX.notebook.question_path}")
-    answer = str(MAILBOX.ask("chapter", chapter, body) or "").strip()
+    answer = str(MAILBOX.ask(
+        "chapter", chapter, body,
+        prompt="Create a new chapter for this?",
+        how='Enter approves · "no — why" keeps it here') or "").strip()
     if answer.lower().startswith(("no", "n ", "reject", "don't", "do not")):
         return answer
     say(f"  answered   approved{f' — {answer}' if answer else ''}")
