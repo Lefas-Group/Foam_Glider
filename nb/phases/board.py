@@ -378,7 +378,7 @@ def _seen_already(notebook, only):
 HISTORY = 200
 
 
-def _qa_line(run, got):
+def _qa_line(run, got, replay=False):
     """
     One exchange, whoever answered it.
 
@@ -398,6 +398,12 @@ def _qa_line(run, got):
     # A BLANK IS AN ANSWER, and the most common one: "" accepts an assumption
     # and keeps every inherited item. Printed raw it looked like the board had
     # failed to record anything.
+    # REPLAYED ANSWERS ARE CAPPED. A reply can be a paragraph -- refusing a
+    # fork and saying why, correcting an assumption with the reasoning -- which
+    # is right to see as you type it and is history you have already read when
+    # the board reopens. The whole of it stays in `run.json`.
+    if replay and len(value) > 150:
+        value = value[:150].rstrip() + " …"
     shown = escape(value) if value else "[italic]accepted as stated[/italic]"
     src = got.get("source", "")
     return (f"  [grey50]{when}[/grey50]  {escape(str(where))} · "
@@ -471,7 +477,7 @@ def _events(notebook, only=None):
     return kept, len(out) - len(kept)
 
 
-def _screen(notebook, runs, pinned):
+def _screen(notebook, runs, pinned, coordinated=False):
     """
     What stays on screen: the direction, then the table.
 
@@ -480,14 +486,59 @@ def _screen(notebook, runs, pinned):
     table is -- and a session long enough to need the reminder is exactly the
     session that has scrolled the top of the scrollback away.
     """
-    if pinned is None:
-        return _table(runs)
     from rich.console import Group
-    return Group(_direction_panel(pinned), _table(runs))
+    parts = [] if pinned is None else [_direction_panel(pinned)]
+    parts.append(_table(runs))
+    # SAY WHEN A QUESTION IS NOT YOURS. Deferring run questions to the
+    # coordinator is right, but done silently it is the failure this whole
+    # mailbox exists to prevent: a run sits `waiting`, nobody at the board
+    # realises they could answer it, the coordinator turns out not to be
+    # running, and the question expires. Naming the count and the way to take
+    # it back costs one line.
+    if coordinated:
+        held = [r for r in runs if r.get("question")
+                and not coordinator.is_coordinator(r["run"])]
+        if held:
+            from rich.text import Text
+            parts.append(Text(
+                f"  {len(held)} waiting on the coordinator — "
+                f"`nb board {notebook.root.name} --all` to answer here",
+                style="grey50"))
+    if len(parts) == 1:
+        return parts[0]
+    return Group(*parts)
 
 
-def _print_event(console, kind, payload):
-    """One conversation event, in the form its kind deserves."""
+def _ending_line(run):
+    """
+    How a run finished, in one line, for replay.
+
+    AN ENDING IS NEWS ONCE. The full panel carries the entry's prose, its
+    figure and its budgets -- right for something that finishes while you are
+    watching, and 33 lines apiece when six of them are replayed into a screen
+    you just opened. Measured: two endings were 36 of 73 history lines, which
+    pushed the rest of the conversation off the top of a 50-line terminal and
+    left the board looking like it had nothing to say.
+    """
+    from rich.markup import escape
+    colour, word = ENDINGS.get(run.get("outcome") or "",
+                               ("red", run.get("outcome") or "died"))
+    when = time.strftime("%H:%M", time.localtime(run.get("updated", 0)))
+    where = run.get("chapter") or run.get("run", "?")
+    said = run.get("answer") or word
+    sha = (run.get("committed") or {}).get("sha")
+    return (f"  [grey50]{when}[/grey50]  [{colour}]\u25cf[/{colour}] "
+            f"{escape(str(where))}   {escape(str(said))}"
+            + (f"  [grey50]{sha}[/grey50]" if sha else ""))
+
+
+def _print_event(console, kind, payload, replay=False):
+    """
+    One conversation event, in the form its kind deserves.
+
+    `replay` is the history being redrawn on open, where an ending is a line
+    rather than the whole entry -- see `_ending_line`.
+    """
     if kind == "note":
         console.print(_note_line(payload))
     elif kind == "direction":
@@ -495,7 +546,9 @@ def _print_event(console, kind, payload):
     elif kind == "ask":
         console.print(_ask_line(payload))
     elif kind == "qa":
-        console.print(_qa_line(*payload))
+        console.print(_qa_line(*payload, replay=replay))
+    elif replay:
+        console.print(_ending_line(payload))
     else:
         console.print(_ending_panel(payload))
 
@@ -557,7 +610,7 @@ def follow(notebook, only=None, answer_all=False):
         past = past[-HISTORY:]
     for _at, kind, payload, key in past:
         seen.add(key)
-        _print_event(console, kind, payload)
+        _print_event(console, kind, payload, replay=True)
     if past:
         console.print()
     with Live(console=console, refresh_per_second=4, transient=True) as live:
@@ -567,7 +620,8 @@ def follow(notebook, only=None, answer_all=False):
                 asking = _asking(runs, answered, coordinated)
                 pinned = (None if only
                           else coordinator.current_direction(notebook))
-                live.update(_screen(notebook, runs, pinned), refresh=True)
+                live.update(_screen(notebook, runs, pinned, coordinated),
+                            refresh=True)
 
                 # ENDINGS, once each, printed with the live region STOPPED
                 # and not restarted until they are all out. Restarting between

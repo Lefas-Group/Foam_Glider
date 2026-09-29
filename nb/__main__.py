@@ -24,6 +24,8 @@
     nb escalate <notebook> "<name>"          put a question to the human,
              --prompt "<question>"           and return at once
     nb await  <notebook> [--timeout N]       block for the answer, print it
+    nb listen <notebook> [--timeout N]       the inverse: block until a RUN
+                                             asks, ends or dies
     nb stop  <notebook> [run] ["why"]        ask a run to stop, and record it
     nb watch <notebook> [run] [--all]        follow the detail, live
     nb clean <notebook> [run] [--keep N]     drop spent run directories
@@ -203,7 +205,7 @@ def main(argv):
         from .phases.board import main as board
         return board(rest)
 
-    if cmd in ("note", "escalate", "await", "direction"):
+    if cmd in ("note", "escalate", "await", "listen", "direction"):
         if not rest:
             print(USAGE)
             return 2
@@ -213,6 +215,8 @@ def main(argv):
             from .phases.direction import main as run_it
         elif cmd == "escalate":
             from .phases.escalate import main as run_it
+        elif cmd == "listen":
+            from .phases.listen import main as run_it
         else:
             # `await` is a keyword, so the module cannot be named for it.
             from .phases.await_ import main as run_it
