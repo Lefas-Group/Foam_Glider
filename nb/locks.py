@@ -115,6 +115,40 @@ def claim(path):
     return None
 
 
+def release(path):
+    """
+    Give back a claim this process holds, before it exits. Returns True if it
+    was ours to give.
+
+    THE ONLY REASON THIS EXISTS IS THE FORK. Everywhere else a claim is held
+    for the life of the process on purpose -- that is what makes it impossible
+    to leave a stale lock behind, and `claim` says so. But a run that forks
+    LEAVES its parent chapter at turn 2 or 3 and never writes there again: the
+    model copy and the inherited items are read inside `fork_chapter`, and
+    everything after it -- the entry, the gate, the commit -- is addressed to
+    the new chapter. Holding the parent for the remaining write and render
+    blocks every other run from a chapter this one has finished with, which is
+    the precise parallelism `claim_chapter` was added to enable.
+
+    Releasing is safe only because the chapter lock guards WRITERS. A later
+    read of the parent (lint resolving lineage, the index resolving an
+    inherited item) was never covered by it -- a probe is unlocked by design.
+    """
+    for fh in list(_claimed):
+        if fh.name == str(path):
+            _claimed.remove(fh)
+            with contextlib.suppress(OSError):
+                fcntl.flock(fh, fcntl.LOCK_UN)
+            fh.close()
+            return True
+    return False
+
+
+def release_chapter(notebook, chapter):
+    """Give back a chapter claim. See `release`: the fork is the only caller."""
+    return release(notebook.scratch / f"chapter-{chapter}.lock")
+
+
 def claim_chapter(notebook, chapter):
     """
     One writer per chapter, for the length of the run that claims it.

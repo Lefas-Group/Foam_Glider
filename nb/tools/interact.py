@@ -629,7 +629,7 @@ def fork_chapter(session, name, title, defines):
     only ever return `rejected: already exists`, and it made ownership
     ambiguous on the one path that is structurally irreversible.
     """
-    from ..locks import claim_chapter
+    from ..locks import claim_chapter, release_chapter
     from ..tools.guards import bodies
     from ..tools.scaffold import create_chapter
     notebook = session.notebook
@@ -683,6 +683,16 @@ def fork_chapter(session, name, title, defines):
         raise ValueError(
             f"chapters/{name} was created but is held by another run (pid "
             f"{holder}). Stop here and say so.")
+    # THE PARENT IS DONE WITH. Claim first, release second: if the new chapter
+    # turns out to be held we raise above, still holding the chapter this run
+    # is actually in. Everything the parent was needed for -- the `_model.py`
+    # copy, the inherited items, the struck ids -- happened above; from here
+    # the entry, the gate and the commit all address `name`. Without this the
+    # run held BOTH locks until it exited, blocking a chapter it had left.
+    if parent and parent != name:
+        release_chapter(notebook, parent)
+        say(f"  chapter   {parent} released — this run has left it")
+
     session.chapter = name
     session.chapter_msg = msg
     # A NEW BASELINE. The one taken at startup belongs to the parent; this
