@@ -31,10 +31,9 @@ from ..log import tell
 from .. import coordinator, mailbox, runstate
 
 REFRESH = 0.5
-SHOWN = 10         # rows: live runs always, then the most recent finished ones
 
 
-def _runs(notebook, only=None, cap=True):
+def _runs(notebook, only=None):
     """
     Every run, newest first, with its state and whether it is alive.
 
@@ -51,7 +50,6 @@ def _runs(notebook, only=None, cap=True):
             continue
         state["dir"] = d
         state["alive"] = runstate.alive(d)
-        state["stopped"] = runstate.stopped(state) if state["alive"] else False
         # TWO DIFFERENT QUESTIONS, and this line used to lose one of them.
         # `run.json`'s `question` is the DESIGN question the coordinator put to
         # the agent, written once at `nb ask` and kept for the life of the run;
@@ -66,14 +64,12 @@ def _runs(notebook, only=None, cap=True):
     # agent off the bottom because six finished ones are newer would hide the
     # one thing it exists to show. Finished runs are kept for context and
     # capped, since every run ever is not context.
-    if not cap:
-        # THE HISTORY WANTS EVERY RUN. The cap below is a TABLE rule -- ten
-        # rows is what fits on a screen -- and applying it to the conversation
-        # silently truncated the record instead of the view.
-        return out
-    live = [r for r in out if r["alive"] is not False]
-    done = [r for r in out if r["alive"] is False]
-    return live + done[:max(0, SHOWN - len(live))]
+    # NO CAP. It existed to keep a ten-row table on one screen, and both of
+    # this function's consumers now filter to what is UNFINISHED -- the status
+    # line and the pending-question list -- while the conversation wants every
+    # run there has ever been. Trimming finished runs was work done for a
+    # reader that no longer exists.
+    return out
 
 
 def _coordinated(notebook):
@@ -479,7 +475,7 @@ def _direction_panel(got):
                  title_align="left", border_style="cyan")
 
 
-def _events(notebook, only=None):
+def _events(notebook, only=None, runs=None):
     """
     The conversation under the current direction, oldest first, and how many
     events an earlier direction has put behind us.
@@ -501,7 +497,7 @@ def _events(notebook, only=None):
             kind = "direction" if note.get("kind") == "direction" else "note"
             out.append((note.get("at", 0), kind, note,
                         (kind, note.get("at", 0))))
-    for r in _runs(notebook, only, cap=False):
+    for r in (_runs(notebook, only) if runs is None else runs):
         if r.get("asked") and r.get("started"):
             out.append((r.get("started", 0), "ask", r, ("ask", r.get("run"))))
         for got in r.get("answered") or []:
@@ -604,7 +600,7 @@ def follow(notebook, only=None, answer_all=False):
     answered, seen, echoed, told = set(), set(), set(), set()
     shown_q = set()           # questions printed live -- see the loop below
 
-    past, behind = _events(notebook, only)
+    past, behind = _events(notebook, only, _runs(notebook, only))
     if behind:
         console.print(f"  [grey50]\u2026 {behind} events under an earlier "
                       f"direction, not replayed[/grey50]")
@@ -659,7 +655,10 @@ def follow(notebook, only=None, answer_all=False):
                 pinned_at = now.get("at")
                 show(_direction_panel(now))
 
-            for _at, kind, payload, key in _events(notebook, only)[0]:
+            # ONE SCAN PER LOOP. `_events` used to do its own, so every
+            # refresh read all 32 run directories twice -- 24 ms of json and
+            # flock at 2 Hz for one copy of the answer.
+            for _at, kind, payload, key in _events(notebook, only, runs)[0]:
                 if key in seen:
                     continue
                 seen.add(key)
