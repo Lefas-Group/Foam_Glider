@@ -1,0 +1,31 @@
+---
+title: "What is the wing loading with the ballast fitted?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 60.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 120.0        # s granted for the probe
+PROBE_SPENT = 10.4      # s the probe actually used
+
+plane = get_airplane()
+mass_props = get_mass_properties(plane)
+mass = mass_props[0]
+s_ref = plane.s_ref
+wing_loading = mass / s_ref
+```
+
+::: {.hero}
+[`{python} f"{wing_loading:.2f} kg/m²"`]{.hero-value}
+[wing loading]{.hero-label}
+:::
+
+**Answer.** The wing loading is `{python} f"{wing_loading:.2f} kg/m²"`. With the wings moved aft, [no nose ballast is required](2026-09-24-01-how-much-nose-ballast-is-needed-with-wings-at-the-rear.qmd) for balance, so the `{python} f"{mass*1000:.1f} g"` flying mass consists entirely of the airframe. The reference wing area is `{python} f"{s_ref:.4f} m²"`.
+
+```{python}
+#| echo: false
+#| output: asis
+footer(get_mass_properties)
+```
