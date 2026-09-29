@@ -433,6 +433,44 @@ def _ending_line(run):
                   run.get("answer") or word, colour, run.get("updated"))
 
 
+def _elapsed(seconds):
+    m, sec = divmod(int(max(0, seconds)), 60)
+    return f"{m}m {sec:02d}s" if m else f"{sec}s"
+
+
+def _status(runs):
+    """
+    One line per working agent, pinned under the conversation.
+
+    THE CONVERSATION CANNOT SHOW LIVENESS. It is a record of things that have
+    HAPPENED, and an agent thinking for four minutes produces nothing to
+    record -- so a board with a silent run on it looked exactly like a board
+    with a dead one. This is the whole of what the old table was for, minus
+    the nine rows of finished runs that pushed it off the screen: who is
+    working, on what, which turn, how long. The id is spelled in full because
+    it is what `nb answer` takes.
+    """
+    from rich.text import Text
+    live = [r for r in runs
+            if not _ended(r) and not coordinator.is_coordinator(r["run"])]
+    if not live:
+        return Text("  nothing running", style="grey50")
+    out = Text()
+    for n, r in enumerate(live):
+        if n:
+            out.append("\n")
+        waiting = bool(r.get("question"))
+        out.append("  \u25cf ", style="yellow" if waiting else "green")
+        out.append(f"{r.get('run', '?')}  ", style="grey50")
+        out.append(f"{r.get('chapter') or '\u2014'}  ")
+        out.append(f"turn {r.get('turn', 0)}  ", style="grey50")
+        out.append(_elapsed(time.time() - (r.get("updated") or time.time())),
+                   style="grey50")
+        if waiting:
+            out.append("   waiting", style="yellow")
+    return out
+
+
 def _direction_panel(got):
     """What the user asked for, pinned above the table."""
     from rich.markup import escape
@@ -558,6 +596,7 @@ def follow(notebook, only=None, answer_all=False):
     liveness question belongs to `nb watch <nb> <run>`.
     """
     from rich.console import Console
+    from rich.live import Live
 
     console = Console()
     interactive = console.is_terminal
@@ -575,6 +614,12 @@ def follow(notebook, only=None, answer_all=False):
     current = None if only else coordinator.current_direction(notebook)
     if current:
         console.print(_direction_panel(current))
+    # WHAT IS PINNED IS NOT WHAT IS PRINTED. The epoch filter keeps events
+    # STRICTLY after the direction, which silently excluded the direction
+    # itself -- so one arriving mid-session changed what the board would
+    # replay next time and said nothing now, and the only way to see it was to
+    # restart. Tracked here so the pivot is announced where it happened.
+    pinned_at = (current or {}).get("at")
     if len(past) > HISTORY:
         console.print(f"  [grey50]\u2026 {len(past) - HISTORY} earlier events "
                       f"not shown[/grey50]")
@@ -583,9 +628,37 @@ def follow(notebook, only=None, answer_all=False):
         seen.add(key)
         _print_event(console, kind, payload, replay=True)
 
+    # A LIVE REGION OF ONE LINE PER AGENT, and no more. The table that used to
+    # sit here was sixteen lines and fought the scrollback at four refreshes a
+    # second; this is the part of it that could not be got any other way.
+    # Skipped entirely when there is no cursor to steer.
+    live = (Live(_status(_runs(notebook, only)), console=console,
+                 refresh_per_second=2, transient=True)
+            if interactive else None)
+    if live:
+        live.start()
+
+    def show(*renderables):
+        """Print above the status line without the two overdrawing."""
+        if live:
+            live.stop()
+        for r in renderables:
+            console.print(r)
+        if live:
+            live.start()
+
     try:
         while True:
             runs = _runs(notebook, only)
+            if live:
+                live.update(_status(runs), refresh=True)
+
+            # A NEW DIRECTION IS A PIVOT, announced where it happens.
+            now = None if only else coordinator.current_direction(notebook)
+            if now and now.get("at") != pinned_at:
+                pinned_at = now.get("at")
+                show(_direction_panel(now))
+
             for _at, kind, payload, key in _events(notebook, only)[0]:
                 if key in seen:
                     continue
@@ -608,7 +681,11 @@ def follow(notebook, only=None, answer_all=False):
                     if sig in echoed:
                         echoed.discard(sig)
                         continue
+                if live:
+                    live.stop()
                 _print_event(console, kind, payload)
+                if live:
+                    live.start()
 
             if bool(only) and runs and all(_ended(r) for r in runs):
                 return 0
@@ -630,14 +707,15 @@ def follow(notebook, only=None, answer_all=False):
                     # THE QUESTION ITSELF, not a note that one exists. It is
                     # the coordinator's to answer, but watching the programme
                     # means seeing what the agents are stuck on.
-                    console.print(_place(console, _question_panel(r), AGENT))
+                    show(_place(console, _question_panel(r), AGENT),
+                         f"  [grey50]for the coordinator \u2014 `--all` to "
+                         f"answer it here[/grey50]")
                     shown_q.add((r["run"], (r.get("question") or {}).get("name")))
-                    console.print(
-                        f"  [grey50]for the coordinator \u2014 `--all` to "
-                        f"answer it here[/grey50]")
 
             if asking and interactive:
                 run = asking[0]
+                if live:
+                    live.stop()
                 console.print(_place(console, _question_panel(run), AGENT))
                 shown_q.add((run["run"], run["question"].get("name")))
                 try:
@@ -656,6 +734,8 @@ def follow(notebook, only=None, answer_all=False):
                 mailbox.answer(Notebook(notebook.root, run_id=run["run"]),
                                reply, replying_to=asked_at)
                 console.print(f"  [grey50]{run['run']} \u2190[/grey50] {reply}\n")
+                if live:
+                    live.start()
                 continue
             elif asking:
                 # Piped or redirected: say what is waiting and how to answer it
@@ -667,13 +747,16 @@ def follow(notebook, only=None, answer_all=False):
                     if key in told:
                         continue
                     told.add(key)
-                    console.print(_question_panel(r))
-                    console.print(f"  answer with: nb answer "
-                                  f"{notebook.root.name} {r['run']} \"<value>\"")
+                    show(_question_panel(r),
+                         f"  answer with: nb answer "
+                         f"{notebook.root.name} {r['run']} \"<value>\"")
 
             time.sleep(REFRESH)
     except KeyboardInterrupt:
         return 0
+    finally:
+        if live:
+            live.stop()
 
 
 def main(argv):
