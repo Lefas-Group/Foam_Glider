@@ -37,6 +37,7 @@ website:
       - auto: "chapters/01-first-chapter"
       - auto: "chapters/02-wings-at-rear"
       - auto: "chapters/03-no-cosmetics"
+      - auto: "chapters/04-wings-swept-20-deg"
 
 format:
   html:
