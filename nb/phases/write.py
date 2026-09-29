@@ -150,6 +150,29 @@ def _ceiling_problem(notebook, entry_path, granted):
             f"that stops and asks a person, and the entry records the answer.")
 
 
+def _render_page(notebook, page, why, stale_note):
+    """
+    Render one page targeted, warn if it did not, return its freeze or None.
+
+    THE RECIPE THREE CALLERS SHARE, and it has one subtlety worth having in one
+    place: a targeted render IGNORES the freeze by definition, so nothing is
+    deleted first. `_refresh_root_index` used to `rmtree` and then render,
+    ignoring the result -- a failed render left no freeze, `_commit` skips a
+    path that does not exist, and rule 40's "no freeze means no finding" escape
+    meant nothing ever said so. A failure now leaves the OLD freeze in place,
+    stale, where rule 40 can see it.
+
+    `page` is relative to the notebook root; the freeze path is derived from it,
+    since Quarto's layout is `_freeze/<page without suffix>/`.
+    """
+    out = verifiers.render(notebook, page, why=why)
+    if "FAILED" in str(out):
+        tell(f"  {stale_note}")
+        return None
+    freeze = notebook.root / "_freeze" / pathlib.Path(page).with_suffix("")
+    return freeze if freeze.exists() else None
+
+
 def _refresh_index_freeze(notebook, chapter):
     """
     Drop the chapter index's freeze when what it renders has moved.
@@ -176,13 +199,11 @@ def _refresh_index_freeze(notebook, chapter):
     if not _touched(notebook, chapter, "_model.py", "_analysis.py",
                     "_inputs.yml", "_fork.yml", "_active.yml"):
         return
-    out = verifiers.render(
-        notebook, str((notebook.chapters_dir / chapter / "index.qmd")
-                      .relative_to(notebook.root)),
-        why="the chapter index renders files this run changed")
-    if "FAILED" in str(out):
-        tell(f"  index     chapters/{chapter}/index.qmd did NOT rebuild — its "
-             f"freeze is a version behind.")
+    _render_page(
+        notebook, f"chapters/{chapter}/index.qmd",
+        "the chapter index renders files this run changed",
+        f"index     chapters/{chapter}/index.qmd did NOT rebuild — its "
+        f"freeze is a version behind.")
 
 
 def _refresh_active(notebook):
@@ -190,11 +211,18 @@ def _refresh_active(notebook):
     Rewrite every chapter's `_active.yml`, re-render the indexes that moved,
     and return the paths the commit has to carry.
 
-    WHOLE-NOTEBOOK, because inheritance is. An entry added HERE changes what
-    every descendant of this chapter inherits, so the file that goes stale is
-    not the one this run wrote -- and a stale `_active.yml` is worse than none,
-    because it is a confident list of the wrong commitments. Regenerating all
-    of them costs a YAML read each and solves nothing.
+    WHOLE-NOTEBOOK, and NOT because a new entry moves what a descendant
+    inherits -- it cannot. Each fork is frozen at its `at_entry` cutoff, so an
+    entry written afterwards was never part of what the child was built on.
+    This said the opposite, and it was a confident wrong reason for a right
+    thing.
+
+    The right reason is that the file which goes stale is never the one this
+    run wrote: a promotion into an ancestor's `_inputs.yml`, an added
+    `overwrites:`, or a refactor touching a pre-cutoff entry all move a
+    DESCENDANT's copy. Those are rare, the sweep is a YAML read per chapter and
+    solves nothing, and a stale `_active.yml` is worse than none -- it is a
+    confident list of the wrong commitments.
 
     Rendered, not merely invalidated, for the reason `_refresh_root_index`
     spells out at length: a freeze deleted here and rebuilt by `site()` after
@@ -210,16 +238,12 @@ def _refresh_active(notebook):
     paths = []
     for c in moved:
         paths.append(notebook.chapters_dir / c / "_active.yml")
-        out = verifiers.render(
-            notebook, str((notebook.chapters_dir / c / "index.qmd")
-                          .relative_to(notebook.root)),
-            why="what this chapter inherits changed")
-        if "FAILED" in str(out):
-            tell(f"  index     chapters/{c}/index.qmd did NOT rebuild — its "
-                 f"inherited list is a version behind.")
-            continue
-        freeze = notebook.freeze / c / "index"
-        if freeze.exists():
+        freeze = _render_page(
+            notebook, f"chapters/{c}/index.qmd",
+            "what this chapter maintains changed",
+            f"index     chapters/{c}/index.qmd did NOT rebuild — its "
+            f"maintained list is a version behind.")
+        if freeze:
             paths.append(freeze)
     tell(f"  inherited {len(moved)} chapter index"
          f"{'' if len(moved) == 1 else 'es'} refreshed")
@@ -259,12 +283,11 @@ def _refresh_root_index(notebook):
     """
     if not (notebook.root / "index.qmd").exists():
         return
-    out = verifiers.render(
-        notebook, "index.qmd",
-        why="the front page counts entries, and one was just added")
-    if "FAILED" in str(out):
-        tell("  front     the lineage diagram did NOT rebuild — the front page "
-             "is a tick behind.")
+    if _render_page(
+            notebook, "index.qmd",
+            "the front page counts entries, and one was just added",
+            "front     the lineage diagram did NOT rebuild — the front page "
+            "is a tick behind.") is None:
         tell("            The entry is unaffected. Rule 40 will report it; "
              "`quarto render index.qmd` clears it.")
 

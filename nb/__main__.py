@@ -15,8 +15,10 @@
              [--accept-refactor]              …committing a diff you have read
     nb view  <notebook> [--force]            render the whole site
     nb eval  <notebook>                      what each model actually did
-    nb board <notebook>                      N agents, one terminal
+    nb board <notebook> [--all]              N agents, one terminal
     nb answer <notebook> [run] "<value>"     reply to a waiting run
+    nb direction <notebook> "<text>"         what the user asked for;
+                                             pinned, and starts the history
     nb note   <notebook> "<text>"            a line of the programme, for
                                              the board
     nb escalate <notebook> "<name>"          put a question to the human,
@@ -201,12 +203,14 @@ def main(argv):
         from .phases.board import main as board
         return board(rest)
 
-    if cmd in ("note", "escalate", "await"):
+    if cmd in ("note", "escalate", "await", "direction"):
         if not rest:
             print(USAGE)
             return 2
         if cmd == "note":
             from .phases.note import main as run_it
+        elif cmd == "direction":
+            from .phases.direction import main as run_it
         elif cmd == "escalate":
             from .phases.escalate import main as run_it
         else:

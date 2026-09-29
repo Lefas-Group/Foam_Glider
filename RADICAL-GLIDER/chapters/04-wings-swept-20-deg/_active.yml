@@ -4,17 +4,20 @@
 #
 # Rendered by `chapter_inputs()` as one collapsed callout, so a
 # reader sees what is in force here without walking the chain.
+#
+# Every row is `<ancestor>/<handle>`: what this chapter was
+# forked with. What its own entries assume stays on those entries.
 
 specified:
   - 01-first-chapter/dihedral: 20 degrees determines the cross-angle of the X-wing.
   - 01-first-chapter/static-margin: 10% of the mean aerodynamic chord, which fixes the CG.
-  - 01-first-chapter/2026-09-25: **flight-time target: 2 s** — Determines if requirements are met
+  - 01-first-chapter/2026-09-25-01-does-it-meet-the-2-s-flight-time-target: **flight-time target: 2 s** — Determines if requirements are met
 assumed:
   - 01-first-chapter/wing-position: Wing leading edge at x=0.25 m, mid-fuselage.
   - 01-first-chapter/engine-gun-position: Engines at the wing root, guns at the tip.
   - 01-first-chapter/airfoil: NACA0006, a proxy for 5 mm flat plate.
-  - 01-first-chapter/2026-09-23: **velocity: 5 m/s**, typical for a chuck glider.
-  - 01-first-chapter/2026-09-24: **Mass model: fuse solid, wings sheet**, from volumes.
-  - 01-first-chapter/2026-09-24: **Ballast location: nose tip**, best for gliders.
-  - 01-first-chapter/2026-09-24: **wing-incidence-model: Twist, leaving engines aligned**, Avoids rotating cylinders.
-  - 01-first-chapter/2026-09-24: **launch height: 1.5 m**, shoulder height for standing throw.
+  - 01-first-chapter/2026-09-23-02-what-is-the-best-lift-to-drag-ratio-and-at-what-angle-of-attack: **velocity: 5 m/s**, typical for a chuck glider.
+  - 01-first-chapter/2026-09-24-03-how-much-nose-ballast-is-needed-for-the-required-cg: **Mass model: fuse solid, wings sheet**, from volumes.
+  - 01-first-chapter/2026-09-24-03-how-much-nose-ballast-is-needed-for-the-required-cg: **Ballast location: nose tip**, best for gliders.
+  - 01-first-chapter/2026-09-24-05-what-wing-incidence-makes-it-trim-at-positive-lift: **wing-incidence-model: Twist, leaving engines aligned**, Avoids rotating cylinders.
+  - 01-first-chapter/2026-09-24-06-how-far-does-it-glide-when-hand-launched-from-a-standing-throw: **launch height: 1.5 m**, shoulder height for standing throw.

@@ -4,6 +4,9 @@
 #
 # Rendered by `chapter_inputs()` as one collapsed callout, so a
 # reader sees what is in force here without walking the chain.
+#
+# Every row is `<ancestor>/<handle>`: what this chapter was
+# forked with. What its own entries assume stays on those entries.
 
 specified:
 assumed:

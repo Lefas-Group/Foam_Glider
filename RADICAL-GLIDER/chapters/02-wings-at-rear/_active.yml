@@ -4,6 +4,9 @@
 #
 # Rendered by `chapter_inputs()` as one collapsed callout, so a
 # reader sees what is in force here without walking the chain.
+#
+# Every row is `<ancestor>/<handle>`: what this chapter was
+# forked with. What its own entries assume stays on those entries.
 
 specified:
   - 01-first-chapter/dihedral: 20 degrees determines the cross-angle of the X-wing.
@@ -12,6 +15,6 @@ assumed:
   - 01-first-chapter/wing-position: Wing leading edge at x=0.25 m, mid-fuselage.
   - 01-first-chapter/engine-gun-position: Engines at the wing root, guns at the tip.
   - 01-first-chapter/airfoil: NACA0006, a proxy for 5 mm flat plate.
-  - 01-first-chapter/2026-09-23: **velocity: 5 m/s**, typical for a chuck glider.
-  - 01-first-chapter/2026-09-24: **Mass model: fuse solid, wings sheet**, from volumes.
-  - 01-first-chapter/2026-09-24: **Ballast location: nose tip**, best for gliders.
+  - 01-first-chapter/2026-09-23-02-what-is-the-best-lift-to-drag-ratio-and-at-what-angle-of-attack: **velocity: 5 m/s**, typical for a chuck glider.
+  - 01-first-chapter/2026-09-24-03-how-much-nose-ballast-is-needed-for-the-required-cg: **Mass model: fuse solid, wings sheet**, from volumes.
+  - 01-first-chapter/2026-09-24-03-how-much-nose-ballast-is-needed-for-the-required-cg: **Ballast location: nose tip**, best for gliders.

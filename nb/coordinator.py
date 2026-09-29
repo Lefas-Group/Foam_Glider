@@ -83,15 +83,42 @@ def log_path(notebook):
     return mailbox_for(notebook).run / "log.jsonl"
 
 
-def note(notebook, text):
-    """Append one decision to the programme log."""
+def note(notebook, text, kind="note"):
+    """
+    Append one line to the programme log.
+
+    `kind` distinguishes a DIRECTION -- what the user asked for -- from the
+    notes explaining what was done about it. It was a text convention before
+    ("direction: …" as the first words of a note), which nothing could find
+    reliably and which the board could not pin. Absent on every line written
+    so far, and defaulted here, so those still read as notes.
+    """
     text = " ".join(str(text).split())
     if not text:
         return None
     touch(notebook)
     with log_path(notebook).open("a") as fh:
-        fh.write(json.dumps({"at": time.time(), "text": text}) + "\n")
+        fh.write(json.dumps({"at": time.time(), "kind": kind,
+                             "text": text}) + "\n")
     return text
+
+
+def direction(notebook, text):
+    """Record what the user asked for. The board pins the newest one."""
+    return note(notebook, text, kind="direction")
+
+
+def current_direction(notebook):
+    """
+    The direction in force, or None.
+
+    THE EPOCH OF THE PROGRAMME, not just a caption. Everything before it
+    belongs to a previous direction in the same notebook, which is history the
+    board deliberately does not replay -- so this is what bounds the
+    conversation as well as what heads it.
+    """
+    found = [n for n in notes(notebook) if n.get("kind") == "direction"]
+    return found[-1] if found else None
 
 
 def notes(notebook, after=0.0):
@@ -104,6 +131,7 @@ def notes(notebook, after=0.0):
             except ValueError:
                 continue                      # a torn final line, not a crash
             if got.get("at", 0) > after:
+                got.setdefault("kind", "note")
                 out.append(got)
     except OSError:
         pass
@@ -157,6 +185,18 @@ def wait(notebook, timeout=TIMEOUT, poll=POLL):
             continue
         nb.question_path.unlink(missing_ok=True)
         nb.answer_path.unlink(missing_ok=True)
-        touch(notebook, waiting_on=None, question=None)
-        return str(got.get("value", ""))
+        value = str(got.get("value", ""))
+        # RECORDED LIKE ANY OTHER EXCHANGE. A run's `Mailbox._record` appends
+        # every question and answer to its `run.json`, which is what the board
+        # reads the conversation from; nothing does that for an escalation,
+        # so the one question the person actually answered was the one the
+        # history could not show.
+        state = touch(notebook, waiting_on=None, question=None)
+        answered = list(state.get("answered") or [])
+        answered.append({"kind": "specified", "name": q.get("name", ""),
+                         "why": q.get("prompt") or q.get("why", ""),
+                         "value": value, "source": got.get("by") or "user",
+                         "at": time.time()})
+        touch(notebook, answered=answered)
+        return value
     return None

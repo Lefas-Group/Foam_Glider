@@ -938,44 +938,63 @@ def chapter_inputs(chapter):
 
 def _render_active(chapter):
     """
-    One collapsed callout: what is in force here that this page never said.
+    One collapsed callout: what this chapter was forked with.
 
-    THE CHAIN, ON THE PAGE. A chapter renders its own items and the items it
-    overwrote, and both are one step deep -- so a reader of 03-no-cosmetics saw
-    one specification where ten were actually in force, and the only way to the
-    other nine was to open three ancestors and read their entries. The model
-    never had that problem: `probe._inputs_notice` has handed every run the
-    resolved set since the day `ask_specified` started firing, on the reasoning
-    that "go and find them" is the step that does not happen. This is the same
-    list, for the human.
+    A chapter index renders `_inputs.yml` and the items it overwrote, and both
+    are one step deep -- so a reader of 03-no-cosmetics saw one specification
+    where ten were in force, and the only route to the other nine was to open
+    three ancestors and read their entries. The model never had that problem:
+    `probe._inputs_notice` has handed every run the resolved set since
+    `ask_specified` started firing, on the reasoning that "go and find them" is
+    the step that does not happen. This is that list, for the human.
 
-    NOT MERGED INTO THE NEW CALLOUTS, which is the whole of the design. Roughly
-    half of these are ENTRY-level assumptions an ancestor made while answering
-    one question; listing them under this chapter's "New assumptions" would
-    claim every entry here assumes them, which is false. A separate callout
-    with the provenance on every row says what is true instead: this is in
-    force, and here is where it was decided.
+    ANCESTORS ONLY, and the chronology is why. This chapter's own entry-level
+    assumptions were in here briefly, and they do not belong: entries are
+    dated and read downwards, so an assumption the fourth entry introduced is
+    not a premise of the page. Listing it at the top would claim the chapter
+    held it from the start. An ANCESTOR's is different -- including the
+    entry-level ones declared before the fork, which `_lineage`'s `at_entry`
+    cutoff selects -- because those are premises of the vehicle this chapter
+    copied, true here from its first line.
 
-    COLLAPSED, because it is context rather than news, it repeats verbatim on
-    every chapter of a deep chain, and the two callouts above it are what the
-    chapter itself decided.
+    NOT MERGED INTO THE NEW CALLOUTS, which is the rest of the design. Roughly
+    half of these are assumptions one ancestral entry made; listing them under
+    this chapter's "New assumptions" would claim it declared them.
+
+    SPLIT BY KIND, NOT BY SOURCE, and headed to match the callouts above it --
+    "Inherited user specifications" against "New user specifications". A reader
+    asking what this page is held to wants Specified apart from Assumed: one
+    was given, the other guessed, and that is what changes how much weight a
+    number carries. Which ancestor each came from is the key in `_active.yml`
+    and is not printed -- it answered a question nobody reading the page was
+    asking, and put a handle on every row.
+
+    NO LEAD-IN SENTENCE. The title says where these came from and the headings
+    say what they are; a line of prose under it restated both.
 
     Reads `_active.yml`, which `nb` regenerates on every commit -- this file
     executes at Quarto render time with no `nb` importable, so it cannot walk
-    the chain itself. No file at all renders nothing, which is right for a
-    notebook whose chapters predate the generator.
+    the chain itself. No file renders nothing, which is right both for a
+    chapter that predates the generator and for a root chapter, which inherits
+    from no one.
     """
     rows = _blocks(_pathlib.Path("chapters") / chapter / "_active.yml")
-    items = [(kind, handle, text)
-             for key, kind in (("specified", "Specified"),
-                               ("assumed", "Assumed"))
-             for handle, text in (rows.get(key) or [])]
-    if not items:
+    # The handle is the KEY and is never printed -- it is there so `_blocks`
+    # can parse this like every other inputs file, and so provenance survives
+    # in the source for anyone who goes looking.
+    groups = [(heading, [t for _handle, t in (rows.get(key) or [])])
+              for key, heading in (("specified", "Inherited user specifications"),
+                                   ("assumed", "Inherited assumptions"))]
+    total = sum(len(items) for _, items in groups)
+    if not total:
         return
     print('::: {.callout-note collapse="true"}')
-    print(f"## Inherited and still in force ({len(items)})\n")
-    print("Decided in an earlier chapter, carried here by the fork, and not "
-          "overwritten since.\n")
-    for n, (kind, handle, text) in enumerate(items, 1):
-        print(f"{n}. {text} *({kind} — {handle})*")
+    print(f"## Maintained from earlier chapters ({total})\n")
+    for heading, items in groups:
+        if not items:
+            continue
+        print(f"**{heading}**\n")
+        for n, text in enumerate(items, 1):
+            print(f"{n}. {text}")
+        print()
     print(":::\n")

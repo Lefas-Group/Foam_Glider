@@ -337,7 +337,7 @@ def confirm_inherited(notebook, chapter, parent=None):
     if not ancestry(notebook, chapter, parent):
         tell(f"\n{'─' * 72}\nTHE BRIEF — true of the whole aircraft, and "
              f"inherited as it stands\n{'─' * 72}")
-        for kind, item, src, _h in items:
+        for kind, item, _where in items:
             tell(f"    [{kind}] {item}")
         tell("\n  This chapter has no parent, so it carries the notebook's own "
              "brief.\n  Nothing here is strikeable: a design that departs from "
@@ -348,17 +348,19 @@ def confirm_inherited(notebook, chapter, parent=None):
     # names, so they run straight through the groups -- renumbering within each
     # would make "3" ambiguous the moment there were two groups.
     lines, seen = [], None
-    for n, (kind, item, src, handle) in enumerate(items, 1):
+    for n, (kind, item, where) in enumerate(items, 1):
+        src = where.partition("/")[0]
         if src != seen:
             seen = src
-            where = ("nearest" if n == 1 else
-                     "furthest" if n + sum(1 for k in items[n:] if k[2] == src)
-                     == len(items) else "")
-            lines.append(f"\n  from {src}{f'  ({where})' if where else ''}")
-        # THE SAME LABEL THE PAGE WILL CARRY. `short` is what `active` puts
-        # in `_active.yml` and what the index prints, so an item approved here
-        # and an item listed there read identically.
-        lines.append(f"    {n:2}. [{kind}] {item}   ({_short(handle, chapter)})")
+            pos = ("nearest" if n == 1 else
+                   "furthest" if n + sum(
+                       1 for k in items[n:]
+                       if k[2].partition("/")[0] == src) == len(items) else "")
+            lines.append(f"\n  from {src}{f'  ({pos})' if pos else ''}")
+        # THE SAME HANDLE `_active.yml` KEYS THE ROW BY. The page no longer
+        # prints it, but this is the moment someone decides what an item IS, so
+        # it is named here exactly as the register names it.
+        lines.append(f"    {n:2}. [{kind}] {item}   ({_short(where, chapter)})")
     body = "\n".join(lines).lstrip("\n")
     how = ('  A NEARER chapter overrides a further one: where two items name the\n'
            '  same quantity, the one higher up is the one in force.\n\n'
@@ -686,7 +688,8 @@ def fork_chapter(session, name, title, defines):
     struck_ids = []
     if struck:
         import lint
-        for _kind, item, src, _handle in struck:
+        for _kind, item, where in struck:
+            src = where.partition("/")[0]
             for _id, _text in lint.input_ids(notebook.root, src).items():
                 if _text == item:
                     struck_ids.append((src, _id))
@@ -745,7 +748,7 @@ def _inherited_note(session):
                   "chapter's index, its _inputs.yml or in entry prose. They "
                   "are already stated one level up, and repeating them is what "
                   "rule 39 and the Specified/Assumed callouts exist to prevent:"]
-        lines += [f"  [{k}] {i}   (from {_short(h, '')})" for k, i, _s, h in kept]
+        lines += [f"  [{k}] {i}   (from {_short(w, '')})" for k, i, w in kept]
     if struck:
         # RECORDED ONLY WHERE THERE IS AN ID. `overwrites:` rows are
         # `<chapter>/<id>` and resolve through the parent's `_inputs.yml`, so a
@@ -759,10 +762,11 @@ def _inherited_note(session):
                   "value for one of them, that value is NEW and goes in this "
                   "chapter's `_inputs.yml`:"]
         rows, loose = [], []
-        for k, i, s_, h_ in struck:
+        for k, i, w_ in struck:
+            s_ = w_.partition("/")[0]
             ids = lint.input_ids(session.notebook.root, s_)
             (rows if any(t == i for t in ids.values()) else loose).append(
-                f"  [{k}] {i}   (was from {_short(h_, '')})")
+                f"  [{k}] {i}   (was from {_short(w_, '')})")
         if rows:
             lines += ["", "Recorded in `_fork.yml` under `overwrites:`, which "
                       "lists them on this chapter's page as no longer holding:"]

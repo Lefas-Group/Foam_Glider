@@ -48,6 +48,24 @@ from collections import defaultdict
 # checking every new entry on 1 January without failing or saying anything.
 ENTRY_FILE = re.compile(r"^\d{4}-\d{2}-\d{2}-")
 
+
+def is_entry(handle):
+    """
+    Is this handle an ENTRY stem rather than an `_inputs.yml` id?
+
+    THE HANDLE ALREADY SAYS SO, which is the point. An id is a slug an author
+    chose; an entry stem starts with its date. Three readers were each deciding
+    this their own way -- `inputs.short` by matching `ENTRY_FILE`,
+    `inputs.own_entry` by re-reading `input_ids` off disk to see which tier a
+    row came from, and `_notebook.py` by a private `_STEM` copy. The middle one
+    was the worst: a second file read to learn something already encoded in the
+    string it was holding.
+
+    An `<ancestor>/<handle>` pair is judged on its last segment, which is the
+    part that names the declaration.
+    """
+    return bool(ENTRY_FILE.match(handle.rpartition("/")[2]))
+
 # Two decimals or more reads as a result. One decimal is usually a condition --
 # 6 m/s, 0.5 deg, 10% -- and flagging those is noise. Measured on this notebook:
 # at two decimals the whole thing yields a handful of hits, nearly all real; at
@@ -2515,12 +2533,26 @@ def _fork_provenance(root, chapters, entries):
         kin = [(o, difflib.SequenceMatcher(None, other, code[c]).ratio())
                for o, other in code.items() if o < c]
         close = sorted((r, o) for o, r in kin if r >= FORK_SIMILARITY)
-        if not close:
-            continue
-        ratio, parent = close[-1]
         fork = read_fork(root, c)
         where = root / "chapters" / c / "_fork.yml"
+        # SIMILARITY DEMANDS A DECLARATION; IT NO LONGER GATES ONE. Everything
+        # below used to sit behind `if not close: continue`, so a fork that
+        # REWROTE its model rather than copying it escaped every check on its
+        # own record -- including the placeholder test three blocks down, whose
+        # comment predicts exactly what then happened. Measured: RADICAL-GLIDER
+        # 05-optimised-geometry parameterised `get_airplane` and added a CasADi
+        # mass function, scoring 0.66 against its parent to a 0.85 threshold,
+        # and committed with `summary: "TODO: what the design BECAME"` intact.
+        # The front page rendered those words, twice, as its lineage label.
+        #
+        # `_plausible_parent` was already loosened this way -- a declared parent
+        # need not be the most similar one -- and the completeness checks simply
+        # did not come with it. They belong to the DECLARATION: if a chapter
+        # says it is a fork, its record is checked whatever the diff says.
         if not fork or not fork.get("parent"):
+            if not close:
+                continue        # not a copy and claims no parent: not a fork
+            ratio, parent = close[-1]
             out.append((where, (
                 f"chapters/{c}/_model.py is {ratio:.0%} identical to "
                 f"chapters/{parent}/_model.py and no _fork.yml says so. Write "
@@ -2528,6 +2560,11 @@ def _fork_provenance(root, chapters, entries):
                 f"`changes:` list with one line per deliberate difference, so "
                 f"that `diff` between the two files is the review")))
             continue
+        # Against the DECLARED parent, not the most similar one -- they are the
+        # same chapter for a copy and different for a rewrite, and the declared
+        # one is what the `changes:` list is answerable to. None when the parent
+        # does not resolve, which the next check refuses anyway.
+        ratio = dict(kin).get(fork["parent"])
         if not _plausible_parent(root, c, fork["parent"]):
             out.append((where, (
                 f"names parent {fork['parent']!r}, which is not an earlier "
@@ -2567,9 +2604,14 @@ def _fork_provenance(root, chapters, entries):
         changes = [x for x in (fork.get("changes") or [])
                    if not x.upper().startswith("TODO")]
         if not changes:
+            # The percentage is a supporting fact, not the reason -- so it is
+            # omitted rather than faked when the parent's model cannot be read.
+            # A fork with no `changes:` is wrong at any similarity.
+            how_far = (f" chapters/{c}/_model.py is "
+                       f"{100 - ratio * 100:.0f}% different from it."
+                       if ratio is not None else "")
             out.append((where, (
-                f"lists no changes, but chapters/{c}/_model.py is "
-                f"{100 - ratio * 100:.0f}% different from its parent. One line "
+                f"names a parent but lists no changes.{how_far} One line "
                 f"per deliberate difference — the differences ARE the chapter")))
     # Departures are checked on EVERY chapter, not only ones the similarity
     # test flagged: a fork that rewrote its model rather than copying it -- 05,

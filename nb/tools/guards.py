@@ -56,7 +56,8 @@ def _refactor(session, path):
     if f.name not in SHARED or not session.siblings:
         return None, 0
     before = session.before_bodies.get(f.name, {})
-    moved = changed_bodies(before, bodies(session.notebook.chapters_dir / path))
+    moved = changed_bodies(before, bodies(session.notebook.chapters_dir
+                                          / "/".join(_parts(path))))
     return (moved or None), session.siblings
 
 
@@ -80,6 +81,32 @@ WRITABLE = ("_model.py", "_analysis.py", "_inputs.yml", "_fork.yml",
             "index.qmd", "_model.qmd")
 
 
+def _parts(path):
+    """
+    `path` split, with a leading `chapters/` dropped if it is there.
+
+    READS TAKE THE PREFIX AND WRITES DID NOT, which is the worse half of the
+    split to be strict on: the model learns a spelling from the calls that
+    WORKED. Observed on run 20260929-083307-4d55 -- `read_text_file` was given
+    `chapters/05-optimised-geometry/_analysis.py` on turn 6 and returned the
+    file; the same prefix on `_model.py` was refused here at turn 18; it
+    corrected itself at 20, made the identical mistake on the entry at 30 and
+    corrected it again at 32. Two turns, on a prefix its own successful reads
+    had taught it.
+
+    WHY the server resolves the prefixed form is not established -- it is
+    rooted at `chapters/` and those reads should not have landed, so something
+    in its resolution is more forgiving than the root suggests. Recorded as the
+    observation it is, because the fix does not depend on the reason.
+
+    `fork_chapter` compounds it: it reports what it created as
+    `chapters/<slug>/`, which is precisely the form the write then refused. One
+    vocabulary, accepted everywhere, is cheaper than teaching two.
+    """
+    parts = [p for p in str(path).strip("/").split("/") if p]
+    return parts[1:] if parts[:1] == ["chapters"] else parts
+
+
 def _allowed(session, path):
     """(ok, why not) for a write to `path`, which is relative to chapters/."""
     import lint
@@ -90,10 +117,16 @@ def _allowed(session, path):
     # before the first token, so the chapter is known for the whole life of the
     # process and this is a pure path check -- no ordering, no state, nothing
     # that can be in the wrong sequence.
-    parts = [p for p in str(path).strip("/").split("/") if p]
+    parts = _parts(path)
     if len(parts) != 2:
+        # THE CORRECTED PATH, not the rule it broke. A refusal that only
+        # restates the shape costs a turn to translate; one that names the path
+        # to use costs none. Only offered when there is a single obvious
+        # candidate -- a bare filename in the run's own chapter.
+        fix = (f" Did you mean {session.chapter + '/' + parts[0]!r}?"
+               if len(parts) == 1 and "." in parts[0] else "")
         return False, (f"writes go inside a chapter, as `<chapter>/<file>`. "
-                       f"{path!r} is not one")
+                       f"{path!r} is not one.{fix}")
     chapter, name = parts
     if chapter != session.chapter:
         return False, (f"this run is in chapters/{session.chapter}, and "
@@ -119,13 +152,21 @@ def wrap_writes(handlers, session):
 
     def guard(name, inner):
         def call(**kw):
-            path = kw.get("path", "")
-            ok, why = _allowed(session, path)
+            ok, why = _allowed(session, kw.get("path", ""))
             if not ok:
                 return {"error": f"refused: {why}"}
+            # NORMALISED BEFORE THE CALL, not merely accepted. The server is
+            # rooted at `chapters/`, and the bare `<chapter>/<file>` spelling is
+            # the one every successful write in the record used -- whether it
+            # would also take the `chapters/` prefix was never learned, because
+            # this guard refused those before they reached it. So the prefix is
+            # forgiven here and stripped here, and the server keeps seeing the
+            # one spelling it is known to resolve.
+            path = "/".join(_parts(kw.get("path", "")))
+            kw = dict(kw, path=path)
             # READ BEFORE WRITING, so a refusal can put it back exactly. Only
             # for the two shared files; an entry is never rolled back.
-            f = notebook.chapters_dir / str(path).strip("/")
+            f = notebook.chapters_dir / path
             watched = f.name in SHARED
             restore = f.read_text() if watched and f.exists() else None
 

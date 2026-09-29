@@ -142,6 +142,18 @@ Then relay it to the run that needed it, with `nb answer <nb> <run-id>`, and
 `20260925-082733-5d8d` was asked that way, the answer took longer than the
 run's hour, and the entry was lost.
 
+## Record the direction first
+
+```bash
+uv run --group nb python -m nb direction <nb> "<what the user asked for>"
+```
+
+**Before the first `nb ask`**, so nothing in the programme predates the reason
+for it. The board pins it above the table and starts the conversation there:
+work done under a previous direction stays on the record but is not replayed.
+Record a new one when the user changes what they are after — that is what
+marks the pivot.
+
 ## Narrate every decision
 
 ```bash

@@ -192,29 +192,37 @@ def _ancestral(notebook, chapter, parent=None):
     return carried, dropped
 
 
-def active(notebook, chapter, own_rows=None):
+def carried(notebook, chapter, parent=None, own_rows=None):
     """
-    [(kind, text, where)] in force here but declared by an ANCESTOR.
+    [(kind, text, where)] this chapter carries from ABOVE it.
 
-    The ancestral half of `committed`, lifted out because two readers need
-    exactly this set and nothing else: the chapter index, which renders what a
-    reader would otherwise have to walk the chain for, and `committed` itself.
-    Split rather than copied -- an index that computed its own notion of
-    "inherited" would be a second definition of the word, and the first thing
-    to disagree with it would be the notice the model is shown on every probe.
+    ONE QUERY, TWO MOMENTS. The fork review asks it before the chapter exists,
+    seeding the walk with `parent`; the chapter index and `committed` ask it
+    afterwards. Those were two functions returning the same rows from the same
+    `_ancestral` walk, alike enough that they agreed only because one author
+    kept them so -- and `active` was the second definition of a word the probe
+    notice already had a first definition of.
 
-    `where` is `<ancestor>/<handle>`, which is what `overwrites:` takes and
-    what `short` formats for display. `own_rows` is the caller's already-read
-    `own(...)`, since the restatement test needs it and `committed` has it.
+    THE RESTATEMENT FILTER IS UNCONDITIONAL, which is what let them merge. It
+    drops an ancestor's item this chapter states in its own words, so the
+    chapter's wording wins; at fork time the chapter has no words yet, `own()`
+    is empty, and the filter is a no-op. The one behaviour that cannot be
+    shared is the notebook brief, which `inherited` falls back to for a root
+    chapter and which must never reach `committed` -- so that stays with the
+    caller that wants it.
+
+    `where` is `<ancestor>/<handle>`: what `overwrites:` takes, what
+    `_active.yml` keys a row by, and what `short` formats for a terminal.
+    `own_rows` is the caller's already-read `own(...)`, which `committed` has.
     """
     have = [_words(t) | _words(w)
             for _, t, w in (own(notebook, chapter) if own_rows is None
                             else own_rows)]
     out = []
-    for kind, text, anc, handle in _ancestral(notebook, chapter)[0]:
+    for kind, text, anc, handle in _ancestral(notebook, chapter, parent)[0]:
         words = _words(text) | _words(handle)
         if any(w and w <= words for w in have):
-            continue          # this chapter restates it; its wording wins
+            continue
         out.append((kind, text, f"{anc}/{handle}"))
     return out
 
@@ -246,7 +254,7 @@ def committed(notebook, chapter):
     where you stood.
     """
     rows = list(own(notebook, chapter))
-    return rows + active(notebook, chapter, own_rows=rows)
+    return rows + carried(notebook, chapter, own_rows=rows)
 
 
 # An entry's callout is markdown written for THAT page, so it may carry an
@@ -270,35 +278,68 @@ def write_active(notebook, chapter):
 
     DERIVED, and the only derived file in a chapter -- which is the cost of
     putting the inherited set on the page. `_notebook.py` renders at Quarto
-    time with no `nb` on the path, so it cannot call `active()`; it reads what
+    time with no `nb` on the path, so it cannot call `carried()`; it reads what
     this wrote. The alternative was porting `_lineage`/`_ancestral` into the
     vendored runtime, which would make the word "inherited" mean whatever two
     copies of that walk happened to agree on.
 
     Stale is the failure to fear, so every commit rewrites EVERY chapter's
-    copy: an entry added to an ancestor changes what its descendants inherit,
-    and the chapter being written is not the one whose file went wrong.
+    copy. NOT because a new entry moves what a descendant inherits -- it
+    cannot: `_lineage` freezes each fork at its `at_entry` cutoff, a new entry
+    always lands after every existing cutoff, and 02-wings-at-rear still shows
+    3 of 01-first-chapter's 6 entry-level items long after 01 grew past entry
+    5. This comment used to claim the opposite, which would have had the next
+    reader reasoning from a property the cutoff specifically denies.
+
+    What DOES move a descendant's copy is an ancestor's `_inputs.yml` changing
+    (rule 2 promotion), an `overwrites:` being added, or a refactor editing an
+    entry from BEFORE the cutoff. Rare, and never in the chapter being
+    written -- which is the actual argument for doing all of them: the file
+    that goes wrong is not the one this run touched, and the sweep costs a YAML
+    read each.
 
     Empty `_active.yml` is still written for a root chapter, so that "no file"
     means "never generated" rather than "nothing inherited" -- the two want
     different fixes and the renderer cannot tell them apart.
 
-    The handle is `short`ened, so an entry stem reduces to its date: it is a
-    provenance label on a page here, not a handle to be typed back.
+    The handle is written WHOLE. It was `short`ened while the page printed it
+    as provenance, and that collapsed an entry stem to its date -- putting
+    three unrelated entries under the key `2026-09-24` in 01-first-chapter the
+    moment a chapter contributed several of its own. Nothing displays it now,
+    so its jobs are to name the declaration a row came from and to say, by the
+    presence of a `/`, whether that was an ancestor or an earlier entry here.
+
+    Two rows CAN still share a handle, and that is not the collision above: it
+    is one entry that declared two assumptions. The handle names the
+    declaration and not one line of it -- the same thing `_item_text` says when
+    it joins them.
     """
-    rows = active(notebook, chapter)
+    # ANCESTORS ONLY. This chapter's own entry-level assumptions were in here
+    # briefly and should not have been: a chapter is CHRONOLOGICAL, and an
+    # assumption the fourth entry made is not a premise of the page -- hoisting
+    # it to the top asserts at the head of the chapter what only becomes true
+    # part way down, which is the one thing a dated lab notebook must not do.
+    # They are already stated in their place, on the entry that made them.
+    #
+    # What DOES belong is an ancestor's, including the entry-level ones it
+    # declared BEFORE the fork -- `_lineage`'s `at_entry` cutoff -- because
+    # those were premises of the vehicle this chapter copied.
+    rows = carried(notebook, chapter)
     lines = ["# GENERATED by `nb` on every commit, from the ancestor chain.",
              "# Not hand-edited: the next commit overwrites it. What a chapter",
              "# declares ITSELF is `_inputs.yml`, which is the file to edit.",
              "#",
              "# Rendered by `chapter_inputs()` as one collapsed callout, so a",
              "# reader sees what is in force here without walking the chain.",
+             "#",
+             "# Every row is `<ancestor>/<handle>`: what this chapter was",
+             "# forked with. What its own entries assume stays on those entries.",
              ""]
     for key, kind in (("specified", "Specified"), ("assumed", "Assumed")):
         lines.append(f"{key}:")
         for k, text, where in rows:
             if k == kind:
-                lines.append(f"  - {short(where, chapter)}: {_flatten(text)}")
+                lines.append(f"  - {where}: {_flatten(text)}")
     body = "\n".join(lines) + "\n"
     f = notebook.chapters_dir / chapter / "_active.yml"
     try:
@@ -329,14 +370,20 @@ def short(handle, chapter=""):
     makes it useless -- `foam-thick` is not a handle. An entry stem is 70
     characters of slug whose front is a date, and the date is what places it
     against the entries the prefix already lists.
+
+    FOR A TERMINAL OR THE MODEL, never for a page. Its three callers are the
+    probe notice, the fork review and `_inherited_note`. `_active.yml` keys its
+    rows by the WHOLE handle and the chapter index prints no provenance at all,
+    so shortening there only cost uniqueness -- three unrelated entries landing
+    on one `2026-09-24`.
     """
     import lint
     if handle == chapter:
         return ""
+    if not lint.is_entry(handle):
+        return handle
     anc, _, tail = handle.rpartition("/")
-    tail = f"{anc}/{tail[:10]}" if anc and lint.ENTRY_FILE.match(tail) else (
-        handle[:10] if lint.ENTRY_FILE.match(handle) else handle)
-    return tail
+    return f"{anc}/{tail[:10]}" if anc else handle[:10]
 
 
 def settled(notebook, chapter, name):
@@ -436,15 +483,13 @@ def inherited(notebook, chapter, parent=None):
     import lint
     if not _lineage(notebook, chapter, parent):
         # The brief has no ancestor and no handle to point at -- it is stated
-        # once, at the notebook root. The fourth slot carries the notebook's
-        # own name so every caller can unpack one shape.
-        return [(k, t, notebook.root.name, notebook.root.name)
+        # once, at the notebook root, and `where` carries that name so the row
+        # shape holds even here.
+        return [(k, t, notebook.root.name)
                 for k, t in lint.notebook_items(notebook.root)], []
-    carried, dropped = _ancestral(notebook, chapter, parent)
-    # THE HANDLE COMES TOO, as `<ancestor>/<handle>` -- the same string
-    # `active` puts on the chapter index, through the same `short`. The review
-    # that approves an item and the page that later states it now name it
-    # identically; they used to agree on the set and disagree on every label,
-    # so an item struck at the fork could not be matched by eye to the row it
-    # removed from the page.
-    return [(k, t, c, f"{c}/{h}") for k, t, c, h in carried], dropped
+    # THE SAME ROWS THE PAGE WILL SHOW, from `carried` -- this is the review
+    # of exactly what the new chapter is about to be given, so computing it a
+    # second way here is how the two come to disagree. `dropped` still needs
+    # the raw walk, which reports what a later chapter already replaced.
+    return (carried(notebook, chapter, parent),
+            _ancestral(notebook, chapter, parent)[1])
