@@ -1,0 +1,47 @@
+---
+title: "What is the minimum trimmed sink rate when bounded below the section stall angle?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 47.4      # s the probe actually used
+
+stall_angle = 6.7
+unbounded_sink = 0.56  # from 2026-09-29-01-does-freeing-the-wing-planform-lower-the-trimmed-sink-rate-below-0-84.qmd
+
+sink_rate, opt_plane = optimize_geometry_for_sink_rate(get_airplane, alpha_max=stall_angle)
+
+v_trim = opt_plane.v_trim
+sweep = opt_plane.le_sweep
+inc = opt_plane.wing_inc
+```
+
+::: {.hero}
+[`{python} f"{sink_rate:.2f} m/s"`]{.hero-value}
+[trimmed sink rate]{.hero-label}
+:::
+
+**Answer.** Constraining the trim angle of attack to the section stall limit of [`{python} f"{stall_angle:.1f}°"`]{.key} results in a minimum trimmed sink rate of [`{python} f"{sink_rate:.2f} m/s"`]{.key} at [`{python} f"{v_trim:.2f} m/s"`]{.key}. Compared to the [`{python} f"{unbounded_sink:.2f} m/s"`]{.key} achieved by the [unbounded planform optimization](2026-09-29-01-does-freeing-the-wing-planform-lower-the-trimmed-sink-rate-below-0-84.qmd), the stall constraint raises the sink rate but remains a substantial improvement over the fixed planform. The bounded optimal planform selects a sweep of [`{python} f"{sweep:.1f}°"`]{.key} and wing incidence of [`{python} f"{inc:.1f}°"`]{.key} (@fig-stall-bounded-planform).
+
+::: {.callout-tip}
+## New user specifications
+Asked of the user, 2026-09-29:
+
+1. **section stall angle: 6.7 degrees** — Bounds trim alpha.
+:::
+
+```{python}
+#| label: fig-stall-bounded-planform
+#| fig-cap: "Three-view geometry of the planform optimum bounded below the section stall angle."
+opt_plane.draw_three_view(show=False)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_geometry_for_sink_rate)
+```

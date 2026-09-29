@@ -43,7 +43,7 @@ def _get_mass_properties_casadi(plane, area_density=0.1744, foam_thickness=0.005
             
     return m_tot, x_cg_m / m_tot
 
-def optimize_geometry_for_sink_rate(get_airplane_func):
+def optimize_geometry_for_sink_rate(get_airplane_func, alpha_max=None):
     opti = asb.Opti()
     wing_x_le = opti.variable(init_guess=0.25, lower_bound=0.1, upper_bound=0.4)
     le_sweep = opti.variable(init_guess=10.5, lower_bound=0, upper_bound=45)
@@ -66,6 +66,8 @@ def optimize_geometry_for_sink_rate(get_airplane_func):
     plane.xyz_ref = [x_cg_total, 0, 0]
 
     alpha_trim = opti.variable(init_guess=5.0, lower_bound=-5, upper_bound=20)
+    if alpha_max is not None:
+        opti.subject_to(alpha_trim <= alpha_max)
     v_trim = opti.variable(init_guess=5.0, lower_bound=2.0, upper_bound=15.0)
 
     op_trim = asb.OperatingPoint(velocity=v_trim, alpha=alpha_trim)
@@ -93,5 +95,12 @@ def optimize_geometry_for_sink_rate(get_airplane_func):
         wing_x_le=sol.value(wing_x_le), le_sweep=sol.value(le_sweep), wing_inc=sol.value(wing_inc),
         wing_span=sol.value(wing_span), root_chord=sol.value(root_chord), tip_chord=sol.value(tip_chord)
     )
+    opt_plane.v_trim = float(sol.value(v_trim))
+    opt_plane.alpha_trim = float(sol.value(alpha_trim))
+    opt_plane.wing_x_le = float(sol.value(wing_x_le))
+    opt_plane.le_sweep = float(sol.value(le_sweep))
+    opt_plane.wing_inc = float(sol.value(wing_inc))
+    opt_plane.mass_ballast = float(sol.value(mass_ballast))
+    opt_plane.m_total = float(sol.value(m_total))
     return float(sol.value(sink)), opt_plane
 
