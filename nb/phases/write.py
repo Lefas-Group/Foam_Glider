@@ -174,7 +174,7 @@ def _refresh_index_freeze(notebook, chapter):
     it prints source rather than solving.
     """
     if not _touched(notebook, chapter, "_model.py", "_analysis.py",
-                    "_inputs.yml", "_fork.yml"):
+                    "_inputs.yml", "_fork.yml", "_active.yml"):
         return
     out = verifiers.render(
         notebook, str((notebook.chapters_dir / chapter / "index.qmd")
@@ -183,6 +183,47 @@ def _refresh_index_freeze(notebook, chapter):
     if "FAILED" in str(out):
         tell(f"  index     chapters/{chapter}/index.qmd did NOT rebuild — its "
              f"freeze is a version behind.")
+
+
+def _refresh_active(notebook):
+    """
+    Rewrite every chapter's `_active.yml`, re-render the indexes that moved,
+    and return the paths the commit has to carry.
+
+    WHOLE-NOTEBOOK, because inheritance is. An entry added HERE changes what
+    every descendant of this chapter inherits, so the file that goes stale is
+    not the one this run wrote -- and a stale `_active.yml` is worse than none,
+    because it is a confident list of the wrong commitments. Regenerating all
+    of them costs a YAML read each and solves nothing.
+
+    Rendered, not merely invalidated, for the reason `_refresh_root_index`
+    spells out at length: a freeze deleted here and rebuilt by `site()` after
+    the commit is a freeze that never gets committed.
+
+    A failed render is reported and not fatal. The page is one tick behind; the
+    entry that this run actually wrote is unaffected, and rule 40 will say so.
+    """
+    from ..inputs import refresh_active
+    moved = refresh_active(notebook)
+    if not moved:
+        return []
+    paths = []
+    for c in moved:
+        paths.append(notebook.chapters_dir / c / "_active.yml")
+        out = verifiers.render(
+            notebook, str((notebook.chapters_dir / c / "index.qmd")
+                          .relative_to(notebook.root)),
+            why="what this chapter inherits changed")
+        if "FAILED" in str(out):
+            tell(f"  index     chapters/{c}/index.qmd did NOT rebuild — its "
+                 f"inherited list is a version behind.")
+            continue
+        freeze = notebook.freeze / c / "index"
+        if freeze.exists():
+            paths.append(freeze)
+    tell(f"  inherited {len(moved)} chapter index"
+         f"{'' if len(moved) == 1 else 'es'} refreshed")
+    return paths
 
 
 def _refresh_root_index(notebook):
@@ -436,8 +477,13 @@ def _commit(notebook, chapter, stem, entry_path, title, extra_paths=()):
     # while the SOURCE of the chapter's Specified and Assumed items stayed
     # uncommitted in the working tree -- the exact invariant the note above
     # states: the committed freeze stops matching the committed code.
+    # `_active.yml` is here as well as in `_refresh_active`'s return, and the
+    # overlap is the point: a run that CREATES a chapter has the file written
+    # by `create_chapter`, so the refresh finds it already correct, returns it
+    # in no list, and the new chapter would be committed with a rendered
+    # inherited callout whose source was never added.
     for name in ("_analysis.py", "_model.py", "index.qmd", "_model.qmd",
-                 "_inputs.yml", "_fork.yml"):
+                 "_inputs.yml", "_fork.yml", "_active.yml"):
         f = notebook.chapters_dir / chapter / name
         if f.exists():
             changed = subprocess.run(

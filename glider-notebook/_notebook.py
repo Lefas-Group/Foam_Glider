@@ -932,3 +932,50 @@ def chapter_inputs(chapter):
 
     _render_inputs(_pathlib.Path("chapters") / chapter / "_inputs.yml",
                    "New user specifications", "New assumptions")
+
+    _render_active(chapter)
+
+
+def _render_active(chapter):
+    """
+    One collapsed callout: what is in force here that this page never said.
+
+    THE CHAIN, ON THE PAGE. A chapter renders its own items and the items it
+    overwrote, and both are one step deep -- so a reader of 03-no-cosmetics saw
+    one specification where ten were actually in force, and the only way to the
+    other nine was to open three ancestors and read their entries. The model
+    never had that problem: `probe._inputs_notice` has handed every run the
+    resolved set since the day `ask_specified` started firing, on the reasoning
+    that "go and find them" is the step that does not happen. This is the same
+    list, for the human.
+
+    NOT MERGED INTO THE NEW CALLOUTS, which is the whole of the design. Roughly
+    half of these are ENTRY-level assumptions an ancestor made while answering
+    one question; listing them under this chapter's "New assumptions" would
+    claim every entry here assumes them, which is false. A separate callout
+    with the provenance on every row says what is true instead: this is in
+    force, and here is where it was decided.
+
+    COLLAPSED, because it is context rather than news, it repeats verbatim on
+    every chapter of a deep chain, and the two callouts above it are what the
+    chapter itself decided.
+
+    Reads `_active.yml`, which `nb` regenerates on every commit -- this file
+    executes at Quarto render time with no `nb` importable, so it cannot walk
+    the chain itself. No file at all renders nothing, which is right for a
+    notebook whose chapters predate the generator.
+    """
+    rows = _blocks(_pathlib.Path("chapters") / chapter / "_active.yml")
+    items = [(kind, handle, text)
+             for key, kind in (("specified", "Specified"),
+                               ("assumed", "Assumed"))
+             for handle, text in (rows.get(key) or [])]
+    if not items:
+        return
+    print('::: {.callout-note collapse="true"}')
+    print(f"## Inherited and still in force ({len(items)})\n")
+    print("Decided in an earlier chapter, carried here by the fork, and not "
+          "overwritten since.\n")
+    for n, (kind, handle, text) in enumerate(items, 1):
+        print(f"{n}. {text} *({kind} — {handle})*")
+    print(":::\n")

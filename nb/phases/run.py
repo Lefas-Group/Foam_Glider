@@ -41,7 +41,8 @@ from ..tools.interact import ask_pool, ask_render_ceiling, ask_stuck
 from .. import briefs, metrics, runstate
 from .view import site
 from .common import setup, report, spoken_calls
-from .write import (_ceiling_problem, _commit, _refresh_index_freeze,
+from .write import (_ceiling_problem, _commit, _refresh_active,
+                    _refresh_index_freeze,
                     _refresh_root_index, _render_cost, _resolve, _why_and_diff,
                     answer_line, rendered_prose)
 from ..log import detach_output, detached, open_log, say, tell
@@ -604,6 +605,11 @@ def _finish(notebook, session, run_metrics, first_pass, moved, accepted):
                   f". {session.siblings} sibling entr"
                   f"{'y' if session.siblings == 1 else 'ies'} re-proved and "
                   f"re-frozen.")
+    # BEFORE the front page and before the commit, because both read it: an
+    # entry added here can change what any descendant chapter inherits, and
+    # every `_active.yml` it moved has to ride THIS commit or the tree carries
+    # a rendered page whose source is uncommitted.
+    extra = tuple(extra) + tuple(_refresh_active(notebook))
     _refresh_root_index(notebook)
     sha, detail = _commit(notebook, chapter, stem, session.entry_path, title,
                           extra_paths=extra)

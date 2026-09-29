@@ -192,6 +192,33 @@ def _ancestral(notebook, chapter, parent=None):
     return carried, dropped
 
 
+def active(notebook, chapter, own_rows=None):
+    """
+    [(kind, text, where)] in force here but declared by an ANCESTOR.
+
+    The ancestral half of `committed`, lifted out because two readers need
+    exactly this set and nothing else: the chapter index, which renders what a
+    reader would otherwise have to walk the chain for, and `committed` itself.
+    Split rather than copied -- an index that computed its own notion of
+    "inherited" would be a second definition of the word, and the first thing
+    to disagree with it would be the notice the model is shown on every probe.
+
+    `where` is `<ancestor>/<handle>`, which is what `overwrites:` takes and
+    what `short` formats for display. `own_rows` is the caller's already-read
+    `own(...)`, since the restatement test needs it and `committed` has it.
+    """
+    have = [_words(t) | _words(w)
+            for _, t, w in (own(notebook, chapter) if own_rows is None
+                            else own_rows)]
+    out = []
+    for kind, text, anc, handle in _ancestral(notebook, chapter)[0]:
+        words = _words(text) | _words(handle)
+        if any(w and w <= words for w in have):
+            continue          # this chapter restates it; its wording wins
+        out.append((kind, text, f"{anc}/{handle}"))
+    return out
+
+
 def committed(notebook, chapter):
     """
     [(kind, text, where)] -- everything in force for an entry written here.
@@ -211,20 +238,87 @@ def committed(notebook, chapter):
     that every entry here assumes it. Promoting the same item into this
     chapter's `_inputs.yml` WOULD be that claim, and would be false for roughly
     half of them.
+
+    NOT the notebook's brief, which `inherited` falls back to for a chapter
+    with no ancestor. It is true of every chapter equally, the prefix quotes it
+    under its own heading, and a root chapter picking it up here while a forked
+    one did not would make the register mean two different things depending on
+    where you stood.
     """
-    out = list(own(notebook, chapter))
-    # NOT the notebook's brief, which `inherited` falls back to for a chapter
-    # with no ancestor. It is true of every chapter equally, the prefix quotes
-    # it under its own heading, and a root chapter picking it up here while a
-    # forked one did not would make the register mean two different things
-    # depending on where you stood.
-    have = [_words(t) | _words(w) for _, t, w in out]
-    for kind, text, anc, handle in _ancestral(notebook, chapter)[0]:
-        words = _words(text) | _words(handle)
-        if any(w and w <= words for w in have):
-            continue          # this chapter restates it; its wording wins
-        out.append((kind, text, f"{anc}/{handle}"))
-    return out
+    rows = list(own(notebook, chapter))
+    return rows + active(notebook, chapter, own_rows=rows)
+
+
+# An entry's callout is markdown written for THAT page, so it may carry an
+# inline `{python} ...` expression that only resolves in that entry's session --
+# `**Launch height: `{python} f"{h:.0f}"` m**` is a real one, from
+# 01-foam-glider. Rendered verbatim onto a descendant's index it executes there,
+# where `h` was never defined, and takes the whole page down. The number is not
+# recoverable from source (only the freeze holds it), so the expression becomes
+# an ellipsis and the provenance points at the entry that has the value.
+_INLINE = re.compile(r"`\{=?python\}[^`]*`|\{\{<[^>]*>\}\}")
+
+
+def _flatten(text):
+    """One line of plain markdown, safe to render on a page that is not its own."""
+    return " ".join(_INLINE.sub("…", str(text)).split())
+
+
+def write_active(notebook, chapter):
+    """
+    Regenerate `chapters/<c>/_active.yml`. True when the bytes changed.
+
+    DERIVED, and the only derived file in a chapter -- which is the cost of
+    putting the inherited set on the page. `_notebook.py` renders at Quarto
+    time with no `nb` on the path, so it cannot call `active()`; it reads what
+    this wrote. The alternative was porting `_lineage`/`_ancestral` into the
+    vendored runtime, which would make the word "inherited" mean whatever two
+    copies of that walk happened to agree on.
+
+    Stale is the failure to fear, so every commit rewrites EVERY chapter's
+    copy: an entry added to an ancestor changes what its descendants inherit,
+    and the chapter being written is not the one whose file went wrong.
+
+    Empty `_active.yml` is still written for a root chapter, so that "no file"
+    means "never generated" rather than "nothing inherited" -- the two want
+    different fixes and the renderer cannot tell them apart.
+
+    The handle is `short`ened, so an entry stem reduces to its date: it is a
+    provenance label on a page here, not a handle to be typed back.
+    """
+    rows = active(notebook, chapter)
+    lines = ["# GENERATED by `nb` on every commit, from the ancestor chain.",
+             "# Not hand-edited: the next commit overwrites it. What a chapter",
+             "# declares ITSELF is `_inputs.yml`, which is the file to edit.",
+             "#",
+             "# Rendered by `chapter_inputs()` as one collapsed callout, so a",
+             "# reader sees what is in force here without walking the chain.",
+             ""]
+    for key, kind in (("specified", "Specified"), ("assumed", "Assumed")):
+        lines.append(f"{key}:")
+        for k, text, where in rows:
+            if k == kind:
+                lines.append(f"  - {short(where, chapter)}: {_flatten(text)}")
+    body = "\n".join(lines) + "\n"
+    f = notebook.chapters_dir / chapter / "_active.yml"
+    try:
+        if f.read_text() == body:
+            return False
+    except OSError:
+        pass
+    f.write_text(body)
+    return True
+
+
+def refresh_active(notebook):
+    """
+    Rewrite every chapter's `_active.yml`. Returns the chapters that changed.
+
+    Whole-notebook because inheritance is: the run writes into one chapter and
+    can move what any descendant of it inherits. Cheap enough to be
+    unconditional -- it reads YAML and entry callouts and solves nothing.
+    """
+    return [c for c in notebook.chapters() if write_active(notebook, c)]
 
 
 def short(handle, chapter=""):
@@ -341,7 +435,16 @@ def inherited(notebook, chapter, parent=None):
     """
     import lint
     if not _lineage(notebook, chapter, parent):
-        return [(k, t, notebook.root.name)
+        # The brief has no ancestor and no handle to point at -- it is stated
+        # once, at the notebook root. The fourth slot carries the notebook's
+        # own name so every caller can unpack one shape.
+        return [(k, t, notebook.root.name, notebook.root.name)
                 for k, t in lint.notebook_items(notebook.root)], []
     carried, dropped = _ancestral(notebook, chapter, parent)
-    return [(k, t, c) for k, t, c, _h in carried], dropped
+    # THE HANDLE COMES TOO, as `<ancestor>/<handle>` -- the same string
+    # `active` puts on the chapter index, through the same `short`. The review
+    # that approves an item and the page that later states it now name it
+    # identically; they used to agree on the set and disagree on every label,
+    # so an item struck at the fork could not be matched by eye to the row it
+    # removed from the page.
+    return [(k, t, c, f"{c}/{h}") for k, t, c, h in carried], dropped

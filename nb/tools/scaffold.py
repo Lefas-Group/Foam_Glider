@@ -289,6 +289,14 @@ def create_chapter(notebook, name, title, defines="", number=None,
     # unexplained page in a later render's count.
     say(f"  freeze    _freeze/index/ {'deleted' if _had else 'absent'} — "
         f"create_chapter; the book index re-executes on the next render")
+    # WHAT THIS CHAPTER INHERITS, written at birth. The commit path rewrites
+    # every chapter's copy, but a fork renders its index before it has
+    # committed anything -- and a chapter whose first render found no
+    # `_active.yml` would show an empty page where it inherits ten items, then
+    # quietly gain them later with nothing to say why.
+    from ..inputs import write_active
+    write_active(notebook, name)
+
     _sidebar_add(notebook, name)
 
     return name, (
