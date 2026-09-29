@@ -1,0 +1,32 @@
+---
+title: "Does the 714 mm flat plate design meet the 50 g mass budget?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 120.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 250.0        # s granted for the probe
+PROBE_SPENT = 25.3      # s the probe actually used
+
+target_span = 0.714  # from 2026-09-29-07-what-is-the-smallest-flat-plate-span-meeting-the-2-s-flight-time-targe.qmd
+stall_angle = 5.75   # from 2026-09-29-05-is-naca-0006-a-valid-flat-plate-proxy-at-the-stall-bounded-reynolds-nu.qmd
+
+sink, opt_plane = optimize_geometry_for_sink_rate(get_airplane_plate, alpha_max=stall_angle, span_max=target_span)
+total_mass = opt_plane.m_total * 1000
+ballast_mass = opt_plane.mass_ballast * 1000
+```
+
+::: {.hero}
+[`{python} f"No, {total_mass:.1f} g"`]{.hero-value}
+[all-up mass]{.hero-label}
+:::
+
+**Answer.** The optimized [714 mm planform](2026-09-29-07-what-is-the-smallest-flat-plate-span-meeting-the-2-s-flight-time-targe.qmd) exceeds the 50 g mass budget by [`{python} f"{total_mass - 50:.1f} g"`]{.key}. Because it trims at the limit [`{python} f"{target_span * 1000:.0f} mm"`]{.key} span without needing additional stability correction, it carries essentially zero ballast ([`{python} f"{ballast_mass:.1f} g"`]{.key}); the mass is entirely structural.
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_geometry_for_sink_rate, get_airplane_plate)
+```
