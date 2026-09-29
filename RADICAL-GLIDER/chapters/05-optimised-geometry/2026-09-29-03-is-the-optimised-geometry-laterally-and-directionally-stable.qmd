@@ -1,0 +1,42 @@
+---
+title: "Is the optimised geometry laterally and directionally stable?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0
+SOLVE_BUDGET = 15.0
+PROBE_POOL = 200.0
+PROBE_SPENT = 64.3
+
+import aerosandbox as asb
+import aerosandbox.numpy as np
+
+opt_res = get_optimised_geometry_state(get_airplane)
+plane = opt_res['airplane']
+v_trim = opt_res['v']
+alpha_trim = opt_res['alpha']
+
+op_beta = asb.OperatingPoint(velocity=v_trim, alpha=alpha_trim, beta=1.0)
+aero_beta = asb.AeroBuildup(airplane=plane, op_point=op_beta).run()
+
+Cl_beta = aero_beta['Cl'][0] / np.radians(1)
+Cn_beta = aero_beta['Cn'][0] / np.radians(1)
+```
+
+**Answer.** It is laterally stable but directionally unstable. The dihedral effect is correct ([`{python} f"{Cl_beta:.3f} rad⁻¹"`]{.key}), but the weathercock stability is negative ([`{python} f"{Cn_beta:.3f} rad⁻¹"`]{.key}).
+
+To minimise sink rate, the optimiser removed the nose ballast and shifted the wings far forward ([how low can trimmed sink rate be driven with free geometry and ballast?](2026-09-29-01-how-low-can-trimmed-sink-rate-be-driven-with-free-geometry-and-ballast.qmd)) to hit the 10% static margin. Because the cosmetic engine nacelles and cannons are attached to the wings, they were carried far forward of the new center of gravity (@fig-three-view), where their side area destabilises the aircraft in yaw.
+
+```{python}
+#| label: fig-three-view
+#| fig-cap: "The optimised aircraft layout, showing the cosmetic engines and guns positioned far ahead of the center of gravity."
+plane.draw_three_view()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(get_airplane, get_optimised_geometry_state)
+```
