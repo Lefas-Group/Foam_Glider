@@ -24,10 +24,11 @@ DOCS = {
     "surrogates": "Lookup tables and cached polars: what level to cache at.",
     "quarto": "Render and tooling traps. Read when a render fails, or before "
               "writing a figure or table you have not written here before.",
-    "aerosandbox": "API traps, return types and solver behaviour. Read BEFORE "
-                   "the first probe that calls an AeroSandbox function this "
-                   "notebook has not used yet — it answers in one call what "
-                   "costs several probes to find out.",
+    # `aerosandbox` and `aerosandbox-api` are deliberately NOT here: both are in
+    # the prefix now (see nb/prefix.py PREFIX_DOCS), so offering them would buy
+    # a turn to re-read what the model already has in front of it. That turn was
+    # the point of moving them -- 0.8 read_reference calls per run on flash.
+    # The files stay in this directory; only the tool's enum drops them.
 }
 
 

@@ -20,8 +20,42 @@ must not repeat.
 import ast
 import sys
 
-from .config import Notebook, SYSTEM_INSTRUCTION
+from .config import Notebook, SYSTEM_INSTRUCTION, REFERENCES
 from . import manifest
+
+# Read every run, so they belong in the cached head rather than behind a tool.
+#
+# `aerosandbox.md` is the gotchas page: hand-written, every line of it something
+# that was got wrong once here. `aerosandbox-api.md` is generated from the
+# installed package by `nb.tools.api` -- the ~5% of the library these notebooks
+# actually call.
+#
+# Both used to be `read_reference` calls, which cost a turn each and were made
+# only when the model thought to make them. The gotchas page is the one that
+# stops a wrong ANSWER rather than a wasted turn: "a stability derivative is
+# only meaningful at the trim speed" is on it, and chapter 07 published two
+# entries that needed it. A page that prevents a wrong conclusion is not a page
+# to leave behind an optional lookup.
+#
+# Together ~7,700 tokens, taking the prefix from 8,293 to ~16,000. At the
+# measured 89% implicit-cache rate that is about $0.03 per run -- against 3.2
+# api/reference turns per run on flash, each of which also carries its result in
+# context for every turn after it.
+PREFIX_DOCS = ("aerosandbox-api", "aerosandbox")
+
+
+def reference_docs():
+    """The always-loaded corpus pages, in PREFIX_DOCS order."""
+    out = []
+    for name in PREFIX_DOCS:
+        p = REFERENCES / f"{name}.md"
+        try:
+            text = p.read_text().strip()
+        except OSError:
+            continue                  # generated file absent; not fatal
+        if text:
+            out.append(text)
+    return "\n\n".join(out)
 
 
 def module_summary(path):
@@ -250,6 +284,10 @@ def build(notebook, chapter=None):
         "```",
         notebook_context(notebook),
         chapter_context(notebook),
+        # Before `this_chapter`, which must stay last: everything above it is
+        # byte-identical for every run in the notebook, and these two are
+        # identical for every run in every notebook.
+        "\n" + reference_docs(),
     ]
     if chapter:
         parts.append(this_chapter(notebook, chapter))

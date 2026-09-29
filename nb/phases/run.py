@@ -249,7 +249,17 @@ def resume(notebook_path, run_id=None, allow_refactor=False,
         return 2
 
     _start(notebook, quiet, answers)
-    runstate.write(notebook, phase="run")
+    # Clear the PREVIOUS ending before doing anything else. `runstate.write`
+    # merges, so `outcome` survives a resume unless it is explicitly overwritten
+    # -- and `nb listen` calls a run `ends` on nothing more than a truthy
+    # `outcome`, gated by an `updated > since` watermark that this process bumps
+    # on its very first write. The result was that every resumed run reported
+    # its own PREVIOUS outcome the instant it started, while alive and working;
+    # seen three times in one afternoon, each costing a manual pid check to tell
+    # the replay from a real ending. `failure` and `answer` go with it: they
+    # describe the attempt that just ended, not this one.
+    runstate.write(notebook, phase="run", outcome=None,
+                   failure=None, answer=None)
     title = state.get("title") or stem[14:].replace("-", " ")
     question = state.get("question") or title
     open_log(notebook, "resume", title)

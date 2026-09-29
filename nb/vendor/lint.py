@@ -1901,6 +1901,93 @@ def _sidebar_lists_chapters(root, chapters):
             for c in chapters if c not in listed]
 
 
+HERO_SOURCE = re.compile(
+    r"\[([^\]]*)\]\{\.hero-value\}", re.S)      # source side, before rendering
+
+
+def _hero_is_computed(root, chapters, entries):
+    """
+    Rule 41. The hero value derives from a solve, not from a literal.
+
+    Rule 1 already rejects an inline expression that computes nothing, so
+    `[`{python} 0.714`]{.hero-value}` never survives. What it cannot see is one
+    more hop: `[`{python} f"{crossing_span:.3f}"`]{.hero-value}` carries a Name
+    and passes, while two cells up sits `crossing_span = 0.714`.
+
+    That is not hypothetical. An entry answering "what is the smallest span
+    that meets the target" swept six spans, hard-coded the crossing it had
+    found while probing, and inserted that same number into the swept list so
+    the figure would pass through it. Every number on the page was real; the
+    root-find the page describes was never run. A reader cannot tell, and
+    neither can a re-render -- which is the whole basis on which these entries
+    are meant to be trusted.
+
+    Checked against the ENTRY's own cells only. A literal that came from
+    `_model.py`, from a sibling entry, or from a user specification is a
+    different thing entirely -- rule 26 governs those -- and this rule must not
+    fire on them, which is why `_bound` is asked about the entry source rather
+    than about every name in scope.
+
+    Two things keep it narrow, and both were put in after a false positive.
+
+    EVERY name in a hero must be a literal, not merely one of them. Flagging any
+    literal hit `launch_height / sink`, where the height is a specified 1.5 m
+    and the sink is solved for, and it hit `value * MM`, a unit conversion. The
+    literal there is a co-factor and something beside it was genuinely solved.
+
+    And EVERY hero in the entry must fail before it reports, because a
+    before/after entry publishes two. Reading only the first flagged the
+    comparison entries whose opening hero is a sibling's published baseline --
+    carried as a literal with a `# from <entry>` comment, which is the
+    convention -- while the computed half sat in the very next span.
+
+    What is left is the hero that rests on nothing computed at all:
+    `f"{crossing_span*1000:.0f} mm"` with `crossing_span = 0.714` two cells up
+    and no other name in sight.
+    """
+    out = []
+    for f in entries:
+        text = f.read_text()
+        heroes = HERO_SOURCE.findall(text)
+        if not heroes:
+            continue                    # rule 12 owns a missing hero
+        cells = entry_cells(text)
+        literals = {}
+        for hero in heroes:
+            names = set()
+            for expr in INLINE_BODY.findall(hero):
+                try:
+                    tree = ast.parse(expr.strip(), mode="eval")
+                except SyntaxError:
+                    names = None
+                    break
+                names |= {n.id for n in ast.walk(tree)
+                          if isinstance(n, ast.Name)}
+            if not names:
+                literals = None         # rule 1 owns a hero computing nothing
+                break
+            here = {}
+            for name in sorted(names):
+                bound, value = _bound(cells, name)
+                if bound and isinstance(value, (int, float)) \
+                        and not isinstance(value, bool):
+                    here[name] = value
+            if len(here) != len(names):
+                literals = None         # this hero was solved for; entry stands
+                break
+            literals.update(here)
+        if not literals:
+            continue
+        shown = ", ".join(f"`{k}` = {v!r}" for k, v in literals.items())
+        out.append((f, f"every hero value rests only on literals this entry "
+                       f"assigns: {shown} (warning). A headline number has to "
+                       f"be what the code worked out, not what you already "
+                       f"knew it would be -- solve for it, or make the hero "
+                       f"the quantity you actually solved for and give this "
+                       f"one in the prose"))
+    return out
+
+
 def _citation_targets(root, chapters, entries):
     """
     Rule 37. A `cite()` names an entry that exists and publishes a hero value.
@@ -2912,6 +2999,7 @@ RULES = {
     38: "every chapter is named in the sidebar",
     39: "an index carries its input callouts, in order, and nothing else",
     40: "the front page's freeze is not older than the entries it counts",
+    41: "the hero value derives from a solve, not from a literal",
 }
 
 
@@ -2957,6 +3045,7 @@ def check(root, chapters):
     problems += _tag(34, _book_index(root, chapters))
     problems += _tag(35, _chapter_index_blocks(root, chapters))
     problems += _tag(37, _citation_targets(root, chapters, entries))
+    problems += _tag(41, _hero_is_computed(root, chapters, entries))
     problems += _tag(38, _sidebar_lists_chapters(root, chapters))
 
     # Rule 13. Scoped to `_analysis.py`: `_model.py` is rendered in full by the

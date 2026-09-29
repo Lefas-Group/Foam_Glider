@@ -43,9 +43,22 @@ if str(VENDOR) not in sys.path:
 # first-pass lint violations per entry, which metrics.py records per run
 # alongside the model that served it; pro sits at 0 across its last six.
 #
+# SWITCHED TO FLASH ON 2026-09-29, by decision rather than by measurement: the
+# four runs above stand and have not been repeated. Left in place because a
+# comment that contradicts the line under it is the exact failure `nb eval`
+# exists to prevent -- a model swap was once decided off a stale comment here
+# and reversed the same morning.
+#
+# What would settle it, in the columns `nb eval` already prints: pro sits at 34
+# runs, 27 committed, 0.07 first-pass lint violations per entry. Flash has to
+# COMMIT to be compared at all -- its failure was never knowledge or budget, it
+# was 25 to 40 turns of probing without ever proposing an answer. Watch the ok
+# count first; first-pass violations only mean something once entries exist.
+#
 # $NB_MODEL overrides it for one run, in either direction -- the quota is per
 # MODEL per day (250), so a day spent on one leaves the other's bucket whole.
-MODEL = os.environ.get("NB_MODEL", "gemini-3.1-pro-preview")
+# `NB_MODEL=gemini-3.1-pro-preview` is the way back.
+MODEL = os.environ.get("NB_MODEL", "gemini-3.8-flash")
 
 # MINIMAL is in the enum but 400s on both candidate models. LOW/MEDIUM/HIGH are
 # the usable range, and this is the main cost lever.
@@ -77,7 +90,17 @@ INCLUDE_THOUGHTS = True
 # means the run spent its whole budget and the detector never fired: either a
 # genuinely hard entry or a blind spot in the heuristic, and both are worth
 # opening. `python -m nb eval <notebook>` lists outcomes by run.
-MAX_TURNS = 60          # per agent loop
+#
+# 60 -> 80 on 2026-09-29, because the diagnostic fired on a run that was not
+# stuck: flash averages 50.6 turns to a commit against pro's 28.0, and one run
+# hit the cap during its CLOSING LINT with the entry already written -- a 53 s
+# resume recovered it whole. A cap that ends a run which has done all the work
+# is measuring the model's turn appetite, not bounding spend. Pro's runs are
+# nowhere near either number, so this costs them nothing.
+#
+# $NB_MAX_TURNS overrides it for one run, the way $NB_MODEL does above: a model
+# whose appetite differs again should not need a commit to find out.
+MAX_TURNS = int(os.environ.get("NB_MAX_TURNS", "80"))   # per agent loop
 MAX_LINT_ATTEMPTS = 3   # write -> lint -> write
 # write -> render -> write, on a page that does not BUILD. It used to be
 # deliberately separate from the verify budget, so that a build error could not

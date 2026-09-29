@@ -34,6 +34,7 @@ SELECT model,
        ROUND(AVG(first_pass_violations), 2)            AS fpv,
        ROUND(AVG(renders), 1)                          AS renders,
        ROUND(AVG(pages_rendered), 1)                   AS pages,
+       ROUND(AVG(thinking_tokens))                     AS thought,
        ROUND(AVG(duration_s))                          AS secs
 FROM runs
 GROUP BY model, phase
@@ -64,12 +65,15 @@ def main(argv):
 
     tell(f"  {'model':22} {'phase':6} {'runs':>4} {'ok':>4} "
          f"{'turns':>6} {'lint':>5} {'1st-pass':>8} "
-         f"{'rndrs':>6} {'pages':>6} {'secs':>5}")
-    for model, phase, runs, ok, turns, lints, fpv, rnd, pages, secs in rows:
+         f"{'rndrs':>6} {'pages':>6} {'thought':>8} {'secs':>5}")
+    for (model, phase, runs, ok, turns, lints, fpv,
+         rnd, pages, thought, secs) in rows:
         dash = lambda v: "—" if v is None else v
         tell(f"  {model[:22]:22} {phase:6} {runs:4} {ok or 0:4} "
              f"{turns or 0:6} {lints or 0:5} "
-             f"{dash(fpv):>8} {dash(rnd):>6} {dash(pages):>6} {secs or 0:5.0f}")
+             f"{dash(fpv):>8} {dash(rnd):>6} {dash(pages):>6} "
+             f"{dash(None if thought is None else f'{thought:,.0f}'):>8} "
+             f"{secs or 0:5.0f}")
 
     tell("\n  ok = committed. 1st-pass = lint problems before any")
     tell("  correction round; lower is the model knowing the rules in advance.")
@@ -79,7 +83,12 @@ def main(argv):
     # against sixteen pages and one. A model whose pages-per-render is high is
     # targeting chapters where an entry would do.
     tell("  rndrs = quarto renders asked for; pages = what they executed.")
-    tell('  Both show "—" for runs recorded before the columns existed.')
+    # Thinking is billed at the OUTPUT rate and is not in `output_tokens`, so a
+    # model comparison that ignores it prices the cheap-per-token model wrong in
+    # the direction that flatters it.
+    tell("  thought = thinking tokens per run, billed as output and counted")
+    tell("  nowhere else. THINKING_LEVEL is the lever that moves it.")
+    tell('  All show "—" for runs recorded before the columns existed.')
     return 0
 
 

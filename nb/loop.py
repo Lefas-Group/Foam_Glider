@@ -24,7 +24,7 @@ and then a different way later.
 
 import json
 
-from .client import complete
+from .client import complete, usage
 from .config import MAX_TURNS
 from .log import thought
 from .stuck import Detector
@@ -169,7 +169,14 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
                 f"outcome that produces nothing at all."}]})
         resp = complete(contents, cfg)
         turn = resp.candidates[0].content
-        _log(transcript, turn)         # the record keeps the thinking
+        # The record keeps the thinking -- and now what it cost. The thought
+        # TEXT stored below is a summary, so counting its characters understates
+        # the billed tokens; `thinking` here is the API's own count, which makes
+        # a transcript enough to price a run without the metrics db beside it.
+        p_tok, c_tok, o_tok, t_tok = usage(resp)
+        _log(transcript, turn, extra={"usage": {
+            "prompt": p_tok, "cached": c_tok,
+            "output": o_tok, "thinking": t_tok}})
         # The turn's own line FIRST, then the reasoning behind it. Printing the
         # thoughts first put every `turn N` line after the block it belonged to,
         # so it read as a heading for the NEXT turn -- which is most of why the

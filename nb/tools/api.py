@@ -93,3 +93,104 @@ def api_signature(path, methods=False):
     if "error" in r:
         return f"{r['error']}"
     return head(json.dumps(r, indent=2))
+
+
+# The AeroSandbox the notebooks ACTUALLY use, measured over every committed
+# entry, `_model.py` and `_analysis.py` in all four notebooks: 15 classes and
+# ~20 methods, against an index of 46 classes and 291 functions. Roughly 5% of
+# the library, and stable -- the set has not grown in six days of entries.
+#
+# It is pregenerated into the prefix rather than looked up, because a lookup
+# costs a TURN. `api_signature` returns in microseconds once the index is built,
+# which made it look free; it is not, because the model must spend a turn asking
+# and then carry the answer in context for every turn after. Flash spent 1.0
+# turns per run on `api_signature` and produced 8 NameErrors anyway.
+#
+# Methods are listed EXPLICITLY, not pulled wholesale: full method lists for
+# these classes measure 8,573 tokens for the nine core ones and 19,533 for all
+# fifteen, against 2,067 for this. The names below include a few the notebooks
+# have not called yet but that `aerosandbox.md` exists to point at -- every row
+# of its "instead of / use" table is something that was hand-reimplemented once.
+SURFACE = {
+    "aerosandbox.geometry.airplane.Airplane": ["draw_three_view"],
+    "aerosandbox.geometry.wing.Wing": [
+        "area", "span", "aspect_ratio", "mean_aerodynamic_chord",
+        "mean_geometric_chord", "translate"],
+    "aerosandbox.geometry.wing.WingXSec": [],
+    "aerosandbox.geometry.fuselage.Fuselage": [
+        "volume", "area_wetted", "length", "fineness_ratio", "translate"],
+    "aerosandbox.geometry.fuselage.FuselageXSec": ["xsec_area"],
+    "aerosandbox.geometry.airfoil.airfoil.Airfoil": [
+        "get_aero_from_neuralfoil", "repanel"],
+    "aerosandbox.geometry.airfoil.kulfan_airfoil.KulfanAirfoil": [],
+    "aerosandbox.performance.operating_point.OperatingPoint": [],
+    "aerosandbox.aerodynamics.aero_3D.aero_buildup.AeroBuildup": [
+        "run", "run_with_stability_derivatives"],
+    "aerosandbox.optimization.opti.Opti": [
+        "variable", "subject_to", "minimize", "maximize", "solve", "value"],
+    "aerosandbox.optimization.opti.OptiSol": ["value"],
+    "aerosandbox.atmosphere.atmosphere.Atmosphere": [
+        "density", "dynamic_viscosity", "speed_of_sound"],
+    "aerosandbox.weights.mass_properties.MassProperties": [],
+    "aerosandbox.dynamics.point_mass.point_2D.speed_gamma"
+    ".DynamicsPointMass2DSpeedGamma": [],
+    "aerosandbox.dynamics.rigid_body.rigid_2D.body"
+    ".DynamicsRigidBody2DBody": [],
+}
+
+HEADER = """# AeroSandbox: the surface this notebook uses
+
+Signatures read from the INSTALLED package, so they are current. This is the
+5% of AeroSandbox these notebooks actually call -- it is here so you do not
+spend a turn asking for what you were always going to need.
+
+It is NOT the whole library. Anything not below still exists: reach for
+`api_search` when you know the concept but not the name, `api_list` to browse
+an area, `api_signature` for a full method list. A name that is absent here is
+absent from this page only, never from AeroSandbox.
+"""
+
+
+def block():
+    """
+    The pregenerated API surface, as text for the prefix.
+
+    Regenerate with `python -m nb.tools.api` after an AeroSandbox version bump,
+    and COMMIT the result: the prefix has to be byte-identical across runs for
+    one implicit cache object to serve them all, so this cannot be built per
+    run.
+    """
+    import library_explorer as lx
+    out = [HEADER]
+    for path, keep in SURFACE.items():
+        r = lx.get_methods(path, docstring_lines=1, include_signature=True)
+        if "error" in r:
+            continue
+        out.append(f"### {r.get('name', path)}")
+        doc = (r.get("docstring") or "").strip().splitlines()
+        if doc:
+            out.append(doc[0][:110])
+        if r.get("parameters"):
+            out.append("(" + ", ".join(r["parameters"]) + ")")
+        for m in (r.get("methods") or []):
+            if m.get("name") not in keep:
+                continue
+            d = (m.get("docstring") or "").strip().replace("\n", " ")[:80]
+            out.append(f"  .{m['name']}{m.get('signature') or ''}"
+                       + (f"  {d}" if d else ""))
+    return "\n".join(out) + "\n"
+
+
+def main():
+    import sys
+    from ..config import REFERENCES
+    sys.path.insert(0, str(REFERENCES.parent))
+    text = block()
+    dest = REFERENCES / "aerosandbox-api.md"
+    dest.write_text(text)
+    print(f"{dest}  {len(text):,} chars  ~{len(text) // 4:,} tokens")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

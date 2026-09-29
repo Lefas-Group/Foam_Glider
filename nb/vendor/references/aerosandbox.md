@@ -1,15 +1,14 @@
 # AeroSandbox gotchas
 
-API traps and solver behaviour. Read before writing dynamics, optimization or
-mass-properties code.
+API traps and solver behaviour. Every line below was got wrong here first.
 
 ## Don't reimplement what the library has
 
-Look it up with the `library-explorer` MCP server before writing a calculation:
-`search` when you know the concept but not the name, `list_classes` /
-`list_functions` to browse, then `get_methods` on the class. It introspects the
-installed version, so it is always current — don't substitute your own `dir()`
-dump. Note `search` is lexical: `"static margin"` finds nothing because no
+The signatures you will need are already above, in "the surface this notebook
+uses". For anything NOT there, `api_search` finds a function by name or
+docstring, `api_list` browses an area, and `api_signature` gives a full method
+list — all against the installed version, so never substitute your own `dir()`
+dump. Note `api_search` is lexical: `"static margin"` finds nothing because no
 aerosandbox docstring uses that phrase, though `run_with_stability_derivatives`
 computes what you want.
 

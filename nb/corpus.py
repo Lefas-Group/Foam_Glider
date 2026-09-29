@@ -87,7 +87,17 @@ EXPECTED = {
     # line of prose above their numbered items -- "Asked of the user,
     # 2026-09-03:" and the like. Correct, and frozen: both notebooks predate
     # the rule exactly as they predate 33, 34 and 35.
-    "optimised-glider-notebook": (83, 109),
+    #
+    # +0/+1 rule 41, the one new warning: 02-flight-path's fix entry heroes
+    # `+{EXTRA*1e3:.1f} g` where `EXTRA = 1.0e-3` is the nose lead the entry
+    # PROPOSES rather than anything it solved for. A chosen input published as
+    # the headline, which is what the rule is for, and frozen like the rest.
+    #
+    # One finding in a notebook nobody edits is the number that mattered here:
+    # the first two drafts of rule 41 scored 5 and 3 across the corpus, hitting
+    # unit conversions, specified launch heights, and the cited baseline half of
+    # every before/after entry. This baseline is what made those visible.
+    "optimised-glider-notebook": (83, 110),
 }
 
 

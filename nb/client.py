@@ -130,8 +130,19 @@ def complete(contents, cfg, model=MODEL):
 
 
 def usage(resp):
-    """(prompt, cached, output) tokens. `cached` is the number that matters."""
+    """
+    (prompt, cached, output, thinking) tokens. `cached` is the number that
+    matters for cost; `thinking` is the one that was missing.
+
+    `candidates_token_count` does NOT include thinking -- the SDK documents the
+    total as prompt + candidates + tool_use_prompt + thoughts -- yet thinking is
+    billed at the output rate. With THINKING_LEVEL at HIGH that is not a
+    rounding error: one measured run reported 8,108 output tokens against
+    roughly 14,000 tokens of thought. Every cost `nb eval` printed before this
+    was therefore under the true spend, which is the one job the eval has.
+    """
     u = resp.usage_metadata
     return (u.prompt_token_count or 0,
             u.cached_content_token_count or 0,
-            u.candidates_token_count or 0)
+            u.candidates_token_count or 0,
+            u.thoughts_token_count or 0)

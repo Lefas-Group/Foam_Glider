@@ -35,12 +35,23 @@ CREATE TABLE IF NOT EXISTS runs (
     prompt_tokens          INTEGER,
     cached_tokens          INTEGER,
     output_tokens          INTEGER,
+    -- Billed at the output rate but NOT counted in `output_tokens`, which is
+    -- `candidates_token_count`. Separate rather than summed in: the two are
+    -- different work, and folding them would silently rewrite every row's
+    -- meaning against the ones recorded before anybody counted.
+    thinking_tokens        INTEGER,
     solves                 INTEGER,
     solve_seconds          REAL,
     first_pass_violations  INTEGER,  -- write only; the eval
     lint_calls             INTEGER,  -- times the model asked lint before stopping
     renders                INTEGER,  -- quarto renders this run asked for
     pages_rendered         INTEGER,  -- pages those renders actually executed
+    -- `run.py` has always written this via `set()`, but the column was never
+    -- declared -- and `close()` builds its INSERT from the row's keys, so every
+    -- run that hit a failed build raised `no such column: render_fixes` and
+    -- lost its whole row. That is why no `build_failed` run has ever been
+    -- recorded: the rows that would have shown it are the ones that died.
+    render_fixes           INTEGER,  -- times a failed build was handed back
     -- A whole phase produced zero findings in 32 write runs and was deleted.
     -- The column stays: old rows recorded a real (zero) measurement, and
     -- dropping it would rewrite history to say nobody looked.
@@ -58,7 +69,9 @@ CREATE TABLE IF NOT EXISTS runs (
 # counted.
 ADDED = (("lint_calls", "INTEGER"),
          ("renders", "INTEGER"),
-         ("pages_rendered", "INTEGER"))
+         ("pages_rendered", "INTEGER"),
+         ("thinking_tokens", "INTEGER"),
+         ("render_fixes", "INTEGER"))
 
 
 def migrate(con):
@@ -102,18 +115,20 @@ class Run:
         self.row = dict(
             ts=self.t0, phase=phase, model=MODEL, thinking_level=THINKING_LEVEL,
             question=question, chapter="", entry_stem="", turns=0,
-            prompt_tokens=0, cached_tokens=0, output_tokens=0, solves=0,
+            prompt_tokens=0, cached_tokens=0, output_tokens=0,
+            thinking_tokens=0, solves=0,
             solve_seconds=0.0, first_pass_violations=None, lint_calls=0,
-            renders=0, pages_rendered=0, verify_findings=None,
+            renders=0, pages_rendered=0, render_fixes=0, verify_findings=None,
             outcome="incomplete", duration_s=0.0)
 
     def turn(self, resp):
         from .client import usage
-        prompt, cached, out = usage(resp)
+        prompt, cached, out, thinking = usage(resp)
         self.row["turns"] += 1
         self.row["prompt_tokens"] += prompt
         self.row["cached_tokens"] += cached
         self.row["output_tokens"] += out
+        self.row["thinking_tokens"] += thinking
         # How hard the model worked to satisfy lint, which
         # `first_pass_violations` cannot see: that samples AFTER the loop
         # returns, so a run that spent eight turns in lint/edit still reported

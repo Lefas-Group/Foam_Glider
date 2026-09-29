@@ -83,6 +83,9 @@ def spoken_calls(turn, width=44):
 
 
 def report(resp, label=""):
-    prompt, cached, out = usage(resp)
+    # `thought` is shown beside `out` rather than folded into it: they are
+    # billed the same but they are not the same work, and a run whose output is
+    # small while its thinking is large is exactly the shape worth seeing.
+    prompt, cached, out, thinking = usage(resp)
     return (f"  {label:9s} {prompt:,} prompt ({cached:,} cached), "
-            f"{out:,} out")
+            f"{out:,} out" + (f" (+{thinking:,} thought)" if thinking else ""))

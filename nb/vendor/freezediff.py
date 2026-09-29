@@ -113,7 +113,7 @@ def stale(entry_qmd, frozen_md):
     return [l for l in want if l not in frozen_md]
 
 
-def figures(root, repo, ref, chapters):
+def figures(root, repo, ref, chapters, absent=()):
     """
     Figure PNGs whose bytes moved, as [(label, filename)].
 
@@ -121,6 +121,14 @@ def figures(root, repo, ref, chapters):
     have every bar move while its three printed values stay put. Matplotlib
     embeds no timestamp, so within one environment a pure refactor leaves these
     byte-identical and any difference here is real.
+
+    `absent` is the set of page labels with no baseline, and figures belonging
+    to them are NOT findings -- the same rule the page loop already applies to
+    itself, for the same reason. Without it a new entry's own first figure was
+    counted as a moved answer, so any run that added a plot while touching
+    shared code tripped the refactor gate while the summary line beside it read
+    `0 page(s) changed`. Measured: two of five runs in one afternoon, each
+    costing a resume to clear a gate that had found nothing.
     """
     moved = []
     for c in chapters:
@@ -130,7 +138,8 @@ def figures(root, repo, ref, chapters):
             old = at_ref(repo, ref, str(p.relative_to(repo)))
             now = p.read_bytes()
             if old is None:
-                moved.append((p.parts[-3], f"{p.name} (new)"))
+                if _label(p.parts[-3]) not in absent:
+                    moved.append((p.parts[-3], f"{p.name} (new)"))
             elif hashlib.sha256(old).digest() != hashlib.sha256(now).digest():
                 moved.append((p.parts[-3], p.name))
     return moved
@@ -189,7 +198,7 @@ def main(argv):
                 if len(delta) > 40:
                     print(f"    … {len(delta) - 40} more")
 
-    moved = figures(root, repo, ref, chapters)
+    moved = figures(root, repo, ref, chapters, absent=set(absent))
     if moved:
         print("\n  figures:")
         for label, name in moved:
