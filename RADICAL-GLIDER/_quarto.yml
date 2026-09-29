@@ -38,6 +38,7 @@ website:
       - auto: "chapters/02-wings-at-rear"
       - auto: "chapters/03-no-cosmetics"
       - auto: "chapters/04-wings-swept-20-deg"
+      - auto: "chapters/05-optimised-geometry"
 
 format:
   html:
