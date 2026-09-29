@@ -1,0 +1,42 @@
+---
+title: "How much trimmed sink rate is given up with span held to 0.508 m?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 192.5      # s the probe actually used
+
+stall_angle = 6.7
+span_baseline = 0.76
+span_fuselage = 0.508
+
+sink_baseline, opt_plane_baseline = optimize_geometry_for_sink_rate(get_airplane, alpha_max=stall_angle, span_max=span_baseline)
+sink_fuselage, opt_plane = optimize_geometry_for_sink_rate(get_airplane, alpha_max=stall_angle, span_max=span_fuselage)
+
+sink_penalty = sink_fuselage - sink_baseline
+penalty_percent = (sink_penalty / sink_baseline) * 100
+v_trim = opt_plane.v_trim
+```
+
+::: {.hero}
+[`{python} f"{sink_penalty:.2f} m/s"`]{.hero-value}
+[trimmed sink rate given up]{.hero-label}
+:::
+
+**Answer.** Restricting wing span to the [`{python} f"{span_fuselage:.3f} m"`]{.key} fuselage length increases the minimum trimmed sink rate from [`{python} f"{sink_baseline:.2f} m/s"`]{.key} to [`{python} f"{sink_fuselage:.2f} m/s"`]{.key}, giving up [`{python} f"{sink_penalty:.2f} m/s"`]{.key} ([{python} f"+{penalty_percent:.0f}%"]{.key}) relative to the [stall-bounded planform optimum](2026-09-29-03-what-is-the-minimum-trimmed-sink-rate-when-bounded-below-the-section-s.qmd). Induced drag from the lower aspect ratio drives the required trim airspeed up to [`{python} f"{v_trim:.2f} m/s"`]{.key} (@fig-span-constrained-planform).
+
+```{python}
+#| label: fig-span-constrained-planform
+#| fig-cap: "Three-view geometry of the planform optimum with wing span held to fuselage length."
+opt_plane.draw_three_view(show=False)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_geometry_for_sink_rate)
+```
