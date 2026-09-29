@@ -1,0 +1,36 @@
+---
+title: "Does freeing the wing planform lower the trimmed sink rate below 0.84 m/s?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 480.0   # s for this render, granted by the user
+SOLVE_BUDGET = 25.0     # s for any one solve
+PROBE_POOL = 900.0      # s granted for the probe
+PROBE_SPENT = 46.5      # s the probe actually used
+
+baseline_sink_rate = 0.84
+span_bound = 0.76
+sink_rate, opt_plane = optimize_geometry_for_sink_rate(get_airplane)
+chord_mm = opt_plane.wings[0].xsecs[0].chord * 1000
+```
+
+::: {.hero}
+[`{python} f"{sink_rate:.2f}"`]{.hero-value}
+[m/s trimmed sink rate]{.hero-label}
+:::
+
+**Answer.** Yes. Opening the span and chords to the optimiser drops the sink rate to `{python} f"{sink_rate:.2f}"` m/s, down from `{python} f"{baseline_sink_rate:.2f}"` m/s. The optimiser builds the highest aspect ratio wing the bounds allow, hitting the `{python} f"{span_bound:.2f}"` m span ceiling while holding both chords at ~`{python} f"{chord_mm:.0f}"` mm.
+
+```{python}
+#| label: fig-optimised-planform
+#| fig-cap: "The planform optimised for minimum trimmed sink rate within the 1.5x bounding box."
+opt_plane.draw_three_view(show=False)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_geometry_for_sink_rate)
+```

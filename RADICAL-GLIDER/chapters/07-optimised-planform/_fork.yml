@@ -1,0 +1,22 @@
+# What this chapter changed, and from what. Read by rule 31,
+# by the chapter index, and by the lineage diagram on the
+# book index -- one source, three readers.
+parent: 05-optimised-geometry
+at: 983fa16
+at_entry: 2
+summary: "Planform freed to optimiser"
+changes:
+  - Free wing span, root chord, and tip chord to the optimiser
+# What this chapter OVERWROTE: items an EARLIER
+# chapter declared that no longer hold here, as
+# `<chapter>/<their id>`, with an optional reason after a
+# colon. What REPLACED them is this chapter's own
+# _inputs.yml -- do not restate it here, and do not force a
+# 1:1 link: one overwritten assumption is often replaced by
+# several new items.
+#
+# It renders HERE, as "Overwritten from <chapter>" -- on
+# the page that made the change. The chapter overwritten
+# keeps its own items: they are its premise and stay true
+# under it.
+overwrites:

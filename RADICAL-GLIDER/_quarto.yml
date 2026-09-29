@@ -40,6 +40,7 @@ website:
       - auto: "chapters/04-wings-swept-20-deg"
       - auto: "chapters/05-optimised-geometry"
       - auto: "chapters/06-optimised-geometry-no-cosmetics"
+      - auto: "chapters/07-optimised-planform"
 
 format:
   html:
