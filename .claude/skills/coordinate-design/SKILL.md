@@ -93,6 +93,12 @@ at any moment, `nb board <notebook>`.
 uv run --group nb python -m nb answer <notebook> <run-id> "<value>"
 ```
 
+**Say who decided.** Add `--by coordinator` when the answer is *yours* — a
+chapter you approved, an assumption you accepted, a budget you set. Leave it off
+only when you are relaying what the user actually told you, because then they
+are the author and the record should say so. Without it every answer is
+recorded as the user's and the board captions it "you".
+
 **Always pass the run id.** Omitting it refuses only when two runs are waiting
 at the same instant — and a run you answered a second ago still looks like the
 only one waiting until it consumes the reply. A second bare `nb answer` then

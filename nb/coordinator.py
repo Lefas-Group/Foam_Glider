@@ -196,7 +196,7 @@ def wait(notebook, timeout=TIMEOUT, poll=POLL):
         answered.append({"kind": "specified", "name": q.get("name", ""),
                          "why": q.get("prompt") or q.get("why", ""),
                          "value": value, "source": got.get("by") or "user",
-                         "at": time.time()})
+                         "asked_at": q.get("asked_at"), "at": time.time()})
         touch(notebook, answered=answered)
         return value
     return None

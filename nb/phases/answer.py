@@ -29,9 +29,22 @@ def waiting(notebook):
 
 
 def main(argv):
+    # WHO IS ANSWERING, said rather than assumed. `mailbox.answer` defaulted
+    # `by` to "user" and nothing ever overrode it, so a decision the
+    # COORDINATOR made -- approving a chapter, accepting an assumption -- was
+    # recorded as the user's and the board captioned it "you". That is the one
+    # thing a record of what the user agreed to must never do. A person typing
+    # this at a terminal is still the default, because they are the one who
+    # cannot pass a flag.
+    by = "user"
+    if "--by" in argv:
+        i = argv.index("--by")
+        if i + 1 < len(argv):
+            by = argv[i + 1]
+        argv = argv[:i] + argv[i + 2:]
     if len(argv) < 2:
         tell('usage: uv run --group nb python -m nb answer <notebook> '
-             '[<run>] "<value>"')
+             '[<run>] "<value>" [--by coordinator]')
         return 2
     notebook = Notebook(argv[0])
     pend = waiting(notebook)
@@ -72,7 +85,7 @@ def main(argv):
              f"{run_id}")
         return 1
     path = mailbox.answer(Notebook(notebook.root, run_id=run_id), value,
-                          replying_to=q.get("asked_at"))
+                          by=by, replying_to=q.get("asked_at"))
     tell(f"  answered  {q.get('name','')} -> {value}")
     tell(f"            {path}")
     return 0

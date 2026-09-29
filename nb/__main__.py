@@ -17,6 +17,7 @@
     nb eval  <notebook>                      what each model actually did
     nb board <notebook> [--all]              N agents, one terminal
     nb answer <notebook> [run] "<value>"     reply to a waiting run
+             [--by coordinator]                  …saying who decided it
     nb direction <notebook> "<text>"         what the user asked for;
                                              pinned, and starts the history
     nb note   <notebook> "<text>"            a line of the programme, for

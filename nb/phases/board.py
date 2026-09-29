@@ -76,10 +76,6 @@ def _runs(notebook, only=None, cap=True):
     return live + done[:max(0, SHOWN - len(live))]
 
 
-def _ago(seconds):
-    return f"{seconds / 60:.0f}m" if seconds >= 60 else f"{seconds:.0f}s"
-
-
 def _coordinated(notebook):
     """
     True when a coordinator holds this notebook's programme.
@@ -135,79 +131,6 @@ def _asking(runs, answered=(), coordinated=False):
             continue
         out.append(r)
     return out
-
-
-def _table(runs):
-    """
-    One row per run. No `phase` column: there is one phase.
-
-    It read `ask` or `write` when a question was two processes with a gate
-    between them, and knowing which half you were in was most of knowing what
-    was happening. A question is one conversation now, so the column said `run`
-    on every row -- and `resume`, on the rare row that was one, which the `for`
-    column already tells you by being older than the work.
-    """
-    from rich.table import Table
-    # NOT `expand=True`. Stretched to the terminal, six columns of short
-    # values sat in acres of whitespace -- a run id and a chapter name a third
-    # of a screen apart, which is harder to read the wider your terminal is.
-    t = Table(box=None, pad_edge=False, expand=False, padding=(0, 2, 0, 0))
-    for col, style, justify in (("run", "grey50", "left"),
-                                ("chapter", "", "left"),
-                                ("turn", "", "right"),
-                                ("for", "grey50", "right"),
-                                ("waited", "grey50", "right"),
-                                ("state", "", "left")):
-        t.add_column(col, style=style or None, justify=justify)
-    for r in runs:
-        if coordinator.is_coordinator(r["run"]):
-            # Never `died`. It holds no lock by design, so the liveness test
-            # below reads it as dead on every refresh -- which would print the
-            # most alarming word on the board, permanently, against the row
-            # driving everything else on it.
-            state = ("[bold yellow]waiting[/bold yellow]" if r.get("question")
-                     else "[cyan]coordinating[/cyan]")
-        elif r.get("outcome"):
-            # THE OUTCOME WINS OVER LIVENESS. `_ended` calls a run with an
-            # outcome finished -- "it said so" -- and prints its ending panel,
-            # but this branch asked whether the process had exited yet. For the
-            # second or two between `metrics.close()` writing the outcome and
-            # the process actually going, the conversation showed a committed
-            # entry while the table underneath it still said `running`.
-            state = f"[dim]{r['outcome']}[/dim]"
-        elif r["alive"] is False:
-            # `outcome` is written by metrics.close(), so its absence means the
-            # run never reached an ending the system chose: it crashed, was
-            # killed, or the machine slept through its deadline. That is the one
-            # state worth a colour, and it used to be indistinguishable from a
-            # clean commit.
-            out = r.get("outcome")
-            state = (f"[dim]{out}[/dim]" if out else "[red]died[/red]")
-        elif r.get("stopped"):
-            # Suspended, not working. `os.kill(pid, 0)` cannot tell the
-            # difference, so this used to read `running` while the process
-            # burned no CPU at all -- and the `for` column kept counting up,
-            # which looks exactly like a wedged run.
-            state = "[magenta]stopped[/magenta]"
-        elif r.get("question"):
-            state = "[bold yellow]waiting[/bold yellow]"
-        else:
-            state = "[green]running[/green]"
-        since = time.time() - (r.get("updated") or r.get("started") or time.time())
-        # `for` is time since the run last did ANYTHING; `waited` is time since
-        # the question was put. They are usually the same number while a run is
-        # blocked, and they stop being the same the moment they matter: a run
-        # that answered one question and is now asking another shows a fresh
-        # `waited` against a long `for`. The question carries its own asked_at,
-        # so this is the real figure rather than an inference from the last
-        # state write.
-        q = r.get("question") or {}
-        asked = q.get("asked_at")
-        t.add_row(r.get("run", "?"), r.get("chapter") or "—",
-                  str(r.get("turn", "")),
-                  _ago(since), _ago(time.time() - asked) if asked else "",
-                  state)
-    return t
 
 
 def _question_panel(run):
@@ -341,79 +264,68 @@ def _ended(run):
     THE COORDINATOR NEVER ENDS. It holds no lock, so `alive` is False for it
     always, and it never writes an `outcome` -- which together satisfy both
     halves of this test and made the conversation open with a panel reading
-    "coordinator — died without a word". `_table` had already learned this;
-    the predicate had not, so every other reader of it was wrong in the same
-    way. It has no process to stop, which is the whole point of the reserved
-    id, so the honest answer here is simply no.
+    "coordinator — died without a word". It has no process to stop, which is
+    the whole point of the reserved id, so the honest answer here is no.
     """
     if coordinator.is_coordinator(run.get("run")):
         return False
     return bool(run.get("outcome")) or run.get("alive") is False
 
 
-def _seen_already(notebook, only):
-    """
-    Endings that predate this board, so it announces only what ends while it
-    is watching.
-
-    A whole-notebook board would otherwise open by printing a panel for every
-    run that ever finished -- nine of them here. `_runs` keeps finished runs
-    for context and caps them, which is right for a table and wrong for a panel
-    each.
-
-    EMPTY WHEN FOLLOWING ONE RUN. `nb ask` forks the board before the child has
-    written an outcome, so this is normally empty anyway -- but a run that dies
-    in its first second would be pre-seeded as already-seen and the board would
-    exit having shown nothing at all. Both entry points take this, which they
-    did not when the rule lived in one of them: the piped path fell through to
-    `_follow_plain` and went silent.
-    """
-    if only:
-        return set()
-    return {r["run"] for r in _runs(notebook, only) if _ended(r)}
-
-
-# How many past exchanges a board replays on opening. The whole conversation
-# is the point -- a programme you cannot read back is a programme you cannot
-# check -- but a notebook accumulates runs for ever, and a board that opens by
-# printing two thousand lines has buried the question it was opened to answer.
-# What is dropped is SAID, rather than silently trimmed.
 HISTORY = 200
-
-
-def _block(when, sigil, sigil_style, content):
-    """
-    One conversation event: a time, a sigil, and a column that wraps in place.
-
-    A GRID RATHER THAN A STRING, so that every event has the same left edge and
-    long ones wrap UNDER themselves instead of falling back to column zero.
-    Printed as f-strings, a wrapped question ran back to the margin and the
-    conversation lost the alignment that makes it scannable -- four kinds of
-    event, four different shapes, none of them lining up with the next.
-    """
-    from rich.table import Table
-    from rich.text import Text
-    t = Table.grid(padding=(0, 1))
-    t.add_column(width=7, no_wrap=True)          # "  09:43"
-    t.add_column(width=1, no_wrap=True)          # the sigil
-    t.add_column(overflow="fold")                # everything else, wrapping
-    t.add_row(Text(f"  {when}", style="grey50"),
-              Text(sigil, style=sigil_style), content)
-    return t
 
 
 def _stamp(at):
     return time.strftime("%H:%M", time.localtime(at or 0))
 
 
-def _note_line(note):
-    """One decision from the coordinator: narration, not a panel."""
+# Left is the agents, centre is the coordinator, right is you. Placing a box
+# by its AUTHOR turns a flat log into a conversation you can follow by shape
+# alone -- which side a box sits on says who spoke before a word is read.
+AGENT, COORD, USER = "left", "center", "right"
+# And a colour each, so the side and the hue say the same thing. An agent's
+# box keeps the colour of its OUTCOME -- green committed, red failed -- which
+# is information the other two do not have to carry.
+COORD_COLOUR, USER_COLOUR = "grey50", "cyan"
+
+
+def _place(console, panel, side):
+    """Put a panel on its author's side, at a width that leaves the gap visible."""
+    from rich.align import Align
+    panel.width = max(46, int(console.width * 0.78))
+    return Align(panel, side)
+
+
+def _panel(author, context, body, colour, at=None):
+    """
+    One conversation event, in a box titled by WHO SENT IT.
+
+    THE AUTHOR IS THE FIRST THING ON THE BOX, in bold and in that author's
+    colour. Titles used to open with the chapter, so an answer you typed and
+    an entry an agent committed began with the same words in the same green
+    and could only be told apart by reading to the end -- where the sender was
+    spelled out on a line of its own, under a blank one. Two lines per box to
+    say something the title can carry for nothing.
+    """
+    from rich.markup import escape
+    from rich.panel import Panel
     from rich.text import Text
-    return _block(_stamp(note.get("at")), "\u25c6", "grey50",
-                  Text(str(note.get("text", ""))))
+    from rich import box as _box
+    title = Text(str(author), style=f"bold {colour}")
+    tail = "  ·  ".join(x for x in (context, _stamp(at) if at else "") if x)
+    if tail:
+        title.append(f"  ·  {tail}", style="grey50")
+    return Panel(escape(str(body)), title=title, title_align="left",
+                 border_style=colour, box=_box.ROUNDED, padding=(0, 1))
 
 
-def _ask_line(run):
+def _note_panel(note):
+    """A decision by the coordinator: why the next question is the next one."""
+    return _panel("coordinator", "", note.get("text", ""), COORD_COLOUR,
+                  note.get("at"))
+
+
+def _ask_panel(run):
     """
     The question the coordinator put to one agent.
 
@@ -422,15 +334,51 @@ def _ask_line(run):
     them, so the board could show a programme's worth of answers with no
     record of what had been asked.
     """
-    from rich.text import Text
-    body = Text(str(run.get("chapter") or run.get("run", "?")), style="bold")
-    body.append("\n" + str(run.get("asked") or ""))
-    return _block(_stamp(run.get("started")), "\u2192", "cyan", body)
+    return _panel("coordinator",
+                  f"asked {run.get('chapter') or run.get('run', '?')}",
+                  run.get("asked") or "", COORD_COLOUR, run.get("started"))
 
 
-def _qa_line(run, got, replay=False):
+# What each kind of gate is asking, for records written before the question
+# carried its own `prompt`. Not a second copy of the wording in `interact.py`:
+# that one is what the agent puts to a person live, this one is what a reader
+# of the history needs to understand a decision already taken.
+WAS_ASKED = {
+    "assumptions": "Are these assumptions sound?",
+    "inherited":   "Does this fork break any of these?",
+    "chapter":     "Create a new chapter for this?",
+    "refactor":    "Allow this change?",
+    "stuck":       "No progress — carry on?",
+    "budget":      "How long may it run?",
+}
+
+
+def _gate_panel(run, got):
     """
-    One exchange, whoever answered it.
+    The agent's question, as it was put, beside the answer it got.
+
+    HALF THE CONVERSATION WAS MISSING. The board showed every answer and no
+    question: `you · _analysis.py · allowed — alpha_max defaults to None` with
+    nothing saying what had been proposed, or which assumptions were being
+    confirmed, or what chapter was being asked for. `_record` has kept the
+    question's `why` all along and now keeps its `prompt` too, so the box that
+    prompted a decision can sit next to it.
+    """
+    body = (got.get("prompt")
+            or WAS_ASKED.get(got.get("kind"))
+            or f"What is the {got.get('name', '')}?")
+    why = (got.get("why") or "").strip()
+    if why and why != body:
+        body = f"{body}\n\n{why}"
+    # The clock on the QUESTION is when it was put, not when it was answered.
+    return _panel(run.get("chapter") or run.get("run", "?"),
+                  got.get("name", ""), body, "yellow",
+                  got.get("asked_at") or got.get("at"))
+
+
+def _qa_panel(run, got, replay=False):
+    """
+    One exchange, titled by whoever answered it.
 
     THE RECORD IS `run.json`, NOT THIS PROCESS. The board used to print an
     answer only when it had collected the answer itself, so everything settled
@@ -439,46 +387,50 @@ def _qa_line(run, got, replay=False):
     and answered and the board showed neither. `_record` has been appending
     every question and its answer, with the source, to `run.json` all along.
     """
-    from rich.text import Text
     where = run.get("chapter") or run.get("run", "?")
     value = (got.get("value") or "").strip()
     # REPLAYED ANSWERS ARE CAPPED. A reply can be a paragraph -- refusing a
     # fork and saying why, correcting an assumption with the reasoning -- which
     # is right to see as you type it and is history you have already read when
     # the board reopens. The whole of it stays in `run.json`.
-    if replay and len(value) > 150:
-        value = value[:150].rstrip() + " \u2026"
-    body = Text(f"{where} \u00b7 {got.get('name', '')}", style="bold")
+    if replay and len(value) > 220:
+        value = value[:220].rstrip() + " \u2026"
+    src = got.get("source", "")
+    mine = src == "user"
     # A BLANK IS AN ANSWER, and the most common one: "" accepts an assumption
     # and keeps every inherited item. Printed raw it looked like the board had
     # failed to record anything.
-    body.append("\n")
-    body.append(value or "accepted as stated",
-                style=None if value else "italic")
-    body.append(f"  ({got.get('source', '')})", style="grey50")
-    return _block(_stamp(got.get("at")), "\u2190", "grey50", body)
+    # THE CHAPTER IS ON THE QUESTION, not repeated here. The gate box directly
+    # above names it; saying it again pushed the source and the clock off the
+    # end of the title and into the border.
+    del where
+    return _panel("you" if mine else "coordinator",
+                  got.get("name", "")
+                  + ("" if mine or src in ("", "user") else f"  \u00b7  {src}"),
+                  value or "accepted as stated",
+                  USER_COLOUR if mine else COORD_COLOUR, got.get("at"))
 
 
 def _ending_line(run):
     """
-    How a run finished, in one line, for replay.
+    How a run finished, for replay: the box without the entry inside it.
 
     AN ENDING IS NEWS ONCE. The full panel carries the entry's prose, its
     figure and its budgets -- right for something that finishes while you are
     watching, and 33 lines apiece when six of them are replayed into a screen
-    you just opened. Measured: two endings were 36 of 73 history lines, which
-    pushed the rest of the conversation off the top of a 50-line terminal and
-    left the board looking like it had nothing to say.
+    you just opened. Measured: two endings were 36 of 73 history lines.
     """
-    from rich.text import Text
     colour, word = ENDINGS.get(run.get("outcome") or "",
                                ("red", run.get("outcome") or "died"))
-    body = Text(str(run.get("chapter") or run.get("run", "?")), style="bold")
-    body.append("\n" + str(run.get("answer") or word))
     sha = (run.get("committed") or {}).get("sha")
-    if sha:
-        body.append(f"   {sha}", style="grey50")
-    return _block(_stamp(run.get("updated")), "\u25cf", colour, body)
+    # THE COLOUR ALREADY SAYS `committed`. Spelling it out as well pushed the
+    # title past the width of the box and the last characters of the timestamp
+    # were eaten by the border. An ending that is NOT a commit still says so,
+    # because that is the case where the word carries something green does not.
+    context = "  ·  ".join(
+        x for x in (word if run.get("outcome") != "committed" else "", sha) if x)
+    return _panel(run.get("chapter") or run.get("run", "?"), context,
+                  run.get("answer") or word, colour, run.get("updated"))
 
 
 def _direction_panel(got):
@@ -515,6 +467,14 @@ def _events(notebook, only=None):
         if r.get("asked") and r.get("started"):
             out.append((r.get("started", 0), "ask", r, ("ask", r.get("run"))))
         for got in r.get("answered") or []:
+            # TWO EVENTS PER EXCHANGE, each at its own time: the agent asked
+            # at `asked_at` and was answered at `at`, and those can be minutes
+            # apart with the coordinator's notes written in between. Records
+            # made before `asked_at` existed fall back to an instant before the
+            # answer, which is where they used to sit anyway.
+            out.append((got.get("asked_at") or got.get("at", 0) - 1e-3,
+                        "gate", (r, got),
+                        ("gate", r.get("run"), got.get("at"), got.get("name"))))
             out.append((got.get("at", 0), "qa", (r, got),
                         ("qa", r.get("run"), got.get("at"), got.get("name"))))
         if _ended(r):
@@ -522,6 +482,23 @@ def _events(notebook, only=None):
             # the float this has to sort by.
             out.append((r.get("updated") or 0, "end", r, ("end", r.get("run"))))
     out.sort(key=lambda e: e[0])
+    # ONE DECISION, ONE BOX. An escalation is recorded twice by design: once
+    # against the coordinator, where the person actually answered it, and again
+    # against the run when it is relayed there -- 17 seconds apart, same name,
+    # same value, and indistinguishable to a reader. The RUN's copy is the one
+    # kept: it names the chapter the answer was used in, which is what anyone
+    # reading the programme back wants to know. The coordinator's survives
+    # only when no relay followed it, which is the case where it is the whole
+    # record of what was decided.
+    relayed = {(g.get("name"), (g.get("value") or "").strip())
+               for at, k, pay, _key in out
+               if k == "qa" and not coordinator.is_coordinator(pay[0].get("run"))
+               for g in [pay[1]]}
+    out = [e for e in out
+           if not (e[1] in ("qa", "gate")
+                   and coordinator.is_coordinator(e[2][0].get("run"))
+                   and (e[2][1].get("name"),
+                        (e[2][1].get("value") or "").strip()) in relayed)]
     # STRICTLY AFTER: the epoch direction itself is pinned above the table, so
     # printing it into the scrollback as well would say it twice. A direction
     # that arrives LATER is an event like any other -- it marks the pivot in
@@ -530,94 +507,74 @@ def _events(notebook, only=None):
     return kept, len(out) - len(kept)
 
 
-def _screen(notebook, runs, pinned, coordinated=False):
-    """
-    What stays on screen: the direction, then the table.
-
-    PINNED rather than printed once. The direction is the frame every question
-    below it is chosen to serve, so it is current state in the same sense the
-    table is -- and a session long enough to need the reminder is exactly the
-    session that has scrolled the top of the scrollback away.
-    """
-    from rich.console import Group
-    parts = [] if pinned is None else [_direction_panel(pinned)]
-    # ONLY WHAT IS IN FLIGHT. A finished run has already said so in the
-    # conversation above, as one line with its answer on it; repeating it here
-    # for the rest of the session made the table mostly a list of things that
-    # are not happening, and pushed the two rows that were off the bottom.
-    parts.append(_table([r for r in runs if not _ended(r)]))
-    # SAY WHEN A QUESTION IS NOT YOURS. Deferring run questions to the
-    # coordinator is right, but done silently it is the failure this whole
-    # mailbox exists to prevent: a run sits `waiting`, nobody at the board
-    # realises they could answer it, the coordinator turns out not to be
-    # running, and the question expires.
-    if coordinated:
-        held = [r for r in runs if r.get("question")
-                and not coordinator.is_coordinator(r["run"])]
-        if held:
-            from rich.text import Text
-            parts.append(Text(
-                f"  {len(held)} waiting on the coordinator — "
-                f"`nb board {notebook.root.name} --all` to answer here",
-                style="grey50"))
-    return parts[0] if len(parts) == 1 else Group(*parts)
-
-
 def _print_event(console, kind, payload, replay=False):
     """
     One conversation event, in the form its kind deserves.
 
-    `replay` is the history being redrawn on open, where an ending is a line
-    rather than the whole entry -- see `_ending_line`.
+    `replay` is the history being redrawn on open, where an ending is its
+    headline rather than the whole entry -- see `_ending_line`.
     """
     if kind == "note":
-        console.print(_note_line(payload))
+        console.print(_place(console, _note_panel(payload), COORD))
     elif kind == "direction":
         console.print(_direction_panel(payload))
     elif kind == "ask":
-        console.print(_ask_line(payload))
+        # The coordinator's question, not the agent's: it chose what to ask.
+        console.print(_place(console, _ask_panel(payload), COORD))
+    elif kind == "gate":
+        console.print(_place(console, _gate_panel(*payload), AGENT))
     elif kind == "qa":
-        console.print(_qa_line(*payload, replay=replay))
+        # Placed by WHO ANSWERED. The question came from an agent; the answer
+        # is the person's when they typed it and the coordinator's when it came
+        # from `--answers` or from a default nobody overrode.
+        side = USER if payload[1].get("source") == "user" else COORD
+        console.print(_place(console, _qa_panel(*payload, replay=replay), side))
     elif replay:
-        console.print(_ending_line(payload))
+        console.print(_place(console, _ending_line(payload), AGENT))
     else:
-        console.print(_ending_panel(payload))
+        console.print(_place(console, _ending_panel(payload), AGENT))
 
 
 def follow(notebook, only=None, answer_all=False):
-    """Draw the table, surface questions, and take answers. Ctrl-C to leave."""
+    """
+    The conversation, printed as it happens. Ctrl-C to leave.
+
+    NO LIVE REGION, AND NO TABLE. Both are gone, and the reasons they went are
+    worth keeping. The table showed what each run was doing right now, redrawn
+    four times a second; pinned under a growing conversation it fought the
+    terminal's own scrollback -- scrolling up to read what happened snapped you
+    back to the bottom on the next refresh -- and most of its rows were runs
+    that had already finished and already said so above. The direction was
+    pinned for the same reason and cost the same thing.
+
+    What is left is a log: the direction, then every question, answer, decision
+    and ending in the order they happened, each in its own box. It scrolls like
+    any other program's output, which means the terminal you already have is
+    the history control. `nb watch` is still there for a single run's detail.
+
+    The cost, stated: between events nothing moves. A run thinking for four
+    minutes looks the same as a run that has died, and the table used to tell
+    those apart by its turn counter. `nb board` is the CONVERSATION now; the
+    liveness question belongs to `nb watch <nb> <run>`.
+    """
     from rich.console import Console
-    from rich.live import Live
 
     console = Console()
-    if not console.is_terminal:
-        # A Live region needs a cursor to move. Piped or redirected there is
-        # none, so every refresh prints the whole table again and the output
-        # grows by a table a second. Fall back to printing only when something
-        # actually changes -- useful for a log, and it cannot scroll the thing
-        # you are reading off the top.
-        return _follow_plain(notebook, console, only, answer_all)
-
-    # TRANSIENT. The table is the current state, not a record of it: left
-    # behind, every question pushes another copy of it into the scrollback and
-    # the history becomes unreadable at exactly the point there are enough
-    # agents to need it. Erased on stop, the scrollback holds the CONVERSATION
-    # -- each question, each answer, in order -- and the table lives at the
-    # bottom of the screen where it belongs.
-    answered = set()          # (run, asked_at) -- see `_asking`
+    interactive = console.is_terminal
     coordinated = _coordinated(notebook) and not answer_all
-    # THE CONVERSATION SO FAR, before the live region starts. This used to
-    # begin at NOW: a board opened mid-programme showed an empty screen with a
-    # table under it, and everything already asked and answered -- the record
-    # of what the programme had decided -- was reachable only by reading JSON
-    # by hand. Printed into the scrollback, so the terminal's own scroll is
-    # the history control and this module needs no pager.
-    seen = set()
-    echoed = set()            # exchanges shown as they were typed -- see below
+    answered, seen, echoed, told = set(), set(), set(), set()
+    shown_q = set()           # questions printed live -- see the loop below
+
     past, behind = _events(notebook, only)
     if behind:
         console.print(f"  [grey50]\u2026 {behind} events under an earlier "
                       f"direction, not replayed[/grey50]")
+    # THE DIRECTION FIRST, once, at the top of the scrollback. Everything under
+    # it was chosen to serve it, so it reads as the head of the conversation
+    # rather than a caption that has to be kept on screen.
+    current = None if only else coordinator.current_direction(notebook)
+    if current:
+        console.print(_direction_panel(current))
     if len(past) > HISTORY:
         console.print(f"  [grey50]\u2026 {len(past) - HISTORY} earlier events "
                       f"not shown[/grey50]")
@@ -625,126 +582,95 @@ def follow(notebook, only=None, answer_all=False):
     for _at, kind, payload, key in past:
         seen.add(key)
         _print_event(console, kind, payload, replay=True)
-    if past:
-        console.print()
-    with Live(console=console, refresh_per_second=4, transient=True) as live:
-        try:
-            while True:
-                runs = _runs(notebook, only)
-                asking = _asking(runs, answered, coordinated)
-                pinned = (None if only
-                          else coordinator.current_direction(notebook))
-                live.update(_screen(notebook, runs, pinned, coordinated),
-                            refresh=True)
 
-                # ENDINGS, once each, printed with the live region STOPPED
-                # and not restarted until they are all out. Restarting between
-                # them redraws the table straight over the panel just written
-                # -- the table appeared inside the entry, between the figure
-                # caption and the panel's bottom border. The question panel
-                # above already carries this lesson: "the panel is written at a
-                # clean cursor with nothing live below it, so it cannot be
-                # overdrawn -- which is what happened when the display was
-                # restarted over the top of it."
-                #
-                # A board attached to ONE run also leaves when that run does,
-                # so the restart is skipped entirely on the way out: it used to
-                # spin on a table of a finished run until somebody pressed
-                # Ctrl-C, and `nb ask` forks this as the parent, so that was
-                # every run.
-                fresh = [e for e in _events(notebook, only)[0]
-                         if e[3] not in seen]
-                leaving = bool(only) and runs and all(_ended(r) for r in runs)
-                if fresh or leaving:
-                    live.stop()
-                    for _at, kind, payload, key in fresh:
-                        seen.add(key)
-                        if kind == "qa":
-                            r, got = payload
-                            sig = (r.get("run"), got.get("name"),
-                                   (got.get("value") or "").strip())
-                            if sig in echoed:
-                                echoed.discard(sig)
-                                continue
-                        _print_event(console, kind, payload)
-                    if leaving:
-                        return 0
-                    live.start()
-
-                if asking:
-                    run = asking[0]
-                    # Stop first (which erases the table), THEN print. The panel
-                    # is written at a clean cursor with nothing live below it,
-                    # so it cannot be overdrawn -- which is what happened when
-                    # the display was restarted over the top of it.
-                    live.stop()
-                    console.print(_question_panel(run))
-                    try:
-                        reply = console.input(f"  [{len(asking)} waiting] > ")
-                    except (EOFError, KeyboardInterrupt):
-                        console.print("  left unanswered")
-                        return 0
-                    asked_at = run["question"].get("asked_at")
-                    answered.add((run["run"], asked_at))
-                    # ECHOED NOW, RECORDED IN A MOMENT. The run writes this
-                    # exchange into `run.json` a poll from now and `_events`
-                    # would print it a second time; the two halves cannot share
-                    # a key, because the record is stamped when it lands and
-                    # the echo cannot know that time. They do share who was
-                    # asked, what, and the reply -- enough to drop the
-                    # duplicate once, and only once.
-                    echoed.add((run["run"], run["question"].get("name"),
-                                reply.strip()))
-                    # Stamped with the question ON SCREEN, not with whatever is
-                    # on disk by the time the write lands -- the run may have
-                    # moved on while the reply was being typed, and that is the
-                    # case `replying_to` exists for.
-                    mailbox.answer(Notebook(notebook.root, run_id=run["run"]),
-                                   reply, replying_to=asked_at)
-                    # The permanent record of what you said, since the panel
-                    # above it is permanent too and an answer without its
-                    # question is no use when you scroll back.
-                    console.print(f"  [grey50]{run['run']} ←[/grey50] {reply}\n")
-                    live.start()
-                    continue
-
-                time.sleep(REFRESH)
-        except KeyboardInterrupt:
-            return 0
-
-
-def _follow_plain(notebook, console, only=None, answer_all=False):
-    """No cursor to steer: print the table only when a row changes."""
-    last, shown = None, _seen_already(notebook, only)
-    # The same rule as the interactive path: with a coordinator holding the
-    # programme, only what it escalated is the person's to answer. Here it is
-    # advice rather than a prompt, and advice to answer someone else's question
-    # is still how two writers end up on one `answer.json`.
-    coordinated = _coordinated(notebook) and not answer_all
-    # Printed once rather than pinned: there is no cursor to hold a region in
-    # place here, which is why this path exists at all.
-    pinned = None if only else coordinator.current_direction(notebook)
-    if pinned:
-        console.print(_direction_panel(pinned))
     try:
         while True:
             runs = _runs(notebook, only)
-            key = [(r.get("run"), r.get("phase"), r.get("turn"),
-                    r.get("outcome"), bool(r.get("question"))) for r in runs]
-            for r in runs:
-                if _ended(r) and r["run"] not in shown:
-                    shown.add(r["run"])
-                    console.print(_ending_panel(r))
-            if only and runs and all(_ended(r) for r in runs):
+            for _at, kind, payload, key in _events(notebook, only)[0]:
+                if key in seen:
+                    continue
+                seen.add(key)
+                if kind == "gate":
+                    r, got = payload
+                    # Shown live a moment ago as a pending question; the record
+                    # would print it again the instant it is answered.
+                    if (r.get("run"), got.get("name")) in shown_q:
+                        shown_q.discard((r.get("run"), got.get("name")))
+                        continue
+                if kind == "qa":
+                    r, got = payload
+                    sig = (r.get("run"), got.get("name"),
+                           (got.get("value") or "").strip())
+                    # ECHOED WHEN TYPED, RECORDED A MOMENT LATER. The two
+                    # halves cannot share a key -- the record is stamped when
+                    # it lands and the echo cannot know that time -- so they
+                    # are matched on who was asked, what, and the reply.
+                    if sig in echoed:
+                        echoed.discard(sig)
+                        continue
+                _print_event(console, kind, payload)
+
+            if bool(only) and runs and all(_ended(r) for r in runs):
                 return 0
-            if key != last:
-                console.print(_table(runs))
-                for r in _asking(runs, coordinated=coordinated):
-                    console.print(_question_panel(r))
+
+            asking = _asking(runs, answered, coordinated)
+            if coordinated:
+                # SAY WHEN A QUESTION IS NOT YOURS, once each. Deferring run
+                # questions to the coordinator is right; doing it silently is
+                # the failure this mailbox exists to prevent -- a run waits,
+                # nobody here realises they could answer it, the coordinator
+                # turns out not to be running, and the question expires.
+                for r in _asking(runs):
+                    if coordinator.is_coordinator(r["run"]):
+                        continue
+                    key = (r["run"], (r.get("question") or {}).get("asked_at"))
+                    if key in told:
+                        continue
+                    told.add(key)
+                    # THE QUESTION ITSELF, not a note that one exists. It is
+                    # the coordinator's to answer, but watching the programme
+                    # means seeing what the agents are stuck on.
+                    console.print(_place(console, _question_panel(r), AGENT))
+                    shown_q.add((r["run"], (r.get("question") or {}).get("name")))
                     console.print(
-                        f"  answer with: nb answer {notebook.root.name} "
-                        f"{r['run']} \"<value>\"")
-                last = key
+                        f"  [grey50]for the coordinator \u2014 `--all` to "
+                        f"answer it here[/grey50]")
+
+            if asking and interactive:
+                run = asking[0]
+                console.print(_place(console, _question_panel(run), AGENT))
+                shown_q.add((run["run"], run["question"].get("name")))
+                try:
+                    reply = console.input(f"  [{len(asking)} waiting] > ")
+                except (EOFError, KeyboardInterrupt):
+                    console.print("  left unanswered")
+                    return 0
+                asked_at = run["question"].get("asked_at")
+                answered.add((run["run"], asked_at))
+                echoed.add((run["run"], run["question"].get("name"),
+                            reply.strip()))
+                # Stamped with the question ON SCREEN, not with whatever is on
+                # disk by the time the write lands -- the run may have moved on
+                # while the reply was being typed, and that is the case
+                # `replying_to` exists for.
+                mailbox.answer(Notebook(notebook.root, run_id=run["run"]),
+                               reply, replying_to=asked_at)
+                console.print(f"  [grey50]{run['run']} \u2190[/grey50] {reply}\n")
+                continue
+            elif asking:
+                # Piped or redirected: say what is waiting and how to answer it
+                # from a terminal, rather than blocking on a stdin that is not
+                # a person.
+                for r in asking:
+                    key = ("piped", r["run"],
+                           (r.get("question") or {}).get("asked_at"))
+                    if key in told:
+                        continue
+                    told.add(key)
+                    console.print(_question_panel(r))
+                    console.print(f"  answer with: nb answer "
+                                  f"{notebook.root.name} {r['run']} \"<value>\"")
+
             time.sleep(REFRESH)
     except KeyboardInterrupt:
         return 0

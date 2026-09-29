@@ -67,7 +67,7 @@ class Mailbox:
         self.answers = dict(answers or {})
         self.wait = wait
 
-    def _record(self, kind, name, why, value, source):
+    def _record(self, kind, name, why, value, source, prompt="", asked_at=None):
         """
         Append one question and its answer to `run.json`.
 
@@ -88,8 +88,21 @@ class Mailbox:
         """
         from . import runstate
         got = runstate.read(self.notebook).get("answered") or []
-        got.append({"kind": kind, "name": name, "why": " ".join(why.split())[:300],
-                    "value": str(value), "source": source, "at": time.time()})
+        # THE QUESTION AS ASKED, not just what it was called. `name` is the
+        # mailbox key -- `assumptions`, `inherited`, a chapter slug -- and a
+        # record holding only that could say a decision was made but never
+        # what the decision was ABOUT. The board reads this back to show the
+        # agent's question beside the answer it got.
+        # WHEN IT WAS ASKED, as well as when it was answered. With only `at`
+        # a reader cannot place the question: `nb board` stamped the agent's
+        # question with the moment its ANSWER landed, so a gate that had been
+        # open for four minutes appeared after the notes written while it was
+        # waiting -- an exchange that read as though the answer preceded the
+        # question.
+        got.append({"kind": kind, "name": name, "prompt": prompt,
+                    "why": " ".join(why.split())[:300],
+                    "value": str(value), "source": source,
+                    "asked_at": asked_at, "at": time.time()})
         runstate.write(self.notebook, answered=got)
 
     def ask(self, kind, name, why="", options="", default=None, wait=None,
@@ -109,9 +122,13 @@ class Mailbox:
         never strand a run; a Specified input has none and stops instead.
         """
         from . import runstate
+        # ONE CLOCK for the question, shared by the file and the record, so
+        # they cannot disagree about when it was put.
+        asked_at = time.time()
         if name in self.answers:
             value = str(self.answers.pop(name))
-            self._record(kind, name, why, value, "answers-file")
+            self._record(kind, name, why, value, "answers-file", prompt,
+                         asked_at)
             return value
 
         # `default` goes IN the file, not just into this call's fallback. The
@@ -129,7 +146,7 @@ class Mailbox:
              # one line; `why` is the content between them.
              "prompt": prompt or name, "how": how,
              "default": None if default is None else str(default),
-             "asked_at": time.time(), "run": self.notebook.run_id}
+             "asked_at": asked_at, "run": self.notebook.run_id}
         self.notebook.run.mkdir(parents=True, exist_ok=True)
         self.notebook.answer_path.unlink(missing_ok=True)
         self.notebook.question_path.write_text(json.dumps(q, indent=1) + "\n")
@@ -180,7 +197,8 @@ class Mailbox:
                     continue
                 self.notebook.question_path.unlink(missing_ok=True)
                 value = str(a.get("value", ""))
-                self._record(kind, name, why, value, a.get("by") or "reply")
+                self._record(kind, name, why, value, a.get("by") or "reply", prompt,
+                             asked_at)
                 return value
         finally:
             runstate.write(self.notebook, waiting_on=None)
@@ -189,7 +207,8 @@ class Mailbox:
         # stopped run a coordinator can resume rather than an answer invented
         # on the run's behalf.
         if default is not None:
-            self._record(kind, name, why, default, "default (unanswered)")
+            self._record(kind, name, why, default, "default (unanswered)", prompt,
+                     asked_at)
             return str(default)
         raise SystemExit(
             f"\n  no answer to {name!r} after "
