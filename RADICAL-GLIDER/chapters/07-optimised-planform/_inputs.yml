@@ -17,3 +17,6 @@ defines: Wing span, root chord, and tip chord free to the optimiser alongside po
 specified:
   - bounds: Planform bounds: span <= 0.76 m, chords <= 0.15 m
 assumed:
+overwrites:
+  - 01-first-chapter/airfoil: Flat plate replaces NACA0006 proxy
+

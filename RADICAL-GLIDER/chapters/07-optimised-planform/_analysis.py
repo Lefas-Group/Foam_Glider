@@ -107,3 +107,20 @@ def optimize_geometry_for_sink_rate(get_airplane_func, alpha_max=None, span_max=
     opt_plane.m_total = float(sol.value(m_total))
     return float(sol.value(sink)), opt_plane
 
+def get_airplane_plate(wing_x_le=0.25, le_sweep=10.5, wing_inc=0.0, wing_span=0.508, root_chord=0.0853, tip_chord=0.0508):
+    plane = get_airplane(
+        wing_x_le=wing_x_le, le_sweep=le_sweep, wing_inc=wing_inc,
+        wing_span=wing_span, root_chord=root_chord, tip_chord=tip_chord
+    )
+    x_coords = np.linspace(1, 0, 50)
+    plate_coords = np.vstack([
+        np.column_stack([x_coords, np.zeros_like(x_coords)]),
+        np.column_stack([x_coords[::-1][1:], np.zeros_like(x_coords[1:])])
+    ])
+    af_plate = asb.Airfoil("flat_plate", coordinates=plate_coords)
+    for w in plane.wings:
+        for xsec in w.xsecs:
+            xsec.airfoil = af_plate
+    return plane
+
+
