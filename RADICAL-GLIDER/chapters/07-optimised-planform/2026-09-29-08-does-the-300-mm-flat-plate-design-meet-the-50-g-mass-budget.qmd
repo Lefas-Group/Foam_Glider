@@ -1,0 +1,68 @@
+---
+title: "Does the 300 mm flat plate design meet the 50 g mass budget?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 120.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 250.0        # s granted for the probe
+PROBE_SPENT = 25.0      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# 50 g budget from 02-wings-at-rear/2026-09-29-01-does-it-meet-the-50-g-mass-budget-with-ballast-fitted.qmd
+mass_budget_g = 50.0
+
+_, opt_plane = optimize_geometry_for_sink_rate(
+    get_airplane_plate,
+    alpha_max=5.75,
+    span_max=0.300
+)
+
+m_total_g = opt_plane.m_total * 1000
+m_ballast_g = opt_plane.mass_ballast * 1000
+m_airframe_g = m_total_g - m_ballast_g
+mass_excess_g = m_total_g - mass_budget_g
+
+assert m_total_g > mass_budget_g
+```
+
+::: {.hero}
+[`{python} f"No, {m_total_g:.1f} g"`]{.hero-value}
+[all-up mass exceeding 50 g budget]{.hero-label}
+:::
+
+**Answer.** No. The [300 mm flat plate optimum](2026-09-29-06-what-is-the-minimum-trimmed-sink-rate-with-a-300-mm-flat-plate-wing.qmd) has an airframe mass of [`{python} f"{m_airframe_g:.1f} g"`]{.key} and requires [`{python} f"{m_ballast_g:.1f} g"`]{.key} of nose ballast for pitch trim and static margin. This brings all-up mass to [`{python} f"{m_total_g:.1f} g"`]{.key}, exceeding the [`{python} f"{mass_budget_g:.1f} g"`]{.key} [budget](../02-wings-at-rear/2026-09-29-01-does-it-meet-the-50-g-mass-budget-with-ballast-fitted.qmd) by [`{python} f"{mass_excess_g:.1f} g"`]{.key} (@fig-mass-breakdown). Expanding chords to recover area on the constrained span drives foam mass up, leaving no margin for trim ballast.
+
+```{python}
+#| label: fig-mass-breakdown
+#| fig-cap: "Mass breakdown of the 300 mm flat plate optimum compared to the 50 g budget."
+fig, ax = plt.subplots(figsize=(6, 4))
+categories = ["Airframe", "Ballast", "All-up mass"]
+masses = [m_airframe_g, m_ballast_g, m_total_g]
+colors = ["#2b5c8f", "#d95f02", "#7570b3"]
+
+bars = ax.bar(categories, masses, color=colors, width=0.5)
+ax.axhline(mass_budget_g, color="crimson", linestyle="--", linewidth=1.5, label=f"Budget ({mass_budget_g:.0f} g)")
+
+for bar, cat in zip(bars, categories):
+    yval = bar.get_height()
+    if cat == "Airframe":
+        ax.text(bar.get_x() + bar.get_width()/2, yval - 5.0, f"{yval:.1f} g", ha="center", va="top", fontsize=9, color="white", fontweight="bold")
+    else:
+        ax.text(bar.get_x() + bar.get_width()/2, yval + 1.2, f"{yval:.1f} g", ha="center", va="bottom", fontsize=9)
+
+ax.set_ylabel("Mass [g]")
+ax.set_ylim(0, 65)
+ax.legend(loc="upper left")
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_geometry_for_sink_rate, get_airplane_plate)
+```
