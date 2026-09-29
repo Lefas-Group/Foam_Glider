@@ -1,0 +1,85 @@
+---
+title: "Is NACA 0006 a valid flat plate proxy at the stall-bounded Reynolds number?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 120.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 250.0      # s granted for the probe
+PROBE_SPENT = 68.0      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+stall_angle = 6.7
+sink_baseline = 0.64  # from 2026-09-29-03-what-is-the-minimum-trimmed-sink-rate-when-bounded-below-the-section-s.qmd
+
+sink_rate, opt_plane = optimize_geometry_for_sink_rate(get_airplane, alpha_max=stall_angle)
+
+rho = 1.225
+mu = 1.81e-5
+v_trim = opt_plane.v_trim
+c_mean = (opt_plane.root_chord + opt_plane.tip_chord) / 2
+Re = rho * v_trim * c_mean / mu
+
+alphas = np.linspace(0, 8, 33)
+af_naca = asb.Airfoil("naca0006")
+x_coords = np.linspace(1, 0, 50)
+plate_coords = np.vstack([
+    np.column_stack([x_coords, np.zeros_like(x_coords)]),
+    np.column_stack([x_coords[::-1][1:], np.zeros_like(x_coords[1:])])
+])
+af_plate = asb.Airfoil("flat_plate", coordinates=plate_coords)
+
+aero_naca = af_naca.get_aero_from_neuralfoil(alpha=alphas, Re=Re)
+aero_plate = af_plate.get_aero_from_neuralfoil(alpha=alphas, Re=Re)
+
+cl_naca = np.array(aero_naca["CL"])
+cd_naca = np.array(aero_naca["CD"])
+cl_plate = np.array(aero_plate["CL"])
+cd_plate = np.array(aero_plate["CD"])
+
+idx_stall_plate = int(np.argmax(cl_plate))
+stall_plate = float(alphas[idx_stall_plate])
+
+cl_naca_trim = float(af_naca.get_aero_from_neuralfoil(alpha=stall_angle, Re=Re)["CL"][0])
+cl_plate_trim = float(af_plate.get_aero_from_neuralfoil(alpha=stall_angle, Re=Re)["CL"][0])
+
+assert cl_plate_trim < cl_naca_trim
+assert stall_plate < stall_angle
+```
+
+::: {.hero}
+[`{python} f"{Re:.0f}"`]{.hero-value}
+[chord Reynolds number]{.hero-label}
+:::
+
+**Answer.** At the [stall-bounded planform optimum](2026-09-29-03-what-is-the-minimum-trimmed-sink-rate-when-bounded-below-the-section-s.qmd) trimmed at [`{python} f"{v_trim:.2f} m/s"`]{.key} and mean chord [`{python} f"{c_mean*1000:.1f} mm"`]{.key}, the chord Reynolds number is [`{python} f"{Re:.0f}"`]{.key}. NACA 0006 is not a valid stand-in here (@fig-naca-vs-plate). While thin plate and NACA 0006 behave similarly below [`{python} f"{stall_plate:.1f}°"`]{.key}, the flat plate stalls earlier near [`{python} f"{stall_plate:.1f}°"`]{.key}, yielding [`{python} f"{cl_plate_trim:.2f}"`]{.key} lift at [`{python} f"{stall_angle:.1f}°"`]{.key} compared to [`{python} f"{cl_naca_trim:.2f}"`]{.key} for NACA 0006. The rounded leading edge suppresses separation, overpredicting usable lift and causing the real trimmed sink rate to degrade above [`{python} f"{sink_baseline:.2f} m/s"`]{.key}.
+
+```{python}
+#| label: fig-naca-vs-plate
+#| fig-cap: "Section lift coefficient and drag polar comparison between NACA 0006 and flat plate at the stall-bounded chord Reynolds number."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7, 3))
+ax1.plot(alphas, cl_naca, label="NACA 0006")
+ax1.plot(alphas, cl_plate, "--", label="Flat plate")
+ax1.axvline(stall_angle, color="gray", linestyle=":", label=f"Trim bound ({stall_angle}°)")
+ax1.set_xlabel(r"Angle of attack $\alpha$ [deg]")
+ax1.set_ylabel(r"Section lift coefficient $C_l$")
+ax1.legend(fontsize=8)
+
+ax2.plot(cd_naca, cl_naca, label="NACA 0006")
+ax2.plot(cd_plate, cl_plate, "--", label="Flat plate")
+ax2.set_xlabel(r"Section drag coefficient $C_d$")
+ax2.set_ylabel(r"Section lift coefficient $C_l$")
+ax2.legend(fontsize=8)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_geometry_for_sink_rate)
+```
