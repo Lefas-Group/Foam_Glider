@@ -4,9 +4,9 @@
 parent: 01-first-chapter
 at: ecf245b
 at_entry: 9
-summary: "TODO: what the design BECAME, a few words"
+summary: "Geometry optimised for sink rate"
 changes:
-  - TODO: one line per deliberate difference, as you make it
+  - Wing position, sweep, incidence, and ballast free to minimise trimmed sink rate
 # What this chapter OVERWROTE: items an EARLIER
 # chapter declared that no longer hold here, as
 # `<chapter>/<their id>`, with an optional reason after a

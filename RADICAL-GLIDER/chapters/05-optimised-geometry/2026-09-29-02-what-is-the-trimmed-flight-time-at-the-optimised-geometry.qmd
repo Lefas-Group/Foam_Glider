@@ -1,0 +1,45 @@
+---
+title: "What is the trimmed flight time at the optimised geometry?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0
+SOLVE_BUDGET = 15.0
+PROBE_POOL = 200.0
+PROBE_SPENT = 17.7
+
+import aerosandbox as asb
+import aerosandbox.numpy as np
+
+min_sink = optimize_geometry_for_sink_rate(get_airplane)
+flight_time = 1.5 / min_sink
+```
+
+::: {.hero}
+[`{python} f"No, {flight_time:.2f} s"`]{.hero-value}
+[Trimmed flight time from 1.5 m]{.hero-label}
+:::
+
+**Answer.** Even with geometry fully freed to find the lowest possible sink rate, the aircraft cannot achieve the 2.0 s flight-time target. The minimum trimmed sink rate is [`{python} f"{min_sink:.2f} m/s"`]{.key} (from [how low can trimmed sink rate be driven with free geometry and ballast?](2026-09-29-01-how-low-can-trimmed-sink-rate-be-driven-with-free-geometry-and-ballast.qmd)). From a 1.5 m standing throw, this yields a flight time of [`{python} f"{flight_time:.2f} s"`]{.key}.
+
+```{python}
+#| echo: false
+#| output: asis
+from IPython.display import display, Markdown
+
+table = f"""
+| Configuration | Trimmed sink rate | Flight time from 1.5 m |
+|---|---|---|
+| Baseline (unballasted) | 1.89 m/s | 0.79 s |
+| Optimised geometry | {min_sink:.2f} m/s | {flight_time:.2f} s |
+"""
+display(Markdown(table))
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_geometry_for_sink_rate)
+```
