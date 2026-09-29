@@ -148,7 +148,10 @@ def _table(runs):
     column already tells you by being older than the work.
     """
     from rich.table import Table
-    t = Table(box=None, pad_edge=False, expand=True)
+    # NOT `expand=True`. Stretched to the terminal, six columns of short
+    # values sat in acres of whitespace -- a run id and a chapter name a third
+    # of a screen apart, which is harder to read the wider your terminal is.
+    t = Table(box=None, pad_edge=False, expand=False, padding=(0, 2, 0, 0))
     for col, style, justify in (("run", "grey50", "left"),
                                 ("chapter", "", "left"),
                                 ("turn", "", "right"),
@@ -378,37 +381,36 @@ def _seen_already(notebook, only):
 HISTORY = 200
 
 
-def _qa_line(run, got, replay=False):
+def _block(when, sigil, sigil_style, content):
     """
-    One exchange, whoever answered it.
+    One conversation event: a time, a sigil, and a column that wraps in place.
 
-    THE RECORD IS `run.json`, NOT THIS PROCESS. The board used to print an
-    answer only when it had collected the answer itself, so everything settled
-    by `--answers`, by `nb answer` from another terminal, or by a coordinator
-    -- which is now most of them -- happened invisibly: `inherited` was asked
-    and answered and the board showed neither. `_record` has been appending
-    every question and its answer, with the source, to `run.json` all along.
-    Reading that makes the board a view of the conversation rather than a log
-    of its own half of it.
+    A GRID RATHER THAN A STRING, so that every event has the same left edge and
+    long ones wrap UNDER themselves instead of falling back to column zero.
+    Printed as f-strings, a wrapped question ran back to the margin and the
+    conversation lost the alignment that makes it scannable -- four kinds of
+    event, four different shapes, none of them lining up with the next.
     """
-    from rich.markup import escape
-    when = time.strftime("%H:%M", time.localtime(got.get("at", 0)))
-    where = run.get("chapter") or run.get("run", "?")
-    value = (got.get("value") or "").strip()
-    # A BLANK IS AN ANSWER, and the most common one: "" accepts an assumption
-    # and keeps every inherited item. Printed raw it looked like the board had
-    # failed to record anything.
-    # REPLAYED ANSWERS ARE CAPPED. A reply can be a paragraph -- refusing a
-    # fork and saying why, correcting an assumption with the reasoning -- which
-    # is right to see as you type it and is history you have already read when
-    # the board reopens. The whole of it stays in `run.json`.
-    if replay and len(value) > 150:
-        value = value[:150].rstrip() + " …"
-    shown = escape(value) if value else "[italic]accepted as stated[/italic]"
-    src = got.get("source", "")
-    return (f"  [grey50]{when}[/grey50]  {escape(str(where))} · "
-            f"[bold]{escape(str(got.get('name', '')))}[/bold]\n"
-            f"         [grey50]\u2190[/grey50] {shown}  [grey50]({escape(src)})[/grey50]")
+    from rich.table import Table
+    from rich.text import Text
+    t = Table.grid(padding=(0, 1))
+    t.add_column(width=7, no_wrap=True)          # "  09:43"
+    t.add_column(width=1, no_wrap=True)          # the sigil
+    t.add_column(overflow="fold")                # everything else, wrapping
+    t.add_row(Text(f"  {when}", style="grey50"),
+              Text(sigil, style=sigil_style), content)
+    return t
+
+
+def _stamp(at):
+    return time.strftime("%H:%M", time.localtime(at or 0))
+
+
+def _note_line(note):
+    """One decision from the coordinator: narration, not a panel."""
+    from rich.text import Text
+    return _block(_stamp(note.get("at")), "\u25c6", "grey50",
+                  Text(str(note.get("text", ""))))
 
 
 def _ask_line(run):
@@ -420,11 +422,63 @@ def _ask_line(run):
     them, so the board could show a programme's worth of answers with no
     record of what had been asked.
     """
-    from rich.markup import escape
-    when = time.strftime("%H:%M", time.localtime(run.get("started", 0)))
+    from rich.text import Text
+    body = Text(str(run.get("chapter") or run.get("run", "?")), style="bold")
+    body.append("\n" + str(run.get("asked") or ""))
+    return _block(_stamp(run.get("started")), "\u2192", "cyan", body)
+
+
+def _qa_line(run, got, replay=False):
+    """
+    One exchange, whoever answered it.
+
+    THE RECORD IS `run.json`, NOT THIS PROCESS. The board used to print an
+    answer only when it had collected the answer itself, so everything settled
+    by `--answers`, by `nb answer` from another terminal, or by a coordinator
+    -- which is now most of them -- happened invisibly: `inherited` was asked
+    and answered and the board showed neither. `_record` has been appending
+    every question and its answer, with the source, to `run.json` all along.
+    """
+    from rich.text import Text
     where = run.get("chapter") or run.get("run", "?")
-    return (f"  [grey50]{when}[/grey50]  [grey50]\u2192[/grey50] "
-            f"{escape(str(where))}   {escape(str(run.get('asked') or ''))}")
+    value = (got.get("value") or "").strip()
+    # REPLAYED ANSWERS ARE CAPPED. A reply can be a paragraph -- refusing a
+    # fork and saying why, correcting an assumption with the reasoning -- which
+    # is right to see as you type it and is history you have already read when
+    # the board reopens. The whole of it stays in `run.json`.
+    if replay and len(value) > 150:
+        value = value[:150].rstrip() + " \u2026"
+    body = Text(f"{where} \u00b7 {got.get('name', '')}", style="bold")
+    # A BLANK IS AN ANSWER, and the most common one: "" accepts an assumption
+    # and keeps every inherited item. Printed raw it looked like the board had
+    # failed to record anything.
+    body.append("\n")
+    body.append(value or "accepted as stated",
+                style=None if value else "italic")
+    body.append(f"  ({got.get('source', '')})", style="grey50")
+    return _block(_stamp(got.get("at")), "\u2190", "grey50", body)
+
+
+def _ending_line(run):
+    """
+    How a run finished, in one line, for replay.
+
+    AN ENDING IS NEWS ONCE. The full panel carries the entry's prose, its
+    figure and its budgets -- right for something that finishes while you are
+    watching, and 33 lines apiece when six of them are replayed into a screen
+    you just opened. Measured: two endings were 36 of 73 history lines, which
+    pushed the rest of the conversation off the top of a 50-line terminal and
+    left the board looking like it had nothing to say.
+    """
+    from rich.text import Text
+    colour, word = ENDINGS.get(run.get("outcome") or "",
+                               ("red", run.get("outcome") or "died"))
+    body = Text(str(run.get("chapter") or run.get("run", "?")), style="bold")
+    body.append("\n" + str(run.get("answer") or word))
+    sha = (run.get("committed") or {}).get("sha")
+    if sha:
+        body.append(f"   {sha}", style="grey50")
+    return _block(_stamp(run.get("updated")), "\u25cf", colour, body)
 
 
 def _direction_panel(got):
@@ -453,7 +507,6 @@ def _events(notebook, only=None):
         current = coordinator.current_direction(notebook)
         if current:
             epoch = current.get("at", 0.0)
-    if not only:
         for note in coordinator.notes(notebook):
             kind = "direction" if note.get("kind") == "direction" else "note"
             out.append((note.get("at", 0), kind, note,
@@ -488,13 +541,16 @@ def _screen(notebook, runs, pinned, coordinated=False):
     """
     from rich.console import Group
     parts = [] if pinned is None else [_direction_panel(pinned)]
-    parts.append(_table(runs))
+    # ONLY WHAT IS IN FLIGHT. A finished run has already said so in the
+    # conversation above, as one line with its answer on it; repeating it here
+    # for the rest of the session made the table mostly a list of things that
+    # are not happening, and pushed the two rows that were off the bottom.
+    parts.append(_table([r for r in runs if not _ended(r)]))
     # SAY WHEN A QUESTION IS NOT YOURS. Deferring run questions to the
     # coordinator is right, but done silently it is the failure this whole
     # mailbox exists to prevent: a run sits `waiting`, nobody at the board
     # realises they could answer it, the coordinator turns out not to be
-    # running, and the question expires. Naming the count and the way to take
-    # it back costs one line.
+    # running, and the question expires.
     if coordinated:
         held = [r for r in runs if r.get("question")
                 and not coordinator.is_coordinator(r["run"])]
@@ -504,32 +560,7 @@ def _screen(notebook, runs, pinned, coordinated=False):
                 f"  {len(held)} waiting on the coordinator — "
                 f"`nb board {notebook.root.name} --all` to answer here",
                 style="grey50"))
-    if len(parts) == 1:
-        return parts[0]
-    return Group(*parts)
-
-
-def _ending_line(run):
-    """
-    How a run finished, in one line, for replay.
-
-    AN ENDING IS NEWS ONCE. The full panel carries the entry's prose, its
-    figure and its budgets -- right for something that finishes while you are
-    watching, and 33 lines apiece when six of them are replayed into a screen
-    you just opened. Measured: two endings were 36 of 73 history lines, which
-    pushed the rest of the conversation off the top of a 50-line terminal and
-    left the board looking like it had nothing to say.
-    """
-    from rich.markup import escape
-    colour, word = ENDINGS.get(run.get("outcome") or "",
-                               ("red", run.get("outcome") or "died"))
-    when = time.strftime("%H:%M", time.localtime(run.get("updated", 0)))
-    where = run.get("chapter") or run.get("run", "?")
-    said = run.get("answer") or word
-    sha = (run.get("committed") or {}).get("sha")
-    return (f"  [grey50]{when}[/grey50]  [{colour}]\u25cf[/{colour}] "
-            f"{escape(str(where))}   {escape(str(said))}"
-            + (f"  [grey50]{sha}[/grey50]" if sha else ""))
+    return parts[0] if len(parts) == 1 else Group(*parts)
 
 
 def _print_event(console, kind, payload, replay=False):
@@ -551,23 +582,6 @@ def _print_event(console, kind, payload, replay=False):
         console.print(_ending_line(payload))
     else:
         console.print(_ending_panel(payload))
-
-
-def _note_line(note):
-    """
-    One decision from the coordinator, for the scrollback.
-
-    NOT A PANEL and not a pane. A panel is for something that wants you or
-    tells you an outcome; a note is narration, and bordering it would give it
-    the same weight as the question it is explaining. A pane would be worse:
-    this module keeps the conversation in the scrollback and the table at the
-    bottom precisely so the order survives, and notes read as causes of the
-    questions that follow them -- which is exactly what a separately scrolling
-    pane destroys.
-    """
-    from rich.markup import escape
-    when = time.strftime("%H:%M", time.localtime(note.get("at", 0)))
-    return f"  [grey50]\u25c6 {when}[/grey50]  {escape(note.get('text', ''))}"
 
 
 def follow(notebook, only=None, answer_all=False):

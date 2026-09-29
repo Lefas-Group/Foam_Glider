@@ -26,6 +26,29 @@ PLACEHOLDER = ("<one sentence, then a bullet list: the aero method, the section,
 SLUG = re.compile(r"^(?:\d{2}-)?(?P<slug>[a-z0-9]+(?:-[a-z0-9]+)*)$")
 
 
+def next_number(notebook):
+    """
+    The number `_allocate` would pick right now, with no `start` hint.
+
+    SPLIT OUT SO THE APPROVAL GATE CAN SHOW IT. The model proposes a chapter
+    name with a number in it, `create_chapter` calls `_allocate` WITHOUT a
+    `number=`, and the guess is discarded -- so the gate was displaying, and
+    keying its question on, a number the system had already decided to ignore.
+    Measured, 2026-09-29: two concurrent runs both proposed `06-`, the
+    coordinator saw the collision at the gate and spent a round trip sending
+    one back to be renumbered, when `_allocate` was always going to hand it
+    `07-`. Ten minutes of run time to fix something that was not broken.
+
+    OUTSIDE THE LOCK, and so a best effort by construction: another run may
+    allocate between this call and the one that counts. That is why it only
+    ever DISPLAYS. Allocation stays where it was, under `alloc.lock`, and still
+    walks past a collision -- the guarantee is unchanged, and the gate now says
+    something much closer to true than the model's guess.
+    """
+    used = [int(c[:2]) for c in notebook.chapters() if c[:2].isdigit()]
+    return max(used, default=0) + 1
+
+
 def _allocate(notebook, slug, start=None):
     """
     Create `chapters/NN-<slug>/` and return (name, path).
@@ -58,8 +81,7 @@ def _allocate(notebook, slug, start=None):
     """
     from ..locks import held
     with held(notebook.scratch / "alloc.lock", timeout=60):
-        used = [int(c[:2]) for c in notebook.chapters() if c[:2].isdigit()]
-        n = int(start) if start is not None else max(used, default=0) + 1
+        n = int(start) if start is not None else next_number(notebook)
         for _ in range(100):
             target = notebook.chapters_dir / f"{n:02d}-{slug}"
             if any(c.startswith(f"{n:02d}-") for c in notebook.chapters()):

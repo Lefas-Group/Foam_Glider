@@ -602,7 +602,26 @@ def _new_chapter_approval(notebook, parent, chapter, title, defines):
     goes back as a tool error the model reads and acts on -- write the entry
     into the chapter it was given, or say why it cannot. Ending the process on
     a refusal would throw away the probe that justified the request.
+
+    THE NUMBER SHOWN IS THE ONE THAT WILL BE USED, not the one the model
+    guessed. `create_chapter` calls `_allocate` with no `number=`, so the
+    model's guess is discarded and the next free number taken -- which meant
+    this gate asked about `06-foo` and then created `07-foo`, and keyed the
+    question, `waiting_on` and the `--answers` entry on a name that never
+    existed. Worse than cosmetic: on 2026-09-29 two runs proposed `06-` within
+    eleven minutes, the coordinator read that as a collision it had to resolve,
+    and sent one back to be renumbered into the number allocation was already
+    going to give it.
+
+    THE SLUG IS THE KEY, for the same reason. It is the half the model actually
+    decides and the half that survives allocation, so `--answers` can now name
+    a chapter approval in advance; the number never could be predicted and had
+    no business being in the key. `defines` carries the rest.
     """
+    from ..tools.scaffold import SLUG, next_number
+    m = SLUG.match(str(chapter or "").strip().strip("/"))
+    slug = m.group("slug") if m else str(chapter or "")
+    chapter = f"{next_number(notebook):02d}-{slug}"
     body = "\n".join([
         f"  {chapter}", f'  "{title}"', "",
         f"  defines   {' '.join(defines.split())[:400]}",
@@ -611,6 +630,8 @@ def _new_chapter_approval(notebook, parent, chapter, title, defines):
         "",
         "  Later entries build on its _model.py — changing it then means",
         "  re-solving all of them. That commitment is yours, not the entry's.",
+        "  The number is settled at creation and walks past anything a",
+        "  concurrent run takes first — approve the slug, not the number.",
     ])
     how = '  Enter (or anything else) creates it. "no — <why>" sends it back.'
     tell(f"\n{'─' * 72}\nNEW CHAPTER — approve before it is created"
@@ -619,7 +640,7 @@ def _new_chapter_approval(notebook, parent, chapter, title, defines):
     tell(f"\n{how}")
     tell(f"  waiting for an answer — {MAILBOX.notebook.question_path}")
     answer = str(MAILBOX.ask(
-        "chapter", chapter, body,
+        "chapter", slug, body,
         prompt="Create a new chapter for this?",
         how='Enter approves · "no — why" keeps it here') or "").strip()
     if answer.lower().startswith(("no", "n ", "reject", "don't", "do not")):

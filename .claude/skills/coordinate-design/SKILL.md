@@ -61,19 +61,31 @@ uv run --group nb python -m nb ask <notebook> \
 
 ## Watch
 
-Poll `run.json`. It is written atomically, so read it at any rate:
+**Do not poll. `nb listen` blocks until a run needs you, and prints what and
+how long you have:**
 
 ```bash
-uv run --group nb python -c "
-import json, pathlib
-for f in sorted(pathlib.Path('<notebook>/_scratch/runs').glob('*/run.json')):
-    d = json.loads(f.read_text())
-    print(d['run'], d.get('chapter'), 'turn', d.get('turn'),
-          'waiting_on=', d.get('waiting_on'), 'outcome=', d.get('outcome'))"
+uv run --group nb python -m nb listen <notebook>      # RUN THIS IN THE BACKGROUND
 ```
 
-`waiting_on` names a pending question — it is in `question.json` beside it,
-with `kind`, `name`, `why`, `options`, `default`. `outcome` set means finished.
+It returns 0 the moment any run **asks** (a question on disk), **ends** (an
+`outcome`) or **dies**, and 1 if the wait runs out — so a backgrounded call's
+exit is what wakes you. An `asks` block names the run, the question, **how many
+seconds are left before it defaults**, and the `nb answer` line to paste.
+
+**Background it, for the reason `nb await` is backgrounded.** A foreground
+shell call is capped at ten minutes, and — this is the part that bites — its
+output only reaches you when it EXITS. A hand-rolled `for … sleep … done` loop
+therefore prints `waiting_on` every 40 s and shows you the whole batch once,
+minutes later. Measured on 2026-09-29: an `inherited` question went unseen for
+nine minutes against a five-minute default, and chapter 06 — whose premise is
+that the wing position is free — committed carrying an inherited assumption
+that pins the wing at x=0.25 m.
+
+Endings are reported once and then they are history; a question or a death is
+reported every time until you act on it. A notebook you have never listened to
+reports nothing on the first call — it starts the clock. For the whole picture
+at any moment, `nb board <notebook>`.
 
 ## Answer
 
@@ -96,6 +108,12 @@ overwrites the first, and the record says the user typed the second. Measured.
 | `refactor` | `_model.py` / `_analysis.py` | anything allows · `no — why` restores the file |
 | `specified` | the quantity | **see below** |
 
+**The number on a proposed chapter is not yours to police.** Allocation takes
+the next free number under a lock and walks past anything a concurrent run took
+first, so two runs proposing the same number is not a collision and sending one
+back to be renumbered only costs a round trip. Judge the slug, the title and
+what it `defines`.
+
 **A Specified input is the one you may not invent.** It is an input where a
 different answer changes *what is being built*. Answer it yourself **only when
 the user's direction already settles it**, and say which part of their
@@ -116,8 +134,9 @@ stopped:
 
 `--answers file.json` pre-answers by `name`, once each — e.g.
 `{"assumptions": "", "_model.py": "", "static margin": "10% of MAC"}`. The
-refactor key is the filename, so it is predictable; the chapter key is the slug
-the model invents, so it is not.
+refactor key is the filename and the chapter key is the bare slug — no number,
+because the number is allocated at creation and the model's guess is
+discarded.
 
 ## Escalate what the direction does not settle
 

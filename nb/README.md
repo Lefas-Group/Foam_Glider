@@ -88,6 +88,7 @@ uv run --group nb python -m nb ask    <notebook> "<q>" --quiet  # …no board
 uv run --group nb python -m nb resume <notebook> [run]       # resume a stop
 uv run --group nb python -m nb board  <notebook>             # N agents, one terminal
 uv run --group nb python -m nb answer <notebook> [run] "…"   # reply to a waiting run
+uv run --group nb python -m nb listen <notebook>             # block until a run needs you
 uv run --group nb python -m nb watch  <notebook> [run]       # follow the detail
 uv run --group nb python -m nb stop   <notebook> [run]       # ask a run to stop
 uv run --group nb python -m nb clean  <notebook> [run] [--keep N] [--yes]
