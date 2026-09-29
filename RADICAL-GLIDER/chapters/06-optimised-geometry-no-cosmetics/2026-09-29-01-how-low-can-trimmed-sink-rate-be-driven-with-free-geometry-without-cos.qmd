@@ -1,0 +1,54 @@
+---
+title: "How low can trimmed sink rate be driven with free geometry without cosmetics?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 480.0
+SOLVE_BUDGET = 15.0
+PROBE_POOL = 900.0
+PROBE_SPENT = 10.9
+
+sink_with_cosmetics = 0.84 # from 05-optimised-geometry/2026-09-29-01-how-low-can-trimmed-sink-rate-be-driven-with-free-geometry-and-ballast.qmd
+
+res = optimize_geometry_for_sink_rate(get_airplane)
+plane = get_airplane(res['wing_x_le'], res['le_sweep'], res['wing_inc'])
+```
+
+::: {.hero}
+[`{python} f"{res['sink']:.2f}"`]{.hero-value}
+[m/s minimum trimmed sink rate]{.hero-label}
+:::
+
+**Answer.** Removing the cosmetic components drops the minimum attainable sink rate from [`{python} sink_with_cosmetics`]{.key} m/s ([How low can trimmed sink rate be driven with free geometry and ballast?](../05-optimised-geometry/2026-09-29-01-how-low-can-trimmed-sink-rate-be-driven-with-free-geometry-and-ballast.qmd)) to [`{python} f"{res['sink']:.2f}"`]{.key} m/s. The optimal configuration uses an unswept wing and requires no nose ballast, trimming at a slow [`{python} f"{res['v_trim']:.2f}"`]{.key} m/s. 
+
+```{python}
+#| echo: false
+#| output: asis
+from IPython.display import display, Markdown
+
+md = f"""
+| Parameter | Optimised value |
+|---|---|
+| Wing position (LE) | `{res['wing_x_le']*100:.1f}` cm |
+| Leading edge sweep | `{res['le_sweep']:.1f}`° |
+| Wing incidence | `{res['wing_inc']:.1f}`° |
+| Nose ballast | `{res['mass_ballast']*1000:.1f}` g |
+| Trimmed speed | `{res['v_trim']:.2f}` m/s |
+| Trim angle of attack | `{res['alpha_trim']:.1f}`° |
+"""
+display(Markdown(md))
+```
+
+```{python}
+#| label: fig-three-view
+#| fig-cap: "Three-view of the optimised geometry without cosmetics, showing the unswept wing."
+plane.draw_three_view()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_geometry_for_sink_rate)
+```
