@@ -1,7 +1,7 @@
 """
 Lint, render and diff a notebook in one call. One copy, shared by every notebook.
 
-    uv run python nb/vendor/check.py <notebook-dir> [chapter ...] [--no-render] [--all] [--ref REF]
+    uv run --group nb python -m nb.check <notebook-dir> [chapter ...] [--no-render] [--all] [--ref REF]
 
 Runs the three checks in the order that costs least: lint first, because almost
 every authoring mistake is catchable without a render and finding one afterwards
@@ -30,8 +30,9 @@ page it wrongly spares is a page freezediff never gets to compare. So `--all` is
 the release gate: fast path while authoring, exhaustive run before committing.
 
 A checker like lint.py and freezediff.py -- authoring-time, reads the notebook,
-writes nothing into the rendered site -- so it lives in `nb/vendor/` and is not
-vendored. It imports the other two rather than reimplementing either.
+writes nothing into the rendered site -- so it is ordinary `nb` code and is not
+vendored into any notebook. It imports the other two rather than reimplementing
+either.
 """
 import ast
 import contextlib
@@ -45,8 +46,8 @@ import subprocess
 import sys
 import time
 
-import freezediff
-import lint
+from . import freezediff
+from . import lint
 
 # `_budget.py` used to be here: a chapter-wide solve budget that binds truncates
 # a solve, so editing it could move a frozen number exactly as editing the model

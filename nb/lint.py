@@ -1,17 +1,20 @@
 """
 Format checks for notebook entries. One copy, shared by every notebook.
 
-    uv run python nb/vendor/lint.py <notebook-dir> [chapter ...]
+    uv run --group nb python -m nb.lint <notebook-dir> [chapter ...]
 
 Defaults to every chapter except those a notebook opts out of. Exits non-zero if
 anything is flagged, so it can gate a commit.
 
-This lives in `nb/vendor/` rather than in each notebook because it is a CHECKER:
-it runs at authoring time, reads the notebook and writes nothing. Nothing it does
-ends up in the rendered site, so a notebook does not need it present to render.
-`_notebook.py` is the opposite -- exec'd into every page at render time, with its
-output baked into the published HTML -- which is why that one stays vendored in
-each notebook and this one does not.
+This is ordinary `nb` code rather than something copied into each notebook,
+because it is a CHECKER: it runs at authoring time, reads the notebook and writes
+nothing. Nothing it does ends up in the rendered site, so a notebook does not
+need it present to render. `_notebook.py` is the opposite -- exec'd into every
+page at render time, with its output baked into the published HTML -- which is
+why that one is vendored, in `nb/vendored/`, and this one is not.
+
+It sat in `nb/vendor/` beside that file for a while, which is how four modules
+that were never vendored came to look as though they were.
 
 **A notebook carries no lint configuration.** Everything that once looked
 notebook-specific is either derived or declared where it belongs: the helpers
@@ -95,15 +98,22 @@ BUDGET_NAMES = {"ENTRY_CEILING", "SOLVE_BUDGET", "PROBE_POOL", "PROBE_SPENT"}
 
 RESULT_NUMBER = re.compile(r"\d+\.\d{2,}")
 
+# THE CANONICAL `_notebook.py`, which rules 11 and 27 both read. One constant,
+# because they used to derive it separately from `__file__` and the two would
+# have disagreed the moment either moved -- as both just did, out of `vendor/`
+# and into `nb/`, leaving `vendored/` holding the only file the word fits.
+CANONICAL_NOTEBOOK = pathlib.Path(__file__).resolve().parent / "vendored" / "notebook.py"
+
+
 # Rule 27. Every top-level name `_notebook.py` binds -- its imports, its helpers
-# and its state. READ FROM THE FILE rather than typed out here: the two live in
-# the same directory, and a hand-copied list would be wrong the first time
-# someone adds a helper, in the silent direction (no rule, no warning). Falls
-# back to the names that actually broke a render if the file cannot be parsed,
-# so the rule degrades rather than vanishing.
+# and its state. READ FROM THE FILE rather than typed out here: a hand-copied
+# list would be wrong the first time someone adds a helper, in the silent
+# direction (no rule, no warning). Falls back to the names that actually broke a
+# render if the file cannot be parsed, so the rule degrades rather than
+# vanishing.
 def _machinery_names():
     try:
-        tree = ast.parse((pathlib.Path(__file__).parent / "notebook.py").read_text())
+        tree = ast.parse(CANONICAL_NOTEBOOK.read_text())
     except (OSError, SyntaxError):
         return {"time", "pathlib", "aero_cost", "footer", "_T0"}
     names = set()
@@ -557,8 +567,7 @@ def _notebook_drift(root):
     # 16, 17, 18 and 28 between them, and attributing per finding means
     # splitting the function. The table below is therefore also the list of what
     # is left to split, which is the honest version of a gap.
-    problems += _one_drift(pathlib.Path(__file__).parent / "notebook.py",
-                           root / "_notebook.py")
+    problems += _one_drift(CANONICAL_NOTEBOOK, root / "_notebook.py")
     return problems
 
 

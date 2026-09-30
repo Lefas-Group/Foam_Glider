@@ -73,7 +73,7 @@ def _render_cost(notebook, chapter, stem):
     md = frozen_markdown(notebook, chapter, stem)
     if md is None:
         return None
-    import lint
+    from .. import lint
     secs = lint.RUNTIME_SECONDS.search(md)
     if not secs:
         return None
@@ -139,7 +139,7 @@ def _ceiling_problem(notebook, entry_path, granted):
     """
     if granted is None:
         return None
-    import lint
+    from .. import lint
     _, declared = lint.limits_of(notebook.root, entry_path)
     if declared == granted:
         return None

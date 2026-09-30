@@ -459,7 +459,7 @@ def ask_specified(session, name, why, kind="specified", options="",
         # first is something `replaces=` can name. Told apart by the date
         # prefix every entry stem carries, not by guessing at the string: an id
         # may legally start with a digit.
-        import lint
+        from .. import lint
         this_id = (None if lint.ENTRY_FILE.match(where) or where == session.chapter
                    else where)
         raise ValueError(
@@ -480,7 +480,7 @@ def ask_specified(session, name, why, kind="specified", options="",
               "inherit it.")
     body = f"  {name}\n  {why}"
     if replaces:
-        import lint
+        from .. import lint
         ids = lint.input_ids(session.notebook.root, session.chapter or "")
         if replaces not in ids:
             raise ValueError(
@@ -708,7 +708,7 @@ def fork_chapter(session, name, title, defines):
     kept, struck = confirm_inherited(notebook, name, parent=parent or None)
     struck_ids = []
     if struck:
-        import lint
+        from .. import lint
         for _kind, item, where in struck:
             src = where.partition("/")[0]
             for _id, _text in lint.input_ids(notebook.root, src).items():
@@ -777,7 +777,7 @@ def _inherited_note(session):
         # made cannot -- it has no id to name. Both are struck; only the first
         # renders as "Overwritten from …". Saying otherwise would tell the
         # model its work was done when half of it was not.
-        import lint
+        from .. import lint
         lines += ["", "STRUCK — the user says this chapter BREAKS these, so "
                   "they do NOT carry forward. Where this chapter needs its own "
                   "value for one of them, that value is NEW and goes in this "
@@ -1055,7 +1055,7 @@ def open_entry(session, title, inputs_none_because=""):
                    ceiling=session.render_ceiling)
     say(f"  entry     {session.chapter}/{stem}.qmd")
 
-    import lint as _lint
+    from .. import lint as _lint
     default_solve, default_ceiling = _lint._defaults(notebook.root)
     ceiling = session.render_ceiling
     total = session.probe_pool or 0.0

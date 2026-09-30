@@ -64,7 +64,7 @@ def site(notebook, force=False, verbose=True, page=None,
               f"{notebook.root.name} --force` to rebuild them anyway")
         return None
 
-    import lint
+    from .. import lint
     # UNDER THE LOCK, and retried once, exactly as `verifiers.render` is. This
     # was the last render in the system taking no lock, and it is a PROJECT
     # render -- the widest one there is -- fired after every commit. Two runs
@@ -110,7 +110,7 @@ def site(notebook, force=False, verbose=True, page=None,
     # looking at it. Four chapters holding four copies of one vehicle is not a
     # lint problem -- rule 31 covers the provenance -- but it IS the thing that
     # decides how expensive the next physics fix is, and nothing else says it.
-    import lint as _lint
+    from .. import lint as _lint
     kin = _lint.model_kinship(notebook.root, notebook.chapters())
     # TELEMETRY. This describes the notebook's standing shape, not anything
     # the run just did, and printing five unchanging lines after every entry

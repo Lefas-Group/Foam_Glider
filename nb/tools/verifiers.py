@@ -74,7 +74,7 @@ def _problems(root, chapters, pre_render=True):
     IS their fix, and gating the render on them deadlocks. See
     `FREEZE_STALE_RULES`.
     """
-    import lint
+    from .. import lint
     blocking, warnings = [], []
     for rule, where, msg in lint.check(root, chapters):
         if pre_render and rule in FREEZE_STALE_RULES:
@@ -87,7 +87,7 @@ def _problems(root, chapters, pre_render=True):
 
 def _word_budgets(notebook, chapter):
     """Prose words against rule 6's budget, per entry, so nobody counts by hand."""
-    import lint
+    from .. import lint
     lines = []
     for e in sorted((notebook.chapters_dir / chapter).glob("*.qmd")):
         if not lint.ENTRY_FILE.match(e.name):
@@ -241,7 +241,7 @@ def render_plan(root, path):
     different question -- "what would a project render have executed?" -- and is
     reported as its own clause rather than folded into the target's count.
     """
-    import lint
+    from .. import lint
     todo = lint.will_execute(root, path)
     deadline = lint.render_deadline(root, path)
     if path == root:
@@ -289,7 +289,7 @@ def render(notebook, target="", why="", session=None):
     # shape as the socket that hung a run for four hours. lint.render_quarto
     # sizes the deadline from what will actually execute and names the page it
     # died on.
-    import lint
+    from .. import lint
     # Announced before it starts, so `nb watch` knows how long silence here is
     # allowed to last. Without it the watcher falls back to a flat 120 s and
     # would cry wolf over an honest 200 s render.
@@ -391,7 +391,7 @@ def check(notebook, chapter="", force_all=False, no_render=False):
     includes, so without it a fresh render is compared against a cache hit and
     the match is an artefact. There is no flag to skip it.
     """
-    import check as check_mod
+    from .. import check as check_mod
     argv = [str(notebook.root)]
     if chapter:
         argv.append(chapter)

@@ -206,7 +206,7 @@ maintained for you; they are listed so that breaking one is recognisable rather
 than mysterious.
 
 Each violation names its own fix. A rule that looks arbitrary is one whose
-failure is recorded in `nb/vendor/lint.py` beside the rule -- for a person to
+failure is recorded in `nb/lint.py` beside the rule -- for a person to
 read, not you: fix what the message says.
 
 Rule 2 is a one-entry fix: promote the shared logic to `_analysis.py` and call it

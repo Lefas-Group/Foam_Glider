@@ -109,7 +109,7 @@ def _parts(path):
 
 def _allowed(session, path):
     """(ok, why not) for a write to `path`, which is relative to chapters/."""
-    import lint
+    from .. import lint
     notebook = session.notebook
     # NO RUN-STATE CHECK HERE ANY MORE. It used to refuse every write until
     # `open_chapter` had run, because until then nothing knew which chapter the

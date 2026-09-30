@@ -9,7 +9,7 @@ is a command you run rather than something the agent can reach -- there is no
 What makes it worth a command rather than a documented procedure is the failure
 mode. `_notebook.py` is VENDORED into every notebook -- Quarto execs it at
 render time, so a notebook must render without `nb` installed -- and lint rule
-11 requires it byte-identical to the copy in `vendor/`. Copied by hand, a stray
+11 requires it byte-identical to the copy in `nb/vendored/`. Copied by hand, a stray
 edit or a truncated paste is silent until the first lint run. Copied here, it
 cannot drift, and the command lints and preflights before it returns.
 """
@@ -20,7 +20,7 @@ import shutil
 import subprocess
 import sys
 
-from ..config import SCAFFOLD, VENDOR, Notebook
+from ..config import SCAFFOLD, VENDORED, Notebook
 from ..tools.scaffold import NAME as CHAPTER_NAME
 from ..tools.scaffold import create_chapter
 from ..log import say, tell
@@ -52,14 +52,14 @@ GITIGNORE = ("/.quarto/\n"
              "/_scratch/*\n")
 
 # Rule 11: vendored, and checked byte-for-byte. The tuple order is
-# (canonical in vendor/, destination in the new notebook).
+# (canonical in `nb/vendored/`, destination in the new notebook).
 #
 # ONE entry, and it is worth saying why there is not a second. `probe_base.py`
 # sat here until probes moved into a kernel: it had to be vendored because a
 # probe subprocess started from the notebook directory and could reach nothing
 # else. `nb` starts the kernel now, so the loader is `nb/tools/probe_init.py` --
 # ordinary `nb` code, propagated by being imported rather than by being copied.
-VENDORED = (("notebook.py", "_notebook.py"),)
+VENDORED_FILES = (("notebook.py", "_notebook.py"),)
 
 
 def _render(name, title, subject, chapter):
@@ -180,8 +180,8 @@ def main(path, title=None, subject=None, chapter=None,
     (root / "chapters").mkdir(parents=True)
     (root / "_scratch").mkdir(parents=True)
 
-    for canonical, dest in VENDORED:
-        shutil.copy(VENDOR / canonical, root / dest)
+    for canonical, dest in VENDORED_FILES:
+        shutil.copy(VENDORED / canonical, root / dest)
 
     (root / ".gitignore").write_text(GITIGNORE)
     # No probe scaffold: probing is a tool call into the run's kernel, so the
@@ -218,12 +218,12 @@ def main(path, title=None, subject=None, chapter=None,
 
     if verbose:
         tell(f"  created   {root}")
-        tell(f"  vendored  {', '.join(d for _, d in VENDORED)}  (rule 11)")
+        tell(f"  vendored  {', '.join(d for _, d in VENDORED_FILES)}  (rule 11)")
         tell(f"  chapter   chapters/{chapter}/")
 
     # Prove it rather than claim it. A notebook that does not lint is a notebook
     # whose first `nb ask` fails at preflight, several minutes later.
-    import lint
+    from .. import lint
     problems = [m for _, _, m in lint.check(root, [chapter])
                 if "(warning)" not in m]
     tell(f"  lint      {'clean' if not problems else f'{len(problems)} problem(s)'}")

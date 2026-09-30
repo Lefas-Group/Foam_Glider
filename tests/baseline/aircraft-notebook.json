@@ -1,0 +1,162 @@
+[
+ [
+  11,
+  "_notebook.py",
+  "differs from nb/vendored/notebook.py (first at line 15) \u2014 copy the canonical version down, or promote the local change up so every notebook gets it"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-27-01-what-does-it-look-like.qmd",
+  "declares no ENTRY_CEILING \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-27-01-what-does-it-look-like.qmd",
+  "declares no SOLVE_BUDGET \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-27-02-where-does-the-ballast-go-and-how-much.qmd",
+  "declares no ENTRY_CEILING \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-27-02-where-does-the-ballast-go-and-how-much.qmd",
+  "declares no SOLVE_BUDGET \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-27-03-what-are-the-lift-and-drag-polars-from-15-to-15-degrees.qmd",
+  "calls stall() from _analysis.py but does not render it \u2014 the footer cell passes the shared functions the entry called: footer(stall)"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-27-03-what-are-the-lift-and-drag-polars-from-15-to-15-degrees.qmd",
+  "declares no ENTRY_CEILING \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-27-03-what-are-the-lift-and-drag-polars-from-15-to-15-degrees.qmd",
+  "declares no SOLVE_BUDGET \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-28-01-how-far-should-it-fly.qmd",
+  "calls ballast_for(), neutral_point() from _analysis.py but does not render them \u2014 the footer cell passes the shared functions the entry called: footer(ballast_for, neutral_point, trim)"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-28-01-how-far-should-it-fly.qmd",
+  "declares no ENTRY_CEILING \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-28-01-how-far-should-it-fly.qmd",
+  "declares no SOLVE_BUDGET \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-30-01-how-is-it-cut-out-and-put-together.qmd",
+  "calls ballast_for(), neutral_point() from _analysis.py but does not render them \u2014 the footer cell passes the shared functions the entry called: footer(ballast_for, fin_outline, fuselage_outline, nest, neutral_point, sym_surface)"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-30-01-how-is-it-cut-out-and-put-together.qmd",
+  "declares no ENTRY_CEILING \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-30-01-how-is-it-cut-out-and-put-together.qmd",
+  "declares no SOLVE_BUDGET \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-30-03-should-it-still-fly.qmd",
+  "calls neutral_point() from _analysis.py but does not render it \u2014 the footer cell passes the shared functions the entry called: footer(neutral_point, stall, trim)"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-30-03-should-it-still-fly.qmd",
+  "declares no ENTRY_CEILING \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-30-03-should-it-still-fly.qmd",
+  "declares no SOLVE_BUDGET \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-30-04-if-so-how-far.qmd",
+  "calls neutral_point(), stall() from _analysis.py but does not render them \u2014 the footer cell passes the shared functions the entry called: footer(neutral_point, stall, trim)"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-30-04-if-so-how-far.qmd",
+  "declares no ENTRY_CEILING \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-30-04-if-so-how-far.qmd",
+  "declares no SOLVE_BUDGET \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-31-04-why-was-the-built-glider-tail-heavy.qmd",
+  "calls neutral_point() from _analysis.py but does not render it \u2014 the footer cell passes the shared functions the entry called: footer(ballast_for, neutral_point)"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-31-04-why-was-the-built-glider-tail-heavy.qmd",
+  "declares no ENTRY_CEILING \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-31-04-why-was-the-built-glider-tail-heavy.qmd",
+  "declares no SOLVE_BUDGET \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-31-05-how-did-the-first-flight-compare.qmd",
+  "calls neutral_point() from _analysis.py but does not render it \u2014 the footer cell passes the shared functions the entry called: footer(neutral_point, stall, trim)"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-31-05-how-did-the-first-flight-compare.qmd",
+  "declares no ENTRY_CEILING \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/2026-08-31-05-how-did-the-first-flight-compare.qmd",
+  "declares no SOLVE_BUDGET \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
+ ],
+ [
+  null,
+  "chapters/00-mceagle-refined-notebook/_analysis.py",
+  "(warning) `static_margin()` is called by no entry and no other helper \u2014 delete it, or call it"
+ ],
+ [
+  33,
+  "chapters/00-mceagle-refined-notebook/index.qmd",
+  "declares no `order:` \u2014 without it Quarto does not sort the sidebar at all, it uses readdir order. Add `order: 0` under the title"
+ ],
+ [
+  35,
+  "chapters/00-mceagle-refined-notebook/index.qmd",
+  "does not print its lineage \u2014 the parent chapter is recorded only in `_fork.yml`, which no reader opens. The scaffold ships the one-line cell: `chapter_lineage(\"<chapter>\")`"
+ ],
+ [
+  39,
+  "chapters/00-mceagle-refined-notebook/index.qmd",
+  "has a `## The model` heading. An index carries its input callouts and nothing else: a listing and a code block are legible without being announced, and a heading over one div is a label for what the reader can already see"
+ ],
+ [
+  35,
+  "chapters/00-mceagle-refined-notebook/index.qmd",
+  "has no entry listing \u2014 a reader landing here has nothing to click. The scaffold ships the `listing:` block and a `::: {#entries}` div"
+ ],
+ [
+  34,
+  "index.qmd",
+  "the notebook has no front page \u2014 every chapter is reachable only from the sidebar, and nothing says how they relate. `nb new` scaffolds one"
+ ]
+]

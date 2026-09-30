@@ -28,7 +28,7 @@ def declared(notebook, chapter):
     moved into a data file that copy would have returned zero -- silently, for
     the notice that is the only reason `ask_specified` fires at all.
     """
-    import lint
+    from . import lint
     items = lint.declared_items(notebook.root, chapter)
     spec = sum(1 for k, _ in items if k == "Specified")
     return spec, len(items) - spec
@@ -70,7 +70,7 @@ def own(notebook, chapter, entries_before=None):
     `entries_before` takes only the first N entries, for an ancestor seen
     through a fork: see `_lineage`.
     """
-    import lint
+    from . import lint
     # THE HANDLE IS ALSO PART OF THE IDENTITY for a chapter item, because the
     # format is `- <id>: <text>` and the text never repeats the name.
     # `- dihedral: 20 degrees determines the cross-angle` says nothing about
@@ -128,7 +128,7 @@ def _lineage(notebook, chapter, parent=None):
     what the fork-time review needs -- there is no `_fork.yml` to read until
     `create_chapter` has run.
     """
-    import lint
+    from . import lint
     out, seen, cur = [], {chapter}, chapter
     if parent and parent != chapter and (notebook.chapters_dir / parent).is_dir():
         out.append((parent, None))     # not forked yet: everything it has
@@ -161,7 +161,7 @@ def _ancestral(notebook, chapter, parent=None):
     identity when its text does not (`- dihedral: 20 degrees…` names dihedral
     only in its id).
     """
-    import lint
+    from . import lint
     chain = _lineage(notebook, chapter, parent)
     gone = lint.departures(notebook.root, notebook.chapters())
     # THIS CHAPTER'S OWN OVERWRITES COUNT. The test was against the ancestors
@@ -171,7 +171,7 @@ def _ancestral(notebook, chapter, parent=None):
     breakers = {c for c, _ in chain} | {chapter}
     # An inherited item this chapter overwrote in its own `_inputs.yml`, by the
     # `<ancestor>/<handle>` the register reports.
-    import lint as _l
+    from . import lint as _l
     mine = {h for h, _ in _pairs(
         (_l.read_inputs(notebook.root, chapter) or {}).get("overwrites"))}
     carried, dropped = [], []
@@ -377,7 +377,7 @@ def short(handle, chapter=""):
     so shortening there only cost uniqueness -- three unrelated entries landing
     on one `2026-09-24`.
     """
-    import lint
+    from . import lint
     if handle == chapter:
         return ""
     if not lint.is_entry(handle):
@@ -480,7 +480,7 @@ def inherited(notebook, chapter, parent=None):
     `overwrites:` records the override now, so it is mechanical and the dropped
     set is reported rather than silently missing.
     """
-    import lint
+    from . import lint
     if not _lineage(notebook, chapter, parent):
         # The brief has no ancestor and no handle to point at -- it is stated
         # once, at the notebook root, and `where` carries that name so the row

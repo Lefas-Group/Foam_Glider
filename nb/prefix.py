@@ -130,7 +130,7 @@ def notebook_context(notebook):
     Callouts only, not the whole page: the rest is the generated lineage
     diagram, which is a picture of the chapters the manifest already lists.
     """
-    import lint
+    from . import lint
     items = lint.notebook_items(notebook.root)
     if not items:
         return ""
@@ -165,7 +165,7 @@ def chapter_context(notebook):
     one, and a handle you cannot see is a handle you cannot use.
     """
     import re
-    import lint
+    from . import lint
     out = []
     for chapter in notebook.chapters():
         d = notebook.chapters_dir / chapter

@@ -40,7 +40,7 @@ def _rule_list_problems(text):
     has to be. Contiguity is gone with it: 36 was retired and its number is not
     reused, so the registry -- not `range(1, max)` -- decides what exists.
     """
-    import lint
+    from . import lint
     head = RULE_HEADING.search(text)
     if not head:
         return ["system instruction has no '# The N rules lint checks' heading"]
@@ -147,7 +147,7 @@ def check(root):
     # `_notebook.py` alone now; `_scratch/_probe_base.py` was the second until
     # probes moved into a kernel and its job passed to `nb/tools/probe_init.py`,
     # which ships with `nb` and so cannot drift.
-    import lint
+    from . import lint
     for where, msg in lint._notebook_drift(notebook.root):
         bad.append(f"rule 11: {where.name if where else ''} {msg}")
 

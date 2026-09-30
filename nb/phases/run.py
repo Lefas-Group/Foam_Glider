@@ -161,7 +161,7 @@ def main(notebook_path, question, verbose=True,
     # `config.py` disagreed with the notebook once -- 20 s against 200 s -- so
     # the flag overrides the ANSWER and never the source of the default.
     if ceiling is None:
-        import lint
+        from .. import lint
         _, default_ceiling = lint._defaults(notebook.root)
         ceiling = ask_render_ceiling(
             default_ceiling or 200.0,

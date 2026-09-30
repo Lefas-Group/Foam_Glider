@@ -1,24 +1,31 @@
 """
-Paths, model settings and budgets. Imported first by everything else, because
-importing it is what puts `nb/vendor` on the path.
+Paths, model settings and budgets. Imported early by everything else, for the
+constants below.
 
-The vendored modules (`lint`, `check`, `freezediff`, `library_explorer`) use
-same-directory imports of each other, so they have to be reachable as top-level
-names rather than as `nb.vendor.lint`.
+IT USED TO PUT `nb/vendor` ON sys.path. Four modules lived there -- `lint`,
+`check`, `freezediff`, `library_explorer` -- importing each other by bare name,
+and the insert was what made that work. None of them was ever vendored anywhere:
+they sat in `vendor/` because they had been lifted out of the design-notebook
+skill, where they were loose files in a project directory.
+
+They are ordinary `nb` modules now and import each other relatively, so the path
+mutation is gone with them. It was not free: `sys.path.insert` at import time
+means any `import lint` ANYWHERE in the process resolves to this one, including
+in code that has nothing to do with `nb`.
+
+`vendored/` keeps the one file the word applies to: `notebook.py`, copied
+byte-identical into each notebook because Quarto execs it at render time and a
+notebook must render without `nb` installed. Rule 11 polices that copy.
 """
 
 import os
 import pathlib
-import sys
 
 NB = pathlib.Path(__file__).resolve().parent
-VENDOR = NB / "vendor"
-REFERENCES = VENDOR / "references"
+VENDORED = NB / "vendored"
+REFERENCES = NB / "references"
 SCAFFOLD = NB / "scaffold"
 SYSTEM_INSTRUCTION = NB / "system_instruction.md"
-
-if str(VENDOR) not in sys.path:
-    sys.path.insert(0, str(VENDOR))
 
 # ---------------------------------------------------------------- model
 
@@ -256,12 +263,12 @@ class Notebook:
         return self.run / "transcript.jsonl"
 
     def chapters(self):
-        import lint
+        from . import lint
         return lint.chapters_of(self.root)
 
     def entries(self, chapter):
         """Entry .qmd files, date-prefixed, in chronological order."""
-        import lint
+        from . import lint
         d = self.chapters_dir / chapter
         return sorted(p for p in d.glob("*.qmd") if lint.ENTRY_FILE.match(p.name))
 
