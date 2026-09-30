@@ -36,6 +36,7 @@ website:
       # missing from here loud rather than invisible.
       - auto: "chapters/01-calibrated-discus-2c"
       - auto: "chapters/02-biplane-configuration"
+      - auto: "chapters/03-box-wing-configuration"
 
 format:
   html:

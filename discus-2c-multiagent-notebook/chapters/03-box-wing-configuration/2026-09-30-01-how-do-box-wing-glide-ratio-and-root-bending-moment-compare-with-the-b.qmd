@@ -1,0 +1,138 @@
+---
+title: "How do box-wing glide ratio and root bending moment compare with the baseline?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 68.6      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Evaluate box-wing configuration against calibrated baseline
+n_manoeuvre = 5.3
+res = box_wing_comparison(airplane, load_factor=n_manoeuvre)
+ac_bx = res["box_airplane"]
+
+m_root_base = float(res["m_root_base_kNm"])
+m_root_fwd = float(res["m_root_fwd_kNm"])
+m_root_aft = float(res["m_root_aft_kNm"])
+m_root_max = float(res["m_root_max_kNm"])
+bending_relief_pct = float(res["bending_relief_pct"])
+
+e_base = float(res["e_base"])
+e_box = float(res["e_box"])
+cdi_reduction_pct = float(res["induced_drag_reduction_pct"])
+
+ld_base = float(res["ld_base_max"])
+ld_box = float(res["ld_box_max"])
+delta_ld = float(res["delta_ld"])
+v_best = float(res["v_box_max"])
+```
+
+::: {.hero}
+[`{python} f"-{bending_relief_pct:.1f}%"`]{.hero-value}
+[reduction in maximum limit root bending moment per spar relative to cantilever baseline]{.hero-label}
+:::
+
+**Answer.** The joined-wingtip box-wing architecture splits the [`{python} f"{airplane.s_ref:.2f} m²"`]{.key} area equally across forward and aft wings joined by vertical tip endplates (@fig-box-wing). Under [`{python} f"+{n_manoeuvre:.1f}g"`]{.key} limit manoeuvre loads, peak spar root bending moment drops by [`{python} f"{bending_relief_pct:.1f}%"`]{.key}, falling from [`{python} f"{m_root_base:.1f} kN·m"`]{.key} on the [calibrated baseline](../01-calibrated-discus-2c/2026-09-30-01-what-does-a-discus-2c-geometry-reconstructed-from-published-data-look.qmd) to [`{python} f"{m_root_max:.1f} kN·m"`]{.key}. Endplate circulation coupling reduces vortex-induced drag by [`{python} f"{cdi_reduction_pct:.1f}%"`]{.key}, improving span efficiency from [`{python} f"{e_base:.2f}"`]{.key} to [`{python} f"{e_box:.2f}"`]{.key}. Despite Reynolds profile drag penalties on halved chords, best glide ratio improves by [`{python} f"{delta_ld:+.2f}"`]{.key} to [`{python} f"{ld_box:.2f}"`]{.key} at [`{python} f"{v_best:.0f} km/h"`]{.key}, matching earlier [exploratory sizing](../01-calibrated-discus-2c/2026-09-30-11-how-do-box-wing-glide-ratio-and-root-bending-moment-compare-with-basel.qmd).
+
+```{python}
+#| label: fig-box-wing
+#| fig-cap: "Planform geometry layout and glide ratio polar comparison between baseline and box-wing configuration."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
+
+# Subplot 1: Top-down planform comparison
+ap_base = res["baseline_airplane"]
+w_base = ap_base.wings[0]
+y_b = np.array([xs.xyz_le[1] for xs in w_base.xsecs])
+x_le_b = np.array([xs.xyz_le[0] for xs in w_base.xsecs])
+x_te_b = x_le_b + np.array([xs.chord for xs in w_base.xsecs])
+
+w_fwd = ac_bx.wings[0]
+w_aft = ac_bx.wings[1]
+y_f = np.array([xs.xyz_le[1] for xs in w_fwd.xsecs])
+x_le_f = np.array([xs.xyz_le[0] for xs in w_fwd.xsecs])
+x_te_f = x_le_f + np.array([xs.chord for xs in w_fwd.xsecs])
+
+y_a = np.array([xs.xyz_le[1] for xs in w_aft.xsecs])
+x_le_a = np.array([xs.xyz_le[0] for xs in w_aft.xsecs])
+x_te_a = x_le_a + np.array([xs.chord for xs in w_aft.xsecs])
+
+for sgn in [1, -1]:
+    ax1.fill(
+        np.concatenate([sgn * y_b, sgn * y_b[::-1]]),
+        np.concatenate([x_le_b, x_te_b[::-1]]),
+        color="blue",
+        alpha=0.15,
+        label="Baseline wing" if sgn == 1 else "",
+    )
+    ax1.plot(sgn * y_b, x_le_b, "b-", lw=1.2)
+    ax1.plot(sgn * y_b, x_te_b, "b--", lw=1.2)
+
+    ax1.fill(
+        np.concatenate([sgn * y_f, sgn * y_f[::-1]]),
+        np.concatenate([x_le_f, x_te_f[::-1]]),
+        color="red",
+        alpha=0.35,
+        label="Box fwd wing" if sgn == 1 else "",
+    )
+    ax1.plot(sgn * y_f, x_le_f, "r-", lw=1.5)
+    ax1.plot(sgn * y_f, x_te_f, "r-", lw=1.5)
+
+    ax1.fill(
+        np.concatenate([sgn * y_a, sgn * y_a[::-1]]),
+        np.concatenate([x_le_a, x_te_a[::-1]]),
+        color="purple",
+        alpha=0.35,
+        label="Box aft wing" if sgn == 1 else "",
+    )
+    ax1.plot(sgn * y_a, x_le_a, "m-", lw=1.5)
+    ax1.plot(sgn * y_a, x_te_a, "m-", lw=1.5)
+
+    ax1.plot(
+        [sgn * y_f[-1], sgn * y_a[-1]],
+        [x_te_f[-1], x_le_a[-1]],
+        "k-",
+        lw=2.0,
+        label="Tip endplate" if sgn == 1 else "",
+    )
+
+ax1.set_xlabel("Spanwise station y (m)")
+ax1.set_ylabel("Fuselage station x (m)")
+ax1.invert_yaxis()
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="lower right", fontsize=8)
+
+# Subplot 2: Glide polar comparison
+ax2.plot(
+    res["speeds_kmh"],
+    res["ld_base_arr"],
+    "b-o",
+    lw=1.8,
+    label=f"Baseline (best {ld_base:.1f})",
+)
+ax2.plot(
+    res["speeds_kmh"],
+    res["ld_box_arr"],
+    "r-s",
+    lw=1.8,
+    label=f"Box-wing (best {ld_box:.1f})",
+)
+ax2.set_xlabel("Airspeed (km/h)")
+ax2.set_ylabel("Glide Ratio L/D")
+ax2.grid(True, alpha=0.3)
+ax2.legend(loc="upper right")
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(box_wing_comparison)
+```

@@ -1,0 +1,24 @@
+# What this chapter changed, and from what. Read by rule 31,
+# by the chapter index, and by the lineage diagram on the
+# book index -- one source, three readers.
+parent: 01-calibrated-discus-2c
+at: 0b486b0
+at_entry: 12
+summary: "box-wing joined-wingtip layout with 18.0 m span and 2.70 m vertical gap"
+changes:
+  - split 11.39 m² wing area equally across forward and aft wings of 18.0 m span
+  - vertical wing gap of 2.70 m (h/b = 0.15) between forward (z = 0.0 m) and aft (z = 2.70 m) wings
+  - vertical tip endplates joining forward and aft wingtips
+# What this chapter OVERWROTE: items an EARLIER
+# chapter declared that no longer hold here, as
+# `<chapter>/<their id>`, with an optional reason after a
+# colon. What REPLACED them is this chapter's own
+# _inputs.yml -- do not restate it here, and do not force a
+# 1:1 link: one overwritten assumption is often replaced by
+# several new items.
+#
+# It renders HERE, as "Overwritten from <chapter>" -- on
+# the page that made the change. The chapter overwritten
+# keeps its own items: they are its premise and stay true
+# under it.
+overwrites:
