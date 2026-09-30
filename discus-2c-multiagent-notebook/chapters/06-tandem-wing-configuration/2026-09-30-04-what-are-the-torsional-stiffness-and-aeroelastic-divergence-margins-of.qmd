@@ -1,0 +1,116 @@
+---
+title: "What are the torsional stiffness and aeroelastic divergence margins of the AR 94.8 tandem wing?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 0.8      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Execute torsional and static aeroelastic divergence analysis for AR 94.8 tandem wing
+load_factor = 5.3
+tau_allow = 60.0e6
+e_frac = 0.10
+res = tandem_aeroelastic_analysis(load_factor=load_factor, tau_allow=tau_allow, e_frac=e_frac)
+
+b_target = float(res["b_target"])
+semi_span = float(res["semi_span"])
+c_mean = float(res["c_mean"])
+c_root = float(res["c_root"])
+t_root = float(res["t_root_Nm"])
+tau_root = float(res["tau_root_MPa"])
+margin_stress = float(res["margin_stress"])
+tip_twist = float(res["tip_twist_deg"])
+
+v_ne = float(res["v_ne_kmh"])
+v_div_strip = float(res["v_div_strip_kmh"])
+v_div_beam = float(res["v_div_beam_kmh"])
+q_div_strip = float(res["q_div_strip_Pa"])
+q_div_beam = float(res["q_div_beam_Pa"])
+
+speed_ratio = float(res["speed_ratio_strip"])
+reinf_strip = float(res["reinforce_factor_strip"])
+reinf_beam = float(res["reinforce_factor_beam"])
+
+v_m_kmh = float(55.56 * 3.6)
+v_req_kmh = float(1.20 * v_ne)
+ar_ref = float(b_target**2 / 11.39)
+```
+
+::: {.hero}
+[`{python} f"{v_div_strip:.1f} km/h"`]{.hero-value}
+[strip-theory static aeroelastic divergence speed, well below the 280 km/h VNE]{.hero-label}
+:::
+
+**Answer.** At the [aspect ratio trade](2026-09-30-03-how-far-can-tandem-aspect-ratio-be-pushed-within-the-root-bending-budg.qmd) limit ([`{python} f"AR {ar_ref:.1f}"`]{.key}, [`{python} f"{b_target:.1f} m"`]{.key} span), the wing chord shrinks to [`{python} f"{c_mean*100:.1f} cm"`]{.key}, severely reducing D-tube stiffness (@fig-aeroelastic-margins). Under the manoeuvre pitching moment ([`{python} f"{t_root:.1f} N·m"`]{.key}), the [`{python} f"{tau_root:.1f} MPa"`]{.key} root shear stress has an adequate [`{python} f"{margin_stress:.1f}×"`]{.key} strength margin against the composite limit. However, torsional flexibility produces severe [`{python} f"{tip_twist:.1f}°"`]{.key} tip twist. Strip-theory static aeroelastic divergence occurs at [`{python} f"{v_div_strip:.1f} km/h"`]{.key} ([`{python} f"{v_div_beam:.1f} km/h"`]{.key} continuous beam), reaching only [`{python} f"{speed_ratio*100:.0f}%"`]{.key} of placarded [`{python} f"{v_ne:.0f} km/h"`]{.key} $V_{NE}$. Sizing for bending alone is insufficient: divergence clearance requires [`{python} f"{reinf_strip:.1f}×"`]{.key} to [`{python} f"{reinf_beam:.1f}×"`]{.key} torsional reinforcement.
+
+::: {.callout-note}
+## New assumptions
+1. **shear center offset: `{python} f"{e_frac:.2f}"` chord**, spar position.
+:::
+
+```{python}
+#| label: fig-aeroelastic-margins
+#| fig-cap: "Spanwise torsional stiffness GJ and limit twist angle, alongside aeroelastic divergence speed compared to operational and certification airspeed boundaries."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
+
+# Subplot 1: Spanwise GJ and Twist Angle
+color_gj = "navy"
+color_tw = "crimson"
+
+ax1.plot(res["ys"], res["GJ"], color=color_gj, lw=2.0, label="Torsional stiffness $GJ$")
+ax1.set_xlabel("Semi-span station $y$ [m]")
+ax1.set_ylabel("Stiffness $GJ$ [N·m$^2$]", color=color_gj)
+ax1.tick_params(axis="y", labelcolor=color_gj)
+ax1.grid(True, alpha=0.3)
+
+ax1_tw = ax1.twinx()
+ax1_tw.plot(res["ys"], res["theta_deg"], color=color_tw, lw=2.0, ls="--", label="Twist angle $\\theta$")
+ax1_tw.set_ylabel("Manoeuvre twist [deg]", color=color_tw)
+ax1_tw.tick_params(axis="y", labelcolor=color_tw)
+ax1.set_title("Spanwise Torsional Distribution")
+
+# Subplot 2: Aeroelastic Speed Envelope & Divergence
+labels = [
+    "Continuous\nBeam $V_{div}$",
+    "Strip Theory\n$V_{div}$",
+    "Manoeuvre\n$V_m$",
+    "Placarded\n$V_{NE}$",
+    "Certification\n$1.2 V_{NE}$",
+]
+speeds = [v_div_beam, v_div_strip, v_m_kmh, v_ne, v_req_kmh]
+colors = ["firebrick", "crimson", "goldenrod", "steelblue", "forestgreen"]
+
+bars = ax2.bar(labels, speeds, color=colors, width=0.55, edgecolor="black", alpha=0.85)
+ax2.axhline(v_ne, color="steelblue", ls="--", lw=1.5, label=f"$V_{{NE}}$ ({v_ne:.0f} km/h)")
+ax2.axhline(v_req_kmh, color="forestgreen", ls=":", lw=1.5, label=f"Req. $1.2 V_{{NE}}$ ({v_req_kmh:.0f} km/h)")
+for bar in bars:
+    yval = bar.get_height()
+    ax2.text(
+        bar.get_x() + bar.get_width() / 2.0,
+        yval + 5,
+        f"{yval:.0f}",
+        ha="center",
+        va="bottom",
+        fontsize=8.5,
+        fontweight="bold",
+    )
+
+ax2.set_ylabel("Equivalent Airspeed [km/h]")
+ax2.set_ylim(0, 390)
+ax2.set_title("Aeroelastic Divergence vs Operating Limits")
+ax2.grid(True, axis="y", alpha=0.3)
+
+plt.tight_layout()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(tandem_aeroelastic_analysis)
+```

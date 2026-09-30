@@ -811,3 +811,156 @@ def tandem_aspect_ratio_trade(
     }
 
 
+def tandem_aeroelastic_analysis(
+    b_target: float = 32.86,
+    mass_structural: float = 565.0,
+    load_factor: float = 5.3,
+    velocity_manoeuvre: float = 55.56,
+    v_ne: float = 77.78,
+    t_skin: float = 0.0015,
+    G_skin: float = 12.0e9,
+    tau_allow: float = 60.0e6,
+    spar_chord_frac: float = 0.35,
+    e_frac: float = 0.10,
+    a0: float = 2.0 * np.pi,
+) -> dict:
+    """Analyze wing torsional stiffness, stress margin, and aeroelastic divergence for high-AR tandem wing."""
+    from scipy.interpolate import interp1d
+    import scipy.linalg
+
+    scale_span = b_target / 18.0
+    scale_chord = 18.0 / b_target
+
+    base_ys = np.array([0.0, 2.1, 4.5, 7.5, 8.8, 9.0])
+    base_chords = np.array([0.8093, 0.7646, 0.6653, 0.5015, 0.3128, 0.1589]) * 0.5
+    wing_ys = base_ys * scale_span
+    wing_chords = base_chords * scale_chord
+    semi_span = b_target / 2.0
+
+    s_wing = float(np.trapezoid(wing_chords, wing_ys) * 2.0)
+    c_mean = s_wing / b_target
+
+    rho = 1.225
+    q_m = 0.5 * rho * velocity_manoeuvre**2
+    q_ne = 0.5 * rho * v_ne**2
+
+    af_root = asb.Airfoil("hq17")
+    af_mid = asb.Airfoil("hq2512")
+    af_tip = asb.Airfoil("hq2195")
+
+    cm_root = float(af_root.get_aero_from_neuralfoil(alpha=0.0, Re=1e6)["CM"][0])
+    cm_mid = float(af_mid.get_aero_from_neuralfoil(alpha=0.0, Re=5e5)["CM"][0])
+    cm_tip = float(af_tip.get_aero_from_neuralfoil(alpha=0.0, Re=2e5)["CM"][0])
+    cm_stations = np.array([cm_root, cm_root, cm_mid, cm_mid, cm_tip, cm_tip])
+
+    # Discretize along span
+    ys = np.linspace(0, semi_span, 100)
+    chords = np.interp(ys, wing_ys, wing_chords)
+    cms = np.interp(ys, wing_ys, cm_stations)
+
+    # Torque from intrinsic pitching moment
+    m_running = q_m * (chords**2) * np.abs(cms)
+    t_root = float(np.trapezoid(m_running, ys))
+    t_y = np.array([np.trapezoid(m_running[i:], ys[i:]) for i in range(len(ys))])
+
+    # D-tube geometry (HQ-17 profile scaled to chord)
+    coords = af_root.coordinates
+    x_af = np.linspace(0, spar_chord_frac, 100)
+    upper = coords[coords[:, 1] >= 0]
+    lower = coords[coords[:, 1] <= 0]
+    upper = upper[np.argsort(upper[:, 0])]
+    lower = lower[np.argsort(lower[:, 0])]
+    yu = interp1d(upper[:, 0], upper[:, 1], fill_value="extrapolate")(x_af)
+    yl = interp1d(lower[:, 0], lower[:, 1], fill_value="extrapolate")(x_af)
+
+    A_m_nd = float(np.trapezoid(yu - yl, x_af))
+    perim_skin_nd = float(
+        np.sum(np.sqrt(np.diff(x_af) ** 2 + np.diff(yu) ** 2))
+        + np.sum(np.sqrt(np.diff(x_af) ** 2 + np.diff(yl) ** 2))
+    )
+    h_web_nd = float(yu[-1] - yl[-1])
+    t_web = 0.002
+
+    k_J = 4.0 * (A_m_nd**2) / (perim_skin_nd / t_skin + h_web_nd / t_web)
+    J_fine = k_J * (chords**3)
+    GJ_fine = G_skin * J_fine
+    GJ_root = float(GJ_fine[0])
+    GJ_avg = float(np.mean(GJ_fine))
+
+    c_root = float(chords[0])
+    A_m_root = A_m_nd * (c_root**2)
+    q_flow_root = t_root / (2.0 * A_m_root)
+    tau_root = q_flow_root / t_skin
+    margin_stress = tau_allow / tau_root
+
+    theta_rad = np.zeros_like(ys)
+    for i in range(1, len(ys)):
+        theta_rad[i] = np.trapezoid(t_y[: i + 1] / GJ_fine[: i + 1], ys[: i + 1])
+    tip_twist_deg = float(np.degrees(theta_rad[-1]))
+
+    # Strip theory divergence criterion: q_div = GJ / (e * a0 * c^2 * b)
+    q_div_strip = float(GJ_avg / (e_frac * a0 * (c_mean**2) * b_target))
+    v_div_strip = float(np.sqrt(2.0 * q_div_strip / rho))
+
+    # Tapered beam continuous eigenvalue
+    n_nodes = 100
+    dy = semi_span / (n_nodes - 1)
+    K = np.zeros((n_nodes, n_nodes))
+    for i in range(1, n_nodes - 1):
+        GJ_p = 0.5 * (GJ_fine[i] + GJ_fine[i + 1])
+        GJ_m = 0.5 * (GJ_fine[i] + GJ_fine[i - 1])
+        K[i, i - 1] = -GJ_m / dy**2
+        K[i, i] = (GJ_p + GJ_m) / dy**2
+        K[i, i + 1] = -GJ_p / dy**2
+    K[-1, -2] = -GJ_fine[-1] / dy**2
+    K[-1, -1] = GJ_fine[-1] / dy**2
+
+    A_mat = np.diag(chords**2 * e_frac * a0)
+    A_mat[0, 0] = 0.0
+    A_mat[-1, -1] = 0.0
+
+    eigvals = scipy.linalg.eigvals(K[1:, 1:], A_mat[1:, 1:])
+    eigvals_real = np.real(eigvals[np.isreal(eigvals) & (np.real(eigvals) > 0)])
+    q_div_beam = float(np.min(eigvals_real))
+    v_div_beam = float(np.sqrt(2.0 * q_div_beam / rho))
+
+    v_req = 1.20 * v_ne
+    q_req = 0.5 * rho * v_req**2
+    reinforce_factor_strip = q_req / q_div_strip
+    reinforce_factor_beam = q_req / q_div_beam
+
+    return {
+        "b_target": b_target,
+        "semi_span": semi_span,
+        "s_wing": s_wing,
+        "c_root": c_root,
+        "c_mean": c_mean,
+        "c_tip": float(chords[-1]),
+        "t_root_Nm": t_root,
+        "A_m_root_m2": A_m_root,
+        "GJ_root": GJ_root,
+        "GJ_avg": GJ_avg,
+        "tau_root_MPa": tau_root / 1e6,
+        "margin_stress": margin_stress,
+        "tip_twist_deg": tip_twist_deg,
+        "q_div_strip_Pa": q_div_strip,
+        "v_div_strip_ms": v_div_strip,
+        "v_div_strip_kmh": v_div_strip * 3.6,
+        "q_div_beam_Pa": q_div_beam,
+        "v_div_beam_ms": v_div_beam,
+        "v_div_beam_kmh": v_div_beam * 3.6,
+        "v_ne_ms": v_ne,
+        "v_ne_kmh": v_ne * 3.6,
+        "q_ne_Pa": q_ne,
+        "speed_ratio_strip": v_div_strip / v_ne,
+        "speed_ratio_beam": v_div_beam / v_ne,
+        "reinforce_factor_strip": reinforce_factor_strip,
+        "reinforce_factor_beam": reinforce_factor_beam,
+        "ys": ys,
+        "chords": chords,
+        "GJ": GJ_fine,
+        "t_y": t_y,
+        "theta_deg": np.degrees(theta_rad),
+    }
+
+
