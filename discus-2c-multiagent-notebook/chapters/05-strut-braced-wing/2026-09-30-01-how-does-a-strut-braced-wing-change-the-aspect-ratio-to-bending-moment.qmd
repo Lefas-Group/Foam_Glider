@@ -1,0 +1,119 @@
+---
+title: "How does a strut-braced wing change the aspect-ratio-to-bending-moment trade?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 199.0      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Execute aspect ratio trade for strut-braced wing
+ars = np.array([20.0, 24.0, 28.45, 32.0, 36.0])
+trade = sbw_aspect_ratio_trade(airplane, aspect_ratios=ars)
+
+ar_min = float(trade["AR"][0])
+ar_max = float(trade["AR"][-1])
+ar_base = float(trade["AR"][2])
+
+span_min = float(trade["span"][0])
+span_max = float(trade["span"][-1])
+
+ld_min = float(trade["max_LD"][0])
+ld_max = float(trade["max_LD"][-1])
+ld_base = float(trade["max_LD"][2])
+pct_ld = float(trade["pct_ld"])
+
+mcant_base = float(trade["root_moment_cant_kNm"][2])
+mcant_max = float(trade["root_moment_cant_kNm"][-1])
+msbw_peak_base = float(trade["peak_moment_sbw_kNm"][2])
+msbw_peak_max = float(trade["peak_moment_sbw_kNm"][-1])
+msbw_root_base = float(trade["root_moment_sbw_kNm"][2])
+
+relief_peak_pct = float((1.0 - msbw_peak_base / mcant_base) * 100)
+relief_root_pct = float((1.0 - abs(msbw_root_base) / mcant_base) * 100)
+
+trade_cant = float(trade["trade_cant"])
+trade_sbw = float(trade["trade_sbw"])
+t_strut_base = float(trade["T_strut_kNm"][2])
+```
+
+::: {.hero}
+[`{python} f"{trade_sbw:.2f}"`]{.hero-value}
+[percent increase in peak spar bending moment per percent glide gain with strut support]{.hero-label}
+:::
+
+**Answer.** Bracing the [`{python} f"{airplane.s_ref:.2f} m²"`]{.key} wing with a strut to 50% semi-span cuts peak spar bending under the [+5.3g manoeuvre](../01-calibrated-discus-2c/2026-09-30-03-are-wing-structural-loads-reasonable-under-a-jar-22-5-3g-limit-manoeuv.qmd) by [`{python} f"{relief_peak_pct:.1f}%"`]{.key}, dropping from [`{python} f"{mcant_base:.1f} kN·m"`]{.key} on the [cantilever baseline](../01-calibrated-discus-2c/2026-09-30-04-how-does-wing-aspect-ratio-trade-glide-ratio-against-root-bending-mome.qmd) to [`{python} f"{msbw_peak_base:.1f} kN·m"`]{.key} (@fig-sbw-trade). Root moment drops [`{python} f"{relief_root_pct:.1f}%"`]{.key} to [`{python} f"{abs(msbw_root_base):.1f} kN·m"`]{.key} with [`{python} f"{t_strut_base:.1f} kN"`]{.key} strut tension. Expanding aspect ratio to [`{python} f"{ar_max:.0f}"`]{.key} raises glide ratio by [`{python} f"{pct_ld:.1f}%"`]{.key} to [`{python} f"{ld_max:.1f}"`]{.key}, reducing the moment trade penalty from [`{python} f"{trade_cant:.2f}%"`]{.key} to [`{python} f"{trade_sbw:.2f}%"`]{.key} per percent glide gain.
+
+::: {.callout-tip}
+## New user specifications
+Asked of the user, 2026-09-30:
+
+1. **strut attachment: `{python} f"{strut_attach_frac*100:.0f}%"` semi-span**, outboard load transfer.
+:::
+
+::: {.callout-note}
+## New assumptions
+1. **strut chord: `{python} f"{strut_chord*1e3:.0f} mm"`**, streamlined HQ010 section.
+2. **strut fuselage mount: lower frame**, near main spar.
+:::
+
+```{python}
+#| label: fig-sbw-trade
+#| fig-cap: "Strut-braced wing geometry layout and comparison of limit bending moments and glide ratios against the cantilever baseline across aspect ratios 20 to 36."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
+
+# Subplot 1: Front-view geometry diagram (Y-Z plane)
+w = airplane.wings[0]
+y_w = np.array([xs.xyz_le[1] for xs in w.xsecs])
+z_w = np.array([xs.xyz_le[2] for xs in w.xsecs])
+st = airplane.wings[3]
+y_s = np.array([xs.xyz_le[1] for xs in st.xsecs])
+z_s = np.array([xs.xyz_le[2] for xs in st.xsecs])
+
+for sgn in [1, -1]:
+    ax1.plot(sgn * y_w, z_w, color="navy", lw=2.5, label="Wing" if sgn == 1 else "")
+    ax1.plot(sgn * y_s, z_s, color="crimson", lw=2.2, label="Strut" if sgn == 1 else "")
+    ax1.plot(sgn * y_s[1], z_s[1], "o", color="crimson", ms=6)
+    ax1.plot(sgn * y_s[0], z_s[0], "s", color="darkred", ms=6)
+
+ax1.plot([-0.25, 0.25, 0.25, -0.25, -0.25], [-0.35, -0.35, 0.35, 0.35, -0.35], color="dimgray", lw=1.2)
+ax1.set_xlabel("Spanwise position y (m)")
+ax1.set_ylabel("Vertical position z (m)")
+ax1.set_title("Strut-Braced Wing Layout (Front View)", fontsize=10)
+ax1.set_xlim(-10, 10)
+ax1.set_ylim(-0.8, 1.2)
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="upper right", fontsize=8)
+
+# Subplot 2: AR trade comparison
+ax2.plot(trade["AR"], trade["root_moment_cant_kNm"], "o--", color="steelblue", lw=1.8, label="Cantilever Root M")
+ax2.plot(trade["AR"], trade["peak_moment_sbw_kNm"], "s-", color="crimson", lw=2.0, label="SBW Peak Spar M")
+ax2.plot(trade["AR"], np.abs(trade["root_moment_sbw_kNm"]), "^:", color="forestgreen", lw=1.8, label="SBW Root |M|")
+ax2.set_xlabel("Wing Aspect Ratio")
+ax2.set_ylabel("Limit Bending Moment (kN·m)")
+ax2.set_title("Aspect Ratio vs Bending Moment Trade", fontsize=10)
+ax2.grid(True, alpha=0.3)
+
+ax2_twin = ax2.twinx()
+ax2_twin.plot(trade["AR"], trade["max_LD"], "D-.", color="darkorange", lw=1.8, label="Best Glide (L/D)")
+ax2_twin.set_ylabel("Best Glide Ratio (L/D)", color="darkorange")
+ax2_twin.tick_params(axis="y", labelcolor="darkorange")
+
+lines1, labels1 = ax2.get_legend_handles_labels()
+lines2, labels2 = ax2_twin.get_legend_handles_labels()
+ax2.legend(lines1 + lines2, labels1 + labels2, loc="center left", fontsize=7.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(sbw_aspect_ratio_trade)
+```

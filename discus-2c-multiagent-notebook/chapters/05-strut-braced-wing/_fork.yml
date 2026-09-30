@@ -1,0 +1,12 @@
+# What this chapter changed, and from what. Read by rule 31,
+# by the chapter index, and by the lineage diagram on the
+# book index -- one source, three readers.
+parent: 01-calibrated-discus-2c
+at: 178fd41
+at_entry: 12
+summary: "strut-braced wing configuration with external aerodynamic strut at 50% semi-span"
+changes:
+  - add external aerodynamic strut connecting lower fuselage frame to 50% wing semi-span
+  - update airplane wing assembly to include streamlined strut
+  - add get_strut_braced_airplane helper for parametric aspect ratio scaling
+overwrites:
