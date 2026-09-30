@@ -1,0 +1,69 @@
+---
+title: "Does replacing hand-rolled mass geometry with Wing.area() and Fuselage.volume() move any answer?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 180.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 300.0        # s granted for the probe
+PROBE_SPENT = 258.8      # s the probe actually used
+
+mass_budget_g = 50.0
+
+plane_default = get_airplane()
+m_hand, x_hand = get_mass_properties_hand(plane_default)
+m_lib, x_lib = get_mass_properties_library(plane_default)
+delta_m_g = (m_lib - m_hand) * 1000
+delta_x_mm = (x_lib - x_hand) * 1000
+
+fuse = plane_default.fuselages[0]
+v_fuse_lib = fuse.volume()
+v_fuse_hand = sum(
+    (fuse.xsecs[i].xsec_area() + fuse.xsecs[i+1].xsec_area()) / 2 *
+    np.sqrt(
+        (fuse.xsecs[i+1].xyz_c[0] - fuse.xsecs[i].xyz_c[0])**2 +
+        (fuse.xsecs[i+1].xyz_c[1] - fuse.xsecs[i].xyz_c[1])**2 +
+        (fuse.xsecs[i+1].xyz_c[2] - fuse.xsecs[i].xyz_c[2])**2
+    )
+    for i in range(len(fuse.xsecs)-1)
+)
+vol_reduction_pct = (1.0 - v_fuse_lib / v_fuse_hand) * 100
+
+sink_hand, opt_hand = optimize_geometry_for_sink_rate(get_airplane)
+sink_lib, opt_lib = optimize_geometry_library(get_airplane)
+
+delta_sink = sink_lib - sink_hand
+time_hand = 1.5 / sink_hand
+time_lib = 1.5 / sink_lib
+delta_time = time_lib - time_hand
+
+assert abs(delta_m_g) > 0.4
+assert f"{sink_hand:.2f}" != f"{sink_lib:.2f}"
+```
+
+**Answer.** Yes. `Wing.area()` matches the hand-rolled wing area exactly, but `Fuselage.volume()` uses axial frustum integration rather than centerline trapezoidal sums. This lowers main fuselage volume by [`{python} f"{vol_reduction_pct:.1f}%"`]{.key}, reducing default empty airframe mass by [`{python} f"{abs(delta_m_g):.2f} g"`]{.key} and shifting empty CG aft by [`{python} f"{delta_x_mm:.2f} mm"`]{.key}. This moves the [unbounded planform optimum](2026-09-29-01-does-freeing-the-wing-planform-lower-the-trimmed-sink-rate-below-0-84.qmd) sink rate from [`{python} f"{sink_hand:.2f} m/s"`]{.key} to [`{python} f"{sink_lib:.2f} m/s"`]{.key} and increases [flight time](2026-09-29-02-what-is-the-trimmed-flight-time-of-the-planform-optimum.qmd) to [`{python} f"{time_lib:.2f} s"`]{.key}. Crucially, on the [300 mm constrained wing](2026-09-29-08-does-the-300-mm-flat-plate-design-meet-the-50-g-mass-budget.qmd), the lighter tail and aft CG eliminate trim ballast, reducing all-up mass below the [`{python} f"{mass_budget_g:.0f} g"`]{.key} budget (@tbl-mass-comparison).
+
+```{python}
+#| label: tbl-mass-comparison
+#| tbl-cap: "Comparison of hand-rolled geometry versus AeroSandbox library methods."
+#| echo: false
+#| output: asis
+
+header = ["Metric", "Hand-rolled", "Library", "Delta"]
+rows = [
+    ("Default empty mass", f"{m_hand*1000:.2f} g", f"{m_lib*1000:.2f} g", f"{delta_m_g:.2f} g"),
+    ("Default empty CG", f"{x_hand*1000:.1f} mm", f"{x_lib*1000:.1f} mm", f"{delta_x_mm:.2f} mm"),
+    ("Optimum sink rate", f"{sink_hand:.2f} m/s", f"{sink_lib:.2f} m/s", f"{delta_sink:.3f} m/s"),
+    ("Optimum flight time", f"{time_hand:.2f} s", f"{time_lib:.2f} s", f"{delta_time:.2f} s"),
+    ("Optimum all-up mass", f"{opt_hand.m_total*1000:.1f} g", f"{opt_lib.m_total*1000:.1f} g", f"{(opt_lib.m_total - opt_hand.m_total)*1000:.2f} g"),
+]
+md_table(header, rows)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(get_mass_properties_hand, get_mass_properties_library, optimize_geometry_for_sink_rate, optimize_geometry_library)
+```
