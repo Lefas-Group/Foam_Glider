@@ -32,6 +32,20 @@ WHAT MUST NOT CHANGE when editing this file:
 import os as _os
 import pathlib as _pathlib
 
+# A BARE KeyError HERE READS AS A BUG IN THE CHAPTER, which is the one thing it
+# never is. Both variables are set by `kernel.py`; their absence means this file
+# is being run as something other than a probe kernel's first cell -- imported,
+# most often -- and the traceback should say so rather than name a dict key.
+if not _os.environ.get("NB_ROOT") or not _os.environ.get("NB_CHAPTER"):
+    raise RuntimeError(
+        "nb/tools/probe_init.py is the SOURCE of a probe kernel's first cell, "
+        "not an importable module: it execs a chapter into whatever namespace "
+        "it lands in, and reads $NB_ROOT and $NB_CHAPTER to know which. "
+        "`kernel.py` sets both when it starts a kernel. Nothing else should run "
+        "this file -- `nb.corpus`'s import sweep skips it by name for exactly "
+        "this reason."
+    )
+
 NB_ROOT = _pathlib.Path(_os.environ["NB_ROOT"])
 CHAPTER = _os.environ["NB_CHAPTER"]
 
