@@ -1,0 +1,102 @@
+---
+title: "Do the reinforced AR 80.3 tandem's mass and wing loading stay within limits?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 0.0      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Execute mass and flight limits evaluation for AR 80.3 tandem
+# Divergence reinforcement dm_div = 71.7 kg from 2026-09-30-05
+mb = tandem_mass_budget_analysis(dm_div=71.7)
+
+m_empty = float(mb["m_empty"])
+m_flight = float(mb["m_flight_dry"])
+m_mtom_limit = float(mb["m_mtom_limit"])
+ballast_max = float(mb["m_ballast_max"])
+
+wl_flight = float(mb["wl_flight"])
+wl_mtom = float(mb["wl_mtom"])
+wl_limit = float(mb["wl_limit"])
+
+v_stall_base = float(mb["v_stall_base"])
+v_stall_flight = float(mb["v_stall_flight"])
+v_stall_mtom = float(mb["v_stall_mtom"])
+
+delta_v_stall = float(v_stall_flight - v_stall_base)
+margin_mtom = float(m_mtom_limit - m_flight)
+margin_wl = float(wl_limit - wl_mtom)
+```
+
+::: {.hero}
+[`{python} f"{m_flight:.1f} kg"`]{.hero-value}
+[pilot flight mass leaving 76.3 kg ballast margin within 565 kg MTOM and 52 kg/m² wing loading]{.hero-label}
+:::
+
+**Answer.** Yes. With both wings' [`{python} f"{mb['m_wings_dry']:.0f} kg"`]{.key} base structure and the [`{python} f"{mb['dm_div']:.1f} kg"`]{.key} divergence reinforcement from [aeroelastic sizing](2026-09-30-05-what-aspect-ratio-and-net-glide-ratio-are-achievable-with-an-aeroelast.qmd), empty mass reaches [`{python} f"{m_empty:.1f} kg"`]{.key}. Flight mass with pilot is [`{python} f"{m_flight:.1f} kg"`]{.key} ([`{python} f"{wl_flight:.1f} kg/m²"`]{.key} wing loading), leaving [`{python} f"{margin_mtom:.1f} kg"`]{.key} water ballast headroom beneath the [`{python} f"{m_mtom_limit:.0f} kg"`]{.key} MTOM limit (@fig-mass-budget). Stall speed rises from [`{python} f"{v_stall_base:.1f} km/h"`]{.key} to [`{python} f"{v_stall_flight:.1f} km/h"`]{.key} ([`{python} f"+{delta_v_stall:.1f} km/h"`]{.key}) at pilot flight mass and [`{python} f"{v_stall_mtom:.1f} km/h"`]{.key} at MTOM. At full MTOM, wing loading is [`{python} f"{wl_mtom:.1f} kg/m²"`]{.key}, staying [`{python} f"{margin_wl:.1f} kg/m²"`]{.key} under the [`{python} f"{wl_limit:.0f} kg/m²"`]{.key} ceiling.
+
+```{python}
+#| label: fig-mass-budget
+#| fig-cap: "Mass buildup and flight envelope comparison of the AR 80.3 tandem against baseline limits, showing structural breakdown, wing loading, and stall speed."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
+
+# Subplot 1: Stacked mass buildup comparison
+configs = ["Baseline Monoplane", "AR 80.3 Tandem"]
+fuse_tail = [mb["m_fuse_tail"], mb["m_fuse_tail"]]
+wings = [mb["m_wings_dry"], mb["m_wings_dry"]]
+reinf = [0.0, mb["dm_div"]]
+pilot = [mb["m_pilot"], mb["m_pilot"]]
+ballast = [mb["m_base_ballast"], mb["m_ballast_max"]]
+
+bar_w = 0.5
+ax1.bar(configs, fuse_tail, bar_w, label="Fuselage & Tail (197 kg)", color="#4682b4")
+ax1.bar(configs, wings, bar_w, bottom=fuse_tail, label="Wing Dry Structure (140 kg)", color="#2e8b57")
+ax1.bar(configs, reinf, bar_w, bottom=[f + w for f, w in zip(fuse_tail, wings)], label="Divergence Reinf. (+71.7 kg)", color="#dc143c")
+ax1.bar(configs, pilot, bar_w, bottom=[f + w + r for f, w, r in zip(fuse_tail, wings, reinf)], label="Pilot (80 kg)", color="#e69f00")
+ax1.bar(configs, ballast, bar_w, bottom=[f + w + r + p for f, w, r, p in zip(fuse_tail, wings, reinf, pilot)], label="Max Ballast", color="#56b4e9", alpha=0.6, hatch="//")
+
+ax1.axhline(mb["m_mtom_limit"], color="black", ls="--", lw=1.5, label=f"MTOM limit ({mb['m_mtom_limit']:.0f} kg)")
+ax1.set_ylabel("Aircraft Mass [kg]")
+ax1.set_ylim(0, 620)
+ax1.set_title("Aircraft Mass Buildup to MTOM")
+ax1.grid(True, axis="y", alpha=0.3)
+ax1.legend(loc="upper left", fontsize=7.2)
+
+# Subplot 2: Wing loading and stall speed comparison
+metrics = ["Flight WL\n[kg/m²]", "MTOM WL\n[kg/m²]", "Flight Vstall\n[km/h]", "MTOM Vstall\n[km/h]"]
+base_vals = [mb["wl_base_flight"], mb["wl_base_mtom"], mb["v_stall_base"], mb["v_stall_base_mtom"]]
+td_vals = [mb["wl_flight"], mb["wl_mtom"], mb["v_stall_flight"], mb["v_stall_mtom"]]
+
+x = np.arange(len(metrics))
+w2 = 0.35
+r1 = ax2.bar(x - w2/2, base_vals, w2, label="Baseline", color="#4682b4", alpha=0.85)
+r2 = ax2.bar(x + w2/2, td_vals, w2, label="AR 80.3 Tandem", color="#d95f02", alpha=0.85)
+
+for bar in list(r1) + list(r2):
+    yval = bar.get_height()
+    ax2.text(bar.get_x() + bar.get_width()/2.0, yval + 1.2, f"{yval:.1f}", ha="center", va="bottom", fontsize=8.0)
+
+ax2.axhline(mb["wl_limit"], color="crimson", ls=":", lw=1.5, label=f"Max WL limit ({mb['wl_limit']:.0f} kg/m²)")
+ax2.set_xticks(x)
+ax2.set_xticklabels(metrics, fontsize=8.5)
+ax2.set_ylabel("Value [kg/m² or km/h]")
+ax2.set_ylim(0, 105)
+ax2.set_title("Wing Loading & Stall Speed Comparison")
+ax2.grid(True, axis="y", alpha=0.3)
+ax2.legend(loc="upper left", fontsize=7.8)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(tandem_mass_budget_analysis)
+```

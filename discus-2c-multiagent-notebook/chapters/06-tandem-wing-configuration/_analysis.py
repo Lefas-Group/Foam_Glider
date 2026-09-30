@@ -1097,4 +1097,67 @@ def tandem_aeroelastic_sizing_trade(
     }
 
 
+def tandem_mass_budget_analysis(
+    dm_div: float = 71.7,
+    m_base_empty: float = 337.0,
+    m_base_wing: float = 140.0,
+    m_pilot: float = 80.0,
+    m_mtom_limit: float = 565.0,
+    wl_limit: float = 52.0,
+    s_ref: float = 11.39,
+    v_stall_base: float = 75.0,
+) -> dict:
+    """Analyze total aircraft mass, wing loading, and stall speed for reinforced tandem wing."""
+    m_fuse_tail = m_base_empty - m_base_wing
+    m_wings_dry = m_base_wing
+    m_wings_total = m_wings_dry + dm_div
+    m_empty = m_fuse_tail + m_wings_total
+
+    m_flight_dry = m_empty + m_pilot
+    m_ballast_max = m_mtom_limit - m_flight_dry
+    m_flight_mtom = m_mtom_limit
+
+    wl_empty = m_empty / s_ref
+    wl_flight = m_flight_dry / s_ref
+    wl_mtom = m_flight_mtom / s_ref
+
+    m_base_flight = m_base_empty + m_pilot
+    wl_base_flight = m_base_flight / s_ref
+    wl_base_mtom = m_mtom_limit / s_ref
+
+    v_stall_flight = v_stall_base * np.sqrt(m_flight_dry / m_base_flight)
+    v_stall_mtom = v_stall_base * np.sqrt(m_flight_mtom / m_base_flight)
+    v_stall_base_mtom = v_stall_base * np.sqrt(m_mtom_limit / m_base_flight)
+
+    return {
+        "m_fuse_tail": m_fuse_tail,
+        "m_wings_dry": m_wings_dry,
+        "dm_div": dm_div,
+        "m_wings_total": m_wings_total,
+        "m_empty": m_empty,
+        "m_pilot": m_pilot,
+        "m_flight_dry": m_flight_dry,
+        "m_ballast_max": m_ballast_max,
+        "m_flight_mtom": m_flight_mtom,
+        "m_base_empty": m_base_empty,
+        "m_base_flight": m_base_flight,
+        "m_base_ballast": m_mtom_limit - m_base_flight,
+        "s_ref": s_ref,
+        "wl_empty": wl_empty,
+        "wl_flight": wl_flight,
+        "wl_mtom": wl_mtom,
+        "wl_base_flight": wl_base_flight,
+        "wl_base_mtom": wl_base_mtom,
+        "wl_limit": wl_limit,
+        "m_mtom_limit": m_mtom_limit,
+        "v_stall_base": v_stall_base,
+        "v_stall_flight": v_stall_flight,
+        "v_stall_mtom": v_stall_mtom,
+        "v_stall_base_mtom": v_stall_base_mtom,
+        "is_mtom_compliant": m_flight_dry <= m_mtom_limit,
+        "is_wl_compliant": wl_mtom <= wl_limit,
+    }
+
+
+
 
