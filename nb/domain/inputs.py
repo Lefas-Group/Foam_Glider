@@ -22,14 +22,14 @@ def declared(notebook, chapter):
     """
     (specified, assumed) counts for ONE chapter.
 
-    Delegated to `lint.declared_items`, which knows both sources: a chapter
+    Delegated to `shared.declared_items`, which knows both sources: a chapter
     with `_inputs.yml` is read from it, one without from its index callouts.
     This used to carry its own regex over the markdown, and the day the items
     moved into a data file that copy would have returned zero -- silently, for
     the notice that is the only reason `ask_specified` fires at all.
     """
-    from .. import lint
-    items = lint.declared_items(notebook.root, chapter)
+    from ..contract import shared
+    items = shared.declared_items(notebook.root, chapter)
     spec = sum(1 for k, _ in items if k == "Specified")
     return spec, len(items) - spec
 
@@ -70,15 +70,15 @@ def own(notebook, chapter, entries_before=None):
     `entries_before` takes only the first N entries, for an ancestor seen
     through a fork: see `_lineage`.
     """
-    from .. import lint
+    from ..contract import shared
     # THE HANDLE IS ALSO PART OF THE IDENTITY for a chapter item, because the
     # format is `- <id>: <text>` and the text never repeats the name.
     # `- dihedral: 20 degrees determines the cross-angle` says nothing about
     # dihedral except in its id, so matching on text alone let "dihedral angle"
     # be asked again.
-    ids = {t: i for i, t in lint.input_ids(notebook.root, chapter).items()}
+    ids = {t: i for i, t in shared.input_ids(notebook.root, chapter).items()}
     out = [(k, t, ids.get(t, chapter))
-           for k, t in lint.declared_items(notebook.root, chapter)]
+           for k, t in shared.declared_items(notebook.root, chapter)]
     standing = [_words(t) | _words(w) for _, t, w in out]
 
     # WHAT THIS CHAPTER SAYS NO LONGER HOLDS. `_inputs.yml`'s `overwrites:`
@@ -87,10 +87,10 @@ def own(notebook, chapter, entries_before=None):
     # value is in force rather than reporting both. Handles are dropped
     # wherever they came from -- an entry's stem, or an inherited
     # `<chapter>/<handle>`, which `_ancestral` checks separately.
-    data = lint.read_inputs(notebook.root, chapter) or {}
+    data = shared.read_inputs(notebook.root, chapter) or {}
     dead = {h for h, _ in _pairs(data.get("overwrites"))}
 
-    rows = [r for r in lint.entry_items(notebook.root, chapter)
+    rows = [r for r in shared.entry_items(notebook.root, chapter)
             if r[2] not in dead]
     if entries_before is not None:
         keep = {e.stem for e in notebook.entries(chapter)[:entries_before]}
@@ -128,14 +128,14 @@ def _lineage(notebook, chapter, parent=None):
     what the fork-time review needs -- there is no `_fork.yml` to read until
     `create_chapter` has run.
     """
-    from .. import lint
+    from ..contract import shared
     out, seen, cur = [], {chapter}, chapter
     if parent and parent != chapter and (notebook.chapters_dir / parent).is_dir():
         out.append((parent, None))     # not forked yet: everything it has
         seen.add(parent)
         cur = parent
     for _ in range(len(notebook.chapters())):
-        fork = lint.read_fork(notebook.root, cur) or {}
+        fork = shared.read_fork(notebook.root, cur) or {}
         nxt = (fork.get("parent") or "").strip()
         if not nxt or nxt in seen or not (notebook.chapters_dir / nxt).is_dir():
             break
@@ -161,9 +161,9 @@ def _ancestral(notebook, chapter, parent=None):
     identity when its text does not (`- dihedral: 20 degrees…` names dihedral
     only in its id).
     """
-    from .. import lint
+    from ..contract import shared
     chain = _lineage(notebook, chapter, parent)
-    gone = lint.departures(notebook.root, notebook.chapters())
+    gone = shared.departures(notebook.root, notebook.chapters())
     # THIS CHAPTER'S OWN OVERWRITES COUNT. The test was against the ancestors
     # alone -- written when this only ever ran for a chapter that did not exist
     # yet and so could not have overwritten anything. Used for a chapter that
@@ -171,12 +171,12 @@ def _ancestral(notebook, chapter, parent=None):
     breakers = {c for c, _ in chain} | {chapter}
     # An inherited item this chapter overwrote in its own `_inputs.yml`, by the
     # `<ancestor>/<handle>` the register reports.
-    from .. import lint as _l
+    from ..contract import shared
     mine = {h for h, _ in _pairs(
-        (_l.read_inputs(notebook.root, chapter) or {}).get("overwrites"))}
+        (shared.read_inputs(notebook.root, chapter) or {}).get("overwrites"))}
     carried, dropped = [], []
     for c, at in chain:
-        ids = lint.input_ids(notebook.root, c)
+        ids = shared.input_ids(notebook.root, c)
         for kind, text, handle in own(notebook, c, entries_before=at):
             if any(t == text for _, t, _, _ in carried):
                 continue
@@ -280,7 +280,7 @@ def write_active(notebook, chapter):
     putting the inherited set on the page. `_notebook.py` renders at Quarto
     time with no `nb` on the path, so it cannot call `carried()`; it reads what
     this wrote. The alternative was porting `_lineage`/`_ancestral` into the
-    vendored runtime, which would make the word "inherited" mean whatever two
+    shared runtime, which would make the word "inherited" mean whatever two
     copies of that walk happened to agree on.
 
     Stale is the failure to fear, so every commit rewrites EVERY chapter's
@@ -377,10 +377,10 @@ def short(handle, chapter=""):
     so shortening there only cost uniqueness -- three unrelated entries landing
     on one `2026-09-24`.
     """
-    from .. import lint
+    from ..contract import shared
     if handle == chapter:
         return ""
-    if not lint.is_entry(handle):
+    if not shared.is_entry(handle):
         return handle
     anc, _, tail = handle.rpartition("/")
     return f"{anc}/{tail[:10]}" if anc else handle[:10]
@@ -480,13 +480,13 @@ def inherited(notebook, chapter, parent=None):
     `overwrites:` records the override now, so it is mechanical and the dropped
     set is reported rather than silently missing.
     """
-    from .. import lint
+    from ..contract import shared
     if not _lineage(notebook, chapter, parent):
         # The brief has no ancestor and no handle to point at -- it is stated
         # once, at the notebook root, and `where` carries that name so the row
         # shape holds even here.
         return [(k, t, notebook.root.name)
-                for k, t in lint.notebook_items(notebook.root)], []
+                for k, t in shared.notebook_items(notebook.root)], []
     # THE SAME ROWS THE PAGE WILL SHOW, from `carried` -- this is the review
     # of exactly what the new chapter is about to be given, so computing it a
     # second way here is how the two come to disagree. `dropped` still needs

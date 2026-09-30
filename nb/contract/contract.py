@@ -171,7 +171,8 @@ def unexplained():
     # that file, which it just did. Worse, it returns [] on OSError, so a broken
     # version reports "no gaps" and `corpus.py` believes it.
     documented = set(WHY)
-    for f in sorted(pathlib.Path(__file__).resolve().parent.parent.rglob("*.py")):
+    from ..config import NB
+    for f in sorted(NB.rglob("*.py")):
         if "__pycache__" in str(f):
             continue
         try:

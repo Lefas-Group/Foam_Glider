@@ -130,8 +130,8 @@ def notebook_context(notebook):
     Callouts only, not the whole page: the rest is the generated lineage
     diagram, which is a picture of the chapters the manifest already lists.
     """
-    from .. import lint
-    items = lint.notebook_items(notebook.root)
+    from ..contract import shared
+    items = shared.notebook_items(notebook.root)
     if not items:
         return ""
     out = ["\n## The aircraft — true of EVERY chapter\n",
@@ -165,7 +165,7 @@ def chapter_context(notebook):
     one, and a handle you cannot see is a handle you cannot use.
     """
     import re
-    from .. import lint
+    from ..contract import shared
     out = []
     for chapter in notebook.chapters():
         d = notebook.chapters_dir / chapter
@@ -175,16 +175,16 @@ def chapter_context(notebook):
             m = re.search(r'^title:\s*"(.+)"\s*$', index.read_text(), re.M)
             title = m.group(1) if m else ""
         out.append(f"\n## chapters/{chapter}" + (f' — "{title}"' if title else ""))
-        defines = lint.defines(notebook.root, chapter)
+        defines = shared.defines(notebook.root, chapter)
         if defines:
             out.append(f"\n{defines}")
-        fork = lint.read_fork(notebook.root, chapter) or {}
+        fork = shared.read_fork(notebook.root, chapter) or {}
         if fork.get("parent"):
             out.append(f"Forked from {fork['parent']}"
                        + (f" — {fork['summary']}" if fork.get("summary") else ""))
 
-        data = lint.read_inputs(notebook.root, chapter)
-        declared = lint.declared_items(notebook.root, chapter)
+        data = shared.read_inputs(notebook.root, chapter)
+        declared = shared.declared_items(notebook.root, chapter)
         if declared:
             out.append("\n### Committed to by this chapter. Inherited by every "
                        "entry in it, and never restated in one.\n")

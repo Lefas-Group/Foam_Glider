@@ -27,10 +27,11 @@ from collections import defaultdict
 
 from .contract import register
 from .shared import (
-    BLOCK, BUDGET_NAMES, CANONICAL_NOTEBOOK, CITE_CALL, ENTRY_FILE,
+    SCAFFOLD_NOTEBOOK, machinery_names,
+    BLOCK, BUDGET_NAMES, CITE_CALL, ENTRY_FILE,
     ENTRY_REFERENCE, ENTRY_SELF, ENTRY_TITLE, EXECD, FORK_SIMILARITY,
     HERO_PAIR, HERO_SOURCE, INDEX_SECTIONS, INLINE, INLINE_BODY,
-    INPUT_CALLOUTS, INPUT_TITLES, MACHINERY, MAX_CALLOUT_ITEM, MAX_FIG_CAP,
+    INPUT_CALLOUTS, INPUT_TITLES, MAX_CALLOUT_ITEM, MAX_FIG_CAP,
     MAX_INLINE_PER_SENTENCE, MAX_PROSE, MAX_TITLE_WORDS, PLACEHOLDER,
     RESULT_NUMBER, RUNTIME_SECONDS, SENTENCE, SWEPT_LITERAL, _bound,
     _code_only, _computes_nothing, _defs_of, _departure_targets,
@@ -67,13 +68,13 @@ def _notebook_drift(root):
     project-specific; any difference is either an un-propagated improvement or an
     accident, and both want a person to decide which.
     """
-    # ONE vendored file now. `_scratch/_probe_base.py` was the second, and was
+    # ONE copied file now. `_scratch/_probe_base.py` was the second, and was
     # checked here for the same reason -- an improvement to it once sat in one
     # notebook while the scaffold still held the old text. It is gone: probes
     # run in a kernel `nb` starts, and the cell that loads the chapter is
     # `nb/tools/probe_init.py`, an ordinary module that ships with `nb` and is
     # therefore incapable of drifting. Vendoring buys propagation and costs
-    # this rule; one fewer vendored file is one fewer of both.
+    # this rule; one fewer copied file is one fewer of both.
     problems = []
 
     # (rule, where, message). THE NUMBER IS A FIELD NOW, not something a caller
@@ -89,7 +90,7 @@ def _notebook_drift(root):
     # 16, 17, 18 and 28 between them, and attributing per finding means
     # splitting the function. The table below is therefore also the list of what
     # is left to split, which is the honest version of a gap.
-    problems += _one_drift(CANONICAL_NOTEBOOK, root / "_notebook.py")
+    problems += _one_drift(SCAFFOLD_NOTEBOOK, root / "_notebook.py")
     return problems
 
 
@@ -130,6 +131,8 @@ def _shadowed_machinery(root, chapters, entries):
     Calibrated before it was written: zero hits across 166 cells in every entry
     of all three notebooks, and zero across 18 chapter .py files.
     """
+    # THIS notebook's machinery, not the seed's -- see `machinery_names`.
+    machinery = machinery_names(root)
     out = []
     for f, src in ([(e, entry_cells(e.read_text())) for e in entries] +
                    [(p, p.read_text())
@@ -146,12 +149,11 @@ def _shadowed_machinery(root, chapters, entries):
                                             ast.For)) else [])
             for t in targets:
                 for name in ast.walk(t):
-                    if isinstance(name, ast.Name) and name.id in MACHINERY:
+                    if isinstance(name, ast.Name) and name.id in machinery:
                         out.append((f, f"rebinds `{name.id}`, which "
                                        f"_notebook.py still uses after your "
                                        f"code runs — the traceback would land "
-                                       f"in a vendored file you cannot edit; "
-                                       f"rename it"))
+                                       f"in a file you cannot edit; rename it"))
     return out
 
 

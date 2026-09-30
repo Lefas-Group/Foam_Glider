@@ -109,7 +109,7 @@ def _parts(path):
 
 def _allowed(session, path):
     """(ok, why not) for a write to `path`, which is relative to chapters/."""
-    from .. import lint
+    from ..contract import shared
     notebook = session.notebook
     # NO RUN-STATE CHECK HERE ANY MORE. It used to refuse every write until
     # `open_chapter` had run, because until then nothing knew which chapter the
@@ -134,7 +134,7 @@ def _allowed(session, path):
                        f"write into another is either a refactor of somebody "
                        f"else's work or a misroute, and both want a different "
                        f"ask")
-    if name in WRITABLE or lint.ENTRY_FILE.match(name):
+    if name in WRITABLE or shared.ENTRY_FILE.match(name):
         return True, ""
     return False, (
         f"{name!r} is not a file this notebook keeps. A chapter holds "

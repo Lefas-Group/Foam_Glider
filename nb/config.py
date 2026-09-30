@@ -13,16 +13,19 @@ mutation is gone with them. It was not free: `sys.path.insert` at import time
 means any `import lint` ANYWHERE in the process resolves to this one, including
 in code that has nothing to do with `nb`.
 
-`vendored/` keeps the one file the word applies to: `notebook.py`, copied
-byte-identical into each notebook because Quarto execs it at render time and a
-notebook must render without `nb` installed. Rule 11 polices that copy.
+AND THERE IS NO `vendored/` EITHER. One file genuinely is copied into each
+notebook -- `_notebook.py`, which Quarto execs at render time, so it has to be a
+file inside the Quarto project and a notebook has to render without `nb`
+installed. But "vendored" was never what that made it: `nb new` writes it
+alongside `_model.qmd`, `_quarto.yml` and five others, and it lives with them in
+`scaffold/`. Rule 11 still polices the copy; it just polices it against the seed
+it was scaffolded from rather than against a library.
 """
 
 import os
 import pathlib
 
 NB = pathlib.Path(__file__).resolve().parent
-VENDORED = NB / "vendored"
 REFERENCES = NB / "references"
 SCAFFOLD = NB / "scaffold"
 SYSTEM_INSTRUCTION = NB / "system_instruction.md"
@@ -263,14 +266,14 @@ class Notebook:
         return self.run / "transcript.jsonl"
 
     def chapters(self):
-        from . import lint
-        return lint.chapters_of(self.root)
+        from .contract.shared import chapters_of
+        return chapters_of(self.root)
 
     def entries(self, chapter):
         """Entry .qmd files, date-prefixed, in chronological order."""
-        from . import lint
+        from .contract.shared import ENTRY_FILE
         d = self.chapters_dir / chapter
-        return sorted(p for p in d.glob("*.qmd") if lint.ENTRY_FILE.match(p.name))
+        return sorted(p for p in d.glob("*.qmd") if ENTRY_FILE.match(p.name))
 
     def __repr__(self):
         return f"Notebook({self.root.name})"

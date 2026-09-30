@@ -8,7 +8,7 @@ formatted and syntax-checked like any other file -- a twenty-line program living
 in a string is the one thing nothing in this repo checks.
 
 It replaces `_scratch/_probe_base.py`, which did the same job for the subprocess
-probes and was VENDORED into every notebook to do it. Vendoring bought one
+probes and was COPIED into every notebook to do it. That bought one
 thing: a human could load a chapter by hand, with no `nb` installed, in two
 lines. That is not a path anyone uses, and it cost a second file under lint rule
 11 plus a copy in every notebook to keep in step. Nothing else reached it --

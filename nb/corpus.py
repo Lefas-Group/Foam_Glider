@@ -78,7 +78,7 @@ EXPECTED = {
     # -1/-1 when rule 11 stopped checking `_scratch/_probe_base.py`. Probes run
     # in a kernel `nb` starts, so the chapter loader is `nb/tools/probe_init.py`
     # -- ordinary `nb` code, propagated by being imported rather than copied --
-    # and there is no second vendored file to drift. This notebook had a
+    # and there is no second copied file to drift. This notebook had a
     # `_probe_base.py` that differed from the canonical one; `aircraft-notebook`
     # never had the file at all. Both findings were real under the old rule and
     # are not findings under the new one.
@@ -116,7 +116,7 @@ EXPECTED = {
     # -1/-1 when rule 11 stopped checking `_scratch/_probe_base.py`. Probes run
     # in a kernel `nb` starts, so the chapter loader is `nb/tools/probe_init.py`
     # -- ordinary `nb` code, propagated by being imported rather than copied --
-    # and there is no second vendored file to drift. This notebook had a
+    # and there is no second copied file to drift. This notebook had a
     # `_probe_base.py` that differed from the canonical one; `aircraft-notebook`
     # never had the file at all. Both findings were real under the old rule and
     # are not findings under the new one.
@@ -125,8 +125,9 @@ EXPECTED = {
 
 
 def counts(root):
-    from . import lint
-    problems = lint.check(root, lint.chapters_of(root))
+    from .contract import check
+    from .contract.shared import chapters_of
+    problems = check(root, chapters_of(root))
     blocking = [m for _, _, m in problems if "(warning)" not in m]
     return len(blocking), len(problems)
 
@@ -193,15 +194,15 @@ def main(argv=()):
     # THE CONTRACT'S OWN HEALTH, beside the counts. A rule nobody wrote a
     # reason for is a rule nobody can argue with, which is how a contract
     # accumulates lines that fire on things that look fine -- and it used to be
-    # an impression rather than a number. `lint.WHY` and the `Rule N.`
+    # an impression rather than a number. `contract.WHY` and the `Rule N.`
     # docstrings are the two homes; this counts what is in neither.
-    from . import lint
-    gaps = lint.unexplained()
+    from .contract.contract import RULES, unexplained
+    gaps = unexplained()
     if gaps:
-        print(f"\n  {len(gaps)} of {len(lint.RULES)} rules have no recorded "
-              f"reason, in lint.WHY or a check's docstring:")
+        print(f"\n  {len(gaps)} of {len(RULES)} rules have no recorded "
+              f"reason, in contract.WHY or a check's docstring:")
         for n in gaps:
-            print(f"    {n:3}  {lint.RULES[n]}")
+            print(f"    {n:3}  {RULES[n]}")
     if not bad:
         print("\ncorpus unchanged.")
         return 0

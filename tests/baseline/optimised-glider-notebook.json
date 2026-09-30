@@ -2,7 +2,7 @@
  [
   11,
   "_notebook.py",
-  "differs from nb/vendored/notebook.py (first at line 16) \u2014 copy the canonical version down, or promote the local change up so every notebook gets it"
+  "differs from nb/scaffold/_notebook.py (first at line 16) \u2014 the copy here is the one that renders, so decide which is right: take the seed's version down, or lift this change up into it"
  ],
  [
   28,

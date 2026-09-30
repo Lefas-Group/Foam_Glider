@@ -28,7 +28,7 @@ text.
 It is ordinary `nb` code rather than a per-notebook copy, for the same reason
 `lint.py` is: it is a CHECKER. It runs at authoring time, reads the notebook, and writes
 nothing into the rendered site, so a notebook does not need it present to render.
-`_notebook.py` is the opposite, which is why that one is vendored and this is not.
+`_notebook.py` is the opposite, which is why that one is copied down and this is not.
 
 USAGE NOTE, and it is not optional. Freeze tracks the page, not its includes, so
 editing `_model.py` invalidates nothing. Delete the freeze before re-rendering or
@@ -49,7 +49,7 @@ import pathlib
 import re
 import subprocess
 
-from .. import lint
+from ..contract.shared import RUNTIME_SECONDS
 import sys
 
 from ..contract.shared import ENTRY_FILE, _label, chapters_of
@@ -76,7 +76,7 @@ def markdown_of(blob):
     """The page's rendered markdown, with per-render noise normalised away."""
     d = json.loads(blob)
     md = d["result"]["markdown"] if isinstance(d.get("result"), dict) else ""
-    md = lint.RUNTIME_SECONDS.sub("Rendered in … s", md)
+    md = RUNTIME_SECONDS.sub("Rendered in … s", md)
     md = FENCE.sub("<code cell>", md)
     md = CELL_ID.sub(r"{#ID\1", md)
     md = FIG_ID.sub("-UUID", md)

@@ -1,7 +1,7 @@
 """
 lint / render / check -- the deterministic half, wrapped as tools.
 
-These are the vendored scripts, called rather than reimplemented. `lint.check()`
+The checker and the builder, called rather than reimplemented. `contract.check()`
 returns structured tuples so it is called directly; `check.main()` only prints,
 so its stdout is captured the same way check.py captures lint's.
 """
@@ -38,7 +38,7 @@ from ..process.log import say
 # Rule 12, by NUMBER. It was `FREEZE_STALE = "but the freeze is not"`, matched
 # against the message text -- so rewording the message would have silently
 # turned the filter off, and what comes back then is the deadlock it exists to
-# prevent. `lint.check` yields the rule now, so this cannot go stale.
+# prevent. `contract.check` yields the rule now, so this cannot go stale.
 #
 # RULE 40 JOINED IT on 2026-09-29, and it is the same deadlock one level up:
 # rule 12 watches a chapter's freeze, rule 40 watches the notebook front page's,
@@ -74,9 +74,9 @@ def _problems(root, chapters, pre_render=True):
     IS their fix, and gating the render on them deadlocks. See
     `FREEZE_STALE_RULES`.
     """
-    from .. import lint
+    from ..contract import check
     blocking, warnings = [], []
-    for rule, where, msg in lint.check(root, chapters):
+    for rule, where, msg in check(root, chapters):
         if pre_render and rule in FREEZE_STALE_RULES:
             continue
         label = "" if where is None else f"{where.name}: "
@@ -87,16 +87,16 @@ def _problems(root, chapters, pre_render=True):
 
 def _word_budgets(notebook, chapter):
     """Prose words against rule 6's budget, per entry, so nobody counts by hand."""
-    from .. import lint
+    from ..contract.shared import ENTRY_FILE, MAX_PROSE, body_prose, words
     lines = []
     for e in sorted((notebook.chapters_dir / chapter).glob("*.qmd")):
-        if not lint.ENTRY_FILE.match(e.name):
+        if not ENTRY_FILE.match(e.name):
             continue
         try:
-            n = lint.words(lint.body_prose(e.read_text()))
+            n = words(body_prose(e.read_text()))
         except OSError:
             continue
-        lines.append(f"  {e.stem[:44]}: {n}/{lint.MAX_PROSE} words of prose")
+        lines.append(f"  {e.stem[:44]}: {n}/{MAX_PROSE} words of prose")
     return ("\n\nprose budgets (rule 6):\n" + "\n".join(lines)) if lines else ""
 
 
@@ -211,7 +211,7 @@ def pages_of(root):
     Every page a render can execute: `chapters/*/*.qmd` minus the
     leading-underscore includes, plus the notebook's front page.
 
-    Here rather than in `lint` so the vendored checker keeps its own copy of
+    Here rather than in the contract so the checker keeps its own copy of
     this rule and nothing has to stay in step with an import.
 
     The front page is in the list because it is a page a render executes, and

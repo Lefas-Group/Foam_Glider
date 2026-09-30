@@ -71,10 +71,11 @@ def findings(notebook):
     hiding 17 findings, all of them rules 21 and 22 reporting the same sentence
     about a different chapter's helpers.
     """
-    from nb import lint
+    from nb.contract import check
+    from nb.contract.shared import chapters_of
     root = ROOT / notebook
     out = []
-    for rule, where, msg in lint.check(root, lint.chapters_of(root)):
+    for rule, where, msg in check(root, chapters_of(root)):
         if where is None:
             at = None
         else:
@@ -156,8 +157,9 @@ def check(strict):
     # the leftover `None`s as information.
     unattributable = []
     if strict:
+        # Importing the submodule runs the PACKAGE's `__init__` first, which
+        # imports `rules` -- and that is what the `@register` decorators need.
         from nb.contract import contract
-        from nb import lint                             # noqa: F401 -- registers
         missing, bundled = contract.unattributed()
         unattributable = missing
         if missing:

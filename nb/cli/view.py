@@ -110,8 +110,8 @@ def site(notebook, force=False, verbose=True, page=None,
     # looking at it. Four chapters holding four copies of one vehicle is not a
     # lint problem -- rule 31 covers the provenance -- but it IS the thing that
     # decides how expensive the next physics fix is, and nothing else says it.
-    from .. import lint as _lint
-    kin = _lint.model_kinship(notebook.root, notebook.chapters())
+    from ..contract import shared
+    kin = shared.model_kinship(notebook.root, notebook.chapters())
     # TELEMETRY. This describes the notebook's standing shape, not anything
     # the run just did, and printing five unchanging lines after every entry
     # trained the eye to skip the block the finished prose sits in. `nb view`

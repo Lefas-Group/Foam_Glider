@@ -28,7 +28,7 @@ uv run --group nb python -m nb.preflight glider-notebook
 ```
 
 That last command is the whole of setup verification. It checks every binary,
-the key, the vendored files, and that the model's copy of the rule list matches
+the key, the scaffold seed, and that the model's copy of the rule list matches
 what lint enforces. It prints `preflight ok` or the list of what is wrong.
 
 **Run from the repo root.** There is no installed entry point and nothing to
@@ -310,7 +310,7 @@ detector missed something — worth opening, not shrugging at.
 ```
 glider-notebook/
   index.qmd               the front page: the aircraft's brief, and the lineage diagram
-  _notebook.py            vendored runtime — footer(), cite(), chapter_inputs()
+  _notebook.py            the shared runtime — footer(), cite(), chapter_inputs()
   chapters/NN-name/
     _model.py             THE VEHICLE. Guarded once the chapter has entries
     _analysis.py          how this chapter measures it. Yours to grow
@@ -338,8 +338,7 @@ silently.
 
 ## Three checks
 
-**lint** (`nb/lint.py`, with its contract in `nb/contract/`) reads the source and
-runs nothing. **build** (`nb/build/`) renders the entry and refuses to commit a
+**lint** (`nb/contract/`) reads the source and runs nothing. **build** (`nb/build/`) renders the entry and refuses to commit a
 page that does not execute — lint has passed by then, and nothing else would
 notice. **verify** (`nb/build/verify.py`, once `check.py`) deletes invalidated
 freezes, re-renders, and diffs values and figure bytes against git — what a

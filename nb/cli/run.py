@@ -157,13 +157,13 @@ def main(notebook_path, question, verbose=True,
     if pool is None:
         pool = ask_pool(PROBE_POOL)
     # Granted before anything is built, so the agent designs within it rather
-    # than discovering it at render time. `lint._defaults` is the ONLY source
+    # than discovering it at render time. `shared._defaults` is the ONLY source
     # of the default, flag or no flag: a second copy of this number in
     # `config.py` disagreed with the notebook once -- 20 s against 200 s -- so
     # the flag overrides the ANSWER and never the source of the default.
     if ceiling is None:
-        from .. import lint
-        _, default_ceiling = lint._defaults(notebook.root)
+        from ..contract import shared
+        _, default_ceiling = shared._defaults(notebook.root)
         ceiling = ask_render_ceiling(
             default_ceiling or 200.0,
             "declared by this notebook's _notebook.py" if default_ceiling

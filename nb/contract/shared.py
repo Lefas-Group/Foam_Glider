@@ -16,6 +16,7 @@ and `build/freezediff.py` imports three by name.
 """
 
 import ast
+import functools
 import json
 import pathlib
 import re
@@ -83,17 +84,25 @@ RESULT_NUMBER = re.compile(r"\d+\.\d{2,}")
 # because they used to derive it separately from `__file__` and the two would
 # have disagreed the moment either moved -- as both just did, out of `vendor/`
 # and into `nb/`, leaving `vendored/` holding the only file the word fits.
-# RESOLVED FROM THE PACKAGE, not from this file's directory. It was
-# `__file__.parent / "vendored"`, which was right in `nb/lint.py` and became
-# `nb/contract/vendored/` the moment this moved one level down -- a path that
-# does not exist, so rule 11 stopped reporting drift and said nothing about it.
-# The harness caught it; nothing else would have.
+# THE SEED `nb new` COPIES DOWN, which rule 11 holds each notebook's own copy
+# to. In `nb/scaffold/`, with the seven templates it is written beside -- it was
+# `nb/vendored/notebook.py`, from when four modules that were never copied
+# anywhere shared that directory with it.
 #
-# That is twice in this refactor: `unexplained()` read `__file__` too. A path
-# derived from where the code happens to live is a path that changes meaning
-# when the code moves, silently and in the permissive direction.
-_NB = pathlib.Path(__file__).resolve().parents[1]
-CANONICAL_NOTEBOOK = _NB / "vendored" / "notebook.py"
+# FROM `config.SCAFFOLD`, which is the one place that knows where the package
+# keeps its seeds. FOUR TIMES in this refactor a path was derived from
+# `__file__` and silently changed meaning when its file moved: rule 11 stopped
+# reporting drift, `unexplained()` would have reported seventeen false gaps,
+# `api._furniture` raised FileNotFoundError on every api_search miss, and rule
+# 27 read the seed's names for every notebook. Counting directory levels by hand
+# is what they have in common, and `parents[1]` here was the last of them.
+#
+# `config` imports nothing of ours at module level -- only `os` and `pathlib` --
+# so this cannot cycle, and `Notebook`'s own reach into `contract` is a lazy
+# import inside a method.
+from ..config import SCAFFOLD as _SCAFFOLD
+
+SCAFFOLD_NOTEBOOK = _SCAFFOLD / "_notebook.py"
 
 
 
@@ -103,11 +112,23 @@ CANONICAL_NOTEBOOK = _NB / "vendored" / "notebook.py"
 # direction (no rule, no warning). Falls back to the names that actually broke a
 # render if the file cannot be parsed, so the rule degrades rather than
 # vanishing.
-def _machinery_names():
+#
+# PER NOTEBOOK, and that is a fix. It was `MACHINERY = _machinery_names()`,
+# evaluated once at import from the SEED copy and then used for every notebook
+# -- so the two notebooks whose `_notebook.py` has drifted were checked against
+# a list of names their own file does not bind. Rule 27 exists to stop an entry
+# clobbering a name its own render depends on, which is a question about the
+# notebook in front of it.
+#
+# Cached per root, because rule 27 asks this once per entry and the answer is
+# one parse of one file.
+@functools.lru_cache(maxsize=None)
+def machinery_names(root):
+    """Top-level names bound by THIS notebook's `_notebook.py`."""
     try:
-        tree = ast.parse(CANONICAL_NOTEBOOK.read_text())
+        tree = ast.parse((pathlib.Path(root) / "_notebook.py").read_text())
     except (OSError, SyntaxError):
-        return {"time", "pathlib", "aero_cost", "footer", "_T0"}
+        return frozenset({"time", "pathlib", "aero_cost", "footer", "_T0"})
     names = set()
     for n in tree.body:
         if isinstance(n, (ast.Import, ast.ImportFrom)):
@@ -118,11 +139,7 @@ def _machinery_names():
             names |= {t.id for t in n.targets if isinstance(t, ast.Name)}
     # `_T0` is set by _model.qmd, not by _notebook.py, but footer() reads it
     # and an entry can clobber it.
-    return names | {"_T0"}
-
-
-
-MACHINERY = _machinery_names()
+    return frozenset(names | {"_T0"})
 
 
 # Lines that recur legitimately and say nothing about duplicated machinery.
@@ -550,20 +567,30 @@ def code_of(text):
 
 
 
-def _one_drift(canonical, local):
-    if not canonical.exists():
-        return []                       # skill is the thing that is broken
-    if not local.exists():
-        return [(local, f"missing — copy it from {canonical}")]
+def _one_drift(seed, local):
+    """
+    The notebook's copy against the seed `nb new` wrote it from.
 
-    want, got = canonical.read_text().splitlines(), local.read_text().splitlines()
+    THE REMEDY IS TWO-WAY, and the message says both because neither is
+    obviously right. The notebook's copy is the one that RENDERS, so a local
+    change may be the improvement; the seed is what the next notebook starts
+    from, so a difference left alone is an improvement the next notebook will
+    not get. It used to say "so every notebook gets it" -- true when four
+    notebooks were kept in step, and now an argument about a set of size one.
+    """
+    if not seed.exists():
+        return []                       # the scaffold is the thing that is broken
+    if not local.exists():
+        return [(local, f"missing — copy it from {seed}")]
+
+    want, got = seed.read_text().splitlines(), local.read_text().splitlines()
     if want == got:
         return []
     n = next((i for i, (a, b) in enumerate(zip(want, got), 1) if a != b),
              min(len(want), len(got)) + 1)
-    return [(local, f"differs from {canonical} (first at line {n}) — copy the "
-                    f"canonical version down, or promote the local change up so "
-                    f"every notebook gets it")]
+    return [(local, f"differs from {seed} (first at line {n}) — the copy here "
+                    f"is the one that renders, so decide which is right: take "
+                    f"the seed's version down, or lift this change up into it")]
 
 
 
@@ -913,7 +940,7 @@ def read_fork(root, chapter):
     `chapters/<c>/_fork.yml` as a dict, or None. Flat by design.
 
     Deliberately not a YAML parse, for the reason `_categories.yml` is not one:
-    lint imports nothing outside the stdlib, so the vendored checker runs
+    lint imports nothing outside the stdlib, so the checker runs
     standalone. The shape is therefore held flat enough for one regex --
     `key: value` lines and a `changes:` list of `- item` -- which is also the
     shape a human edits, and a human edits this every time a fork is refined.

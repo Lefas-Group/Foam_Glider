@@ -107,8 +107,8 @@ class Entry:
     @functools.cached_property
     def is_entry(self):
         """An entry, as opposed to an index or some other page."""
-        from .. import lint
-        return bool(lint.ENTRY_FILE.match(self.name))
+        from . import shared
+        return bool(shared.ENTRY_FILE.match(self.name))
 
     # ------------------------------------------------------------------ views
     # Each of these is the helper `lint` already called, once per file instead
@@ -145,8 +145,8 @@ class Entry:
         # everyone after -- which is precisely the bug that parsing once instead
         # of forty times would otherwise introduce. `tuple` changes nothing for a
         # caller that iterates, which all of them do.
-        from .. import lint
-        return tuple(lint.callouts_of(self.text or ""))
+        from . import shared
+        return tuple(shared.callouts_of(self.text or ""))
 
     @functools.cached_property
     def tables(self):
@@ -225,7 +225,7 @@ class Chapter:
 
 
 def chapters(root):
-    """Every chapter of a notebook, in order. Mirrors `lint.chapters_of`."""
+    """Every chapter of a notebook, in order. Mirrors `shared.chapters_of`."""
     from . import shared
     root = pathlib.Path(root)
     return tuple(Chapter(root, c) for c in shared.chapters_of(root))

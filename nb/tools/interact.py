@@ -278,7 +278,7 @@ def confirm_inherited(notebook, chapter, parent=None):
     A CHAPTER WITH NO ANCESTOR IS SHOWN THE BRIEF AND ASKED NOTHING. With no
     parent, `inherited()` falls back to the notebook's own `_inputs.yml`, and
     offering those for striking is an offer that cannot be honoured twice over.
-    Mechanically: resolving a strike calls `lint.input_ids(root, "<notebook>")`,
+    Mechanically: resolving a strike calls `shared.input_ids(root, "<notebook>")`,
     which looks for `chapters/<notebook>/_inputs.yml`, finds nothing and matches
     no id -- so the strike was silently discarded, and rule 31 now refuses the
     `overwrites:` row it would have written. In principle: the brief is never
@@ -459,8 +459,8 @@ def ask_specified(session, name, why, kind="specified", options="",
         # first is something `replaces=` can name. Told apart by the date
         # prefix every entry stem carries, not by guessing at the string: an id
         # may legally start with a digit.
-        from .. import lint
-        this_id = (None if lint.ENTRY_FILE.match(where) or where == session.chapter
+        from ..contract import shared
+        this_id = (None if shared.ENTRY_FILE.match(where) or where == session.chapter
                    else where)
         raise ValueError(
             f"chapters/{session.chapter} has already settled this. In force:\n"
@@ -480,8 +480,8 @@ def ask_specified(session, name, why, kind="specified", options="",
               "inherit it.")
     body = f"  {name}\n  {why}"
     if replaces:
-        from .. import lint
-        ids = lint.input_ids(session.notebook.root, session.chapter or "")
+        from ..contract import shared
+        ids = shared.input_ids(session.notebook.root, session.chapter or "")
         if replaces not in ids:
             raise ValueError(
                 f"replaces={replaces!r} is not an id declared by "
@@ -710,10 +710,10 @@ def fork_chapter(session, name, title, defines):
     kept, struck = confirm_inherited(notebook, name, parent=parent or None)
     struck_ids = []
     if struck:
-        from .. import lint
+        from ..contract import shared
         for _kind, item, where in struck:
             src = where.partition("/")[0]
-            for _id, _text in lint.input_ids(notebook.root, src).items():
+            for _id, _text in shared.input_ids(notebook.root, src).items():
                 if _text == item:
                     struck_ids.append((src, _id))
     session.inherited_kept, session.inherited_struck = kept, struck
@@ -779,7 +779,7 @@ def _inherited_note(session):
         # made cannot -- it has no id to name. Both are struck; only the first
         # renders as "Overwritten from …". Saying otherwise would tell the
         # model its work was done when half of it was not.
-        from .. import lint
+        from ..contract import shared
         lines += ["", "STRUCK — the user says this chapter BREAKS these, so "
                   "they do NOT carry forward. Where this chapter needs its own "
                   "value for one of them, that value is NEW and goes in this "
@@ -787,7 +787,7 @@ def _inherited_note(session):
         rows, loose = [], []
         for k, i, w_ in struck:
             s_ = w_.partition("/")[0]
-            ids = lint.input_ids(session.notebook.root, s_)
+            ids = shared.input_ids(session.notebook.root, s_)
             (rows if any(t == i for t in ids.values()) else loose).append(
                 f"  [{k}] {i}   (was from {_short(w_, '')})")
         if rows:
@@ -1058,8 +1058,8 @@ def open_entry(session, title, inputs_none_because=""):
                    ceiling=session.render_ceiling)
     say(f"  entry     {session.chapter}/{stem}.qmd")
 
-    from .. import lint as _lint
-    default_solve, default_ceiling = _lint._defaults(notebook.root)
+    from ..contract import shared
+    default_solve, default_ceiling = shared._defaults(notebook.root)
     ceiling = session.render_ceiling
     total = session.probe_pool or 0.0
     left = session.probe_left if session.probe_left is not None else 0.0

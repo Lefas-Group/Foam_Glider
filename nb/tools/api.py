@@ -23,15 +23,26 @@ def _furniture():
     """
     The notebook helpers `api_search` does NOT index, by name.
 
-    Read out of `vendored/notebook.py` rather than listed here, so it cannot go
+    Read out of `scaffold/_notebook.py` rather than listed here, so it cannot go
     stale the way a hand-kept list does -- the same reason `api()` introspects
     instead of quoting.
 
     Public names only: a probe reaching for `_render_inputs` is not the case
     this exists for.
+
+    THE PATH COMES FROM `contract.shared`, which is the one place that knows
+    where the seed lives. This built its own -- `__file__.parent.parent /
+    "vendor" / "notebook.py"` -- and the file moved twice under it, so this
+    raised FileNotFoundError from the moment `vendor/` was renamed. Nothing
+    caught it: it runs only when `api_search` MISSES, which no sweep does.
+    Degrades to an empty list rather than raising, because an api_search miss is
+    already the model's bad turn and a traceback on top of it helps nobody.
     """
-    src = pathlib.Path(__file__).parent.parent / "vendor" / "notebook.py"
-    tree = ast.parse(src.read_text())
+    from ..contract.shared import SCAFFOLD_NOTEBOOK
+    try:
+        tree = ast.parse(SCAFFOLD_NOTEBOOK.read_text())
+    except (OSError, SyntaxError):
+        return []
     return sorted(n.name for n in tree.body
                   if isinstance(n, ast.FunctionDef) and not n.name.startswith("_"))
 

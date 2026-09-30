@@ -31,7 +31,7 @@ the release gate: fast path while authoring, exhaustive run before committing.
 
 A checker like lint.py and freezediff.py -- authoring-time, reads the notebook,
 writes nothing into the rendered site -- so it is ordinary `nb` code and is not
-vendored into any notebook. It imports the other two rather than reimplementing
+copied into any notebook. It imports the other two rather than reimplementing
 either.
 """
 import ast
@@ -54,7 +54,8 @@ import time
 # never would have.
 from . import freezediff
 from . import render as render_mod
-from .. import lint
+from ..contract import check as lint_check, main as lint_main
+from ..contract.shared import _defs_of, chapters_of, entry_calls
 
 # `_budget.py` used to be here: a chapter-wide solve budget that binds truncates
 # a solve, so editing it could move a frozen number exactly as editing the model
@@ -78,7 +79,7 @@ MODEL_FILES = ("_model.py", "_analysis.py", "_model.qmd")
 # which hit the site_libs race the lock exists to prevent and survived only on
 # its retry.
 #
-# Duplicated rather than imported: check.py is vendored beside the notebook and
+# Duplicated rather than imported: this file once sat beside the notebook and
 # runs with no `nb` on the path. Five lines of `fcntl` is the cheaper of the
 # two wrongs; the file path is the contract between them.
 _LOCK_FH = None
@@ -305,12 +306,12 @@ def _freeze_targets(root, chapters, force_all):
         # already takes the whole chapter and the index with it.
         if (root / "chapters" / c / "index.qmd").exists():
             pages.append(f"{c}/index")
-        defs = lint._defs_of(root / "chapters" / c)
+        defs = _defs_of(root / "chapters" / c)
         hit = []
         for page in sorted((root / "chapters" / c).glob("*.qmd")):
             if page.name.startswith("_"):
                 continue
-            reach = _closure(defs, lint.entry_calls(page.read_text()))
+            reach = _closure(defs, entry_calls(page.read_text()))
             if reach & funcs:
                 hit.append(f"{c}/{page.stem}")
         pages += hit
@@ -408,7 +409,7 @@ def _main(argv):
     if not (root / "chapters").is_dir():
         print(f"  {root} is not a notebook (no chapters/ directory)")
         return 2
-    chapters = argv[1:] or lint.chapters_of(root)
+    chapters = argv[1:] or chapters_of(root)
 
     # 1. Lint, cheaply, before spending a render on an entry that will fail it.
     #
@@ -416,7 +417,7 @@ def _main(argv):
     # when a render is coming: it is a complaint that the render about to happen
     # is exactly the fix, so gating the render on it deadlocks. The post-render
     # lint below runs the full set, so nothing is skipped, only reordered.
-    code, out = _run(lint.main, [str(root)] + chapters)
+    code, out = _run(lint_main, [str(root)] + chapters)
     problems = [l for l in out.splitlines()
                 if l.startswith("  ") and "(warning)" not in l
                 and (not render or "but the freeze is not" not in l)]
@@ -491,7 +492,7 @@ def _main(argv):
     print(f"render     ok ({pages} pages)")
 
     # 2b. The full lint, now that the freeze is current -- rule 12 among them.
-    code, out = _run(lint.main, [str(root)] + chapters)
+    code, out = _run(lint_main, [str(root)] + chapters)
     if code:
         print(out.strip())
         print("\nlint       FAILED after render")
