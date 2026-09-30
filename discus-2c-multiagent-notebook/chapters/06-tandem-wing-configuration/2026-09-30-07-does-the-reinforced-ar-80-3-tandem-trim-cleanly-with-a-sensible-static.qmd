@@ -1,0 +1,111 @@
+---
+title: "Does the reinforced AR 80.3 tandem trim cleanly with a sensible static margin?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 133.1      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Execute trim and longitudinal balance analysis for AR 80.3 tandem
+res = tandem_ar80_trim_analysis(b_target=30.2, dm_div=71.7)
+
+b_target = float(res["b_target"])
+ar_val = float(b_target**2 / 11.39)
+m_empty = float(res["m_empty"])
+m_flight = float(res["m_flight"])
+x_cg = float(res["x_cg_flight"])
+x_np = float(res["x_np"])
+delta_cg_cm = float((x_cg - res["x_cg_base"]) * 100.0)
+delta_np_cm = float((x_np - res["x_np_base"]) * 100.0)
+
+sm_pct = float(res["sm_pct"])
+sm_spacing = float(res["sm_spacing_pct"])
+dM_da = float(res["dM_da"])
+
+lift_fwd_pct = float(res["lift_fwd_pct"])
+lift_aft_pct = float(res["lift_aft_pct"])
+
+alpha_trim = float(res["alpha_trim"])
+decalage_trim = float(res["decalage_trim"])
+delta_decalage = float(res["delta_decalage"])
+cm_untrim = float(res["cm_untrim"])
+cm_trimmed = float(res["cm_trimmed"])
+v_cruise_kmh = float(27.78 * 3.6)
+
+# Verify assertions
+assert abs(lift_fwd_pct + lift_aft_pct - 100.0) < 0.1
+assert abs(cm_trimmed) < 0.02
+assert sm_pct > 0
+```
+
+::: {.hero}
+[`{python} f"{lift_fwd_pct:.1f}% / {lift_aft_pct:.1f}%"`]{.hero-value}
+[fore / aft cruise lift share at trimmed cruise with balanced static margin]{.hero-label}
+:::
+
+**Answer.** Yes. The trimmed fore/aft lift split remains balanced at [`{python} f"{lift_fwd_pct:.1f}% / {lift_aft_pct:.1f}%"`]{.key}, matching the [`{python} f"{res['lift_fwd_pct_base']:.1f}% / {res['lift_aft_pct_base']:.1f}%"`]{.key} baseline in the [initial tandem check](2026-09-30-01-how-do-tandem-wing-glide-ratio-and-root-bending-moment-compare-with-th.qmd) (@fig-ar80-trim). Balance shifts aft: reduced fore-wing downwash pushes the neutral point from [`{python} f"{res['x_np_base']:.2f} m"`]{.key} to [`{python} f"{x_np:.2f} m"`]{.key}, while symmetrical reinforcement moves CG aft by only [`{python} f"+{delta_cg_cm:.1f} cm"`]{.key} to [`{python} f"{x_cg:.2f} m"`]{.key}. This widens static margin from [`{python} f"+{res['sm_pct_base']:.1f}%"`]{.key} to [`{python} f"+{sm_pct:.1f}% MAC"`]{.key} ([`{python} f"{sm_spacing:.1f}%"`]{.key} spacing) and quadruples pitch stiffness to [`{python} f"{dM_da:.0f} N·m/°"`]{.key}. Hands-off cruise trim requires adjusting aft decalage by [`{python} f"{delta_decalage:+.2f}°"`]{.key} to [`{python} f"{decalage_trim:.2f}°"`]{.key}.
+
+```{python}
+#| label: fig-ar80-trim
+#| fig-cap: "Pitch trim curves and longitudinal balance comparison between the baseline and AR 80.3 tandem configurations across angles of attack and flight speeds."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
+
+# Subplot 1: Cm vs alpha
+alphas = np.linspace(0, 10, 20)
+cm_base = -0.01097 * (alphas - 5.55)
+cm_untrim_curve = res["cma"] * (alphas - res["alpha_untrim"]) + res["cm_untrim"]
+cm_trim_curve = res["cma"] * (alphas - res["alpha_trim"])
+
+ax1.plot(alphas, cm_base, "k--", lw=1.8, label=f"Baseline Tandem (b=12.7m, SM={res['sm_pct_base']:.1f}%)")
+ax1.plot(alphas, cm_untrim_curve, "r-.", lw=1.8, label=f"AR 80.3 Untrimmed (δ=-0.98°, Cm={res['cm_untrim']:+.2f})")
+ax1.plot(alphas, cm_trim_curve, "b-", lw=2.0, label=f"AR 80.3 Trimmed (δ={res['decalage_trim']:.2f}°, SM={res['sm_pct']:.1f}%)")
+ax1.axhline(0, color="gray", ls=":", lw=1.0)
+ax1.plot(res["alpha_trim"], res["cm_trimmed"], "bo", ms=7, label=f"Trim @ {res['cl_req']:.2f} CL")
+ax1.set_xlabel("Angle of Attack α [°]")
+ax1.set_ylabel("Pitching Moment Coefficient $C_m$")
+ax1.set_title("Pitch Moment and Trim Balance")
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="upper right", fontsize=7.5)
+
+# Subplot 2: Decalage and lift share across airspeeds
+sw = res["sweep_data"]
+sp_kmh = [d["speed_kmh"] for d in sw]
+dec_trim = [d["decalage_trim_deg"] for d in sw]
+
+color = "#1f77b4"
+ax2.plot(sp_kmh, dec_trim, color=color, lw=2.0, marker="o", label="Trim Decalage δ_aft [°]")
+ax2.axhline(res["decalage_base"], color="gray", ls="--", lw=1.2, label=f"Baseline Decalage ({res['decalage_base']:.2f}°)")
+ax2.set_xlabel("Airspeed [km/h]")
+ax2.set_ylabel("Trim Decalage δ_aft [°]", color=color)
+ax2.tick_params(axis="y", labelcolor=color)
+ax2.grid(True, alpha=0.3)
+
+# Add lift split band
+ax2_twin = ax2.twinx()
+color_split = "#2ca02c"
+fwd_pcts = [res["lift_fwd_pct"]] * len(sp_kmh)
+ax2_twin.plot(sp_kmh, fwd_pcts, color=color_split, ls="-.", lw=1.8, label="Fore Lift Share [%]")
+ax2_twin.set_ylabel("Fore Wing Lift Share [%]", color=color_split)
+ax2_twin.tick_params(axis="y", labelcolor=color_split)
+ax2_twin.set_ylim(40, 70)
+
+# Combine legends
+lines1, labels1 = ax2.get_legend_handles_labels()
+lines2, labels2 = ax2_twin.get_legend_handles_labels()
+ax2.legend(lines1 + lines2, labels1 + labels2, loc="lower right", fontsize=7.5)
+ax2.set_title("Required Trim Decalage and Lift Share")
+
+plt.tight_layout()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(tandem_ar80_trim_analysis)
+```

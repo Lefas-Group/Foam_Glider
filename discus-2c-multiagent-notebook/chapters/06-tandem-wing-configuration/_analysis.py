@@ -1159,5 +1159,170 @@ def tandem_mass_budget_analysis(
     }
 
 
+def tandem_ar80_trim_analysis(
+    b_target: float = 30.2,
+    dm_div: float = 71.7,
+    v_cruise: float = 27.78,
+    mass_pilot: float = 80.0,
+    decalage_base: float = -0.98,
+    speeds_kmh: np.ndarray = None,
+) -> dict:
+    """Analyze pitch trim, static margin, and fore/aft lift split for AR 80.3 reinforced tandem wing."""
+    if speeds_kmh is None:
+        speeds_kmh = np.array([80.0, 95.0, 100.0, 115.0, 130.0, 150.0])
+
+    m_base_empty = 337.0
+    m_base_wing = 140.0
+    m_fuse_tail = m_base_empty - m_base_wing
+    x_fuse_tail = (m_base_empty * 2.832 - m_base_wing * 2.8684) / m_fuse_tail
+    x_wings_mid = 2.8692
+
+    m_empty = m_base_empty + dm_div
+    x_cg_empty = (m_fuse_tail * x_fuse_tail + (m_base_wing + dm_div) * x_wings_mid) / m_empty
+    m_flight = m_empty + mass_pilot
+    x_cg_flight = (m_empty * x_cg_empty + mass_pilot * 1.75) / m_flight
+
+    s_ref = 11.39
+    weight = m_flight * 9.81
+    q_cruise = 0.5 * 1.225 * v_cruise**2
+    cl_req = weight / (q_cruise * s_ref)
+
+    pl_base_dec = _build_scaled_tandem_airplane(b_target, decalage_aft=decalage_base)
+    c_ref = float(pl_base_dec.wings[0].mean_aerodynamic_chord())
+
+    plane_base = asb.Airplane(
+        name="AR80.3-BaseDec",
+        xyz_ref=[x_cg_flight, 0.0, 0.0784],
+        wings=pl_base_dec.wings,
+        fuselages=pl_base_dec.fuselages,
+        s_ref=s_ref,
+        c_ref=c_ref,
+        b_ref=b_target,
+    )
+
+    r2 = asb.VortexLatticeMethod(
+        airplane=plane_base, op_point=asb.OperatingPoint(velocity=v_cruise, alpha=2.0), verbose=False
+    ).run()
+    r6 = asb.VortexLatticeMethod(
+        airplane=plane_base, op_point=asb.OperatingPoint(velocity=v_cruise, alpha=6.0), verbose=False
+    ).run()
+
+    cla = float((r6["CL"] - r2["CL"]) / 4.0)
+    cma = float((r6["Cm"] - r2["Cm"]) / 4.0)
+    cl0 = float(r2["CL"] - cla * 2.0)
+    cm0 = float(r2["Cm"] - cma * 2.0)
+
+    pl_pert = _build_scaled_tandem_airplane(b_target, decalage_aft=-2.0)
+    plane_pert = asb.Airplane(
+        name="AR80.3-PertDec",
+        xyz_ref=[x_cg_flight, 0.0, 0.0784],
+        wings=pl_pert.wings,
+        fuselages=pl_pert.fuselages,
+        s_ref=s_ref,
+        c_ref=c_ref,
+        b_ref=b_target,
+    )
+    r_pert = asb.VortexLatticeMethod(
+        airplane=plane_pert, op_point=asb.OperatingPoint(velocity=v_cruise, alpha=4.0), verbose=False
+    ).run()
+    r_base_a4 = asb.VortexLatticeMethod(
+        airplane=plane_base, op_point=asb.OperatingPoint(velocity=v_cruise, alpha=4.0), verbose=False
+    ).run()
+
+    cld = float((r_pert["CL"] - r_base_a4["CL"]) / (-2.0 - decalage_base))
+    cmd = float((r_pert["Cm"] - r_base_a4["Cm"]) / (-2.0 - decalage_base))
+
+    sm_pct = float(- (cma / cla) * 100.0)
+    x_np = float(x_cg_flight - (cma / cla) * c_ref)
+    spacing = 3.30
+    sm_spacing_pct = float((x_np - x_cg_flight) / spacing * 100.0)
+    dM_da = float(cma * q_cruise * s_ref * c_ref)
+
+    alpha_untrim = float((cl_req - cl0) / cla)
+    cm_untrim = float(cm0 + cma * alpha_untrim)
+
+    cl_const = float(cl0 - cld * decalage_base)
+    cm_const = float(cm0 - cmd * decalage_base)
+    det_A = cla * cmd - cld * cma
+    alpha_trim = float((cmd * (cl_req - cl_const) - cld * (-cm_const)) / det_A)
+    decalage_trim = float((-cma * (cl_req - cl_const) + cla * (-cm_const)) / det_A)
+
+    pl_trim = _build_scaled_tandem_airplane(b_target, decalage_aft=decalage_trim)
+    plane_trim = asb.Airplane(
+        name="AR80.3-Trimmed",
+        xyz_ref=[x_cg_flight, 0.0, 0.0784],
+        wings=pl_trim.wings,
+        fuselages=pl_trim.fuselages,
+        s_ref=s_ref,
+        c_ref=c_ref,
+        b_ref=b_target,
+    )
+    sol_trim = asb.VortexLatticeMethod(
+        airplane=plane_trim, op_point=asb.OperatingPoint(velocity=v_cruise, alpha=alpha_trim), verbose=False
+    )
+    res_trim = sol_trim.run()
+
+    fzc = sol_trim.forces_geometry[:, 2]
+    xcc = sol_trim.vortex_centers[:, 0]
+    lift_fwd = float(np.sum(fzc[xcc < 2.5]))
+    lift_aft = float(np.sum(fzc[xcc >= 2.5]))
+    tot_lift = lift_fwd + lift_aft
+    lift_fwd_pct = float(lift_fwd / tot_lift * 100.0)
+    lift_aft_pct = float(lift_aft / tot_lift * 100.0)
+
+    sweep_data = []
+    for sp in speeds_kmh:
+        v_s = sp / 3.6
+        q_s = 0.5 * 1.225 * v_s**2
+        clr_s = weight / (q_s * s_ref)
+        a_s = float((cmd * (clr_s - cl_const) - cld * (-cm_const)) / det_A)
+        dec_s = float((-cma * (clr_s - cl_const) + cla * (-cm_const)) / det_A)
+        sweep_data.append({
+            "speed_kmh": float(sp),
+            "cl_req": float(clr_s),
+            "alpha_trim_deg": float(a_s),
+            "decalage_trim_deg": float(dec_s),
+            "delta_decalage_deg": float(dec_s - decalage_base),
+        })
+
+    return {
+        "b_target": b_target,
+        "m_empty": m_empty,
+        "m_flight": m_flight,
+        "x_cg_empty": x_cg_empty,
+        "x_cg_flight": x_cg_flight,
+        "x_np": x_np,
+        "c_ref": c_ref,
+        "sm_pct": sm_pct,
+        "sm_spacing_pct": sm_spacing_pct,
+        "dM_da": dM_da,
+        "cl_req": cl_req,
+        "alpha_untrim": alpha_untrim,
+        "cm_untrim": cm_untrim,
+        "alpha_trim": alpha_trim,
+        "decalage_trim": decalage_trim,
+        "delta_decalage": decalage_trim - decalage_base,
+        "cm_trimmed": float(res_trim["Cm"]),
+        "cl_trimmed": float(res_trim["CL"]),
+        "lift_fwd_pct": lift_fwd_pct,
+        "lift_aft_pct": lift_aft_pct,
+        "cla": cla,
+        "cma": cma,
+        "sweep_data": sweep_data,
+        "m_base_flight": 417.0,
+        "b_base": 12.73,
+        "x_cg_base": 2.6244,
+        "x_np_base": 2.6864,
+        "sm_pct_base": 13.27,
+        "sm_spacing_pct_base": (2.6864 - 2.6244) / 3.30 * 100.0,
+        "dM_da_base": -27.6,
+        "lift_fwd_pct_base": 58.1,
+        "lift_aft_pct_base": 41.9,
+        "cm_trim_base": 0.0041,
+        "decalage_base": decalage_base,
+    }
+
+
+
 
 
