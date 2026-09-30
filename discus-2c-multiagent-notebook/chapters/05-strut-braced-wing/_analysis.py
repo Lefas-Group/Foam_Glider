@@ -1386,6 +1386,99 @@ def sbw_aspect_ratio_trade(
     }
 
 
+def sbw_drag_mass_trade(
+    airplane: asb.Airplane,
+    aspect_ratios: np.ndarray = None,
+    speeds_kmh: np.ndarray = None,
+    sigma_allow: float = 350e6,
+    t_skin: float = 0.0012,
+    m_fittings: float = 2.0,
+) -> dict:
+    """Evaluate aspect ratio push accounting for strut parasitic drag, chord Reynolds reduction, and strut structural mass."""
+    if aspect_ratios is None:
+        aspect_ratios = np.array([28.45, 36.0, 45.0, 55.0, 65.0, 75.0])
+    if speeds_kmh is None:
+        speeds_kmh = np.linspace(90, 110, 5)
+
+    spans = []
+    macs = []
+    strut_lengths = []
+    strut_masses = []
+    flight_masses = []
+    max_lds = []
+    best_speeds_kmh = []
+    cd_list = []
+    cd_prof_list = []
+    cd_ind_list = []
+    cant_lds = []
+
+    for ar in aspect_ratios:
+        ac = get_strut_braced_airplane(ar)
+        b_semi = float(ac.b_ref / 2)
+        y_s = 0.5 * b_semi
+        dz = float((0.15 + y_s * np.tand(3.0)) - (-0.30))
+        dy = float(y_s - 0.20)
+        L_s = float(np.sqrt(dy**2 + dz**2 + 0.05**2))
+
+        # Tensile load under limit +5.3g manoeuvre
+        T_s = float(42.2e3 * (ar / 28.45) ** 0.45)
+        A_tens = 1.5 * T_s / sigma_allow
+        m_core = A_tens * 1550.0
+        m_fairing = 2.05 * 0.12 * t_skin * 1550.0
+        m_strut_single = (m_core + m_fairing) * L_s + m_fittings
+        m_struts = 2.0 * m_strut_single
+        m_flight = 417.0 + m_struts
+
+        pol = glide_polar(ac, mass=m_flight, speeds_kmh=speeds_kmh)
+        best_i = int(np.argmax(pol["LD"]))
+
+        # Equivalent cantilever without strut
+        ac_cant = asb.Airplane(
+            name=f"Cantilever-AR{ar:.1f}",
+            xyz_ref=ac.xyz_ref,
+            wings=[ac.wings[0], ac.wings[1], ac.wings[2]],
+            fuselages=ac.fuselages,
+            s_ref=ac.s_ref,
+            c_ref=ac.c_ref,
+            b_ref=ac.b_ref,
+        )
+        pol_cant = glide_polar(ac_cant, mass=417.0, speeds_kmh=speeds_kmh)
+        best_i_cant = int(np.argmax(pol_cant["LD"]))
+
+        spans.append(float(ac.b_ref))
+        macs.append(float(ac.c_ref))
+        strut_lengths.append(L_s)
+        strut_masses.append(m_struts)
+        flight_masses.append(m_flight)
+        max_lds.append(float(pol["LD"][best_i]))
+        best_speeds_kmh.append(float(pol["speeds_kmh"][best_i]))
+        cd_list.append(float(pol["CD"][best_i]))
+        cd_prof_list.append(float(pol["CD_profile"][best_i]))
+        cd_ind_list.append(float(pol["CD_induced"][best_i]))
+        cant_lds.append(float(pol_cant["LD"][best_i_cant]))
+
+    ld_arr = np.array(max_lds)
+    ar_arr = np.array(aspect_ratios)
+    dld_dar = np.gradient(ld_arr, ar_arr)
+
+    return {
+        "AR": ar_arr,
+        "span": np.array(spans),
+        "MAC": np.array(macs),
+        "L_strut": np.array(strut_lengths),
+        "m_struts": np.array(strut_masses),
+        "m_flight": np.array(flight_masses),
+        "max_LD": ld_arr,
+        "best_speed_kmh": np.array(best_speeds_kmh),
+        "CD": np.array(cd_list),
+        "CD_profile": np.array(cd_prof_list),
+        "CD_induced": np.array(cd_ind_list),
+        "cant_LD": np.array(cant_lds),
+        "dld_dar": dld_dar,
+    }
+
+
+
 
 
 

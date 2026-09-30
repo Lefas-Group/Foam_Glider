@@ -1,0 +1,98 @@
+---
+title: "How far can aspect ratio be pushed before strut penalties erode glide gains?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 191.3      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Execute aspect ratio trade accounting for strut drag, chord Reynolds reduction, and mass
+trade = sbw_drag_mass_trade(airplane)
+
+ar_base = float(trade["AR"][0])
+ar_max = float(trade["AR"][-1])
+ar_diminish = float(trade["AR"][3])
+span_diminish = float(trade["span"][3])
+dld_thresh = float(trade["dld_dar"][3])
+
+ld_max = float(trade["max_LD"][-1])
+ld_base = float(trade["max_LD"][0])
+cant_ld_base = float(trade["cant_LD"][0])
+delta_ld_base = float(ld_base - cant_ld_base)
+
+pct_drag_base = float((cant_ld_base / ld_base - 1.0) * 100)
+ar_breakeven = float(np.interp(cant_ld_base, trade["max_LD"], trade["AR"]))
+l_strut_max = float(trade["L_strut"][-1])
+
+sigma_allow_MPa = 350.0
+t_skin_mm = 1.2
+m_fittings = 2.0
+best_ld = ld_max
+```
+
+::: {.hero}
+[`{python} f"{best_ld:.1f}"`]{.hero-value}
+[maximum achievable glide ratio with strut bracing across realistic aspect ratios]{.hero-label}
+:::
+
+**Answer.** With [bending moment relieved by the strut](2026-09-30-01-how-does-a-strut-braced-wing-change-the-aspect-ratio-to-bending-moment.qmd), aspect ratio can be extended from [`{python} f"{ar_base:.1f}"`]{.key} to [`{python} f"{ar_diminish:.0f}"`]{.key} ([`{python} f"{span_diminish:.1f} m"`]{.key} span) before marginal glide gains diminish below [`{python} f"{dld_thresh:.2f}"`]{.key} per aspect ratio unit (@fig-sbw-erosion). At [`{python} f"{ar_base:.1f}"`]{.key}, the strut imposes a [`{python} f"{delta_ld_base:.1f}"`]{.key} glide penalty ([`{python} f"{pct_drag_base:.1f}%"`]{.key} drag), breaking even with the [cantilever baseline](../01-calibrated-discus-2c/2026-09-30-02-does-the-reconstructed-discus-2c-achieve-its-published-45-9-glide-rati.qmd) near [`{python} f"AR {ar_breakeven:.0f}"`]{.key}. Beyond [`{python} f"AR {ar_diminish:.0f}"`]{.key}, growing strut parasitic drag ([`{python} f"{l_strut_max:.1f} m"`]{.key} length) and chord Reynolds degradation erode returns, reaching a best achievable glide ratio of [`{python} f"{ld_max:.1f}"`]{.key} at [`{python} f"AR {ar_max:.0f}"`]{.key}.
+
+::: {.callout-note}
+## New assumptions
+1. **strut allowable stress: `{python} f"{sigma_allow_MPa:.0f} MPa"`**, composite tensile limit.
+2. **strut shell thickness: `{python} f"{t_skin_mm:.1f} mm"`**, aerodynamic HQ010 casing.
+3. **strut fitting mass: `{python} f"{m_fittings:.1f} kg"`**, attachment hardware per strut.
+:::
+
+```{python}
+#| label: fig-sbw-erosion
+#| fig-cap: "Glide ratio and drag breakdown across aspect ratios comparing the strut-braced wing against the unbraced cantilever wing, highlighting the break-even aspect ratio and marginal glide gains as strut length and mass grow."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
+
+# Subplot 1: Glide ratio vs AR
+ax1.plot(trade["AR"], trade["cant_LD"], "o--", color="steelblue", lw=1.8, label="Cantilever (Unbraced)")
+ax1.plot(trade["AR"], trade["max_LD"], "s-", color="crimson", lw=2.2, label="Strut-Braced Wing")
+ax1.axhline(cant_ld_base, color="gray", ls=":", label=f"Baseline Cantilever ({cant_ld_base:.1f})")
+ax1.axvline(ar_breakeven, color="forestgreen", ls="--", alpha=0.7, label=f"Break-even AR ({ar_breakeven:.1f})")
+ax1.axvline(ar_diminish, color="darkorange", ls="--", alpha=0.7, label=f"Diminishing AR ({ar_diminish:.0f})")
+
+ax1.set_xlabel("Wing Aspect Ratio")
+ax1.set_ylabel("Best Glide Ratio (L/D)")
+ax1.set_title("Glide Ratio vs Aspect Ratio", fontsize=10)
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="lower right", fontsize=8)
+
+# Subplot 2: Drag coefficient breakdown and marginal gain
+ax2.plot(trade["AR"], trade["CD_profile"] * 1e4, "^-", color="firebrick", lw=1.8, label="Profile Drag ($10^4 C_{Dp}$)")
+ax2.plot(trade["AR"], trade["CD_induced"] * 1e4, "v--", color="navy", lw=1.8, label="Induced Drag ($10^4 C_{Di}$)")
+ax2.plot(trade["AR"], trade["CD"] * 1e4, "D-.", color="black", lw=1.8, label="Total Drag ($10^4 C_D$)")
+ax2.set_xlabel("Wing Aspect Ratio")
+ax2.set_ylabel("Drag Coefficient ($C_D \\times 10^4$)")
+ax2.set_title("Drag Breakdown & Marginal Glide Gain", fontsize=10)
+ax2.grid(True, alpha=0.3)
+
+ax2_twin = ax2.twinx()
+ax2_twin.plot(trade["AR"], trade["dld_dar"], "*-", color="darkorange", lw=2.0, label="$\\Delta(L/D) / \\Delta AR$")
+ax2_twin.set_ylabel("Marginal Gain $\\Delta(L/D) / \\Delta AR$", color="darkorange")
+ax2_twin.tick_params(axis="y", labelcolor="darkorange")
+ax2_twin.set_ylim(0, 0.45)
+
+lines1, labels1 = ax2.get_legend_handles_labels()
+lines2, labels2 = ax2_twin.get_legend_handles_labels()
+ax2.legend(lines1 + lines2, labels1 + labels2, loc="upper right", fontsize=7.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(sbw_drag_mass_trade)
+```
