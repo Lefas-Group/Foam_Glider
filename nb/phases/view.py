@@ -64,7 +64,7 @@ def site(notebook, force=False, verbose=True, page=None,
               f"{notebook.root.name} --force` to rebuild them anyway")
         return None
 
-    from .. import lint
+    from ..build import render
     # UNDER THE LOCK, and retried once, exactly as `verifiers.render` is. This
     # was the last render in the system taking no lock, and it is a PROJECT
     # render -- the widest one there is -- fired after every commit. Two runs
@@ -90,7 +90,7 @@ def site(notebook, force=False, verbose=True, page=None,
                                                           notebook.root)
             say(f"  site      {scope} · {pages(len(todo))} · "
                 f"deadline {deadline:.0f} s · {plan_why} · rebuilding the site")
-            r = lint.render_quarto(notebook.root, notebook.root,
+            r = render.render_quarto(notebook.root, notebook.root,
                                    cwd=notebook.root)
         if r.returncode == 0:
             break

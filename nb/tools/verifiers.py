@@ -241,9 +241,9 @@ def render_plan(root, path):
     different question -- "what would a project render have executed?" -- and is
     reported as its own clause rather than folded into the target's count.
     """
-    from .. import lint
-    todo = lint.will_execute(root, path)
-    deadline = lint.render_deadline(root, path)
+    from ..build import render
+    todo = render.will_execute(root, path)
+    deadline = render.render_deadline(root, path)
     if path == root:
         # The one case where the freeze counts, which is why the reason here is
         # about what was SPARED rather than about what is being re-run.
@@ -258,7 +258,7 @@ def render_plan(root, path):
     scope = ("front page" if path == root / "index.qmd"
              else "entry" if path.is_file() else "chapter")
     why = "targeted, so the freeze is ignored"
-    project = len(lint.will_execute(root, root))
+    project = len(render.will_execute(root, root))
     if len(todo) > project:
         why += (" — a whole-notebook render would execute "
                 + (f"{project}" if project else "nothing"))
@@ -286,10 +286,10 @@ def render(notebook, target="", why="", session=None):
     """
     path = notebook.root if not target else notebook.root / target
     # Deadlined: a wedged Jupyter kernel used to hang here forever, the same
-    # shape as the socket that hung a run for four hours. lint.render_quarto
+    # shape as the socket that hung a run for four hours. render.render_quarto
     # sizes the deadline from what will actually execute and names the page it
     # died on.
-    from .. import lint
+    from ..build import render
     # Announced before it starts, so `nb watch` knows how long silence here is
     # allowed to last. Without it the watcher falls back to a flat 120 s and
     # would cry wolf over an honest 200 s render.
@@ -329,7 +329,7 @@ def render(notebook, target="", why="", session=None):
                 say("  render    proceeding without the lock — timed out "
                     "waiting for another render")
             executed = _announce()
-            r = lint.render_quarto(path, notebook.root, cwd=notebook.root)
+            r = render.render_quarto(path, notebook.root, cwd=notebook.root)
         if session is not None:
             session.record_render(executed)
         out = (r.stdout or "") + (r.stderr or "")
@@ -391,7 +391,7 @@ def check(notebook, chapter="", force_all=False, no_render=False):
     includes, so without it a fresh render is compared against a cache hit and
     the match is an artefact. There is no flag to skip it.
     """
-    from .. import check as check_mod
+    from ..build import verify as check_mod
     argv = [str(notebook.root)]
     if chapter:
         argv.append(chapter)

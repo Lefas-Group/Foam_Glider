@@ -1,7 +1,7 @@
 """
 Lint, render and diff a notebook in one call. One copy, shared by every notebook.
 
-    uv run --group nb python -m nb.check <notebook-dir> [chapter ...] [--no-render] [--all] [--ref REF]
+    uv run --group nb python -m nb.build.verify <notebook-dir> [chapter ...] [--no-render] [--all] [--ref REF]
 
 Runs the three checks in the order that costs least: lint first, because almost
 every authoring mistake is catchable without a render and finding one afterwards
@@ -46,8 +46,8 @@ import subprocess
 import sys
 import time
 
-from . import freezediff
-from . import lint
+from . import freezediff, render
+from .. import lint
 
 # `_budget.py` used to be here: a chapter-wide solve budget that binds truncates
 # a solve, so editing it could move a frozen number exactly as editing the model
@@ -439,7 +439,7 @@ def _main(argv):
     print(f"freeze     dropped {len(whole)} chapter(s), {len(pages)} page(s)"
           f"; {len(served)} chapter(s) served from cache — {why}")
     shutil.rmtree(root / ".quarto", ignore_errors=True)
-    r = lint.render_quarto(root, root)
+    r = render.render_quarto(root, root)
     blob = r.stdout + r.stderr
     if r.returncode:
         # Show the traceback and the cell it came from, not Quarto's chatter.
@@ -467,7 +467,7 @@ def _main(argv):
         print(f"cite       re-rendering {len(citing)} citing page(s) now that "
               f"what they quote is current")
         _drop(root, citing)
-        r2 = lint.render_quarto(root, root)
+        r2 = render.render_quarto(root, root)
         if r2.returncode:
             blob2 = r2.stdout + r2.stderr
             keep = [l for l in blob2.splitlines()

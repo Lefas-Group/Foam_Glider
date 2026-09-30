@@ -1,7 +1,7 @@
 """
 Did any rendered number move? One copy, shared by every notebook.
 
-    uv run python -m nb.freezediff <notebook-dir> [chapter ...] [--ref REF]
+    uv run python -m nb.build.freezediff <notebook-dir> [chapter ...] [--ref REF]
 
 Compares every entry's rendered output against a git ref (default HEAD) and
 reports what changed. Exits non-zero if anything did, so it can gate a commit.
@@ -37,7 +37,7 @@ artefact:
 
     rm -rf <notebook>/_freeze/chapters/<chapter> <notebook>/.quarto
     quarto render <notebook>
-    uv run python -m nb.freezediff <notebook>
+    uv run python -m nb.build.freezediff <notebook>
 
 There is no `--no-freeze` flag. `stale()` below catches the case anyway, because
 that false pass has already happened here once.
@@ -49,10 +49,10 @@ import pathlib
 import re
 import subprocess
 
-from . import lint
+from .. import lint
 import sys
 
-from .lint import ENTRY_FILE, chapters_of, _label
+from ..lint import ENTRY_FILE, chapters_of, _label
 
 # The four things that differ between two renders of identical code. Each was
 # found by cold-rendering an unmodified tree and reading what came back: after
