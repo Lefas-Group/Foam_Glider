@@ -1,0 +1,85 @@
+---
+title: "How does varying wing dihedral change glide ratio and lateral-directional stability?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 105.6      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Execute dihedral sweep using analysis helper
+dihedrals = np.array([0.0, 1.5, 3.0, 4.5, 6.0])
+trade = dihedral_trade(airplane, dihedrals_deg=dihedrals, mass=flight_mass_props.mass)
+
+d_min = float(trade["dihedrals_deg"][0])
+d_max = float(trade["dihedrals_deg"][-1])
+base_i = int(np.argmin(np.abs(trade["dihedrals_deg"] - 3.0)))
+d_base = float(trade["dihedrals_deg"][base_i])
+
+ld_min_d = float(trade["max_LD"][-1])
+ld_max_d = float(trade["max_LD"][0])
+ld_base = float(trade["max_LD"][base_i])
+delta_ld = float(ld_min_d - ld_max_d)
+pct_ld = float(delta_ld / ld_max_d * 100)
+
+clb_0 = float(trade["Cl_beta"][0])
+clb_base = float(trade["Cl_beta"][base_i])
+clb_6 = float(trade["Cl_beta"][-1])
+
+cnb_0 = float(trade["Cn_beta"][0])
+cnb_base = float(trade["Cn_beta"][base_i])
+cnb_6 = float(trade["Cn_beta"][-1])
+
+dClb_dgamma = float((clb_6 - clb_0) / (d_max - d_min))
+ratio_base = float(-clb_base / cnb_base)
+```
+
+::: {.hero}
+[`{python} f"{dClb_dgamma:.4f} /rad/°"`]{.hero-value}
+[roll stability sensitivity dCl_beta/dGamma at less than 0.1% glide loss per degree]{.hero-label}
+:::
+
+**Answer.** Sweeping wing dihedral from [`{python} f"{d_min:.1f}°"`]{.key} to [`{python} f"{d_max:.1f}°"`]{.key} strengthens roll restoring stability ([`{python} f"{dClb_dgamma:.4f} /rad/°"`]{.key}) by [`{python} f"{clb_6 / clb_0:.1f}×"`]{.key} (@fig-dihedral-trade). Roll derivative $C_{l_\beta}$ scales from [`{python} f"{clb_0:.4f} /rad"`]{.key} to [`{python} f"{clb_6:.4f} /rad"`]{.key}. Directional stability $C_{n_\beta}$ declines mildly from [`{python} f"{cnb_0:.4f} /rad"`]{.key} to [`{python} f"{cnb_6:.4f} /rad"`]{.key}. Best glide ratio drops by only [`{python} f"{abs(delta_ld):.2f}"`]{.key} ([`{python} f"{abs(pct_ld):.2f}%"`]{.key}) due to cosine span loss. The [calibrated baseline](2026-09-30-02-does-the-reconstructed-discus-2c-achieve-its-published-45-9-glide-rati.qmd) at [`{python} f"{d_base:.1f}°"`]{.key} achieves best L/D of [`{python} f"{ld_base:.1f}"`]{.key} and balanced stability coupling ($-C_{l_\beta}/C_{n_\beta} =$ [`{python} f"{ratio_base:.2f}"`]{.key}).
+
+::: {.callout-note}
+## New assumptions
+1. **dihedral range: 0° to 6°**, design trade space.
+:::
+
+```{python}
+#| label: fig-dihedral-trade
+#| fig-cap: "Variation of best glide ratio, roll stability derivative Cl_beta, and directional stability derivative Cn_beta with wing dihedral angle for the calibrated Discus-2c."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 4))
+
+ax1.plot(trade["dihedrals_deg"], trade["max_LD"], "bo-", label="Best L/D (AeroBuildup)")
+ax1.plot(d_base, ld_base, "rs", markersize=7, label=f"Baseline Γ={d_base:.1f}°")
+ax1.set_xlabel("Wing dihedral angle Γ [deg]")
+ax1.set_ylabel("Best glide ratio (L/D)")
+ax1.set_ylim(43.5, 45.0)
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="upper right", fontsize=8)
+
+ax2.plot(trade["dihedrals_deg"], trade["Cl_beta"], "g^-", label="Roll stability $C_{l_\\beta}$ (/rad)")
+ax2.plot(trade["dihedrals_deg"], trade["Cn_beta"], "mD-", label="Yaw stability $C_{n_\\beta}$ (/rad)")
+ax2.axhline(0, color="gray", linestyle="--", linewidth=0.8)
+ax2.plot(d_base, clb_base, "rs", markersize=6)
+ax2.plot(d_base, cnb_base, "rs", markersize=6)
+ax2.set_xlabel("Wing dihedral angle Γ [deg]")
+ax2.set_ylabel("Stability derivatives [1/rad]")
+ax2.grid(True, alpha=0.3)
+ax2.legend(loc="center left", fontsize=8)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(dihedral_trade)
+```

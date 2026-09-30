@@ -304,3 +304,99 @@ def aspect_ratio_trade(
     }
 
 
+def _modify_airplane_dihedral(
+    airplane: asb.Airplane,
+    dihedral_deg: float,
+) -> asb.Airplane:
+    """Return a copy of the airplane with modified wing dihedral while preserving root translation and winglet geometry."""
+    wing_orig = airplane.wings[0]
+    z_root = wing_orig.xsecs[0].xyz_le[2]
+    ys = np.array([xs.xyz_le[1] for xs in wing_orig.xsecs])
+
+    zs = z_root + ys * np.tand(dihedral_deg)
+    delta_winglet = wing_orig.xsecs[-1].xyz_le[2] - wing_orig.xsecs[-2].xyz_le[2]
+    zs[-1] = zs[-2] + delta_winglet
+
+    xsecs = [
+        asb.WingXSec(
+            xyz_le=[wing_orig.xsecs[i].xyz_le[0], ys[i], zs[i]],
+            chord=wing_orig.xsecs[i].chord,
+            twist=wing_orig.xsecs[i].twist,
+            airfoil=wing_orig.xsecs[i].airfoil,
+        )
+        for i in range(len(wing_orig.xsecs))
+    ]
+    w = asb.Wing(
+        name="Main Wing",
+        symmetric=True,
+        xsecs=xsecs,
+    )
+    return asb.Airplane(
+        name=f"Discus-2c-dihedral-{dihedral_deg:.1f}deg",
+        xyz_ref=airplane.xyz_ref,
+        wings=[w, airplane.wings[1], airplane.wings[2]],
+        fuselages=airplane.fuselages,
+        s_ref=airplane.s_ref,
+        c_ref=float(w.mean_aerodynamic_chord()),
+        b_ref=airplane.b_ref,
+    )
+
+
+def dihedral_trade(
+    airplane: asb.Airplane,
+    dihedrals_deg: np.ndarray = None,
+    mass: float = 417.0,
+    speeds_kmh: np.ndarray = None,
+    beta_eval_deg: float = 2.0,
+) -> dict:
+    """Sweep wing dihedral angle, returning best glide ratio and VLM lateral-directional stability derivatives."""
+    if dihedrals_deg is None:
+        dihedrals_deg = np.array([0.0, 1.5, 3.0, 4.5, 6.0])
+    if speeds_kmh is None:
+        speeds_kmh = np.linspace(85, 135, 11)
+
+    max_lds = []
+    best_speeds_kmh = []
+    alphas_trim = []
+    cl_betas = []
+    cn_betas = []
+    cy_betas = []
+
+    dbeta_rad = np.radians(beta_eval_deg)
+
+    for d in dihedrals_deg:
+        ac = _modify_airplane_dihedral(airplane, d)
+        pol = glide_polar(ac, mass=mass, speeds_kmh=speeds_kmh)
+        best_i = int(np.argmax(pol["LD"]))
+        max_ld = float(pol["LD"][best_i])
+        v_best = float(pol["speeds_kmh"][best_i]) / 3.6
+        alpha_best = float(pol["alpha"][best_i])
+
+        op0 = asb.OperatingPoint(velocity=v_best, alpha=alpha_best, beta=0.0)
+        op1 = asb.OperatingPoint(velocity=v_best, alpha=alpha_best, beta=beta_eval_deg)
+        vlm0 = asb.VortexLatticeMethod(airplane=ac, op_point=op0, verbose=False).run()
+        vlm1 = asb.VortexLatticeMethod(airplane=ac, op_point=op1, verbose=False).run()
+
+        cl_b = float((vlm1["Cl"] - vlm0["Cl"]) / dbeta_rad)
+        cn_b = float((vlm1["Cn"] - vlm0["Cn"]) / dbeta_rad)
+        cy_b = float((vlm1["CY"] - vlm0["CY"]) / dbeta_rad)
+
+        max_lds.append(max_ld)
+        best_speeds_kmh.append(float(pol["speeds_kmh"][best_i]))
+        alphas_trim.append(alpha_best)
+        cl_betas.append(cl_b)
+        cn_betas.append(cn_b)
+        cy_betas.append(cy_b)
+
+    return {
+        "dihedrals_deg": np.array(dihedrals_deg),
+        "max_LD": np.array(max_lds),
+        "best_speed_kmh": np.array(best_speeds_kmh),
+        "alpha_trim_deg": np.array(alphas_trim),
+        "Cl_beta": np.array(cl_betas),
+        "Cn_beta": np.array(cn_betas),
+        "CY_beta": np.array(cy_betas),
+    }
+
+
+
