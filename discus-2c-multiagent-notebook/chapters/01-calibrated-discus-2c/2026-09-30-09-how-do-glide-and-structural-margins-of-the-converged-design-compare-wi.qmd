@@ -1,0 +1,107 @@
+---
+title: "How do glide and structural margins of the converged design compare with baseline?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 123.3      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+ar_final = 29.0
+d_final = 6.0
+sw_final = 4.0
+t_skin = 0.0015
+t_skin_mm = t_skin * 1000
+tau_allowable = 60.0
+
+res = final_design_synthesis(
+    airplane,
+    ar_target=ar_final,
+    dihedral_deg=d_final,
+    sweep_deg=sw_final,
+    t_skin=t_skin,
+    tau_allowable_MPa=tau_allowable,
+)
+
+hero_ld = float(res["ld_final"])
+base_ld = float(res["ld_base"])
+hero_dld = float(res["delta_ld"])
+v_final = float(res["v_final_kmh"])
+v_base = float(res["v_base_kmh"])
+
+m_budget = float(res["m_budget_kNm"])
+m_root_final = float(res["m_root_final_kNm"])
+bending_margin = float(res["bending_margin_kNm"])
+bending_pct = float(bending_margin / m_budget * 100)
+
+t_root_final = float(res["t_root_final_kNm"])
+tau_box_final = float(res["tau_box_final_MPa"])
+tau_margin = float(res["tau_margin_MPa"])
+stiffness_ratio = float(res["stiffness_ratio"])
+
+pol_b = res["pol_base"]
+pol_f = res["pol_final"]
+loads_b = res["loads_base"]
+loads_f = res["loads_final"]
+```
+
+::: {.hero}
+[`{python} f"{hero_ld:.2f}"`]{.hero-value}
+[best glide ratio of converged design combining aspect ratio, dihedral, sweep, and D-tube]{.hero-label}
+:::
+
+**Answer.** The converged design synthesizes the [bending-budget-limited aspect ratio](2026-09-30-07-can-higher-aspect-ratio-and-dihedral-improve-glide-within-the-root-ben.qmd) ([`{python} f"{ar_final:.1f}"`]{.key}), [dihedral relief](2026-09-30-05-how-does-varying-wing-dihedral-change-glide-ratio-and-lateral-directio.qmd) ([`{python} f"{d_final:.1f}°"`]{.key}), and [aft sweep](2026-09-30-06-how-does-wing-sweep-trade-glide-ratio-against-root-structural-loads.qmd) ([`{python} f"{sw_final:+.1f}°"`]{.key}) backed by the [D-tube torsion box](2026-09-30-08-can-the-bending-spar-absorb-forward-sweep-root-torque-without-a-torsio.qmd). Best glide ratio improves by [`{python} f"{hero_dld:+.2f}"`]{.key} from [`{python} f"{base_ld:.2f}"`]{.key} to [`{python} f"{hero_ld:.2f}"`]{.key} over the [calibrated baseline](2026-09-30-02-does-the-reconstructed-discus-2c-achieve-its-published-45-9-glide-rati.qmd) (@fig-converged-design). Under [limit manoeuvre loads](2026-09-30-03-are-wing-structural-loads-reasonable-under-a-jar-22-5-3g-limit-manoeuv.qmd), net root bending moment is [`{python} f"{m_root_final:.2f} kN·m"`]{.key} against the [`{python} f"{m_budget:.2f} kN·m"`]{.key} budget ([`{python} f"{bending_pct:+.1f}%"`]{.key} margin). Wing-root torque reaches [`{python} f"{t_root_final:.2f} kN·m"`]{.key}; the [`{python} f"{t_skin_mm:.1f} mm"`]{.key} D-tube sustains [`{python} f"{tau_box_final:.1f} MPa"`]{.key} shear, maintaining a [`{python} f"{tau_margin:.1f} MPa"`]{.key} margin below the [`{python} f"{tau_allowable:.1f} MPa"`]{.key} limit.
+
+```{python}
+#| label: fig-converged-design
+#| fig-cap: "Glide polar comparison, spanwise net bending moments under limit manoeuvre loads, and structural stress margins comparing the converged final design against the calibrated baseline."
+fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(11, 3.6))
+
+# Subplot 1: Glide polar
+ax1.plot(pol_b["speeds_kmh"], pol_b["LD"], "b-o", markersize=4, label=f"Baseline (L/D={base_ld:.2f})")
+ax1.plot(pol_f["speeds_kmh"], pol_f["LD"], "g-s", markersize=4, label=f"Final (L/D={hero_ld:.2f})")
+ax1.set_xlabel("Airspeed (km/h)")
+ax1.set_ylabel("Glide ratio L/D")
+ax1.set_title("Glide polar")
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="lower center", fontsize=8)
+
+# Subplot 2: Spanwise bending moment
+ax2.plot(loads_b["y"], loads_b["moment_net_ballasted"] / 1000, "b-", label="Baseline")
+ax2.plot(loads_f["y"], loads_f["moment_net_ballasted"] / 1000, "g--", label="Final design")
+ax2.axhline(m_budget, color="r", linestyle=":", label="Limit budget")
+ax2.set_xlabel("Semi-span station y (m)")
+ax2.set_ylabel("Net bending moment (kN·m)")
+ax2.set_title("Limit manoeuvre bending")
+ax2.grid(True, alpha=0.3)
+ax2.legend(loc="upper right", fontsize=8)
+
+# Subplot 3: Structural margins
+categories = ["Bending\n(kN·m)", "Torsion shear\n(MPa)"]
+actual = [m_root_final, tau_box_final]
+allowable = [m_budget, tau_allowable]
+
+x = [0, 1]
+width = 0.35
+ax3.bar([xi - width / 2 for xi in x], actual, width, label="Final design", color=["orange", "teal"])
+ax3.bar([xi + width / 2 for xi in x], allowable, width, label="Allowable limit", color="gray", alpha=0.5)
+ax3.set_xticks(x)
+ax3.set_xticklabels(categories)
+ax3.set_ylabel("Value")
+ax3.set_title("Structural demands vs limits")
+ax3.grid(True, axis="y", alpha=0.3)
+ax3.legend(loc="upper left", fontsize=8)
+
+plt.tight_layout()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(final_design_synthesis)
+```

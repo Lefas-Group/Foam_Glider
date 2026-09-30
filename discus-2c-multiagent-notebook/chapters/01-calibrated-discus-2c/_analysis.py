@@ -745,6 +745,80 @@ def wing_torsion_box_analysis(
     }
 
 
+def final_design_synthesis(
+    airplane: asb.Airplane,
+    ar_target: float = 29.0,
+    dihedral_deg: float = 6.0,
+    sweep_deg: float = 4.0,
+    mass_flight: float = 417.0,
+    mass_structural: float = 565.0,
+    load_factor: float = 5.3,
+    speeds_kmh: np.ndarray = None,
+    t_skin: float = 0.0015,
+    tau_allowable_MPa: float = 60.0,
+) -> dict:
+    """Evaluate synthesized final design combining AR, dihedral, sweep, and D-tube torsion box against baseline."""
+    if speeds_kmh is None:
+        speeds_kmh = np.linspace(95, 125, 7)
+
+    ac_ar_d = _scale_airplane_ar_dihedral(airplane, ar_target=ar_target, dihedral_deg=dihedral_deg)
+    ac_final = _modify_airplane_sweep(ac_ar_d, sweep_deg=sweep_deg)
+    ac_final.name = f"Discus-2c-Final-AR{ar_target:.1f}-d{dihedral_deg:.1f}-sw{sweep_deg:+.1f}"
+
+    # Glide polars
+    pol_base = glide_polar(airplane, mass=mass_flight, speeds_kmh=speeds_kmh)
+    pol_final = glide_polar(ac_final, mass=mass_flight, speeds_kmh=speeds_kmh)
+
+    ld_base = float(np.max(pol_base["LD"]))
+    ld_final = float(np.max(pol_final["LD"]))
+    v_base = float(pol_base["speeds_kmh"][np.argmax(pol_base["LD"])])
+    v_final = float(pol_final["speeds_kmh"][np.argmax(pol_final["LD"])])
+
+    # Structural bending loads under +5.3g limit manoeuvre
+    loads_base = wing_structural_loads(airplane, mass=mass_structural, load_factor=load_factor)
+    loads_final = wing_structural_loads(ac_final, mass=mass_structural, load_factor=load_factor)
+
+    m_net_base = float(loads_base["root_moment_net_ballasted"] / 1000.0)
+    m_net_final = float(loads_final["root_moment_net_ballasted"] / 1000.0)
+    m_budget = m_net_base
+    m_margin = m_budget - m_net_final
+
+    # Wing root torsion and D-tube sizing
+    t_res_base = wing_torsion_box_analysis(airplane, sweeps_deg=[0.0], t_skin=t_skin)
+    t_res_final = wing_torsion_box_analysis(ac_final, sweeps_deg=[0.0], t_skin=t_skin)
+
+    t_root_base = float(t_res_base["root_torque_kNm"][0])
+    t_root_final = float(t_res_final["root_torque_kNm"][0])
+    tau_box_base = float(t_res_base["tau_box_MPa"][0])
+    tau_box_final = float(t_res_final["tau_box_MPa"][0])
+    tau_margin = tau_allowable_MPa - tau_box_final
+
+    return {
+        "airplane_final": ac_final,
+        "ld_base": ld_base,
+        "ld_final": ld_final,
+        "delta_ld": ld_final - ld_base,
+        "v_base_kmh": v_base,
+        "v_final_kmh": v_final,
+        "m_budget_kNm": m_budget,
+        "m_root_base_kNm": m_net_base,
+        "m_root_final_kNm": m_net_final,
+        "bending_margin_kNm": m_margin,
+        "t_root_base_kNm": t_root_base,
+        "t_root_final_kNm": t_root_final,
+        "tau_box_base_MPa": tau_box_base,
+        "tau_box_final_MPa": tau_box_final,
+        "tau_margin_MPa": tau_margin,
+        "tau_allowable_MPa": tau_allowable_MPa,
+        "stiffness_ratio": float(t_res_final["stiffness_ratio"]),
+        "pol_base": pol_base,
+        "pol_final": pol_final,
+        "loads_base": loads_base,
+        "loads_final": loads_final,
+    }
+
+
+
 
 
 
