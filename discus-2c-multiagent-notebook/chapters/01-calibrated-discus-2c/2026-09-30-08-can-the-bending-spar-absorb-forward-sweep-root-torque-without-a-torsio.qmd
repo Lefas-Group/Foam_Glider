@@ -1,0 +1,88 @@
+---
+title: "Can the bending spar absorb forward-sweep root torque without a torsion box?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 101.8      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Execute structural analysis of wing-root torsion and open spar vs closed D-tube
+sweeps = np.array([0.0, -2.0, -4.0])
+res = wing_torsion_box_analysis(airplane, sweeps_deg=sweeps)
+
+root_chord = float(airplane.wings[0].xsecs[0].chord)
+x_spar_root = float(airplane.wings[0].xsecs[0].xyz_le[0] + 0.35 * root_chord)
+
+sw_fwd = float(res["sweeps_deg"][-1])
+arm_fwd_mm = float(abs(res["x_cp_m"][-1] - x_spar_root) * 1000)
+t_fwd_abs = float(abs(res["root_torque_kNm"][-1]))
+gj_spar = float(res["GJ_spar"])
+gj_dtube = float(res["GJ_dtube"])
+tau_sv_spar = float(res["tau_sv_spar_MPa"][-1])
+sigma_warp_spar = float(res["sigma_warp_spar_MPa"][-1])
+tau_box_fwd = float(res["tau_box_MPa"][-1])
+stiffness_ratio = float(res["stiffness_ratio"])
+```
+
+::: {.hero}
+[`{python} f"{stiffness_ratio:.0f}×"`]{.hero-value}
+[torsional rigidity of closed D-tube over open bending spar]{.hero-label}
+:::
+
+**Answer.** Under [limit manoeuvre loads](2026-09-30-03-are-wing-structural-loads-reasonable-under-a-jar-22-5-3g-limit-manoeuv.qmd), sweeping the wing forward to [`{python} f"{sw_fwd:.1f}°"`]{.key} shifts the center of lift forward by [`{python} f"{arm_fwd_mm:.0f} mm"`]{.key}, inducing a nose-down root torque of [`{python} f"{t_fwd_abs:.2f} kN·m"`]{.key} about the spar line (@fig-torsion-box). The existing bending spar cannot absorb it: an open I-section has negligible torsional rigidity ([`{python} f"{gj_spar:.0f} N·m²"`]{.key}), yielding [`{python} f"{tau_sv_spar:.0f} MPa"`]{.key} St. Venant shear and [`{python} f"{sigma_warp_spar:.0f} MPa"`]{.key} warping stress. A closed D-tube torsion box is mandatory, providing [`{python} f"{stiffness_ratio:.0f}×"`]{.key} higher stiffness ([`{python} f"{gj_dtube / 1000:.1f} kN·m²"`]{.key}) and carrying the torque cleanly at [`{python} f"{tau_box_fwd:.1f} MPa"`]{.key} skin shear.
+
+::: {.callout-note}
+## New assumptions
+1. **D-tube skin thickness: 1.5 mm**, composite torsion shell.
+:::
+
+```{python}
+#| label: fig-torsion-box
+#| fig-cap: "Variation of wing-root torque and resulting structural shear and warping stresses in an open bending spar compared to a closed D-tube torsion box across forward sweep angles."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 3.8))
+
+sw = res["sweeps_deg"]
+t_root = np.abs(res["root_torque_kNm"])
+
+# Left: root torque and CP offset
+ax1.plot(sw, t_root, "ro-", label="|Root torque| (kN·m)")
+ax1.set_xlabel("Wing sweep angle (°)")
+ax1.set_ylabel("Limit root torque |T| (kN·m)", color="r")
+ax1.tick_params(axis="y", labelcolor="r")
+ax1.grid(True, alpha=0.3)
+
+ax1_cp = ax1.twinx()
+arm_mm = np.abs(res["x_cp_m"] - x_spar_root) * 1000
+ax1_cp.plot(sw, arm_mm, "b^--", label="CP-to-spar offset (mm)")
+ax1_cp.set_ylabel("Forward CP offset (mm)", color="b")
+ax1_cp.tick_params(axis="y", labelcolor="b")
+ax1.set_title("Forward sweep moment arm & torque")
+
+# Right: structural stresses vs allowable
+ax2.plot(sw, res["sigma_warp_spar_MPa"], "s-", color="purple", label="Spar cap warping")
+ax2.plot(sw, res["tau_sv_spar_MPa"], "d-", color="darkred", label="Spar St. Venant shear")
+ax2.plot(sw, res["tau_box_MPa"], "o-", color="darkgreen", label="D-tube skin shear")
+ax2.axhline(600.0, color="purple", linestyle=":", alpha=0.7, label="Cap limit (600 MPa)")
+ax2.axhline(60.0, color="darkred", linestyle=":", alpha=0.7, label="Shear limit (60 MPa)")
+
+ax2.set_xlabel("Wing sweep angle (°)")
+ax2.set_ylabel("Stress under limit torque (MPa)")
+ax2.set_yscale("log")
+ax2.set_title("Spar vs D-tube stress response")
+ax2.legend(loc="upper left", fontsize=7.5)
+ax2.grid(True, which="both", alpha=0.3)
+
+fig.tight_layout()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(wing_torsion_box_analysis)
+```

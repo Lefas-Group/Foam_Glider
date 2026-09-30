@@ -631,6 +631,121 @@ def ar_dihedral_trade(
     }
 
 
+def wing_torsion_box_analysis(
+    airplane: asb.Airplane,
+    sweeps_deg: np.ndarray = None,
+    mass_structural: float = 565.0,
+    load_factor: float = 5.3,
+    velocity: float = 55.56,
+    t_skin: float = 0.0015,
+    G_skin: float = 12.0e9,
+    spar_chord_frac: float = 0.35,
+) -> dict:
+    """Analyze wing root torsion from sweep and compare open spar vs closed D-tube structural response."""
+    from scipy.interpolate import interp1d
+
+    if sweeps_deg is None:
+        sweeps_deg = np.array([0.0, -2.0, -4.0])
+
+    root_chord = float(airplane.wings[0].xsecs[0].chord)
+    coords = airplane.wings[0].xsecs[0].airfoil.coordinates
+    x_af = np.linspace(0, spar_chord_frac, 100)
+    upper = coords[coords[:, 1] >= 0]
+    lower = coords[coords[:, 1] <= 0]
+    upper = upper[np.argsort(upper[:, 0])]
+    lower = lower[np.argsort(lower[:, 0])]
+    yu = interp1d(upper[:, 0], upper[:, 1], fill_value="extrapolate")(x_af)
+    yl = interp1d(lower[:, 0], lower[:, 1], fill_value="extrapolate")(x_af)
+    A_m = float(np.trapezoid(yu - yl, x_af) * (root_chord**2))
+    perim_skin = float(
+        (
+            np.sum(np.sqrt(np.diff(x_af) ** 2 + np.diff(yu) ** 2))
+            + np.sum(np.sqrt(np.diff(x_af) ** 2 + np.diff(yl) ** 2))
+        )
+        * root_chord
+    )
+    h_web = float((yu[-1] - yl[-1]) * root_chord)
+
+    b_cap = 0.060
+    t_cap = 0.0095
+    t_web = 0.002
+    J_spar = float((1 / 3) * (2 * b_cap * t_cap**3 + h_web * t_web**3))
+    GJ_spar = float(
+        5.0e9 * (1 / 3) * (2 * b_cap * t_cap**3) + 4.0e9 * (1 / 3) * (h_web * t_web**3)
+    )
+
+    oint_ds_t = perim_skin / t_skin + h_web / t_web
+    J_dtube = float(4 * A_m**2 / oint_ds_t)
+    GJ_dtube = float(G_skin * J_dtube)
+
+    I_cap_lat = float((t_cap * b_cap**3) / 12.0)
+    I_w = float(I_cap_lat * (h_web**2) / 2.0)
+    lam = float(np.sqrt(GJ_spar / (135e9 * I_w)))
+    char_len = float(1.0 / lam)
+
+    x_spar_root = float(
+        airplane.wings[0].xsecs[0].xyz_le[0] + spar_chord_frac * root_chord
+    )
+
+    t_roots = []
+    xcps = []
+    ycps = []
+    tau_svs = []
+    sigma_warps = []
+    q_boxes = []
+    tau_boxes = []
+
+    for sw in sweeps_deg:
+        ac = _modify_airplane_sweep(airplane, sw)
+        loads = wing_structural_loads(
+            ac, mass=mass_structural, load_factor=load_factor, velocity=velocity
+        )
+        op_trim = asb.OperatingPoint(velocity=velocity, alpha=loads["alpha_trim"])
+        vlm = asb.VortexLatticeMethod(airplane=ac, op_point=op_trim, verbose=False)
+        vlm.run()
+
+        x_c = np.array(vlm.vortex_centers[:, 0])
+        y_c = np.array(vlm.vortex_centers[:, 1])
+        Fz = np.array(vlm.forces_geometry[:, 2])
+        is_sb = (x_c < 4.0) & (y_c >= 0)
+
+        L_sb = float(np.sum(Fz[is_sb]))
+        xcp = float(np.sum(x_c[is_sb] * Fz[is_sb]) / L_sb)
+        ycp = float(np.sum(y_c[is_sb] * Fz[is_sb]) / L_sb)
+        t_spar = float(np.sum((x_c[is_sb] - x_spar_root) * Fz[is_sb]))
+
+        tau_sv = abs(t_spar) * t_cap / J_spar
+        m_flange = (abs(t_spar) / h_web) * char_len
+        sigma_warp = m_flange * (b_cap / 2.0) / I_cap_lat
+
+        q_box = abs(t_spar) / (2.0 * A_m)
+        tau_box = q_box / t_skin
+
+        t_roots.append(t_spar)
+        xcps.append(xcp)
+        ycps.append(ycp)
+        tau_svs.append(tau_sv)
+        sigma_warps.append(sigma_warp)
+        q_boxes.append(q_box)
+        tau_boxes.append(tau_box)
+
+    return {
+        "sweeps_deg": np.array(sweeps_deg),
+        "root_torque_kNm": np.array(t_roots) / 1000.0,
+        "x_cp_m": np.array(xcps),
+        "y_cp_m": np.array(ycps),
+        "tau_sv_spar_MPa": np.array(tau_svs) / 1e6,
+        "sigma_warp_spar_MPa": np.array(sigma_warps) / 1e6,
+        "q_box_kNm": np.array(q_boxes) / 1000.0,
+        "tau_box_MPa": np.array(tau_boxes) / 1e6,
+        "GJ_spar": GJ_spar,
+        "GJ_dtube": GJ_dtube,
+        "stiffness_ratio": GJ_dtube / GJ_spar,
+        "A_m_m2": A_m,
+    }
+
+
+
 
 
 
