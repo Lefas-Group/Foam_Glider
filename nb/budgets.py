@@ -12,7 +12,7 @@ Three layers bound a solve, only one of which lives here:
                         kills the kernel at the grant. Knows why it killed a
                         probe, and says so.
   3  ENTRY_CEILING      granted by the user at the prompt. Drives an actual
-                        render deadline (`lint.render_deadline`), and is checked
+                        render deadline (`build.render.render_deadline`), and is checked
                         against the recorded seconds afterwards by rule 17.
 
 There were four. Layer 2 used to be a watchdog thread INSIDE the probe, calling

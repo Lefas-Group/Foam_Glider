@@ -15,10 +15,10 @@ harness must report zero moved findings, so `Entry.prose` has to be
 `body_prose(text)` and nothing cleverer. The helpers travel here properly when
 the rules do.
 
-THE LAZY IMPORT IS DELIBERATE. `lint` holds the rules and will import this
-module; this module needs `lint`'s parsers. Importing inside the property breaks
-the cycle, and it is the idiom the rest of `nb` already uses -- almost every
-`import lint` in this package is inside a function for the same reason.
+THE LAZY IMPORT IS NOW ONLY A HABIT, and worth keeping. It broke a real cycle
+while the parsers lived in `lint` beside the rules that import this module; they
+are in `shared.py` now, which imports nothing of ours, so the cycle is gone. Left
+inside the properties because the rest of `nb` reads this way and costs nothing.
 
 UNREADABLE FILES KEEP THEIR OLD MEANING. Rules wrapped `read_text()` in
 `try/except OSError` and skipped the file; a dataclass that read eagerly and
@@ -124,18 +124,18 @@ class Entry:
         a module. Named for what it is, because `cells` invited `len(...)` and
         got a character count.
         """
-        from .. import lint
-        return lint.entry_cells(self.text or "")
+        from . import shared
+        return shared.entry_cells(self.text or "")
 
     @functools.cached_property
     def prose(self):
-        from .. import lint
-        return lint.body_prose(self.text or "")
+        from . import shared
+        return shared.body_prose(self.text or "")
 
     @functools.cached_property
     def prose_words(self):
-        from .. import lint
-        return lint.words(self.prose)
+        from . import shared
+        return shared.words(self.prose)
 
     @functools.cached_property
     def callouts(self):
@@ -151,19 +151,19 @@ class Entry:
     @functools.cached_property
     def tables(self):
         """Every markdown pipe table, as (body_rows, columns)."""
-        from .. import lint
-        return lint.tables_in(self.text or "")
+        from . import shared
+        return shared.tables_in(self.text or "")
 
     @functools.cached_property
     def calls(self):
-        from .. import lint
-        return lint.entry_calls(self.text or "")
+        from . import shared
+        return shared.entry_calls(self.text or "")
 
     @functools.cached_property
     def footer(self):
         """(names passed to footer()/show_source(), how many footer() cells)."""
-        from .. import lint
-        return lint.rendered_by_footer(self.text or "")
+        from . import shared
+        return shared.rendered_by_footer(self.text or "")
 
     @property
     def rendered_names(self):
@@ -172,8 +172,8 @@ class Entry:
 
     def limits(self, root):
         """(SOLVE_BUDGET, ENTRY_CEILING) as this entry declares them."""
-        from .. import lint
-        return lint.limits_of(root, self.path)
+        from . import shared
+        return shared.limits_of(root, self.path)
 
 
 class Chapter:
@@ -215,17 +215,17 @@ class Chapter:
 
     @functools.cached_property
     def defs(self):
-        from .. import lint
-        return lint._defs_of(self.dir)
+        from . import shared
+        return shared._defs_of(self.dir)
 
     @functools.cached_property
     def aero_calls(self):
-        from .. import lint
-        return lint.aero_calls_of(self.dir)
+        from . import shared
+        return shared.aero_calls_of(self.dir)
 
 
 def chapters(root):
     """Every chapter of a notebook, in order. Mirrors `lint.chapters_of`."""
-    from .. import lint
+    from . import shared
     root = pathlib.Path(root)
-    return tuple(Chapter(root, c) for c in lint.chapters_of(root))
+    return tuple(Chapter(root, c) for c in shared.chapters_of(root))

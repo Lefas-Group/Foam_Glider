@@ -121,7 +121,7 @@ MAX_LINT_ATTEMPTS = 3   # write -> lint -> write
 # for a reason the entry did not cause: exit 124, killed on a deadline sized as
 # if the freeze would spare its pages, which a TARGETED render never does. Two
 # runs died that way on 2026-09-18, one of them ending `verify_failed` having
-# never verified anything. `lint.will_execute` removes that cause; this makes
+# never verified anything. `build.render.will_execute` removes that cause; this makes
 # the next one survivable rather than terminal, at the price of one extra turn
 # on the rare genuine guess.
 MAX_RENDER_FIXES = 2
@@ -169,7 +169,7 @@ API_TIMEOUT_MS = 300_000
 
 # No DEFAULT_ENTRY_CEILING here. There was one, and nothing read it: the prompt
 # default and lint's fallback both come from the NOTEBOOK's own `_notebook.py`
-# via `lint._defaults`, which is right -- a notebook has to render without `nb`
+# via `contract.shared._defaults`, which is right -- a notebook has to render without `nb`
 # installed, so the number it renders under belongs to it. A second copy here
 # could only ever disagree, and did: this one said 20 s while the notebook said
 # 200 s, and the notebook won every time.

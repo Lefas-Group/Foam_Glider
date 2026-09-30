@@ -52,7 +52,7 @@ import subprocess
 from .. import lint
 import sys
 
-from ..lint import ENTRY_FILE, chapters_of, _label
+from ..contract.shared import ENTRY_FILE, _label, chapters_of
 
 # The four things that differ between two renders of identical code. Each was
 # found by cold-rendering an unmodified tree and reading what came back: after

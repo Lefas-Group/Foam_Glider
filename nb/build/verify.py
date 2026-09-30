@@ -46,7 +46,14 @@ import subprocess
 import sys
 import time
 
-from . import freezediff, render
+# ALIASED, because `_main` binds a local `render` for `--no-render`. Phase 2
+# moved `render_quarto` out of `lint` into this module and wrote
+# `render.render_quarto(...)` inside that same function, where `render` is a
+# bool -- an AttributeError on every run WITHOUT `--no-render`, which is the
+# path that actually renders. Ruff's F811 found it; `--no-render` testing
+# never would have.
+from . import freezediff
+from . import render as render_mod
 from .. import lint
 
 # `_budget.py` used to be here: a chapter-wide solve budget that binds truncates
@@ -439,7 +446,7 @@ def _main(argv):
     print(f"freeze     dropped {len(whole)} chapter(s), {len(pages)} page(s)"
           f"; {len(served)} chapter(s) served from cache — {why}")
     shutil.rmtree(root / ".quarto", ignore_errors=True)
-    r = render.render_quarto(root, root)
+    r = render_mod.render_quarto(root, root)
     blob = r.stdout + r.stderr
     if r.returncode:
         # Show the traceback and the cell it came from, not Quarto's chatter.
@@ -467,7 +474,7 @@ def _main(argv):
         print(f"cite       re-rendering {len(citing)} citing page(s) now that "
               f"what they quote is current")
         _drop(root, citing)
-        r2 = render.render_quarto(root, root)
+        r2 = render_mod.render_quarto(root, root)
         if r2.returncode:
             blob2 = r2.stdout + r2.stderr
             keep = [l for l in blob2.splitlines()

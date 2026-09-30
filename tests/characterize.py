@@ -125,8 +125,13 @@ def check(strict):
         now = _project(findings(n), strict)
         # Counter subtraction keeps multiplicity: losing one of three identical
         # findings shows up as one lost, which a set difference would call equal.
-        gone = sorted((was - now).elements())
-        new = sorted((now - was).elements())
+        # KEYED, because a strict row's first field is `int | None` and sorting
+        # those against each other is a TypeError. The rule-less check (the
+        # transcription warning) is what puts a None in the mix.
+        def _k(row):
+            return tuple("" if x is None else str(x) for x in row)
+        gone = sorted((was - now).elements(), key=_k)
+        new = sorted((now - was).elements(), key=_k)
         if not gone and not new:
             print(f"  {n:28} unchanged ({sum(now.values())} finding(s))")
             continue
