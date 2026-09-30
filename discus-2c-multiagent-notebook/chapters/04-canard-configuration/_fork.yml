@@ -1,0 +1,24 @@
+# What this chapter changed, and from what. Read by rule 31,
+# by the chapter index, and by the lineage diagram on the
+# book index -- one source, three readers.
+parent: 01-calibrated-discus-2c
+at: 4af60af
+at_entry: 12
+summary: "canard foreplane layout replacing aft horizontal stabilizer"
+changes:
+  - replaced aft horizontal stabilizer with lifting foreplane at forward fuselage station x = 0.60 m
+  - rebalanced empty mass CG forward to 2.522 m to establish 10% MAC static margin
+  - configured 3-surface geometry with main wing, canard, and vertical fin
+# What this chapter OVERWROTE: items an EARLIER
+# chapter declared that no longer hold here, as
+# `<chapter>/<their id>`, with an optional reason after a
+# colon. What REPLACED them is this chapter's own
+# _inputs.yml -- do not restate it here, and do not force a
+# 1:1 link: one overwritten assumption is often replaced by
+# several new items.
+#
+# It renders HERE, as "Overwritten from <chapter>" -- on
+# the page that made the change. The chapter overwritten
+# keeps its own items: they are its premise and stay true
+# under it.
+overwrites:

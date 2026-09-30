@@ -37,6 +37,7 @@ website:
       - auto: "chapters/01-calibrated-discus-2c"
       - auto: "chapters/02-biplane-configuration"
       - auto: "chapters/03-box-wing-configuration"
+      - auto: "chapters/04-canard-configuration"
 
 format:
   html:
