@@ -535,10 +535,13 @@ def _notebook_drift(root):
     project-specific; any difference is either an un-propagated improvement or an
     accident, and both want a person to decide which.
     """
-    # Both vendored files, not just _notebook.py. _probe_base.py is vendored the
-    # same way and went unchecked, so an improvement to it sat in one notebook
-    # while the scaffold that creates the next one still held the old text --
-    # drift invisible precisely because nothing compared them.
+    # ONE vendored file now. `_scratch/_probe_base.py` was the second, and was
+    # checked here for the same reason -- an improvement to it once sat in one
+    # notebook while the scaffold still held the old text. It is gone: probes
+    # run in a kernel `nb` starts, and the cell that loads the chapter is
+    # `nb/tools/probe_init.py`, an ordinary module that ships with `nb` and is
+    # therefore incapable of drifting. Vendoring buys propagation and costs
+    # this rule; one fewer vendored file is one fewer of both.
     problems = []
 
     # (rule, where, message). THE NUMBER IS A FIELD NOW, not something a caller
@@ -554,10 +557,8 @@ def _notebook_drift(root):
     # 16, 17, 18 and 28 between them, and attributing per finding means
     # splitting the function. The table below is therefore also the list of what
     # is left to split, which is the honest version of a gap.
-    for canonical_name, local_name in (("notebook.py", "_notebook.py"),
-                                       ("probe_base.py", "_scratch/_probe_base.py")):
-        problems += _one_drift(pathlib.Path(__file__).parent / canonical_name,
-                               root / local_name)
+    problems += _one_drift(pathlib.Path(__file__).parent / "notebook.py",
+                           root / "_notebook.py")
     return problems
 
 
@@ -3009,7 +3010,7 @@ RULES = {
     8: "each Specified / Assumed item within the word budget",
     9: "one prose section",
     10: "a sibling entry is linked, never named in bare prose",
-    11: "`_notebook.py` and `_probe_base.py` byte-match the canonical copies",
+    11: "`_notebook.py` byte-matches the canonical copy",
     12: "a committed page has a freeze, and it is not older than its model",
     13: "every `_analysis.py` function the entry calls is passed to `footer(…)`",
     14: "one visual per entry (two, if one draws the aircraft)",

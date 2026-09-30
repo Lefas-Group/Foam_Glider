@@ -4,22 +4,19 @@ Your instructions carry the rule — probe before writing an entry, and use the
 `probe` tool rather than writing a script. This is the machinery, read when a
 probe misbehaves or a figure is needed.
 
-## `probe.py` and `_probe_base.py`
+## How a probe runs
 
-Every notebook's `_scratch/` holds `_probe_base.py` (the preamble) and `probe.py`
-(the question). The base resolves the notebook root, execs `_notebook.py`,
-`_model.py` and `_analysis.py`, and prints `api()`. A probe is then:
+Every probe for a run goes to ONE kernel, started on the first probe and kept
+until the run ends. `nb/tools/probe_init.py` is its first cell: it execs
+`_notebook.py`, `_model.py` and `_analysis.py` into the namespace your probes
+then run in. There is no file to edit and nothing to import — you send the
+question, and the chapter is already there.
 
-```python
-"""Scratch probe. Gitignored, never rendered. Edit the question, not the file."""
-from _probe_base import *  # noqa: F403 -- chapter loaded, api() printed
-
-# --- the question ----------------------------------------------------------
-```
-
-**Edit the question block; do not rewrite the file.** Successive probes then cost
-the delta rather than the whole thing, which is the single largest per-entry
-saving available.
+**Names survive between probes.** What one probe assigns, the next can use. This
+is the single largest per-entry saving available, and it is yours to take: the
+tool cannot reuse `sink_baseline` on your behalf. Every probe result ends with
+what is held. Read that line and reach for what is on it — a re-derived value
+pays for its solves a second time.
 
 `compile()` with the real path is load-bearing, exactly as in the `_model.qmd`
 shim: a bare `exec()` of file text labels every function `"<string>"`, and then
@@ -27,7 +24,12 @@ shim: a bare `exec()` of file text labels every function `"<string>"`, and then
 together. Probes are where a helper is about to be written, so `api()` must work
 here or the discovery listing is empty.
 
-Set `CHAPTER` in `_probe_base.py` when working on a different chapter.
+The kernel is thrown away and rebuilt, announced in the result, when: the
+chapter's source changes (so you never probe definitions you have just
+replaced), the chapter changes, a probe overruns its budget, or you pass
+`reset=True`. **After any of those, nothing is held.** The announcement is the
+only signal — a number computed before a restart is not comparable with one
+computed after unless you recomputed it.
 
 **A surprise about a return type means READ, not probe again.** A `TypeError`
 about 0-dimensional arrays, a value that is an array where you expected a
@@ -44,10 +46,9 @@ its shape one probe at a time.
 
 ## Figures from a probe
 
-There is no `probe.qmd`. The `probe` tool runs Python, and that is the whole
-surface: it writes `_scratch/_nb_probe.py`, injects the preamble that installs
-the solve budget, and runs it. A Quarto scratch page existed when a person drove
-the tooling by hand; nothing reads one now.
+There is no `probe.qmd`. The `probe` tool runs Python in the run's kernel, and
+that is the whole surface. A Quarto scratch page existed when a person drove the
+tooling by hand; nothing reads one now.
 
 When a probe needs to LOOK at something, save the figure and read it back:
 
@@ -61,13 +62,14 @@ and the freeze is the thing you actually need.
 
 - **Cell code runs from the notebook root**, not from `_scratch/`, because the
   project sets `execute-dir: project`. Any path inside a probe is relative to the
-  notebook directory.
-- A probe pays interpreter startup and the preamble exec every time, so ask one
-  probe several questions rather than running several probes.
-
-Iterating on a plot re-runs every cell above it, cold, on each render. If that
-starts to hurt, `exec` the model into a persistent Jupyter kernel instead and
-re-plot without re-solving.
+  notebook directory. A probe's own cwd is its run directory, so a bare filename
+  from `savefig` lands beside the run.
+- Interpreter startup and the chapter exec are paid ONCE per run, not per probe.
+  So the old advice — cram several questions into one probe to amortise it — no
+  longer applies, and following it now costs you: a probe that overruns its
+  budget is killed, and a long one bundling four solves loses the namespace that
+  three of them had already filled. Ask one question, keep the result in a name,
+  build on it.
 
 ## Why `_scratch/`
 
@@ -81,7 +83,7 @@ to be tidy — but nothing in it survives either.
 More time has been lost here than to any slow model. Each of these cost real
 minutes in a single session.
 
-**Never leave a long run unattended and silent.** `_probe_base.py` arms
+**Never leave a long run unattended and silent.** `probe_init.py` arms
 `faulthandler.dump_traceback_later`, which prints where the process is stuck
 without killing it, from a separate thread — so unlike a signal it reports from
 inside a long C call. A solver flag that turned one solve into ten silent minutes
@@ -101,8 +103,8 @@ anything. Sequential is faster in practice and the results are usable.
 - `grep` in a pipeline buffers — use `--line-buffered`. Piping a live log through
   `| tail` buffers everything until exit, so a finished job looks like an empty
   one. This has twice been mistaken for "still running".
-- `pgrep -f "probe.py"` matches *the shell that is waiting*, so the wait never
-  ends. Use a bracket to break the self-match: `pgrep -f "probe[.]py"`.
+- `pgrep -f "ipykernel"` matches *the shell that is waiting*, so the wait never
+  ends. Use a bracket to break the self-match: `pgrep -f "ipykernel[_]launcher"`.
 - macOS has no `timeout`, and BSD `find` has no `-newermt` — the latter fails
   silently and returns nothing. Prefer Python when portability matters.
 

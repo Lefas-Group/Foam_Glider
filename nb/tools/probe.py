@@ -4,40 +4,27 @@ probe -- run a question against the chapter's model.
 Takes a QUESTION, not code. That is the whole point: `_notebook.py` installs
 SOLVE_BUDGET as the default on asb.Opti.solve, and a probe that wrote
 `import aerosandbox` directly would run outside it. A budget the model can skip
-by forgetting is not a budget, so the preamble is injected rather than asked for.
+by forgetting is not a budget, so the chapter is loaded for it rather than by it.
 
-Writes into the RUN's own directory, `_scratch/runs/<id>/probe.py`, and runs
-with that as the cwd. It used to be one shared `_scratch/_nb_probe.py`, written
-and then executed -- so two agents probing within a second of each other and one
-would run the other's code, attribute the answer to the wrong question, and say
-nothing. A per-run path removes the race without a lock: a probe reads the
-chapter's files and writes only here.
+RUNS IN THE RUN'S KERNEL, so names outlive the probe that made them. That is
+`kernel.py`'s job and its docstring carries the reasoning; what matters here is
+what it changed in this file. Gone: writing `_scratch/runs/<id>/probe.py` and
+spawning `uv run python` over it, the stdin=DEVNULL guard that a background run
+needed to avoid SIGTTIN, the subprocess timeout stacked above an in-process
+watchdog, and the salvage branch that tried to recover output from a killed
+probe -- iopub has already delivered it.
 
-The cwd matters as much as the path. A probe that saves a figure writes a
-relative filename, so it lands beside its own script rather than in a shared
-`_scratch/`. `_probe_base`'s `sys.path` insert is absolute, so it survives the
-move.
+Unchanged, because they operate on the output and the session rather than on how
+the code ran: the inputs notice, the scope hint, the budget line, the
+ENTRY_CEILING notice, and `budgets.aero_cost`.
 """
 
-import os
-import subprocess
 import textwrap
-import time
 
+from . import kernel
 from .. import budgets
 from ..log import say
 from ..text import tail
-
-# `_probe_base` lives in `_scratch/`, one level above the run directory the
-# script now sits in, so it has to be put on the path explicitly -- the cwd no
-# longer finds it. Absolute, because the probe's own cwd is the run directory
-# and a relative hop would break the moment anything changed it.
-PREAMBLE = (
-    "# Written by `nb`. The chapter is loaded and the solve budget is armed.\n"
-    "import sys; sys.path.insert(0, {scratch!r})\n"
-    "from _probe_base import *  # noqa: F403,F401\n"
-    "\n"
-)
 
 
 def _inputs_notice(notebook, chapter):
@@ -120,33 +107,23 @@ def _scope_hint(out):
             "output lists what is in scope.]")
 
 
-def run_probe(notebook, chapter, question, session=None, budget_s=None):
+def run_probe(notebook, chapter, question, session=None, budget_s=None,
+              reset=False):
     """Execute `question` as Python with the chapter preloaded. Returns stdout."""
-    # `_probe_base` falls back to the first chapter alphabetically when
-    # NB_CHAPTER is unset, and says so only on stderr. Swallowed into tool
-    # output that is easy to miss, which is how a probe comes to answer
-    # confidently about the wrong aircraft. Refuse instead.
+    # Refused before a kernel is started, not defaulted around. The old
+    # bootstrap fell back to the first chapter alphabetically and said so only
+    # on stderr, which is how a probe comes to answer confidently about the
+    # wrong aircraft; `probe_init` therefore has no fallback at all, and this is
+    # the check that lets it have none.
     known = notebook.chapters()
     if chapter not in known:
         return (f"no chapter {chapter!r}. Pass one of: {', '.join(known)}.\n"
                 f"The chapter decides which model is loaded, so it is never "
                 f"optional and never guessed.")
 
-    run_dir = notebook.run
-    run_dir.mkdir(parents=True, exist_ok=True)
-    script = notebook.probe_script
-    script.write_text(PREAMBLE.format(scratch=str(notebook.scratch))
-                      + textwrap.dedent(question).strip() + "\n")
+    # Fallback only: with a session the grant below tightens this.
+    deadline = budgets.probe_wall_clock()
 
-    env = dict(os.environ, NB_CHAPTER=chapter)
-    # Fallback only: with a session the grant below tightens this. One place
-    # owns the headroom over the watchdog.
-    timeout = budgets.probe_wall_clock()
-
-    # The run's pool, divided by the agent. `_notebook.py` reads
-    # NB_PROBE_BUDGET ahead of the chapter's own limit, so the watchdog inside
-    # the probe enforces exactly what was granted -- and our subprocess timeout
-    # sits above it, so the watchdog still gets to say WHY it killed something.
     granted = None
     if session is not None:
         granted, left = session.take_probe_budget(budget_s)
@@ -172,38 +149,24 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
                     "wall clock it was given. Call `open_entry` now with what "
                     "you have, and say in the entry what you did not get to.")
         if granted:
-            env["NB_PROBE_BUDGET"] = f"{granted:.1f}"
-            timeout = budgets.probe_wall_clock(granted)
+            deadline = budgets.probe_wall_clock(granted)
 
-    started = time.perf_counter()
-    try:
-        # stdin=DEVNULL, deliberately. `capture_output` redirects stdout and
-        # stderr and says nothing about stdin, so a probe inherited the
-        # TERMINAL's -- and a background process group that reads the terminal
-        # is sent SIGTTIN, which stops the whole group, this process included.
-        # A run launched with `&` would then freeze mid-probe with no error,
-        # no CPU, and a wall-clock timer still counting: observed once at
-        # "15 s granted, 5596 s used".
-        #
-        # A probe has no business reading the operator's keyboard in any case.
-        # DEVNULL turns "silently suspend the run" into "EOF", which anything
-        # reading stdin already has to handle.
-        r = subprocess.run(["uv", "run", "python", script.name],
-                           cwd=run_dir, env=env, capture_output=True,
-                           stdin=subprocess.DEVNULL,
-                           text=True, timeout=timeout)
-        out = (r.stdout or "") + (r.stderr or "")
-        if r.returncode != 0:
-            out += f"\n[exit {r.returncode}]" + _scope_hint(out)
-    except subprocess.TimeoutExpired as e:
-        # `_notebook.py`'s own watchdog should have fired first and said why;
-        # reaching here means it did not. Partial output is still worth having.
-        got = e.stdout if isinstance(e.stdout, str) else (e.stdout or b"").decode()
-        out = got + (f"\n[killed at {timeout:.0f}s -- outlived the probe's own "
-                     f"watchdog, which should have fired first and said why]")
+    out, restarted, used = kernel.probe(notebook, chapter,
+                                        textwrap.dedent(question).strip(),
+                                        deadline, reset=reset)
+    # FIRST, before a line of output. Everything below it was computed in a
+    # namespace that did not exist a moment ago, and a restart the model reads
+    # AFTER the numbers is a restart it has already drawn conclusions past.
+    if restarted:
+        out = (f"[kernel restarted -- {restarted}. Nothing is held from earlier "
+               f"probes; anything this probe needed from one is gone.]\n" + out)
+    # A traceback is an ordinary result here -- the kernel survives it and the
+    # names it had are still there -- so there is no exit status to report. The
+    # scope hint still fires on the one it exists for.
+    if "Traceback" in out or "Error" in out:
+        out += _scope_hint(out)
 
     if session is not None:
-        used = time.perf_counter() - started
         session.record_probe(used)
         # ONCE, after the first probe. Not before probing, where the model has
         # not loaded the chapter and is being asked to classify inputs at the
@@ -252,5 +215,23 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
                     f"entry's render. Open the entry now with what you have, "
                     f"or ask_specified whether to raise it -- that is the "
                     f"user's call, and the entry records the answer.]")
+
+    # WHAT THE KERNEL IS HOLDING, last, because it is the line that decides
+    # whether any of this pays for itself. The saving is model-directed: a
+    # kernel that carries `s1_orig` forward buys nothing if the next probe
+    # re-solves for it anyway, and the model has no other way to know the
+    # namespace survived. Naming the cost -- a solve -- rather than the
+    # mechanism, because that is the part it is budgeting against.
+    #
+    # A RESTART IS SAID FIRST AND SEPARATELY. Everything above it was computed
+    # in a namespace that no longer exists, and a restart the model cannot see
+    # is a result it cannot trust.
+    names = kernel.held(notebook)
+    if names:
+        shown = ", ".join(names[:8])
+        more = f" (+{len(names) - 8} more)" if len(names) > 8 else ""
+        out += (f"\n[kernel holds {len(names)} name(s) from earlier probes in "
+                f"this run: {shown}{more}. Reuse them -- re-deriving one costs "
+                f"its solves again. `reset=True` starts clean.]")
 
     return tail(out)

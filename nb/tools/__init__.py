@@ -99,22 +99,31 @@ B = {"type": "boolean"}
 def native_declarations():
     return [
         _decl("probe",
-              "Run a question against the chapter's model in the scratch sandbox. "
-              "Pass PYTHON, not prose: the chapter is already imported and the "
-              "solve budget is already armed, so write only the question itself. "
-              "Returns stdout and any traceback. Call aero_report() at the end to "
-              "record what the solves cost.",
+              "Run a question against the chapter's model. Pass PYTHON, not "
+              "prose: the chapter is already loaded and the solve budget is "
+              "already armed, so write only the question itself. Returns stdout "
+              "and any traceback. Call aero_report() at the end to record what "
+              "the solves cost. PROBES SHARE ONE NAMESPACE for the whole run -- "
+              "what an earlier probe assigned is still bound, and the result "
+              "says what is held. Reuse those names; re-deriving one pays for "
+              "its solves twice.",
               {"question": dict(S, description="Python. The chapter's names are "
-                                               "in scope; do not import it."),
+                                               "in scope; do not import it. So "
+                                               "are names your earlier probes "
+                                               "defined."),
                "chapter": dict(S, description="Chapter directory name"),
                "budget_s": dict(N, description=(
                    "Seconds of wall clock this probe may take, drawn from the "
                    "run's pool. Budget it: a single solve wants tens, a "
-                   "multistart hundreds. Enforced to about 15 s, so anything "
-                   "under ~20 buys nothing over 20. Asking for more than "
-                   "remains grants what remains, and the result says how much "
-                   "is left. Omitted takes the whole remaining pool, which "
-                   "wastes it."))},
+                   "multistart hundreds. Asking for more than remains grants "
+                   "what remains, and the result says how much is left. "
+                   "Omitted takes the whole remaining pool, which wastes it. "
+                   "Overrunning kills the probe -- what it printed first "
+                   "survives, the held names do not.")),
+               "reset": dict(B, description=(
+                   "Discard everything earlier probes defined and load the "
+                   "chapter fresh. For when held state is in the way, not as a "
+                   "habit -- it throws away solves you have already paid for."))},
               ["question", "chapter", "budget_s"]),
 
         _decl("lint",
@@ -286,8 +295,9 @@ def build(session, fs):
 
     handlers = dict(fs.handlers())
     handlers.update({
-        "probe": lambda question, chapter=None, budget_s=None: probe.run_probe(
-            nb, chapter or session.chapter, question, session, budget_s),
+        "probe": lambda question, chapter=None, budget_s=None, reset=False: probe.run_probe(
+            nb, chapter or session.chapter, question, session, budget_s,
+            reset=reset),
         "lint": lambda chapter: verifiers.lint_chapter(nb, chapter, session),
         "render": lambda target="": verifiers.render(
             nb, target, why="the agent asked", session=session),

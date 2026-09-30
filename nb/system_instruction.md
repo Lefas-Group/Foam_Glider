@@ -165,7 +165,7 @@ prose is already written.
  8  each Specified / Assumed item ≤ 10 words
  9  one prose section — no second `**Heading.**` or `##`
 10  a sibling entry is linked, never named in bare prose
-11  `_notebook.py` and `_probe_base.py` byte-match the canonical copies
+11  `_notebook.py` byte-matches the canonical copy
 12  the freeze is not older than the model that froze it
 13  every `_analysis.py` function the entry calls is passed to `footer(…)`
 14  one visual per entry (two, if one draws the aircraft)

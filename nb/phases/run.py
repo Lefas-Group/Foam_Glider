@@ -36,7 +36,7 @@ from ..config import MAX_LINT_ATTEMPTS, MAX_RENDER_FIXES, MAX_TURNS, PROBE_POOL
 from ..loop import Stopped, run as drive
 from ..session import Session
 from ..preflight import check as preflight
-from ..tools import guards, verifiers
+from ..tools import guards, kernel, verifiers
 from ..tools.interact import ask_pool, ask_render_ceiling, ask_stuck
 from .. import briefs, metrics, runstate
 from .view import site
@@ -64,7 +64,9 @@ DETAIL = {
     "turns": "transcript.jsonl — one line per model turn (role: model) and one "
              "per batch of tool results (role: tool), in order. `thought` "
              "parts are the reasoning; skip them unless you want it.",
-    "probe": "probe.py — the last probe this run executed.",
+    "probe": "kernel.log — the probe kernel's own stdout, which is startup "
+             "chatter and, if one happened, a crash. Probe OUTPUT is in "
+             "transcript.jsonl with the turn that asked for it.",
 }
 
 
@@ -574,6 +576,12 @@ def _execute(notebook, session, contents, run_metrics, fs, handlers,
         raise
     finally:
         fs.stop()
+        # The run's probe kernel, which outlives any single probe by design and
+        # so has to be ended by the run. In `finally` beside `fs.stop()`: an
+        # abandoned kernel holds a python process and the chapter's memory for
+        # as long as the terminal lives, and the paths out of here include
+        # KeyboardInterrupt and a raise from `_execute` itself.
+        kernel.shutdown(notebook)
 
     return _finish(notebook, session, run_metrics, first_pass, moved,
                    accepted)

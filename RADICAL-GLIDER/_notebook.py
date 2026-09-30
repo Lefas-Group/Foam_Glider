@@ -13,13 +13,11 @@
 # The leading underscore keeps Quarto from rendering this file, as with _scratch/.
 # =============================================================================
 import builtins
-import faulthandler
 import inspect
 import os
 import pathlib
 import re
 import sys
-import threading
 import time
 
 import aerosandbox as asb
@@ -97,22 +95,24 @@ _time, _pathlib, _re, _inspect, _os = time, pathlib, re, inspect, os
 # An ALIAS, not a copy: `_model.qmd` zeroes the counter through the public name
 # with aero_cost.update(...), and that must be the dict footer() reads.
 _aero_cost = aero_cost
-# DEFAULT_SOLVE_BUDGET and PROBE_BUDGET are deliberately NOT aliased. They are
-# floats: rebinding one yields a wrong limit, not a traceback, so there is no
-# crash for an alias to prevent -- and rule 27 refuses the rebinding anyway. A
-# chapter raising its own limit uses different names (SOLVE_BUDGET_CHAPTER,
-# raised only by the per-probe grant in $NB_PROBE_BUDGET, which this does not
-# touch.
+# DEFAULT_SOLVE_BUDGET is deliberately NOT aliased. It is a float: rebinding it
+# yields a wrong limit, not a traceback, so there is no crash for an alias to
+# prevent -- and rule 27 refuses the rebinding anyway. An entry raising its own
+# limit binds SOLVE_BUDGET, which `_active_budget` reads by membership.
+#
+# PROBE_BUDGET used to sit beside it. A probe's wall clock is `nb`'s to enforce
+# now: it holds the deadline and kills the kernel, so nothing in this file has a
+# probe limit to rebind.
 
 
 def aero_report(reset=True):
     """
     Print the aero solves run since this was last called, and what they cost.
 
-    Terminal-facing, exactly like api(): _scratch/probe.py prints both on every
-    run, which is the moment someone is about to write the helper that spends
-    the solves. That is where the number is worth seeing -- not on a rendered
-    page, and not in a profiler someone would have to think to reach for.
+    Terminal-facing, exactly like api(): a probe calls both, which is the
+    moment someone is about to write the helper that spends the solves. That
+    is where the number is worth seeing -- not on a rendered page, and not in
+    a profiler someone would have to think to reach for.
 
     Resets by default, so probes that print it repeatedly report per-section
     cost rather than a running total. Pass `reset=False` for the total.
@@ -135,7 +135,7 @@ def aero_report(reset=True):
 # The budget is installed as the DEFAULT on asb.Opti.solve rather than passed at
 # each call site, because the thing being defended against is forgetting. Every
 # ad-hoc probe in the session that motivated this was a shell heredoc rather
-# than _scratch/probe.py -- but every one of them still exec'd this file, so a
+# than the probe scaffold -- but every one of them still exec'd this file, so a
 # policy here reaches entries, probes and one-liners alike, and a policy in the
 # probe scaffold would have reached none of them.
 #
@@ -259,8 +259,8 @@ if not getattr(asb.Opti.solve, "_is_budgeted", False):
             # Merged, never assigned: a caller passing its own solver options
             # must not lose them to the budget.
             options = dict(kwargs.get("options") or {})
-            # WALL TIME ONLY OUTSIDE A KERNEL -- that is, in a probe and not in
-            # a render. The two are different failures.
+            # WALL TIME IN A PROBE, NOT IN A RENDER. The two are different
+            # failures.
             #
             # In a probe, being killed for overrunning the wall budget IS the
             # budget working: the agent asked for 15 s, took longer, is told
@@ -277,7 +277,7 @@ if not getattr(asb.Opti.solve, "_is_budgeted", False):
             # heaviest entries render in 11-13 s against a 15 s SOLVE_BUDGET.
             # A render stays bounded by max_cpu_time above and by the render
             # deadline outside it, so nothing here is unbounded.
-            if not globals().get("_IN_KERNEL"):
+            if not globals().get("_IS_RENDER"):
                 options.setdefault("ipopt.max_wall_time", seconds)
             kwargs["options"] = options
         # COUNTED HERE, because this is the only place every solve passes
@@ -316,44 +316,35 @@ _aero_cost = aero_cost
 
 
 # =============================================================================
-# What a PROBE is allowed to cost.
+# Am I a RENDER, or a PROBE?
 #
-# The budget above bounds opti.solve() and nothing else, so a script can still
-# spend minutes in graph construction, marched rollouts and multistarts. One
-# probe ran ten minutes before an external timeout killed it, and the session
-# that motivated this spent more wall clock in scratch than in every render
-# combined.
+# These are different failures and the file has to tell them apart. It used to
+# ask "am I in a kernel", which WAS the same question while probes ran in their
+# own process -- a kernel meant Quarto's jupyter engine and nothing else. Probes
+# run in a kernel too now, so that proxy answers "render" for both and silently
+# disarms the wall clock on the one that needs it.
 #
-# ARMED HERE RATHER THAN IN THE PROBE SCAFFOLD, because the scaffold only
-# reaches probes that import it -- and not one probe in that session did. They
-# were all ad-hoc heredocs. What every one of them DID do is exec this file, to
-# reach the model at all, so this is the only place a limit catches them.
+# `nb` sets NB_PROBE when it starts a probe kernel. Nothing else sets it, and a
+# render never does, so the two are distinguished by WHAT THEY ARE rather than
+# by how they happen to be hosted.
 #
-# A watchdog THREAD, not a signal: a signal is handled between bytecodes and so
-# cannot interrupt a long call sitting inside C. Measured, a 0.3 s SIGALRM
-# against one such call fired at 1.15 s, on return; a threading.Timer fired at
-# 0.61 s from inside the same call.
-#
-# Never armed under a kernel. Quarto's jupyter engine runs every entry in one,
-# and a render that legitimately takes an hour must not be shot in the head --
-# entries are governed by ENTRY_CEILING and lint rule 17 instead.
+# The probe's own watchdog used to live here: a thread that called os._exit(9)
+# at $NB_PROBE_BUDGET. It is gone, because the process it policed is gone. `nb`
+# holds the deadline and kills the kernel, which is the same hard stop -- a
+# signal cannot interrupt a CasADi solve sitting in C, measured at 1.15 s
+# against a 0.3 s limit, so killing the process was always the mechanism. What
+# stays here is PROBE_SILENCE, armed by `nb`'s init cell rather than by this
+# file: saying WHERE a probe is stuck is worth keeping and does not depend on
+# who decides to end it.
 # =============================================================================
-# NOT settable from the environment, and that is the whole design. An earlier
-# version read NOTEBOOK_PROBE_BUDGET, and across the session that followed it was
-# overridden on EVERY SINGLE probe -- 1200 s, 1800 s, 3600 s -- so the limit never
-# once took effect. Two things made that inevitable and both are fixed here: the
-# override was one token at the front of a command line, and the kill message
-# helpfully named the variable to set. A guard that documents its own bypass at
-# the moment it fires is not a guard; it is a speed bump with a detour sign.
-#
-# Raising it is a decision for the user, made by granting a bigger probe pool at
-# the prompt, out of which the agent budgets each probe. Hitting this limit is
-# meant to STOP the work and produce a choice -- is this solve worth it, can it be
-# made cheaper, or should more time be asked for -- rather than a reflex.
 PROBE_SILENCE = 120.0  # s of no output before the traceback says where it is
-PROBE_BUDGET = 300.0   # s a scratch probe may run, absent a per-probe grant
 
 _IN_KERNEL = "ipykernel" in sys.modules or hasattr(builtins, "__IPYTHON__")
+_IN_PROBE = bool(os.environ.get("NB_PROBE"))
+# A render is a kernel that is NOT a probe. Written this way round deliberately:
+# an unknown host defaults to "not a render", which errs towards enforcing a
+# limit rather than towards silently dropping one.
+_IS_RENDER = _IN_KERNEL and not _IN_PROBE
 
 if _IN_KERNEL:
     # Jupyter echoes a cell's last expression. A figure cell ending in
@@ -368,6 +359,11 @@ if _IN_KERNEL:
     # every cell-output-display block is an image, so nothing anywhere relies
     # on last-expression display.
     #
+    # BOTH hosts, render and probe alike. A probe in its own process had no
+    # echo to suppress, so leaving it on for probe kernels would be a new
+    # behaviour arriving by accident -- and a probe that ends in a bare
+    # `opt_plane` would dump an Airplane repr over its own output.
+    #
     # Here rather than in a lint rule because the rule could only fire AFTER a
     # render had already paid for the entry, and the fix would be the same
     # every time.
@@ -375,71 +371,6 @@ if _IN_KERNEL:
         get_ipython().ast_node_interactivity = "none"   # noqa: F821
     except (NameError, AttributeError):
         pass
-
-def _probe_budget():
-    """
-    The probe budget in force: this probe's grant, else the default.
-
-    Read at CHECK time rather than at arm time. The watchdog therefore polls,
-    which also keeps it honest if the environment changes under it.
-
-    $NB_PROBE_BUDGET wins when set, and is how a run divides a POOL of probe
-    wall clock between its own probes: a listing probe asks for ten seconds, a
-    multistart for four hundred, out of one total that bounds the run. Before
-    it, every probe got the same 300 s -- pointless rope for the cheap one,
-    a kill for the expensive one, and no bound at all on how MANY probes a run
-    could take. Same channel as $NB_CHAPTER, for the same reason: switching it
-    edits no file.
-
-    Env var, else the default. There is no chapter override: budgets belong to
-    the entry now, and a probe runs before any entry exists -- the grant is the
-    only thing that can speak for it.
-    """
-    env = _os.environ.get("NB_PROBE_BUDGET")
-    if env:
-        try:
-            return float(env)
-        except ValueError:
-            pass
-    return PROBE_BUDGET
-
-
-if not _IN_KERNEL and not globals().get("_probe_guard_armed"):
-    _probe_guard_armed = True
-    _probe_t0 = time.perf_counter()
-
-    def _probe_too_long():
-        # Deliberately does NOT say how to raise the limit. Naming the escape
-        # hatch here is what turned the previous version into a formality.
-        print(f"\n[probe killed at {time.perf_counter() - _probe_t0:.0f} s, over "
-              f"its {_probe_budget():.0f} s budget.\n"
-              f" This is a stop, not a speed bump. Choose one:\n"
-              f"   - decide the answer is not worth this much compute;\n"
-              f"   - make it cheaper -- fewer nodes, a held design, one arm "
-              f"instead of a sweep;\n"
-              f"   - ask the user for more time, with a bigger budget_s or a "
-              f"bigger pool.]", file=sys.stderr, flush=True)
-        faulthandler.dump_traceback(file=sys.stderr)
-        os._exit(9)
-
-    # faulthandler says WHERE it is stuck, from its own thread, so it reports
-    # from inside a C call too. The timer says ENOUGH.
-    #
-    # Once, not repeating: a solve that legitimately runs for minutes would
-    # otherwise dump a traceback every couple of minutes, and the point is to
-    # distinguish "working" from "hung", which one report already does.
-    faulthandler.dump_traceback_later(PROBE_SILENCE, repeat=False, file=sys.stderr)
-
-    def _probe_watch():
-        while True:
-            time.sleep(15.0)
-            if time.perf_counter() - _probe_t0 > _probe_budget():
-                _probe_too_long()
-
-    # Polling rather than a single sleep, so the limit is re-read as the probe
-    # runs. A daemon thread, so a probe that finishes early is never held open.
-    _probe_thread = threading.Thread(target=_probe_watch, daemon=True)
-    _probe_thread.start()
 
 
 def md_table(header, rows):
@@ -636,7 +567,7 @@ def api(filename="_analysis.py"):
     """
     Every function defined in `filename`, with its signature and summary line.
 
-    Terminal-facing: _scratch/probe.py prints this on every run, which is the
+    Terminal-facing: a probe calls this, which is the
     moment someone is about to write a helper. It is deliberately not rendered
     into the site -- a reader of the design does not need a function inventory,
     and the chapter index already lists _analysis.py in full.

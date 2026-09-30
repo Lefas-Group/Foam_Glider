@@ -79,9 +79,9 @@ the rendered site: the chapter index lists `_model.py` and `_analysis.py` only,
 and `api()` filters to `_analysis.py`. A reader of the design does not need a
 function inventory.
 
-`_scratch/_probe_base.py` prints `api()` on every run, which is the moment
-someone is about to write a helper — that is where discovery belongs, not on a
-page the author has no reason to open. Four subtly different neutral points once
+`api()` is in scope in every probe, which is the moment someone is about to
+write a helper — that is where discovery belongs, not on a page the author has
+no reason to open. Call it before writing one. Four subtly different neutral points once
 existed in one chapter because nothing advertised the first, and one of the four
 took its moment reference from the wrong station. The same failure recurred when
 `_analysis.py` was empty and `api()` printed nothing: a near-duplicate of the

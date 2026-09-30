@@ -144,9 +144,9 @@ def check(root):
 
     # Rule 11, run through the vendored linter itself rather than reimplemented,
     # so the two can never disagree about what "byte-identical" means. It covers
-    # `_notebook.py` AND `_scratch/_probe_base.py` -- the second was added after
-    # an improvement sat in one notebook while the scaffold still held the old
-    # text, drift invisible precisely because nothing compared them.
+    # `_notebook.py` alone now; `_scratch/_probe_base.py` was the second until
+    # probes moved into a kernel and its job passed to `nb/tools/probe_init.py`,
+    # which ships with `nb` and so cannot drift.
     import lint
     for where, msg in lint._notebook_drift(notebook.root):
         bad.append(f"rule 11: {where.name if where else ''} {msg}")

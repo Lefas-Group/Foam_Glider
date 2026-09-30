@@ -126,8 +126,8 @@ TRUNCATE = 8000
 # ---------------------------------------------------------------- budgets
 
 # No PROBE_WALL_CLOCK here. There was one -- 960 s -- and nothing read it: the
-# subprocess timeout comes from `budgets.probe_wall_clock()`, which sizes itself
-# from the per-probe grant plus WATCHDOG_HEADROOM. `_dead_config` did not catch
+# probe deadline comes from `budgets.probe_wall_clock()`, which is the per-probe
+# grant and nothing else. `_dead_config` did not catch
 # it because the only occurrence of the name in the tree was inside a docstring
 # in `lint.py`, and that check greps `*.py` as text. Same shape as the
 # DEFAULT_ENTRY_CEILING note below, which is the failure it was written for.
@@ -247,8 +247,9 @@ class Notebook:
         return self.run / "answer.json"
 
     @property
-    def probe_script(self):
-        return self.run / "probe.py"
+    def kernel_log(self):
+        """ipykernel's own stdout/stderr. NOT cell output, which rides iopub."""
+        return self.run / "kernel.log"
 
     @property
     def transcript_path(self):

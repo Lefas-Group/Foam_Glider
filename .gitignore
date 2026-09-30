@@ -44,7 +44,6 @@ optimised-glider-notebook/.quarto/
 # refuses to start without. Ignoring it meant no notebook was reproducible from
 # git: a fresh clone could not run `nb ask` on anything until the file was
 # restored by hand. Found by checking out an old commit and watching it fail.
-!**/_scratch/_probe_base.py
 
 # macOS
 .DS_Store

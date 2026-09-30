@@ -7,12 +7,11 @@ is a command you run rather than something the agent can reach -- there is no
 `new_notebook` route, and `create_chapter` is not a tool either.
 
 What makes it worth a command rather than a documented procedure is the failure
-mode. `_notebook.py` and `_scratch/_probe_base.py` are VENDORED into every
-notebook -- Quarto execs them at render time, so a notebook must render without
-`nb` installed -- and lint rule 11 requires them byte-identical to the copies in
-`vendor/`. Copied by hand, a stray edit or a truncated paste is silent until the
-first lint run. Copied here, they cannot drift, and the command lints and
-preflights before it returns.
+mode. `_notebook.py` is VENDORED into every notebook -- Quarto execs it at
+render time, so a notebook must render without `nb` installed -- and lint rule
+11 requires it byte-identical to the copy in `vendor/`. Copied by hand, a stray
+edit or a truncated paste is silent until the first lint run. Copied here, it
+cannot drift, and the command lints and preflights before it returns.
 """
 
 import pathlib
@@ -44,16 +43,23 @@ GITIGNORE = ("/.quarto/\n"
              # committed a directory per run.
              # CONTENTS, not the directory: a negation cannot re-include a
              # file whose parent directory is excluded.
-             "/_scratch/*\n"
-             # Except the vendored probe base. Rule 11 requires it and
-             # preflight refuses to start without it, so a notebook that does
-             # not commit it cannot be run from a fresh clone at all.
-             "!/_scratch/_probe_base.py\n")
+             #
+             # Nothing is re-included any more. `_scratch/_probe_base.py` was,
+             # because rule 11 required it and preflight refused to start
+             # without it -- probes run in a kernel `nb` starts now, and the
+             # cell that loads the chapter ships with `nb`. `_scratch/` is
+             # working state end to end again.
+             "/_scratch/*\n")
 
 # Rule 11: vendored, and checked byte-for-byte. The tuple order is
 # (canonical in vendor/, destination in the new notebook).
-VENDORED = (("notebook.py", "_notebook.py"),
-            ("probe_base.py", "_scratch/_probe_base.py"))
+#
+# ONE entry, and it is worth saying why there is not a second. `probe_base.py`
+# sat here until probes moved into a kernel: it had to be vendored because a
+# probe subprocess started from the notebook directory and could reach nothing
+# else. `nb` starts the kernel now, so the loader is `nb/tools/probe_init.py` --
+# ordinary `nb` code, propagated by being imported rather than by being copied.
+VENDORED = (("notebook.py", "_notebook.py"),)
 
 
 def _render(name, title, subject, chapter):
@@ -178,10 +184,9 @@ def main(path, title=None, subject=None, chapter=None,
         shutil.copy(VENDOR / canonical, root / dest)
 
     (root / ".gitignore").write_text(GITIGNORE)
-    # No probe scaffold: `tools/probe.py` writes its own `_scratch/_nb_probe.py`
-    # and imports `_probe_base`, so the `probe.qmd`/`probe.py` pair the skill
-    # used was never read by this system. A person who wants to probe by hand
-    # writes a file beside `_probe_base.py`, which is what the agent does.
+    # No probe scaffold: probing is a tool call into the run's kernel, so the
+    # `probe.qmd`/`probe.py` pair the skill used was never read by this system
+    # and there is no longer a file in `_scratch/` to sit beside.
     for tmpl, dest in (("_quarto.yml.tmpl", "_quarto.yml"),
                        ("styles.css.tmpl", "styles.css"),
                        # The site's front page. Without it Quarto serves a
