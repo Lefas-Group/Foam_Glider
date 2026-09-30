@@ -1,0 +1,122 @@
+---
+title: "How do tandem-wing glide ratio and root bending moment compare with the baseline?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 192.3      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Evaluate tandem-wing configuration against calibrated baseline
+res = tandem_comparison(airplane)
+
+b_td = float(airplane.b_ref)
+s_ref_val = float(airplane.s_ref)
+spacing_val = float(x_aft_root - x_fwd_root)
+stagger_val = float(z_aft_root - z_fwd_root)
+
+m_root_base = float(res["m_root_base"])
+m_root_fwd = float(res["m_root_fwd"])
+m_root_aft = float(res["m_root_aft"])
+m_root_max = float(res["m_root_td_max"])
+bending_relief_pct = float(res["bending_relief_pct"])
+
+ld_base = float(res["ld_base_max"])
+ld_td = float(res["ld_td_max"])
+delta_ld = float(res["delta_ld"])
+v_base_best = float(res["v_base_max"])
+v_td_best = float(res["v_td_max"])
+
+lift_fwd_pct = float(res["lift_split_fwd_pct"])
+lift_aft_pct = float(res["lift_split_aft_pct"])
+static_margin = float(res["static_margin_pct"])
+cm_trim_val = float(res["cm_trim"])
+```
+
+::: {.hero}
+[`{python} f"-{bending_relief_pct:.1f}%"`]{.hero-value}
+[reduction in maximum limit root bending moment relative to single-wing baseline]{.hero-label}
+:::
+
+**Answer.** Splitting the [`{python} f"{s_ref_val:.2f} m²"`]{.key} wing area across tandem fore and aft wings of [`{python} f"{b_td:.2f} m"`]{.key} span spaced [`{python} f"{spacing_val:.2f} m"`]{.key} longitudinally relieves peak limit root bending moment by [`{python} f"{bending_relief_pct:.1f}%"`]{.key} (@fig-tandem-comparison). Under limit manoeuvre loads, peak spar moment falls from [`{python} f"{m_root_base:.1f} kN·m"`]{.key} to [`{python} f"{m_root_max:.1f} kN·m"`]{.key}. At [`{python} f"{v_td_best:.0f} km/h"`]{.key} cruise, pitch trims cleanly ([`{python} f"Cm = {cm_trim_val:+.3f}"`]{.key}) with positive static margin ([`{python} f"{static_margin:+.1f}% MAC"`]{.key}) and a balanced [`{python} f"{lift_fwd_pct:.1f}% / {lift_aft_pct:.1f}%"`]{.key} lift share. However, reduced span increases induced drag, dropping best glide ratio by [`{python} f"{abs(delta_ld):.2f}"`]{.key} points to [`{python} f"{ld_td:.2f}"`]{.key} compared to [`{python} f"{ld_base:.2f}"`]{.key} on the [calibrated baseline](../01-calibrated-discus-2c/2026-09-30-01-what-does-a-discus-2c-geometry-reconstructed-from-published-data-look.qmd).
+
+::: {.callout-tip}
+## New user specifications
+Asked of the user, 2026-09-30:
+
+1. **tandem wing span: `{python} f"{b_td:.2f} m"`**, individual span.
+2. **tandem wing area split: equal**, 50/50 fore and aft.
+3. **longitudinal wing spacing: `{python} f"{spacing_val:.2f} m"`**, root station gap.
+:::
+
+::: {.callout-note}
+## New assumptions
+1. **vertical wing stagger: `{python} f"{stagger_val:.2f} m"`**, elevated aft wing.
+2. **aft wing decalage: `{python} f"{decalage_aft_deg:.2f}°"`**, trimmed pitch stability.
+:::
+
+```{python}
+#| label: fig-tandem-comparison
+#| fig-cap: "Planform geometry comparison and glide ratio polar across airspeeds for the baseline monoplane and the tandem-wing glider."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.4))
+
+# Planform comparison
+ap_base = res["baseline_airplane"]
+w_base = ap_base.wings[0]
+y_b = np.array([xs.xyz_le[1] for xs in w_base.xsecs])
+x_le_b = np.array([xs.xyz_le[0] for xs in w_base.xsecs])
+x_te_b = x_le_b + np.array([xs.chord for xs in w_base.xsecs])
+
+w_fwd = airplane.wings[0]
+w_aft = airplane.wings[1]
+y_f = np.array([xs.xyz_le[1] for xs in w_fwd.xsecs])
+x_le_f = np.array([xs.xyz_le[0] for xs in w_fwd.xsecs])
+x_te_f = x_le_f + np.array([xs.chord for xs in w_fwd.xsecs])
+
+y_a = np.array([xs.xyz_le[1] for xs in w_aft.xsecs])
+x_le_a = np.array([xs.xyz_le[0] for xs in w_aft.xsecs])
+x_te_a = x_le_a + np.array([xs.chord for xs in w_aft.xsecs])
+
+for sgn in [1, -1]:
+    ax1.plot(sgn * y_b, x_le_b, "b-", lw=1.2, label="Baseline 18m" if sgn == 1 else "")
+    ax1.plot(sgn * y_b, x_te_b, "b--", lw=1.2)
+    ax1.fill(np.concatenate([sgn * y_f, sgn * y_f[::-1]]), np.concatenate([x_le_f, x_te_f[::-1]]), color="forestgreen", alpha=0.35, label="Fore Wing" if sgn == 1 else "")
+    ax1.fill(np.concatenate([sgn * y_a, sgn * y_a[::-1]]), np.concatenate([x_le_a, x_te_a[::-1]]), color="darkorange", alpha=0.35, label="Aft Wing" if sgn == 1 else "")
+
+# Fuselage centerline
+fuse_xs = [xs.xyz_c[0] for xs in fuse.xsecs]
+fuse_ws = [xs.width for xs in fuse.xsecs]
+ax1.plot(np.zeros(len(fuse_xs)), fuse_xs, "k-", lw=1.5, alpha=0.6)
+
+ax1.set_xlabel("Spanwise position y (m)")
+ax1.set_ylabel("Longitudinal position x (m)")
+ax1.set_title("Planform Layout")
+ax1.invert_yaxis()
+ax1.axis("equal")
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="lower left", fontsize=8)
+
+# Glide polar comparison
+sp_kmh = res["speeds_kmh"]
+ax2.plot(sp_kmh, res["ld_base_arr"], "b-o", ms=4, lw=1.5, label=f"Baseline (L/D max = {ld_base:.1f})")
+ax2.plot(sp_kmh, res["ld_td_arr"], "r-s", ms=4, lw=1.5, label=f"Tandem (L/D max = {ld_td:.1f})")
+ax2.set_xlabel("Airspeed (km/h)")
+ax2.set_ylabel("Glide Ratio L/D")
+ax2.set_title("1-g Glide Polar (417 kg)")
+ax2.grid(True, alpha=0.3)
+ax2.legend(loc="lower right", fontsize=8)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(tandem_comparison)
+```

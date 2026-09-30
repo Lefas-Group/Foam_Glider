@@ -1,0 +1,12 @@
+# What this chapter changed, and from what. Read by rule 31,
+# by the chapter index, and by the lineage diagram on the
+# book index -- one source, three readers.
+parent: 01-calibrated-discus-2c
+at: 50f9f34
+at_entry: 12
+summary: "tandem-wing layout splitting area across fore and aft wings near CG"
+changes:
+  - replace single main wing with fore and aft wings of 12.73 m span each
+  - place fore and aft wings at moderate longitudinal spacing of 3.30 m around CG
+  - remove aft horizontal stabilizer with aft wing acting as primary pitch trim
+overwrites:
