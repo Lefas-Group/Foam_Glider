@@ -1,0 +1,66 @@
+---
+title: "Does the stall-bounded sink rate move under the library mass model?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 120.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 120.6      # s the probe actually used
+
+stall_angle = 6.7
+
+sink_hand, opt_hand = optimize_geometry_for_sink_rate(get_airplane, alpha_max=stall_angle)
+sink_lib, opt_lib = optimize_geometry_library(get_airplane, alpha_max=stall_angle)
+
+delta_sink = sink_lib - sink_hand
+delta_sink_mm = delta_sink * 1000
+
+v_hand = opt_hand.v_trim
+v_lib = opt_lib.v_trim
+delta_v = v_lib - v_hand
+
+m_hand_g = opt_hand.m_total * 1000
+m_lib_g = opt_lib.m_total * 1000
+delta_m_g = m_hand_g - m_lib_g
+
+ballast_hand_g = opt_hand.mass_ballast * 1000
+ballast_lib_g = opt_lib.mass_ballast * 1000
+delta_ballast_g = ballast_lib_g - ballast_hand_g
+
+moves_str = "Yes" if abs(delta_sink) > 1e-4 else "No"
+
+assert abs(delta_sink_mm) > 1.0
+assert sink_lib < sink_hand
+```
+
+::: {.hero}
+[`{python} f"{moves_str}, {sink_lib:.2f} m/s"`]{.hero-value}
+[stall-bounded sink rate under library mass model]{.hero-label}
+:::
+
+**Answer.** Yes. Under the [library mass model](2026-09-30-01-does-replacing-hand-rolled-mass-geometry-with-wing-area-and-fuselage-v.qmd), the [stall-bounded planform optimum](2026-09-29-03-what-is-the-minimum-trimmed-sink-rate-when-bounded-below-the-section-s.qmd) sink rate drops from [`{python} f"{sink_hand:.2f} m/s"`]{.key} to [`{python} f"{sink_lib:.2f} m/s"`]{.key}, a difference of [`{python} f"{abs(delta_sink_mm):.1f} mm/s"`]{.key}. Axial frustum fuselage integration saves [`{python} f"{delta_m_g:.2f} g"`]{.key} of empty foam mass, reducing all-up mass to [`{python} f"{m_lib_g:.2f} g"`]{.key} without requiring ballast. This lower mass allows the aircraft to trim at [`{python} f"{v_lib:.2f} m/s"`]{.key} instead of [`{python} f"{v_hand:.2f} m/s"`]{.key} at the [`{python} f"{stall_angle:.1f}°"`]{.key} stall limit, slightly improving glide performance (@tbl-sink-rate-comparison).
+
+```{python}
+#| label: tbl-sink-rate-comparison
+#| tbl-cap: "Comparison of stall-bounded planform optimum under hand-rolled versus library mass models."
+#| echo: false
+#| output: asis
+
+header = ["Metric", "Hand-rolled", "Library", "Delta"]
+rows = [
+    ("Trimmed sink rate", f"{sink_hand:.2f} m/s", f"{sink_lib:.2f} m/s", f"{delta_sink_mm:.1f} mm/s"),
+    ("Trim airspeed", f"{v_hand:.2f} m/s", f"{v_lib:.2f} m/s", f"{delta_v:.2f} m/s"),
+    ("All-up mass", f"{m_hand_g:.2f} g", f"{m_lib_g:.2f} g", f"{-delta_m_g:.2f} g"),
+    ("Ballast mass", f"{ballast_hand_g:.1f} g", f"{ballast_lib_g:.1f} g", f"{delta_ballast_g:.1f} g"),
+]
+md_table(header, rows)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(optimize_geometry_for_sink_rate, optimize_geometry_library)
+```
