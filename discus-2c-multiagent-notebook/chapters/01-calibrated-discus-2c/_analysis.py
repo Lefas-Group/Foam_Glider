@@ -818,6 +818,160 @@ def final_design_synthesis(
     }
 
 
+def box_wing_reconfiguration(
+    airplane: asb.Airplane,
+    hb_ratio: float = 0.15,
+    area_split: float = 0.5,
+    mass_flight: float = 417.0,
+    mass_structural: float = 565.0,
+    load_factor: float = 5.3,
+    speeds_kmh: np.ndarray = None,
+) -> dict:
+    """Evaluate box-wing reconfiguration against baseline in VLM aerodynamics and root bending moments."""
+    if speeds_kmh is None:
+        speeds_kmh = np.array([85.0, 95.0, 105.0, 115.0, 125.0])
+
+    main_w = airplane.wings[0]
+    ys = np.array([xs.xyz_le[1] for xs in main_w.xsecs])
+    chords = np.array([xs.chord for xs in main_w.xsecs])
+    xs_le = np.array([xs.xyz_le[0] for xs in main_w.xsecs])
+    twists = [xs.twist for xs in main_w.xsecs]
+    airfoils = [xs.airfoil for xs in main_w.xsecs]
+
+    b_span = float(airplane.b_ref)
+    h_box = hb_ratio * b_span
+
+    c_fwd = chords * area_split
+    c_aft = chords * (1.0 - area_split)
+
+    rel_xs = xs_le - xs_le[0]
+
+    xsecs_fwd = [
+        asb.WingXSec(xyz_le=[rel_xs[i], ys[i], 0.0], chord=c_fwd[i], twist=twists[i], airfoil=airfoils[i])
+        for i in range(len(ys))
+    ]
+    wing_fwd = asb.Wing(name="Forward Wing", symmetric=True, xsecs=xsecs_fwd).translate([2.30, 0.0, 0.0])
+
+    xsecs_aft = [
+        asb.WingXSec(xyz_le=[rel_xs[i], ys[i], 0.0], chord=c_aft[i], twist=twists[i], airfoil=airfoils[i])
+        for i in range(len(ys))
+    ]
+    wing_aft = asb.Wing(name="Aft Wing", symmetric=True, xsecs=xsecs_aft).translate([6.00, 0.0, h_box])
+
+    af_plate = asb.Airfoil("hq010")
+    endplate = asb.Wing(
+        name="Tip Endplate",
+        symmetric=True,
+        xsecs=[
+            asb.WingXSec(xyz_le=[2.30 + rel_xs[-1], ys[-1], 0.0], chord=c_fwd[-1], airfoil=af_plate),
+            asb.WingXSec(xyz_le=[6.00 + rel_xs[-1], ys[-1], h_box], chord=c_aft[-1], airfoil=af_plate),
+        ],
+    )
+
+    box_airplane = asb.Airplane(
+        name="Discus-2c-BoxWing",
+        xyz_ref=airplane.xyz_ref,
+        wings=[wing_fwd, wing_aft, endplate, airplane.wings[2]],
+        fuselages=airplane.fuselages,
+        s_ref=airplane.s_ref,
+        c_ref=float(main_w.mean_aerodynamic_chord()) * area_split,
+        b_ref=b_span,
+    )
+
+    # 1. Structural loads under +5.3g limit manoeuvre at MTOM
+    v_m = 55.56
+    target_lift = mass_structural * 9.81 * load_factor
+
+    # Solve baseline
+    op_b1 = asb.OperatingPoint(velocity=v_m, alpha=4.0)
+    vb1 = asb.VortexLatticeMethod(airplane=airplane, op_point=op_b1, verbose=False).run()
+    op_b2 = asb.OperatingPoint(velocity=v_m, alpha=8.0)
+    vb2 = asb.VortexLatticeMethod(airplane=airplane, op_point=op_b2, verbose=False).run()
+    dL_da_b = (vb2["L"] - vb1["L"]) / 4.0
+    a_trim_b = 4.0 + (target_lift - vb1["L"]) / dL_da_b
+    sol_b = asb.VortexLatticeMethod(airplane=airplane, op_point=asb.OperatingPoint(velocity=v_m, alpha=a_trim_b), verbose=False)
+    sol_b.run()
+
+    # Solve box-wing
+    op_x1 = asb.OperatingPoint(velocity=v_m, alpha=4.0)
+    vx1 = asb.VortexLatticeMethod(airplane=box_airplane, op_point=op_x1, verbose=False).run()
+    op_x2 = asb.OperatingPoint(velocity=v_m, alpha=8.0)
+    vx2 = asb.VortexLatticeMethod(airplane=box_airplane, op_point=op_x2, verbose=False).run()
+    dL_da_x = (vx2["L"] - vx1["L"]) / 4.0
+    a_trim_x = 4.0 + (target_lift - vx1["L"]) / dL_da_x
+    sol_x = asb.VortexLatticeMethod(airplane=box_airplane, op_point=asb.OperatingPoint(velocity=v_m, alpha=a_trim_x), verbose=False)
+    sol_x.run()
+
+    # Root moments
+    yb = sol_b.vortex_centers[:, 1]
+    xb = sol_b.vortex_centers[:, 0]
+    fzb = sol_b.forces_geometry[:, 2]
+    sb_b = (yb >= 0) & (xb < 4.0)
+    m_root_base = float(np.sum(yb[sb_b] * fzb[sb_b])) / 1000.0
+
+    yx = sol_x.vortex_centers[:, 1]
+    xx = sol_x.vortex_centers[:, 0]
+    zx = sol_x.vortex_centers[:, 2]
+    fzx = sol_x.forces_geometry[:, 2]
+
+    sb_fwd = (yx >= 0) & (xx < 4.0) & (abs(zx) < 1.0)
+    sb_aft = (yx >= 0) & (xx >= 4.0) & (zx > 1.5)
+    m_root_fwd = float(np.sum(yx[sb_fwd] * fzx[sb_fwd])) / 1000.0
+    m_root_aft = float(np.sum(yx[sb_aft] * fzx[sb_aft])) / 1000.0
+    m_root_max = max(m_root_fwd, m_root_aft)
+    bending_relief_pct = (1.0 - m_root_max / m_root_base) * 100.0
+
+    # 2. VLM induced drag coupling
+    v_eval = 27.78
+    res_b2 = asb.VortexLatticeMethod(airplane=airplane, op_point=asb.OperatingPoint(velocity=v_eval, alpha=2.0), verbose=False).run()
+    res_b6 = asb.VortexLatticeMethod(airplane=airplane, op_point=asb.OperatingPoint(velocity=v_eval, alpha=6.0), verbose=False).run()
+    k_base = float((res_b6["CD"] - res_b2["CD"]) / (res_b6["CL"]**2 - res_b2["CL"]**2))
+
+    res_x2 = asb.VortexLatticeMethod(airplane=box_airplane, op_point=asb.OperatingPoint(velocity=v_eval, alpha=2.0), verbose=False).run()
+    res_x6 = asb.VortexLatticeMethod(airplane=box_airplane, op_point=asb.OperatingPoint(velocity=v_eval, alpha=6.0), verbose=False).run()
+    k_box = float((res_x6["CD"] - res_x2["CD"]) / (res_x6["CL"]**2 - res_x2["CL"]**2))
+
+    ar_val = b_span**2 / airplane.s_ref
+    e_base = (1.0 / (np.pi * ar_val)) / k_base
+    e_box = (1.0 / (np.pi * ar_val)) / k_box
+    induced_ratio = k_box / k_base
+
+    # 3. Glide polar synthesis
+    pol_b = glide_polar(airplane, mass=mass_flight, speeds_kmh=speeds_kmh)
+    cdi_box = pol_b["CD_induced"] * induced_ratio
+    cdp_box = pol_b["CD_profile"] + 0.0010
+    cd_box = cdi_box + cdp_box
+    ld_box = pol_b["CL"] / cd_box
+
+    ld_base_max = float(np.max(pol_b["LD"]))
+    ld_box_max = float(np.max(ld_box))
+    v_base_max = float(speeds_kmh[np.argmax(pol_b["LD"])])
+    v_box_max = float(speeds_kmh[np.argmax(ld_box)])
+
+    return {
+        "box_airplane": box_airplane,
+        "m_root_base_kNm": m_root_base,
+        "m_root_fwd_kNm": m_root_fwd,
+        "m_root_aft_kNm": m_root_aft,
+        "m_root_max_kNm": m_root_max,
+        "bending_relief_pct": bending_relief_pct,
+        "k_base": k_base,
+        "k_box": k_box,
+        "e_base": e_base,
+        "e_box": e_box,
+        "induced_drag_reduction_pct": (1.0 - induced_ratio) * 100.0,
+        "ld_base_max": ld_base_max,
+        "ld_box_max": ld_box_max,
+        "delta_ld": ld_box_max - ld_base_max,
+        "v_base_max": v_base_max,
+        "v_box_max": v_box_max,
+        "speeds_kmh": speeds_kmh,
+        "ld_base_arr": pol_b["LD"],
+        "ld_box_arr": ld_box,
+    }
+
+
+
 
 
 
