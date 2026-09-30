@@ -19,7 +19,7 @@ import sys
 import time
 
 from ..config import Notebook
-from ..log import tell
+from ..process.log import tell
 
 
 # How long a run may be silent before the watcher says so, when it has not
@@ -52,7 +52,7 @@ def _alive(run_dir):
     """
     if run_dir is None:
         return None
-    from .. import runstate
+    from ..process import runstate
     return runstate.alive(run_dir)
 
 
@@ -96,7 +96,7 @@ def _quiet_note(idle, limit, run_dir, pid):
         # report "alive but not advancing", which is true, useless, and points
         # at the model or the network rather than at the shell. Seen on a
         # detached run with 3.9 s of CPU behind 7m20s of clock.
-        from .. import runstate
+        from ..process import runstate
         if runstate.stopped({"pid": pid}):
             return (f"          ⚠ pid {pid} is STOPPED, not stalled — suspended "
                     f"by a signal, using no CPU.\n"

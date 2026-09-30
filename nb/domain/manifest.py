@@ -19,7 +19,7 @@ import json
 import re
 import sys
 
-from .config import Notebook
+from ..config import Notebook
 
 TITLE = re.compile(r'^title:\s*"(.+)"\s*$', re.M)
 HERO = re.compile(r"\[([^\]]*)\]\{\.hero-value\}")

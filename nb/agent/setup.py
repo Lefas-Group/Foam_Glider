@@ -21,8 +21,8 @@ What it does NOT do is guarantee a hit. `metrics` keeps `cached_tokens` per run
 for exactly that reason -- a silent drop in the ratio is the only symptom.
 """
 
-from ..client import config, usage
-from .. import prefix as prefix_mod
+from ..agent.client import config, usage
+from ..agent import prefix as prefix_mod
 from ..tools import build as build_tools
 from ..tools.mcp_fs import FileSystem
 

@@ -22,8 +22,8 @@ ENTRY_CEILING notice, and `budgets.aero_cost`.
 import textwrap
 
 from . import kernel
-from .. import budgets
-from ..log import say
+from ..agent import budgets
+from ..process.log import say
 from ..text import tail
 
 
@@ -49,7 +49,7 @@ def _inputs_notice(notebook, chapter):
     Says nothing when the chapter declares nothing -- a notice with no items in
     it is furniture.
     """
-    from ..inputs import committed
+    from ..domain.inputs import committed
     if not chapter:
         return ""
     rows = committed(notebook, chapter)
@@ -61,7 +61,7 @@ def _inputs_notice(notebook, chapter):
     # whole -- it IS the handle, and `foam-thick` is not one -- and reduces an
     # entry stem to its date, which places it against the entries the prefix
     # already lists.
-    from ..inputs import short
+    from ..domain.inputs import short
     listing = "\n".join(
         f"    [{k}] {t}" + (f"   ({h})" if h else "")
         for k, t, w in rows for h in [short(w, chapter)])

@@ -58,8 +58,8 @@ import sys
 import time
 
 from ..config import Notebook
-from ..log import tell
-from .. import coordinator, mailbox, runstate
+from ..process.log import tell
+from ..process import coordinator, mailbox, runstate
 
 POLL = 2.0
 # Long enough to outlive the longest question a run can hold (`mailbox.WAIT`,

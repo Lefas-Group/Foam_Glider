@@ -10,7 +10,7 @@ process had to reconstruct what the first had decided. It does not end there
 any more, so there is nothing to reconstruct.
 """
 
-from .config import PROBE_POOL
+from ..config import PROBE_POOL
 
 
 class Session:

@@ -24,8 +24,8 @@ import re
 import sys
 
 from ..config import Notebook
-from ..log import tell
-from .. import runstate
+from ..process.log import tell
+from ..process import runstate
 
 
 # A run id is a timestamp and a suffix. Anything starting that way was MEANT as

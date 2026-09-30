@@ -23,7 +23,7 @@ import sys
 from ..config import SCAFFOLD, VENDORED, Notebook
 from ..tools.scaffold import NAME as CHAPTER_NAME
 from ..tools.scaffold import create_chapter
-from ..log import say, tell
+from ..process.log import say, tell
 
 # `_freeze/chapters/` is deliberately NOT here -- committing it is what lets a
 # fresh clone render without re-solving. Everything else Quarto writes is a build

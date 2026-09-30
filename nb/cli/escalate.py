@@ -13,8 +13,8 @@ why the two are not one command.
 import sys
 
 from ..config import Notebook
-from ..log import tell
-from .. import coordinator
+from ..process.log import tell
+from ..process import coordinator
 
 
 def _opt(argv, flag):

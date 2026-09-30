@@ -14,8 +14,8 @@ reason for it.
 import sys
 
 from ..config import Notebook
-from ..log import tell
-from .. import coordinator
+from ..process.log import tell
+from ..process import coordinator
 
 
 def main(argv):

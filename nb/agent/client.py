@@ -18,8 +18,8 @@ from google import genai
 from google.genai import types
 
 # Aliased: `config` is already a function in this module.
-from . import config as settings
-from .config import API_TIMEOUT_MS, MODEL, THINKING_LEVEL
+from .. import config as settings
+from ..config import API_TIMEOUT_MS, MODEL, THINKING_LEVEL
 
 _client = None
 

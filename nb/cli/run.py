@@ -33,19 +33,20 @@ import datetime
 import sys
 
 from ..config import MAX_LINT_ATTEMPTS, MAX_RENDER_FIXES, MAX_TURNS, PROBE_POOL
-from ..loop import Stopped, run as drive
-from ..session import Session
+from ..agent.loop import Stopped, run as drive
+from ..agent.session import Session
 from ..preflight import check as preflight
 from ..tools import guards, kernel, verifiers
 from ..tools.interact import ask_pool, ask_render_ceiling, ask_stuck
-from .. import briefs, metrics, runstate
+from ..agent import briefs
+from ..process import metrics, runstate
 from .view import site
-from .common import setup, report, spoken_calls
-from .write import (_ceiling_problem, _commit, _refresh_active,
+from ..agent.setup import setup, report, spoken_calls
+from ..build.publish import (_ceiling_problem, _commit, _refresh_active,
                     _refresh_index_freeze,
                     _refresh_root_index, _render_cost, _resolve, _why_and_diff,
                     answer_line, rendered_prose)
-from ..log import detach_output, detached, open_log, say, tell
+from ..process.log import detach_output, detached, open_log, say, tell
 
 
 # The rendered entry, capped, for `run.json`. Measured at 616 characters on a
@@ -72,7 +73,7 @@ DETAIL = {
 
 def _start(notebook, quiet, answers):
     """Mailbox, fork, log redirection -- identical for a fresh run and a resume."""
-    from ..mailbox import Mailbox
+    from ..process.mailbox import Mailbox
     from ..tools.interact import use_mailbox
     use_mailbox(Mailbox(notebook, answers=answers))
     # Only when this process is not ALREADY detached. A bare `nb resume`
@@ -94,7 +95,7 @@ def _start(notebook, quiet, answers):
         # holding the terminal. To whoever typed the command nothing looks
         # different -- a question appears, they answer it -- but there is one
         # mechanism underneath, and closing the window no longer kills the run.
-        from ..detach import detach_process
+        from ..process.detach import detach_process
         board = None
         if not quiet:
             from .board import follow
@@ -176,7 +177,7 @@ def main(notebook_path, question, verbose=True,
     # ONE WRITER PER CHAPTER, claimed before a single token is spent. Refused
     # rather than queued: two agents in one chapter edit the same
     # `_analysis.py` and the refactor gate then blames whichever asks first.
-    from ..locks import claim_chapter
+    from ..process.locks import claim_chapter
     holder = claim_chapter(notebook, chapter)
     if holder:
         tell(f"\n  {'─' * 70}\n  CHAPTER IS BEING WRITTEN — nothing started\n"
@@ -293,7 +294,7 @@ def resume(notebook_path, run_id=None, allow_refactor=False,
     # ONE WRITER PER CHAPTER, re-claimed by the process taking over. Refused
     # rather than queued: the entry is on disk, so the answer is to resume when
     # the other run is done.
-    from ..locks import claim_chapter
+    from ..process.locks import claim_chapter
     holder = claim_chapter(notebook, chapter)
     if holder:
         tell(f"\n  {'─' * 70}\n  CHAPTER IS BEING WRITTEN — nothing started\n"

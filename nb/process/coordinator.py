@@ -33,7 +33,7 @@ explains.
 import json
 import time
 
-from .config import Notebook
+from ..config import Notebook
 
 DIR = "coordinator"
 POLL = 1.0

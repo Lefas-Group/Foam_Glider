@@ -20,8 +20,8 @@ must not repeat.
 import ast
 import sys
 
-from .config import Notebook, SYSTEM_INSTRUCTION, REFERENCES
-from . import manifest
+from ..config import Notebook, SYSTEM_INSTRUCTION, REFERENCES
+from ..domain import manifest
 
 # Read every run, so they belong in the cached head rather than behind a tool.
 #
@@ -130,7 +130,7 @@ def notebook_context(notebook):
     Callouts only, not the whole page: the rest is the generated lineage
     diagram, which is a picture of the chapters the manifest already lists.
     """
-    from . import lint
+    from .. import lint
     items = lint.notebook_items(notebook.root)
     if not items:
         return ""
@@ -165,7 +165,7 @@ def chapter_context(notebook):
     one, and a handle you cannot see is a handle you cannot use.
     """
     import re
-    from . import lint
+    from .. import lint
     out = []
     for chapter in notebook.chapters():
         d = notebook.chapters_dir / chapter
@@ -316,8 +316,8 @@ def measure(notebook):
     """
     FLOOR = 4096
     from .session import Session
-    from .tools import build as build_tools
-    from .tools.mcp_fs import FileSystem
+    from ..tools import build as build_tools
+    from ..tools.mcp_fs import FileSystem
     from .client import config, complete
 
     text = build(notebook)

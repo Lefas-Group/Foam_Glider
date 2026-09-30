@@ -27,8 +27,8 @@ import sys
 import time
 
 from ..config import Notebook
-from ..log import tell
-from .. import coordinator, mailbox, runstate
+from ..process.log import tell
+from ..process import coordinator, mailbox, runstate
 
 REFRESH = 0.5
 

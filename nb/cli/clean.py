@@ -29,8 +29,8 @@ import subprocess
 import sys
 
 from ..config import Notebook
-from ..log import tell
-from .. import coordinator, runstate
+from ..process.log import tell
+from ..process import coordinator, runstate
 
 KEEP = 5
 # A run id is a timestamp and a suffix; anything shaped like one was MEANT as

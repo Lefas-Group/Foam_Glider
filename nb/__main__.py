@@ -119,7 +119,7 @@ def main(argv):
         if not rest:
             print(USAGE)
             return 2
-        from .phases.new import main as new
+        from .cli.new import main as new
         # THE BRIEF, on the command line. It was always a hand-edit afterwards,
         # and the prefix is built once at `nb ask` -- so forgetting meant a
         # first run with no notebook level in front of the model at all.
@@ -137,7 +137,7 @@ def main(argv):
         if len(rest) < 2:
             print(USAGE)
             return 2
-        from .phases.run import main as ask
+        from .cli.run import main as ask
         # `--detach` is kept as an alias: every run detaches now, and what
         # the flag used to buy -- no board drawn on this terminal -- is what
         # `--quiet` means. It is in old scripts and old muscle memory.
@@ -183,7 +183,7 @@ def main(argv):
         if not rest:
             print(USAGE)
             return 2
-        from .phases.run import resume as write
+        from .cli.run import resume as write
         args = [r for r in rest[1:] if not r.startswith("--")]
         return write(rest[0],
                      run_id=args[0] if args else None,
@@ -196,14 +196,14 @@ def main(argv):
         if not rest:
             print(USAGE)
             return 2
-        from .phases.watch import main as watch
+        from .cli.watch import main as watch
         return watch(rest)
 
     if cmd == "board":
         if not rest:
             print(USAGE)
             return 2
-        from .phases.board import main as board
+        from .cli.board import main as board
         return board(rest)
 
     if cmd in ("note", "escalate", "await", "listen", "direction"):
@@ -211,51 +211,51 @@ def main(argv):
             print(USAGE)
             return 2
         if cmd == "note":
-            from .phases.note import main as run_it
+            from .cli.note import main as run_it
         elif cmd == "direction":
-            from .phases.direction import main as run_it
+            from .cli.direction import main as run_it
         elif cmd == "escalate":
-            from .phases.escalate import main as run_it
+            from .cli.escalate import main as run_it
         elif cmd == "listen":
-            from .phases.listen import main as run_it
+            from .cli.listen import main as run_it
         else:
             # `await` is a keyword, so the module cannot be named for it.
-            from .phases.await_ import main as run_it
+            from .cli.await_ import main as run_it
         return run_it(rest)
 
     if cmd == "answer":
         if len(rest) < 2:
             print(USAGE)
             return 2
-        from .phases.answer import main as answer
+        from .cli.answer import main as answer
         return answer(rest)
 
     if cmd == "stop":
         if not rest:
             print(USAGE)
             return 2
-        from .phases.stop import main as stop
+        from .cli.stop import main as stop
         return stop(rest)
 
     if cmd == "clean":
         if not rest:
             print(USAGE)
             return 2
-        from .phases.clean import main as clean
+        from .cli.clean import main as clean
         return clean(rest)
 
     if cmd == "eval":
         if not rest:
             print(USAGE)
             return 2
-        from .phases.eval import main as evaluate
+        from .cli.eval import main as evaluate
         return evaluate(rest)
 
     if cmd == "view":
         if not rest:
             print(USAGE)
             return 2
-        from .phases.view import main as view
+        from .cli.view import main as view
         return view(rest)
 
     print(f"unknown command {cmd!r}\n\n{USAGE}")

@@ -12,7 +12,7 @@ import subprocess
 
 from ..config import Notebook
 from ..text import tail
-from ..log import say
+from ..process.log import say
 
 
 # Rule 12's message, identified the only way lint's output allows. check.py
@@ -322,7 +322,7 @@ def render(notebook, target="", why="", session=None):
     # measured at 14 s. And it matters more than it looks, because a failed
     # render is handed to the model as something to FIX -- so a race would
     # otherwise present as a bug in an entry that is correct.
-    from ..locks import render_lock
+    from ..process.locks import render_lock
     for attempt in (1, 2):
         with render_lock(notebook) as got:
             if not got:

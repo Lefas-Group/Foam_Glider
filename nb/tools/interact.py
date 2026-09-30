@@ -29,8 +29,8 @@ it was reasonable to ask. Here the cap is only good manners.
 import json
 import re
 
-from ..schema import Input
-from ..log import say, tell
+from ..agent.schema import Input
+from ..process.log import say, tell
 
 
 # Set by `ask` and `write` before anything can be asked. Every run has one:
@@ -54,7 +54,7 @@ def ask_stuck(found, phase):
     nobody being there must all mean carry on. A detector that can kill an
     unattended run when it guesses wrong would be worse than no detector.
     """
-    from .. import stuck
+    from ..agent import stuck
 
     def asker(why, options, default):
         tell(f"\n{'─' * 72}\nNO PROGRESS — {phase} phase\n{'─' * 72}")
@@ -328,8 +328,8 @@ def confirm_inherited(notebook, chapter, parent=None):
     that can strand an unattended run is worse than one that occasionally
     carries an item too many.
     """
-    from ..inputs import ancestry, inherited
-    from ..inputs import short as _short
+    from ..domain.inputs import ancestry, inherited
+    from ..domain.inputs import short as _short
     items, superseded = inherited(notebook, chapter, parent)
     if not items:
         return [], []
@@ -449,7 +449,7 @@ def ask_specified(session, name, why, kind="specified", options="",
     #
     # NOT when `replaces` is given: that IS the deliberate change, and naming
     # the item is how you say so.
-    from ..inputs import settled
+    from ..domain.inputs import settled
     already = None if replaces else settled(
         session.notebook, session.chapter, name)
     if already:
@@ -674,7 +674,7 @@ def fork_chapter(session, name, title, defines):
     only ever return `rejected: already exists`, and it made ownership
     ambiguous on the one path that is structurally irreversible.
     """
-    from ..locks import claim_chapter, release_chapter
+    from ..process.locks import claim_chapter, release_chapter
     from ..tools.guards import bodies
     from ..tools.scaffold import create_chapter
     notebook = session.notebook
@@ -748,7 +748,7 @@ def fork_chapter(session, name, title, defines):
     session.before_bodies = {n: bodies(d / n)
                              for n in ("_model.py", "_analysis.py")}
     session.siblings = len(notebook.entries(name))
-    from .. import runstate
+    from ..process import runstate
     runstate.write(notebook, chapter=name)
     if session.metrics is not None:
         session.metrics.set(chapter=name)
@@ -758,7 +758,7 @@ def fork_chapter(session, name, title, defines):
 
 def _inherited_note(session):
     """What the user agreed the new chapter carries, for the model to honour."""
-    from ..inputs import short as _short
+    from ..domain.inputs import short as _short
     kept, struck = session.inherited_kept, session.inherited_struck
     if not (kept or struck):
         return ""
@@ -846,7 +846,7 @@ def declare_input(session, name, value="", source="guessed", why="",
     item = Input(name=name, value=str(value) or None, source=source,
                  why=" ".join(str(why).split()))
     if replaces:
-        from ..inputs import committed, short
+        from ..domain.inputs import committed, short
         rows = committed(session.notebook, session.chapter)
         hit = next((r for r in rows if r[2] == replaces), None)
         if hit is None:
@@ -933,8 +933,9 @@ def open_entry(session, title, inputs_none_because=""):
     Everything here is a refusal the model can act on and then retry. Nothing
     here ends the run.
     """
-    from .. import briefs, runstate
-    from ..phases.write import _stem
+    from ..agent import briefs
+    from ..process import runstate
+    from ..build.publish import _stem
     import datetime
     notebook = session.notebook
     title = " ".join(str(title).split())

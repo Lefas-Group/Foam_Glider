@@ -22,7 +22,7 @@ import sqlite3
 import sys
 
 from ..config import Notebook
-from ..log import tell
+from ..process.log import tell
 
 QUERY = """
 SELECT model,
@@ -56,7 +56,7 @@ def main(argv):
     # A reader migrates too: a notebook whose last run predates a column would
     # otherwise fail with `no such column` on a query the writer was protected
     # from. The added columns read NULL, which is the truth -- nobody counted.
-    from .. import metrics
+    from ..process import metrics
     metrics.migrate(con)
     rows = list(con.execute(QUERY))
     if not rows:

@@ -3,7 +3,7 @@ Everything that happens to an entry after the model stops typing.
 
 NOT A PHASE ANY MORE. This was `nb write`, the second half of a two-process run
 reading `proposal.json`; the run does not stop in the middle now, so the loop
-and the gates live together in `phases/run.py` and what is left here is the
+and the gates live together in `cli/run.py` and what is left here is the
 machinery they call -- stem allocation, the ceiling read, the freeze refreshes,
 the commit, and the rendered prose that gets printed at the end.
 
@@ -21,8 +21,8 @@ import time
 
 from ..config import Notebook
 from ..tools import verifiers
-from .. import runstate
-from ..log import tell
+from ..process import runstate
+from ..process.log import tell
 
 def _stem(notebook, chapter, title, today):
     """
@@ -231,7 +231,7 @@ def _refresh_active(notebook):
     A failed render is reported and not fatal. The page is one tick behind; the
     entry that this run actually wrote is unaffected, and rule 40 will say so.
     """
-    from ..inputs import refresh_active
+    from ..domain.inputs import refresh_active
     moved = refresh_active(notebook)
     if not moved:
         return []

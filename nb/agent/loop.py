@@ -25,8 +25,8 @@ and then a different way later.
 import json
 
 from .client import complete, usage
-from .config import MAX_TURNS
-from .log import thought
+from ..config import MAX_TURNS
+from ..process.log import thought
 from .stuck import Detector
 
 

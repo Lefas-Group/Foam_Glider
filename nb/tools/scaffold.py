@@ -13,7 +13,7 @@ import re
 import shutil
 
 from ..config import SCAFFOLD
-from ..log import say
+from ..process.log import say
 
 NAME = re.compile(r"^\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$")
 
@@ -79,7 +79,7 @@ def _allocate(notebook, slug, start=None):
     under the lock, so a caller that guesses wrong walks forward instead of
     landing on top of an existing chapter.
     """
-    from ..locks import held
+    from ..process.locks import held
     with held(notebook.scratch / "alloc.lock", timeout=60):
         n = int(start) if start is not None else next_number(notebook)
         for _ in range(100):
@@ -316,7 +316,7 @@ def create_chapter(notebook, name, title, defines="", number=None,
     # committed anything -- and a chapter whose first render found no
     # `_active.yml` would show an empty page where it inherits ten items, then
     # quietly gain them later with nothing to say why.
-    from ..inputs import write_active
+    from ..domain.inputs import write_active
     write_active(notebook, name)
 
     _sidebar_add(notebook, name)

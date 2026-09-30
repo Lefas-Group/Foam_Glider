@@ -19,7 +19,7 @@ import subprocess
 import sys
 
 from ..config import Notebook
-from ..log import say, tell
+from ..process.log import say, tell
 
 
 def _unfrozen(notebook):
@@ -76,7 +76,7 @@ def site(notebook, force=False, verbose=True, page=None,
     # to it. What was lost is the site rebuild, silently, on whichever run came
     # second -- leaving the notebook's index and sidebar stale and no obvious
     # reason why.
-    from ..locks import render_lock
+    from ..process.locks import render_lock
     from ..tools.verifiers import pages, render_plan
     for attempt in (1, 2):
         with render_lock(notebook) as got:

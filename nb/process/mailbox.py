@@ -170,7 +170,7 @@ class Mailbox:
                 # a run to stop and having it sit there for the rest of the hour
                 # would make the command a lie.
                 if runstate.stop_requested(self.notebook):
-                    from .loop import Stopped
+                    from ..agent.loop import Stopped
                     raise Stopped(f"stopped while waiting on {name!r}")
                 try:
                     a = json.loads(self.notebook.answer_path.read_text())

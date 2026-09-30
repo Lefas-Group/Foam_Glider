@@ -109,7 +109,7 @@ class Run:
     """Accumulates a run's numbers; writes one row on close."""
 
     def __init__(self, notebook, phase, question=""):
-        from .config import MODEL, THINKING_LEVEL
+        from ..config import MODEL, THINKING_LEVEL
         self.notebook = notebook
         self.t0 = time.time()
         self.row = dict(
@@ -122,7 +122,7 @@ class Run:
             outcome="incomplete", duration_s=0.0)
 
     def turn(self, resp):
-        from .client import usage
+        from ..agent.client import usage
         prompt, cached, out, thinking = usage(resp)
         self.row["turns"] += 1
         self.row["prompt_tokens"] += prompt
@@ -196,7 +196,7 @@ def summary(notebook):
 
 
 def main(argv):
-    from .config import Notebook
+    from ..config import Notebook
     if not argv:
         print("usage: uv run --group nb python -m nb.metrics <notebook>")
         return 2

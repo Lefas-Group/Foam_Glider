@@ -13,8 +13,8 @@ starts.
 import sys
 
 from ..config import Notebook
-from ..log import tell
-from .. import coordinator, mailbox
+from ..process.log import tell
+from ..process import coordinator, mailbox
 
 
 def main(argv):
