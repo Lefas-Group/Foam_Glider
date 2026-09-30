@@ -39,6 +39,7 @@ website:
       - auto: "chapters/03-box-wing-configuration"
       - auto: "chapters/04-canard-configuration"
       - auto: "chapters/05-strut-braced-wing"
+      - auto: "chapters/06-tandem-wing-configuration"
 
 format:
   html:

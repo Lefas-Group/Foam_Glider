@@ -1582,6 +1582,180 @@ def sbw_strut_buckling_analysis(
     }
 
 
+def sbw_jury_strut_analysis(
+    airplane: asb.Airplane,
+    c_jury: float = 0.04,
+    t_skin_jury: float = 0.0010,
+    m_fittings_jury: float = 1.0,
+    speeds_kmh: np.ndarray = None,
+    mass_flight: float = 417.0,
+    load_factor_neg: float = -2.65,
+    p_comp_limit_kN: float = 27.929,
+) -> dict:
+    """Analyze jury strut sub-bay Euler column buckling, mass, and aerodynamic drag penalty."""
+    if speeds_kmh is None:
+        speeds_kmh = np.array([90.0, 98.0, 105.0, 115.0])
+
+    # 1. Main strut cross-section properties
+    c_strut = 0.12
+    af = asb.Airfoil("hq010").repanel(n_points_per_side=200)
+    c_pts = af.coordinates
+    x_pts = c_pts[:, 0] * c_strut
+    y_pts = c_pts[:, 1] * c_strut
+
+    dl = np.sqrt(np.diff(x_pts) ** 2 + np.diff(y_pts) ** 2)
+    y_mid_pts = 0.5 * (y_pts[:-1] + y_pts[1:])
+    perimeter = float(np.sum(dl))
+    t_skin = 0.0012
+    A_shell = perimeter * t_skin
+    I_xx_shell = float(np.sum(y_mid_pts**2 * dl) * t_skin)
+
+    # Tensile core sized for +5.3g tension (42.235 kN) with FS=1.5 and sigma_allow=350 MPa
+    T_pos_bal = 42235.17
+    sigma_allow = 350e6
+    A_core = 1.5 * T_pos_bal / sigma_allow
+    h_core = 0.009
+    b_core = A_core / h_core
+    I_xx_core = (1.0 / 12.0) * b_core * h_core**3
+
+    A_total = A_shell + A_core
+    I_xx_total = I_xx_shell + I_xx_core
+    E_comp = 70e9
+
+    # Main strut length
+    x1, y1, z1 = 2.40, 0.20, -0.30
+    x2, y2, z2 = 2.30 + 0.045 + 0.35 * 0.6653, 4.50, 0.15 + 4.50 * np.tand(3.0)
+    L_strut = float(np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2))
+
+    # Unbraced vs jury-braced Euler buckling
+    P_comp_bal = p_comp_limit_kN * 1e3
+    P_cr_0 = float(np.pi**2 * E_comp * I_xx_total / L_strut**2)
+
+    # Sub-bay length with midpoint brace
+    L_sub = L_strut / 2.0
+    P_cr_jury = float(np.pi**2 * E_comp * I_xx_total / L_sub**2)
+    P_cr_jury_clamp = float(np.pi**2 * E_comp * I_xx_total / (0.5 * L_sub) ** 2)
+    P_cr_jury_clamppin = float(np.pi**2 * E_comp * I_xx_total / (0.7 * L_sub) ** 2)
+
+    overload_0 = float(P_comp_bal / P_cr_0)
+    overload_jury = float(P_comp_bal / P_cr_jury)
+    overload_jury_clamp = float(P_comp_bal / P_cr_jury_clamp)
+
+    n_buckle_0 = float(-abs(load_factor_neg) / overload_0)
+    n_buckle_jury = float(-abs(load_factor_neg) / overload_jury)
+
+    # Required bays to prevent buckling under P_comp_bal
+    n_bays_req = float(np.sqrt(P_comp_bal / P_cr_0))
+
+    # 2. Jury strut geometry
+    x_mid = 0.5 * (x1 + x2)
+    y_mid = 0.5 * (y1 + y2)
+    z_mid = 0.5 * (z1 + z2)
+
+    c_wing_mid = float(np.interp(y_mid, [2.1, 4.5], [0.7646, 0.6653]))
+    x_le_wing_mid = 2.30 + float(np.interp(y_mid, [2.1, 4.5], [-0.040, 0.045]))
+    z_wing_mid = 0.15 + y_mid * np.tand(3.0)
+
+    x_front_spar = x_le_wing_mid + 0.20 * c_wing_mid
+    x_rear_spar = x_le_wing_mid + 0.60 * c_wing_mid
+
+    L_j1 = float(np.sqrt((x_front_spar - x_mid) ** 2 + (z_wing_mid - z_mid) ** 2))
+    L_j2 = float(np.sqrt((x_rear_spar - x_mid) ** 2 + (z_wing_mid - z_mid) ** 2))
+    L_j_total_per_wing = L_j1 + L_j2
+    L_j_total_both = 2.0 * L_j_total_per_wing
+
+    # 3. Jury strut mass
+    rho_comp = 1550.0
+    peri_j = 2.05 * c_jury
+    A_j_wall = peri_j * t_skin_jury
+    m_j_tubes = float(L_j_total_both * A_j_wall * rho_comp)
+    m_j_total = m_j_tubes + m_fittings_jury
+
+    # Baseline aircraft mass
+    m_strut_single = float(A_total * rho_comp * L_strut + 2.0)
+    m_sbw_base = mass_flight + 2.0 * m_strut_single
+    m_sbw_jury = m_sbw_base + m_j_total
+
+    # 4. Aerodynamic model with jury struts
+    af_j = asb.Airfoil("hq010")
+    j1 = asb.Wing(
+        name="Jury1",
+        symmetric=True,
+        xsecs=[
+            asb.WingXSec(xyz_le=[x_mid - 0.25 * c_jury, y_mid, z_mid], chord=c_jury, airfoil=af_j),
+            asb.WingXSec(xyz_le=[x_front_spar - 0.25 * c_jury, y_mid, z_wing_mid], chord=c_jury, airfoil=af_j),
+        ],
+    )
+    j2 = asb.Wing(
+        name="Jury2",
+        symmetric=True,
+        xsecs=[
+            asb.WingXSec(xyz_le=[x_mid - 0.25 * c_jury, y_mid, z_mid], chord=c_jury, airfoil=af_j),
+            asb.WingXSec(xyz_le=[x_rear_spar - 0.25 * c_jury, y_mid, z_wing_mid], chord=c_jury, airfoil=af_j),
+        ],
+    )
+
+    fuse_ref = airplane.fuselages[0]
+    airplane_jury = asb.Airplane(
+        name="Discus-2c-SBW-Jury",
+        xyz_ref=airplane.xyz_ref,
+        wings=[airplane.wings[0], airplane.wings[1], airplane.wings[2], airplane.wings[3], j1, j2],
+        fuselages=[fuse_ref],
+        s_ref=airplane.s_ref,
+        c_ref=airplane.c_ref,
+        b_ref=airplane.b_ref,
+    )
+
+    pol_base = glide_polar(airplane, mass=m_sbw_base, speeds_kmh=speeds_kmh)
+    pol_jury = glide_polar(airplane_jury, mass=m_sbw_jury, speeds_kmh=speeds_kmh)
+
+    best_b = int(np.argmax(pol_base["LD"]))
+    best_j = int(np.argmax(pol_jury["LD"]))
+
+    ld_base = float(pol_base["LD"][best_b])
+    ld_jury = float(pol_jury["LD"][best_j])
+    delta_ld = ld_jury - ld_base
+
+    speed_eval = 98.0
+    idx_eval = int(np.argmin(abs(speeds_kmh - speed_eval)))
+    cd_base = float(pol_base["CD"][idx_eval])
+    cd_jury = float(pol_jury["CD"][idx_eval])
+    delta_cd_counts = (cd_jury - cd_base) * 1e4
+
+    return {
+        "P_comp_bal_kN": P_comp_bal / 1e3,
+        "P_cr_0_kN": P_cr_0 / 1e3,
+        "P_cr_jury_kN": P_cr_jury / 1e3,
+        "P_cr_jury_clamp_kN": P_cr_jury_clamp / 1e3,
+        "P_cr_jury_clamppin_kN": P_cr_jury_clamppin / 1e3,
+        "L_strut_m": L_strut,
+        "L_sub_m": L_sub,
+        "overload_0": overload_0,
+        "overload_jury": overload_jury,
+        "overload_jury_clamp": overload_jury_clamp,
+        "n_buckle_0": n_buckle_0,
+        "n_buckle_jury": n_buckle_jury,
+        "n_bays_req": n_bays_req,
+        "L_j1_m": L_j1,
+        "L_j2_m": L_j2,
+        "L_j_total_m": L_j_total_both,
+        "m_j_tubes_kg": m_j_tubes,
+        "m_j_fittings_kg": m_fittings_jury,
+        "m_j_total_kg": m_j_total,
+        "m_sbw_base_kg": m_sbw_base,
+        "m_sbw_jury_kg": m_sbw_jury,
+        "ld_base": ld_base,
+        "ld_jury": ld_jury,
+        "delta_ld": delta_ld,
+        "delta_cd_counts": delta_cd_counts,
+        "speeds_kmh": speeds_kmh,
+        "pol_base": pol_base,
+        "pol_jury": pol_jury,
+        "airplane_jury": airplane_jury,
+    }
+
+
+
 
 
 

@@ -1,0 +1,102 @@
+---
+title: "Does a jury strut fix negative-g buckling, and what penalty does it cost?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 158.2      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+out = sbw_jury_strut_analysis(airplane)
+
+p_comp_kn = float(out["P_comp_bal_kN"])
+p_cr_0_kn = float(out["P_cr_0_kN"])
+p_cr_jury_kn = float(out["P_cr_jury_kN"])
+p_cr_clamp_kn = float(out["P_cr_jury_clamp_kN"])
+l_sub = float(out["L_sub_m"])
+l_strut = float(out["L_strut_m"])
+overload_0 = float(out["overload_0"])
+overload_jury = float(out["overload_jury"])
+overload_clamp = float(out["overload_jury_clamp"])
+n_buckle_0 = float(out["n_buckle_0"])
+n_buckle_jury = float(out["n_buckle_jury"])
+n_bays_req = float(out["n_bays_req"])
+n_struts_req = n_bays_req - 1.0
+
+m_jury_kg = float(out["m_j_total_kg"])
+m_tubes_kg = float(out["m_j_tubes_kg"])
+m_fittings_kg = float(out["m_j_fittings_kg"])
+delta_cd_counts = float(out["delta_cd_counts"])
+ld_base = float(out["ld_base"])
+ld_jury = float(out["ld_jury"])
+delta_ld = float(out["delta_ld"])
+```
+
+::: {.hero}
+[`{python} f"{overload_jury:.0f}×"`]{.hero-value}
+[ratio of negative limit compressive load to jury-braced Euler buckling capacity]{.hero-label}
+:::
+
+**Answer.** Adding a two-member jury strut halves the unbraced length to [`{python} f"{l_sub:.2f} m"`]{.key}, quadrupling Euler buckling capacity to [`{python} f"{p_cr_jury_kn:.2f} kN"`]{.key}. However, under the [`{python} f"{p_comp_kn:.1f} kN"`]{.key} compression identified in [negative limit analysis](2026-09-30-03-does-the-tension-sized-strut-buckle-under-the-jar-22-2-65g-negative-li.qmd), the strut remains overloaded by [`{python} f"{overload_jury:.0f}×"`]{.key} ([`{python} f"{overload_clamp:.0f}×"`]{.key} clamped) and buckles at just [`{python} f"{n_buckle_jury:.3f}g"`]{.key} (@fig-jury-strut-trade). Preventing buckling requires [`{python} f"{n_bays_req:.0f}"`]{.key} bays ([`{python} f"{n_struts_req:.0f}"`]{.key} jury struts per wing). The jury truss adds [`{python} f"{m_jury_kg:.2f} kg"`]{.key} mass and [`{python} f"{delta_cd_counts:.2f}"`]{.key} drag counts, reducing best glide ratio by [`{python} f"{abs(delta_ld):.2f}"`]{.key} points.
+
+::: {.callout-note}
+## New assumptions
+1. **jury strut chord: 40 mm**, streamlined HQ010 composite blade.
+2. **jury strut fittings: 1.0 kg**, hardware for both wings.
+:::
+
+```{python}
+#| label: fig-jury-strut-trade
+#| fig-cap: "Left: Critical Euler buckling load versus unbraced segment length comparing unbraced, jury-braced, and required multi-bay configurations against negative limit demand. Right: Glide polar comparison between baseline SBW and jury-braced SBW."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
+
+# Subplot 1: Buckling capacity vs unbraced column length
+E_comp = 70e9
+I_xx = 6667.8e-12
+lengths = np.linspace(0.3, 5.0, 100)
+p_cr_pin_curve = (np.pi**2 * E_comp * I_xx / lengths**2) / 1e3
+p_cr_clamp_curve = (np.pi**2 * E_comp * I_xx / (0.5 * lengths)**2) / 1e3
+
+ax1.plot(lengths, p_cr_pin_curve, color="crimson", lw=2.0, label="Pinned ($K=1.0$)")
+ax1.plot(lengths, p_cr_clamp_curve, color="forestgreen", lw=1.8, ls="--", label="Clamped ($K=0.5$)")
+ax1.axhline(p_comp_kn, color="darkred", ls="-.", lw=1.8, label=f"-2.65g Demand ({p_comp_kn:.1f} kN)")
+
+ax1.scatter([l_strut], [p_cr_0_kn], color="crimson", s=50, zorder=5, label=f"Unbraced ($P_{{cr}}={p_cr_0_kn:.2f}$ kN)")
+ax1.scatter([l_sub], [p_cr_jury_kn], color="navy", s=50, zorder=5, label=f"Jury-Braced ($P_{{cr}}={p_cr_jury_kn:.2f}$ kN)")
+ax1.axvline(l_sub, color="navy", ls=":", lw=1.2)
+
+ax1.set_xlabel("Unbraced Segment Length $L$ (m)")
+ax1.set_ylabel("Critical Buckling Load $P_{cr}$ (kN)")
+ax1.set_title("Euler Buckling Capacity vs Segment Length", fontsize=10)
+ax1.set_ylim(0, 35)
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="upper right", fontsize=7.5)
+
+# Subplot 2: Glide polar comparison
+speeds = out["speeds_kmh"]
+ld_b = out["pol_base"]["LD"]
+ld_j = out["pol_jury"]["LD"]
+
+ax2.plot(speeds, ld_b, color="royalblue", lw=2.2, label=f"Baseline SBW (max L/D = {ld_base:.2f})")
+ax2.plot(speeds, ld_j, color="darkorange", lw=2.0, ls="--", label=f"With Jury Strut (max L/D = {ld_jury:.2f})")
+
+ax2.set_xlabel("Airspeed $V$ (km/h)")
+ax2.set_ylabel("Glide Ratio $L/D$")
+ax2.set_title("Glide Ratio Penalty from Jury Strut", fontsize=10)
+ax2.grid(True, alpha=0.3)
+ax2.legend(loc="lower center", fontsize=7.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(sbw_jury_strut_analysis)
+```
