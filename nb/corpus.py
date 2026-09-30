@@ -97,7 +97,15 @@ EXPECTED = {
     # the first two drafts of rule 41 scored 5 and 3 across the corpus, hitting
     # unit conversions, specified launch heights, and the cited baseline half of
     # every before/after entry. This baseline is what made those visible.
-    "optimised-glider-notebook": (83, 110),
+    #
+    # -0/-3 when rules 21/22 stopped counting entry usage with a
+    # `\bname\s*\(` regex and started using `entry_calls`. The regex required a
+    # literal open-paren, so a helper PASSED to another function -- the whole
+    # idiom of a parameterised chapter -- read as dead. Three of these four
+    # chapters do it. The count falling is the false positives going, not
+    # coverage: chapter 04 of RADICAL-GLIDER still reports its four genuinely
+    # unreferenced helpers, and this notebook keeps thirteen of its own.
+    "optimised-glider-notebook": (83, 107),
 }
 
 

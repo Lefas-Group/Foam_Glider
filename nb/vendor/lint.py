@@ -252,14 +252,45 @@ def _defs_of(chapter):
     return defs
 
 
+def _passed_names(tree):
+    """
+    Bare identifiers handed to a call as arguments -- `f(helper)`, not `f()`.
+
+    A PARAMETERISED CHAPTER USES ITS HELPERS THIS WAY. `optimize_geometry_for_
+    sink_rate(get_airplane_plate, alpha_max=5.75)` calls the optimiser and
+    *passes* the vehicle, so `get_airplane_plate` is an `ast.Name` argument and
+    never an `ast.Call`. Counting calls alone therefore reported the most used
+    function in the chapter as dead: `get_airplane_plate()` was flagged with
+    three entries depending on it, and chapter 04 carried four more of exactly
+    the same shape.
+
+    `rendered_by_footer` already reads bare names out of `footer(...)` for the
+    same reason -- "both take live function objects". This is that allowance,
+    applied to every call rather than to one.
+    """
+    out = set()
+    for c in ast.walk(tree):
+        if not isinstance(c, ast.Call):
+            continue
+        for a in list(c.args) + [k.value for k in c.keywords]:
+            if isinstance(a, ast.Name):
+                out.add(a.id)
+    return out
+
+
 def entry_calls(text):
     """
-    Every function name an entry calls, from its cells AND its inline expressions.
+    Every function name an entry calls, from its cells AND its inline
+    expressions -- plus every bare name it PASSES to a call.
 
     The inline half is not optional: a value quoted only in prose, as
     `{python} f"{trim(ap)['alpha']:.1f}"`, is a call that appears in no cell, and
     an entry whose only use of a helper is in its answer sentence is exactly the
     shape that would otherwise slip through unrendered.
+
+    The passed-name half is not optional either, for the reason `_passed_names`
+    gives: a helper handed to another function is used, and a rule that cannot
+    see that calls the chapter's workhorse dead.
     """
     sources = re.findall(r"```\{python\}(.*?)```", text, re.S)
     called = set()
@@ -272,6 +303,7 @@ def entry_calls(text):
         called |= {(c.func.attr if isinstance(c.func, ast.Attribute)
                     else getattr(c.func, "id", None))
                    for c in ast.walk(tree) if isinstance(c, ast.Call)}
+        called |= _passed_names(tree)
     for expr in re.findall(r"`\{python\}([^`]*)`", text):
         try:
             tree = ast.parse(expr.strip(), mode="eval")
@@ -280,6 +312,7 @@ def entry_calls(text):
         called |= {(c.func.attr if isinstance(c.func, ast.Attribute)
                     else getattr(c.func, "id", None))
                    for c in ast.walk(tree) if isinstance(c, ast.Call)}
+        called |= _passed_names(tree)
     return called
 
 
@@ -904,9 +937,16 @@ def _shared_hygiene(root, chapters, entries):
         f_analysis = chapter / "_analysis.py"
 
         # Who calls what, from the entries.
-        called_by_entries = {n: sum(1 for e in mine
-                                    if re.search(rf"\b{re.escape(n)}\s*\(", e.read_text()))
-                             for n in shared}
+        #
+        # `entry_calls`, NOT a `\bname\s*\(` regex. The regex needed a literal
+        # open-paren after the name, so it saw `helper()` and missed
+        # `optimise(helper)` -- and a parameterised chapter passes its vehicle
+        # far more often than it calls it. That reported `get_airplane_plate()`
+        # dead while three entries depended on it, and four more in chapter 04
+        # the same way. One definition of "used", shared with the render-scope
+        # closure in check.py, instead of two that disagree.
+        used = [entry_calls(e.read_text()) for e in mine]
+        called_by_entries = {n: sum(1 for u in used if n in u) for n in shared}
         # Every definition in the chapter, not just `_analysis.py`: a helper
         # called only from `_model.py` is still called.
         called_internally = {

@@ -37,7 +37,11 @@ EXPOSED = ("read_text_file", "list_directory",
 # The server's own descriptions are written for a general audience. These say
 # what the tool is for HERE, which is what changes whether it gets reached for.
 NOTES = {
-    "read_text_file": " Use head/tail to read a slice rather than a whole file.",
+    # "one OR the other" because the server rejects both together -- a
+    # constraint that was discoverable only by violating it, which cost a turn
+    # and then two more re-reading the file to recover.
+    "read_text_file": " Use head OR tail -- not both, the server refuses that --"
+                      " to read a slice rather than a whole file.",
     "edit_file": " The default path for changing an existing file. Set dryRun to"
                  " preview a diff first.",
     "write_file": " Creation only -- a full overwrite. Use edit_file to modify.",

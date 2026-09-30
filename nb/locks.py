@@ -81,6 +81,17 @@ def render_lock(notebook):
 _claimed = []
 
 
+def _pid_alive(pid):
+    """Is `pid` still running? Signal 0 checks without delivering anything."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True             # someone else's process, but it is there
+    return True
+
+
 def claim(path):
     """
     Take `path` exclusively for the life of this process, or refuse at once.
@@ -106,6 +117,21 @@ def claim(path):
         fh.seek(0)
         holder = fh.read().strip()
         fh.close()
+        # SAY WHETHER THE HOLDER IS STILL THERE. `metrics.Run.close()` writes
+        # the run's outcome -- which is what wakes `nb listen` -- before the
+        # process finishes tearing down and drops this flock, so a coordinator
+        # acting the instant it sees a run end can arrive while the lock is
+        # still held by a process that is already on its way out. Measured
+        # 2026-09-29: two refusals in a row, both naming a pid that was gone by
+        # the time anyone looked.
+        #
+        # The refusal itself stays -- a held lock is a held lock, and waiting is
+        # what `claim` deliberately does not do. What changes is that the
+        # message no longer sends the reader hunting a live process that is not
+        # there. A pid we cannot parse is reported unchanged.
+        if holder.isdigit() and not _pid_alive(int(holder)):
+            return (f"{holder} (already exiting — its lock is not yet released; "
+                    f"ask again in a moment)")
         return holder or "another process"
     fh.seek(0)
     fh.truncate()

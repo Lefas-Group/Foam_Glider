@@ -91,6 +91,35 @@ def _inputs_notice(notebook, chapter):
             f"exists to prevent.]")
 
 
+# The chapter's modules, as a probe keeps trying to import them.
+_SCOPE_MODULES = ("_analysis", "_model", "_notebook")
+
+
+def _scope_hint(out):
+    """
+    One line appended to a failed probe that tried to IMPORT the chapter, or
+    referenced one of its names as though it had.
+
+    Measured 2026-09-29: three of the four opening turns across two runs, on two
+    different models, were lost to `ModuleNotFoundError: No module named
+    '_analysis'`. The rule is already stated twice -- in this tool's own schema
+    ("The chapter's names are in scope; do not import it") and as rule 29 -- and
+    was ignored both times. A third statement of a rule that is already present
+    and already ignored is not a fix; saying it at the moment it is violated is,
+    because that is when the model is looking.
+
+    Deliberately NOT a rewrite of the traceback: the traceback is the evidence,
+    and a tool that edits what the interpreter said teaches the model to
+    distrust its own output.
+    """
+    if not any(f"'{m}'" in out or f"named {m}" in out for m in _SCOPE_MODULES):
+        return ""
+    return ("\n[the chapter is already exec'd into this probe -- `_model.py` and "
+            "`_analysis.py` are NOT importable modules here (rule 29). Drop the "
+            "import and use the name directly; `api()` at the top of the probe "
+            "output lists what is in scope.]")
+
+
 def run_probe(notebook, chapter, question, session=None, budget_s=None):
     """Execute `question` as Python with the chapter preloaded. Returns stdout."""
     # `_probe_base` falls back to the first chapter alphabetically when
@@ -165,7 +194,7 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None):
                            text=True, timeout=timeout)
         out = (r.stdout or "") + (r.stderr or "")
         if r.returncode != 0:
-            out += f"\n[exit {r.returncode}]"
+            out += f"\n[exit {r.returncode}]" + _scope_hint(out)
     except subprocess.TimeoutExpired as e:
         # `_notebook.py`'s own watchdog should have fired first and said why;
         # reaching here means it did not. Partial output is still worth having.

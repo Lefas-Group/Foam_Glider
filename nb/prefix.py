@@ -272,7 +272,16 @@ def build(notebook, chapter=None):
         f"`{notebook.root.name}`. Entries live at "
         f"`chapters/NN-name/YYYY-MM-DD-NN-slug.qmd`; the trailing NN orders "
         f"same-day entries. File paths you pass to the file tools are relative "
-        f"to `chapters/`.\n",
+        f"to `chapters/`.\n"
+        # Both of these were reached for and refused, one turn each, in two
+        # runs on 2026-09-29 -- and the brief was already reproduced below the
+        # model at the time. `chapters/` is the file tools' whole world, so
+        # anything above it is not a file as far as this run is concerned.
+        f"\nTwo things live ABOVE `chapters/` and are therefore not readable "
+        f"or writable by the file tools, so do not spend a turn trying: the "
+        f"brief `_inputs.yml`, which is reproduced in full further down this "
+        f"prompt, and the front page `index.qmd`, which is generated and "
+        f"re-rendered for you before every commit.\n",
         "\n# What is already recorded\n",
         "One line per entry: the stem (rule 10 links siblings by stem, never "
         "names them in prose) and the answer it reached. If something you compute "
