@@ -181,8 +181,31 @@ class FileSystem:
                              f"{len(c.data)} b64 chars]")
         out = "\n".join(parts) if parts else "(no content)"
         if getattr(res, "isError", False):
-            return f"error: {out}"
+            return f"error: {out}" + self._path_hint(out)
         return head(out)
+
+    def _path_hint(self, out):
+        """
+        One line on a missing path, saying what the root actually is.
+
+        `_abs` above rewrites every path to live under `chapters/`, which is the
+        server's allowed directory -- so `search_files(path="nb")` became a
+        scandir of `chapters/nb` and came back as a bare ENOENT. Measured once:
+        the model was hunting on disk for the linter, which it already had as a
+        tool, and the error told it only that the guess was wrong rather than
+        that the guess was unreachable by construction.
+
+        Says the root and stops. NOT a list of what is there -- a wrong path is
+        usually a wrong idea about the layout rather than a typo, and a
+        directory listing invites picking the nearest-looking entry.
+        """
+        if "ENOENT" not in out:
+            return ""
+        return (f"\n[every path here resolves under `{self.allowed}`, the only "
+                f"directory this server can reach. `nb/` and the notebook root "
+                f"are outside it: the tooling is not readable from a tool, and "
+                f"the chapter's own files are `_model.py`, `_analysis.py` and "
+                f"the entries beside them.]")
 
     def handlers(self):
         return {t.name: (lambda n: lambda **kw: self.call(n, kw))(t.name)

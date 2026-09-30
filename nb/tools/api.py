@@ -10,16 +10,68 @@ other way in; here the functions are plain callables and the index is built from
 the INSTALLED package on first use, so there is nothing to go stale.
 """
 
+import ast
+import functools
 import json
+import pathlib
 
 from ..text import head
+
+
+@functools.cache
+def _furniture():
+    """
+    The notebook helpers `api_search` does NOT index, by name.
+
+    Read out of `vendor/notebook.py` rather than listed here, so it cannot go
+    stale the way a hand-kept list does -- the same reason `api()` introspects
+    instead of quoting.
+
+    Public names only: a probe reaching for `_render_inputs` is not the case
+    this exists for.
+    """
+    src = pathlib.Path(__file__).parent.parent / "vendor" / "notebook.py"
+    tree = ast.parse(src.read_text())
+    return sorted(n.name for n in tree.body
+                  if isinstance(n, ast.FunctionDef) and not n.name.startswith("_"))
+
+
+def _miss(query):
+    """
+    What a miss should say, which is not "no".
+
+    MEASURED, twice. `api_search("md_table")` returned a bare `no match for
+    'md_table'` and cost a turn recovering it with `inspect.getsource` in a
+    probe. The run after it spent THREE probes -- `"md_table" in globals()`,
+    then the same for `cite`, then a trial call -- rediscovering helpers that
+    were in scope the whole time. Nine turns of probing across two runs, none
+    of it about the aircraft.
+
+    The cause is a true statement told as a dead end: this index covers the
+    INSTALLED AeroSandbox package and nothing else, so every question about the
+    notebook's own helpers is a miss, and a miss that names no next step sends
+    the model to guess in a probe. Saying where to look instead costs the miss
+    result a line and is only ever read on the turn that already went wrong --
+    the same shape as `probe._scope_hint`.
+
+    The furniture is NAMED rather than merely pointed at. `api()` defaults to
+    `_analysis.py` and so does not list it; "call api()" would have been advice
+    that fails, which is worse than none.
+    """
+    return (f"no match for {query!r} in AeroSandbox.\n"
+            f"[this index is the INSTALLED aerosandbox package only. The "
+            f"notebook's own helpers are not in it and are already in scope in "
+            f"every probe: {', '.join(_furniture())}. `api(\"_notebook.py\")` "
+            f"lists them with signatures, `api()` lists the chapter's own "
+            f"helpers from _analysis.py, and `inspect.getsource` works on any "
+            f"of them.]")
 
 
 def api_search(query, kind="all", limit=25):
     import library_explorer as lx
     r = lx.search(query, kind=kind, limit=limit)
     if not r.get("results"):
-        return f"no match for {query!r}"
+        return _miss(query)
     lines = [f"{len(r['results'])} of {r['count']} hits for {query!r}:"]
     lines += [f"  {x['kind']:8s} {x['path']}\n           {x['summary']}"
               for x in r["results"]]

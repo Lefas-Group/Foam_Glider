@@ -191,21 +191,55 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None,
                 say(f"  inputs    put {len(notice.splitlines())} line(s) of "
                     f"chapters/{chapter}'s commitments to the model — once, "
                     f"on the first probe")
+        # READ BEFORE THE BUDGET LINE IS WRITTEN, because the line quotes it.
+        # Only reads `out`, and the budget line it precedes carries no `aero:`
+        # of its own, so the move changes nothing it counts.
+        solves, seconds = budgets.aero_cost(out)
+        session.record_cost(solves, seconds)
         left = session.probe_left
         if left is not None:
+            # SPLIT, when there were solves. Both halves were already known
+            # here and neither was ever said: `used` is the probe's wall clock
+            # and `seconds` is what `aero_report()` measured inside the solver,
+            # so the gap is everything else the probe did -- and in a probe that
+            # is one optimiser call, that gap is the CasADi graph build plus the
+            # geometry rebuilt afterwards from `sol.value(...)`. Measured on one
+            # call in 07-optimised-planform: 9.4 s total, 6.7 s in IPOPT, 2.7 s
+            # outside it. A quarter of the cost, invisible.
+            #
+            # Reported rather than ruled on, and the wording stays descriptive
+            # for that reason -- "outside them", not "wasted". The gap is also
+            # plotting, printing and any python the probe wrote, so only the
+            # person reading it can say whether it is overhead worth attacking
+            # or the probe simply doing its job. A lint rule cannot tell those
+            # apart; a number in front of whoever is about to write the helper
+            # can. Same argument `aero_report` itself won on: nothing counted
+            # solves, so trim() burned about twenty seconds a call at a dozen
+            # call sites for as long as the chapter existed.
+            #
+            # Silent at zero solves. "0 s in 0 solve(s)" is furniture, and the
+            # probes with no solves are the cheap ones nobody is budgeting.
+            # The parts are derived from the ROUNDED total, not rounded
+            # independently. Formatting each with `:.0f` gave "20 s used (14 s
+            # in 1 solve(s), 7 s outside them)" -- true to a tenth and visibly
+            # wrong at a glance, which costs more trust than the tenth is worth.
+            split = ""
+            if solves:
+                whole = round(used)
+                in_solve = min(round(seconds), whole)
+                split = (f" ({in_solve:.0f} s in {solves} solve(s), "
+                         f"{whole - in_solve:.0f} s outside them)")
             # To the MODEL, so the next `budget_s` is informed rather than
             # guessed. Reported after the probe ran, because "used" is the half
             # that tells it whether its own estimate was any good.
             out += (f"\n[probe budget: {granted:.0f} s granted, "
-                    f"{used:.0f} s used; {left:.0f} s of the run's pool left. "
-                    f"Budget the next probe with `budget_s`.]")
+                    f"{used:.0f} s used{split}; {left:.0f} s of the run's pool "
+                    f"left. Budget the next probe with `budget_s`.]")
             # And to the TERMINAL. The turn line above says a probe ran; it
             # cannot say what it cost, because `on_turn` fires before the
             # handler does. This is the only place that knows all three numbers.
             say(f"  budget    probe {granted:.0f} s granted · {used:.0f} s used"
-                f" · {left:.0f} s of {session.probe_pool:.0f} s pool left")
-        solves, seconds = budgets.aero_cost(out)
-        session.record_cost(solves, seconds)
+                f"{split} · {left:.0f} s of {session.probe_pool:.0f} s pool left")
         # The ceiling in force is the one the USER granted at the prompt, not
         # anything the chapter carries -- chapters no longer carry budgets.
         ceiling = session.render_ceiling
