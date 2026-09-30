@@ -1,0 +1,104 @@
+---
+title: "How does wing sweep trade glide ratio against root structural loads?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 164.1      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Execute wing sweep trade using analysis helper
+sweeps = np.array([-4.0, -2.0, 0.0, 2.0, 4.0])
+trade = sweep_trade(airplane, sweeps_deg=sweeps, mass_flight=float(flight_mass_props.mass))
+
+sw_min = float(trade["sweeps_deg"][0])
+sw_max = float(trade["sweeps_deg"][-1])
+base_i = int(np.argmin(np.abs(trade["sweeps_deg"] - 0.0)))
+sw_base = float(trade["sweeps_deg"][base_i])
+
+ld_min = float(trade["max_LD"][0])
+ld_max = float(trade["max_LD"][-1])
+ld_base = float(trade["max_LD"][base_i])
+delta_ld = float(ld_max - ld_min)
+dld_dsweep = float(delta_ld / (sw_max - sw_min))
+
+mbend_min = float(trade["root_moment_net_ballasted_kNm"][0])
+mbend_max = float(trade["root_moment_net_ballasted_kNm"][-1])
+mbend_base = float(trade["root_moment_net_ballasted_kNm"][base_i])
+delta_mbend = float(mbend_max - mbend_min)
+dMbend_dsweep = float(delta_mbend / (sw_max - sw_min))
+pct_mbend = float(delta_mbend / mbend_base * 100)
+
+mtor_min = float(trade["root_torsion_aero_kNm"][0])
+mtor_max = float(trade["root_torsion_aero_kNm"][-1])
+mtor_base = float(trade["root_torsion_aero_kNm"][base_i])
+delta_mtor = float(mtor_max - mtor_min)
+dMtor_dsweep = float(delta_mtor / (sw_max - sw_min))
+pct_mtor = float(delta_mtor / mtor_base * 100)
+```
+
+::: {.hero}
+[`{python} f"{dMtor_dsweep:.3f} kN·m/°"`]{.hero-value}
+[wing-root aerodynamic torsion sensitivity to sweep under limit manoeuvre]{.hero-label}
+:::
+
+**Answer.** Sweeping the wing from [`{python} f"{sw_min:+.1f}°"`]{.key} to [`{python} f"{sw_max:+.1f}°"`]{.key} improves best glide ratio by [`{python} f"{delta_ld:.2f}"`]{.key} to [`{python} f"{ld_max:.1f}"`]{.key} (@fig-sweep-trade). Glide ratio sensitivity is [`{python} f"{dld_dsweep:.2f} /°"`]{.key}. Net limit root bending moment under [limit manoeuvre loads](2026-09-30-03-are-wing-structural-loads-reasonable-under-a-jar-22-5-3g-limit-manoeuv.qmd) rises only [`{python} f"{delta_mbend:.2f} kN·m"`]{.key} ([`{python} f"{pct_mbend:.1f}%"`]{.key}) above the [baseline](2026-09-30-02-does-the-reconstructed-discus-2c-achieve-its-published-45-9-glide-rati.qmd) [`{python} f"{mbend_base:.1f} kN·m"`]{.key}. In contrast, wing-root aerodynamic torsion increases by [`{python} f"{pct_mtor:.0f}%"`]{.key} from [`{python} f"{mtor_min:.2f} kN·m"`]{.key} to [`{python} f"{mtor_max:.2f} kN·m"`]{.key} ([`{python} f"{dMtor_dsweep:.3f} kN·m/°"`]{.key}). Inboard forward sweep relieves root torque while preserving spar bending.
+
+::: {.callout-note}
+## New assumptions
+1. **sweep range: -4° to +4°**, sailplane trade space.
+:::
+
+```{python}
+#| label: fig-sweep-trade
+#| fig-cap: "Variation of best glide ratio, limit net root bending moment, and limit root aerodynamic torsion with wing sweep angle for the calibrated Discus-2c."
+fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(11, 3.6))
+
+ax1.plot(trade["sweeps_deg"], trade["max_LD"], "bo-", label="Best L/D (AeroBuildup)")
+ax1.plot(sw_base, ld_base, "rs", markersize=7, label=f"Baseline Λ={sw_base:+.1f}°")
+ax1.set_xlabel("Wing Sweep Angle Λ [deg]")
+ax1.set_ylabel("Best Glide Ratio L/D [-]")
+ax1.set_title("Glide Ratio vs Sweep")
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="lower right")
+
+ax2.plot(
+    trade["sweeps_deg"],
+    trade["root_moment_net_ballasted_kNm"],
+    "mo-",
+    label="Ballasted (+5.3g)",
+)
+ax2.plot(sw_base, mbend_base, "rs", markersize=7, label=f"Baseline ({mbend_base:.1f} kN·m)")
+ax2.set_xlabel("Wing Sweep Angle Λ [deg]")
+ax2.set_ylabel("Limit Net Bending [kN·m]")
+ax2.set_title("Limit Root Bending")
+ax2.grid(True, alpha=0.3)
+ax2.legend(loc="upper left")
+
+ax3.plot(
+    trade["sweeps_deg"],
+    trade["root_torsion_aero_kNm"],
+    "co-",
+    label="Root Torque (+5.3g)",
+)
+ax3.plot(sw_base, mtor_base, "rs", markersize=7, label=f"Baseline ({mtor_base:.1f} kN·m)")
+ax3.set_xlabel("Wing Sweep Angle Λ [deg]")
+ax3.set_ylabel("Limit Aero Torsion [kN·m]")
+ax3.set_title("Limit Root Torsion")
+ax3.grid(True, alpha=0.3)
+ax3.legend(loc="upper left")
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(sweep_trade)
+```

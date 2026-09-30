@@ -399,4 +399,112 @@ def dihedral_trade(
     }
 
 
+def _modify_airplane_sweep(
+    airplane: asb.Airplane,
+    sweep_deg: float,
+) -> asb.Airplane:
+    """Return a copy of the airplane with modified wing sweep sheared along x, preserving chords and span."""
+    wing_orig = airplane.wings[0]
+    sweep_rad = np.radians(sweep_deg)
+
+    xsecs = [
+        asb.WingXSec(
+            xyz_le=[
+                wing_orig.xsecs[i].xyz_le[0] + wing_orig.xsecs[i].xyz_le[1] * np.tan(sweep_rad),
+                wing_orig.xsecs[i].xyz_le[1],
+                wing_orig.xsecs[i].xyz_le[2],
+            ],
+            chord=wing_orig.xsecs[i].chord,
+            twist=wing_orig.xsecs[i].twist,
+            airfoil=wing_orig.xsecs[i].airfoil,
+        )
+        for i in range(len(wing_orig.xsecs))
+    ]
+    w = asb.Wing(
+        name="Main Wing",
+        symmetric=True,
+        xsecs=xsecs,
+    )
+    return asb.Airplane(
+        name=f"Discus-2c-sweep-{sweep_deg:+.1f}deg",
+        xyz_ref=airplane.xyz_ref,
+        wings=[w, airplane.wings[1], airplane.wings[2]],
+        fuselages=airplane.fuselages,
+        s_ref=airplane.s_ref,
+        c_ref=float(w.mean_aerodynamic_chord()),
+        b_ref=airplane.b_ref,
+    )
+
+
+def sweep_trade(
+    airplane: asb.Airplane,
+    sweeps_deg: np.ndarray = None,
+    mass_flight: float = 417.0,
+    mass_structural: float = 565.0,
+    load_factor: float = 5.3,
+    speeds_kmh: np.ndarray = None,
+) -> dict:
+    """Sweep wing sweep angle, returning best glide ratio, root bending moments, and root torsion."""
+    if sweeps_deg is None:
+        sweeps_deg = np.array([-4.0, -2.0, 0.0, 2.0, 4.0])
+    if speeds_kmh is None:
+        speeds_kmh = np.linspace(85, 135, 11)
+
+    max_lds = []
+    best_speeds_kmh = []
+    alphas_trim = []
+    m_aeros = []
+    m_net_drys = []
+    m_net_bals = []
+    m_torsions = []
+    y_cps = []
+    x_cps = []
+
+    for sw in sweeps_deg:
+        ac = _modify_airplane_sweep(airplane, sw)
+        pol = glide_polar(ac, mass=mass_flight, speeds_kmh=speeds_kmh)
+        best_i = int(np.argmax(pol["LD"]))
+
+        loads = wing_structural_loads(
+            ac, mass=mass_structural, load_factor=load_factor
+        )
+
+        op_trim = asb.OperatingPoint(velocity=55.56, alpha=loads["alpha_trim"])
+        vlm_sol = asb.VortexLatticeMethod(airplane=ac, op_point=op_trim, verbose=False)
+        vlm_sol.run()
+
+        x_c = np.array(vlm_sol.vortex_centers[:, 0])
+        y_c = np.array(vlm_sol.vortex_centers[:, 1])
+        Fz = np.array(vlm_sol.forces_geometry[:, 2])
+
+        x_root = ac.wings[0].xsecs[0].xyz_le[0]
+        is_sb = (x_c < 4.0) & (y_c >= 0)
+        torque_y_aero = np.sum((x_c[is_sb] - x_root) * Fz[is_sb])
+        lift_total_sb = np.sum(Fz[is_sb])
+
+        max_lds.append(float(pol["LD"][best_i]))
+        best_speeds_kmh.append(float(pol["speeds_kmh"][best_i]))
+        alphas_trim.append(float(pol["alpha"][best_i]))
+        m_aeros.append(float(loads["root_moment_aero"] / 1000))
+        m_net_drys.append(float(loads["root_moment_net_dry"] / 1000))
+        m_net_bals.append(float(loads["root_moment_net_ballasted"] / 1000))
+        m_torsions.append(float(torque_y_aero / 1000))
+        y_cps.append(float(loads["lift_centroid_y"]))
+        x_cps.append(float(np.sum(x_c[is_sb] * Fz[is_sb]) / lift_total_sb))
+
+    return {
+        "sweeps_deg": np.array(sweeps_deg),
+        "max_LD": np.array(max_lds),
+        "best_speed_kmh": np.array(best_speeds_kmh),
+        "alpha_trim_deg": np.array(alphas_trim),
+        "root_moment_aero_kNm": np.array(m_aeros),
+        "root_moment_net_dry_kNm": np.array(m_net_drys),
+        "root_moment_net_ballasted_kNm": np.array(m_net_bals),
+        "root_torsion_aero_kNm": np.array(m_torsions),
+        "lift_centroid_y_m": np.array(y_cps),
+        "lift_centroid_x_m": np.array(x_cps),
+    }
+
+
+
 
