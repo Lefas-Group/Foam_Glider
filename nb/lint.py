@@ -928,80 +928,92 @@ def entry_cells(text):
         re.sub(r"^\s*#\|.*$", "", cell, flags=re.M)
         for cell in re.findall(r"```\{python\}(.*?)```", text, re.S))
 
+# WHERE A CHAPTER'S HELPERS LIVE, and which of them are API. Rules 20, 21 and 22,
+# which were one function called `_shared_hygiene`.
+#
+# `_analysis.py` exists to force CONSISTENCY between entries: one implementation,
+# so entries cannot drift apart. Measured, that is working -- of twelve helpers
+# that exist in more than one chapter (forks copy the file), eleven are
+# byte-identical, and the one difference is the fork's declared purpose. The
+# failure it prevents is on record: four subtly different neutral points in one
+# chapter, one of them taking its moment reference from the wrong station.
+#
+# It also saves tokens, but only on REUSE: a signature sits in the cached prefix
+# forever, against one avoided read of a sibling entry. So the rules pull in both
+# directions on purpose -- 20 promotes what must not diverge, 21 removes what
+# nothing calls, 22 keeps what is merely internal out of the prefix and out of
+# `api()`.
+#
+# ALL THREE ARE WARNINGS, and 21 and 22 for a different reason than 20. They
+# describe the chapter's accumulated state, not the entry being written: an
+# established chapter carries 27 of them, and blocking on those would make every
+# run in it start by refactoring `_analysis.py` -- work nobody asked for, on code
+# the run did not touch, which is itself the refactor that needs proving. They are
+# for a human doing a cleanup pass, or for the run that happens to be editing
+# that function anyway. Rule 20 is a warning for the narrower reason that its
+# false-positive rate is not yet measured.
 
-@register(covers=(20, 21, 22))
-def _shared_hygiene(root, chapters, entries):
+
+def _helper_usage(root, chapter_name, entries):
+    r"""
+    Who in a chapter calls what: the shared reading rules 20, 21 and 22 need.
+
+    `entry_calls`, NOT a `\bname\s*\(` regex. The regex needed a literal
+    open-paren after the name, so it saw `helper()` and missed
+    `optimise(helper)` -- and a parameterised chapter passes its vehicle far more
+    often than it calls it. That reported `get_airplane_plate()` dead while three
+    entries depended on it, and four more in chapter 04 the same way. One
+    definition of "used", shared with the render-scope closure in build/verify.py,
+    instead of two that disagree.
     """
-    Rules 20, 21 and 22 -- where a chapter's helpers live, and which are API.
+    chapter = root / "chapters" / chapter_name
+    mine = [e for e in entries if e.parent.name == chapter_name]
+    defs = _defs_of(chapter)
+    shared = {n: called for n, (f, called) in defs.items()
+              if f == "_analysis.py"}
+    used = [entry_calls(e.read_text()) for e in mine]
+    return {
+        "chapter": chapter,
+        "analysis": chapter / "_analysis.py",
+        "mine": mine,
+        "shared": shared,
+        "model_names": {n for n, (f, _) in defs.items() if f == "_model.py"},
+        "expensive": aero_calls_of(chapter),
+        "by_entries": {n: sum(1 for u in used if n in u) for n in shared},
+        # Every definition in the chapter, not just `_analysis.py`: a helper
+        # called only from `_model.py` is still called.
+        "internally": {
+            n: any(n in called for m, (_, called) in defs.items() if m != n)
+            for n in shared},
+    }
 
-    `_analysis.py` exists to force CONSISTENCY between entries: one
-    implementation, so entries cannot drift apart. Measured, that is working --
-    of twelve helpers that exist in more than one chapter (forks copy the file),
-    eleven are byte-identical, and the one difference is the fork's declared
-    purpose. The failure it prevents is on record: four subtly different neutral
-    points in one chapter, one of them taking its moment reference from the
-    wrong station.
 
-    It also saves tokens, but only on REUSE: a signature sits in the cached
-    prefix forever, against one avoided read of a sibling entry. So the rules
-    pull in both directions on purpose -- 20 promotes what must not diverge, 21
-    removes what nothing calls, 22 keeps what is merely internal out of the
-    prefix and out of `api()`.
+@register(20)
+def _entry_local_reaches_the_vehicle(root, chapters, entries):
+    """
+    Rule 20: an entry-local function that measures the aircraft.
 
-    ALL THREE ARE WARNINGS, and 21 and 22 for a different reason than 20. They
-    describe the chapter's accumulated state, not the entry being written: an
-    established chapter carries 27 of them, and blocking on those would make
-    every run in it start by refactoring `_analysis.py` -- work nobody asked
-    for, on code the run did not touch, which is itself the refactor that needs
-    proving. They are for a human doing a cleanup pass, or for the run that
-    happens to be editing that function anyway. Rule 20 is a warning for the
-    narrower reason that its false-positive rate is not yet measured.
+    It is chapter machinery: a measurement of the aircraft, and two entries
+    measuring the same thing differently is the failure `_analysis.py` exists to
+    prevent. A function that only formats an already-computed value diverges
+    harmlessly and stays where it is. WARNING while the false-positive rate is
+    unknown -- a genuinely one-off measurement trips it, and forcing that into
+    the prefix forever is its own cost.
     """
     out = []
     for c in chapters:
-        chapter = root / "chapters" / c
-        mine = [e for e in entries if e.parent.name == c]
-        defs = _defs_of(chapter)
-        shared = {n: called for n, (f, called) in defs.items()
-                  if f == "_analysis.py"}
-        model_names = {n for n, (f, _) in defs.items() if f == "_model.py"}
-        expensive = aero_calls_of(chapter)
-        f_analysis = chapter / "_analysis.py"
-
-        # Who calls what, from the entries.
-        #
-        # `entry_calls`, NOT a `\bname\s*\(` regex. The regex needed a literal
-        # open-paren after the name, so it saw `helper()` and missed
-        # `optimise(helper)` -- and a parameterised chapter passes its vehicle
-        # far more often than it calls it. That reported `get_airplane_plate()`
-        # dead while three entries depended on it, and four more in chapter 04
-        # the same way. One definition of "used", shared with the render-scope
-        # closure in check.py, instead of two that disagree.
-        used = [entry_calls(e.read_text()) for e in mine]
-        called_by_entries = {n: sum(1 for u in used if n in u) for n in shared}
-        # Every definition in the chapter, not just `_analysis.py`: a helper
-        # called only from `_model.py` is still called.
-        called_internally = {
-            n: any(n in called for m, (_, called) in defs.items() if m != n)
-            for n in shared}
-
-        # Rule 20. An entry-local function that reaches the vehicle is chapter
-        # machinery: it is a measurement of the aircraft, and two entries
-        # measuring the same thing differently is the failure `_analysis.py`
-        # exists to prevent. A function that only formats an already-computed
-        # value diverges harmlessly and stays where it is. WARNING while the
-        # false-positive rate is unknown -- a genuinely one-off measurement
-        # trips it, and forcing that into the prefix forever is its own cost.
-        for e in mine:
+        u = _helper_usage(root, c, entries)
+        target = u["model_names"] | set(u["shared"]) | u["expensive"]
+        for e in u["mine"]:
             try:
-                tree = ast.parse(entry_cells(e.read_text()))
+                parsed = ast.parse(entry_cells(e.read_text()))
             except SyntaxError:
                 continue
-            for node in tree.body:
+            for node in parsed.body:
                 if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     continue
                 reached = {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
-                hits = reached & (model_names | set(shared) | expensive)
+                hits = reached & target
                 if hits:
                     out.append((e, f"(warning) `{node.name}()` is defined in the "
                                    f"entry but reaches the vehicle "
@@ -1009,26 +1021,56 @@ def _shared_hygiene(root, chapters, entries):
                                    f"measurement of the aircraft belongs in "
                                    f"_analysis.py, where a sibling cannot "
                                    f"reimplement it differently"))
+    return out
 
-        if not f_analysis.exists():
+
+@register(21)
+def _dead_shared_helper(root, chapters, entries):
+    """
+    Rule 21: nothing reaches it -- not an entry, not another helper.
+
+    Dead here is worse than dead elsewhere: someone calls the stale one and the
+    chapter has two answers again.
+    """
+    out = []
+    for c in chapters:
+        u = _helper_usage(root, c, entries)
+        if not u["analysis"].exists():
             continue
+        for n in sorted(u["shared"]):
+            if not u["by_entries"][n] and not u["internally"][n]:
+                out.append((u["analysis"], f"(warning) `{n}()` is called by no "
+                                           f"entry and no other helper — delete "
+                                           f"it, or call it"))
+    return out
 
-        for n in sorted(shared):
-            # Rule 21. Nothing reaches it: not an entry, not another helper.
-            # Dead here is worse than dead elsewhere -- someone calls the stale
-            # one and the chapter has two answers again.
-            if not called_by_entries[n] and not called_internally[n]:
-                out.append((f_analysis, f"(warning) `{n}()` is called by no "
-                                        f"entry and no other helper — delete "
-                                        f"it, or call it"))
-            # Rule 22. Internal-only, but public: it costs a line of the cached
-            # prefix and a line of `api()` on every run, and an entry that does
-            # not call it does not need to know it exists.
-            elif not called_by_entries[n] and not n.startswith("_"):
-                out.append((f_analysis, f"(warning) `{n}()` is only called by "
-                                        f"other _analysis.py functions — rename "
-                                        f"it `_{n}` so it stays out of the "
-                                        f"prefix and out of api()"))
+
+@register(22)
+def _internal_helper_is_public(root, chapters, entries):
+    """
+    Rule 22: internal-only, but public.
+
+    It costs a line of the cached prefix and a line of `api()` on every run, and
+    an entry that does not call it does not need to know it exists.
+
+    THE `internally` TEST IS LOAD-BEARING, and is what the `elif` used to say.
+    These two rules were one if/elif, so a helper that nothing calls at all
+    reported 21 and stopped. As independent rules it would report both, which is
+    a finding that did not exist before -- so 22 asks for a helper that IS
+    called internally, which is exactly the branch the `elif` reached.
+    """
+    out = []
+    for c in chapters:
+        u = _helper_usage(root, c, entries)
+        if not u["analysis"].exists():
+            continue
+        for n in sorted(u["shared"]):
+            if (not u["by_entries"][n] and u["internally"][n]
+                    and not n.startswith("_")):
+                out.append((u["analysis"], f"(warning) `{n}()` is only called by "
+                                           f"other _analysis.py functions — rename "
+                                           f"it `_{n}` so it stays out of the "
+                                           f"prefix and out of api()"))
     return out
 
 
@@ -1061,55 +1103,61 @@ def tables_in(md):
 # what every three-view in these notebooks is made with.
 DRAWING = re.compile(r"\b(draw_three_view|draw_wireframe|\.draw\s*\()")
 
+# Rules 14 and 15 were one function because they share the hard part: working
+# out what an entry actually SHOWS. Both read the rendered output, for the reason
+# rule 15 always did -- a table produced by `print()` or
+# `display(Markdown(...))` inside a cell is not parseable as a table anywhere in
+# the source. Rule 14 counted `fig-`/`tbl-` cell labels, and the two entries that
+# prompted that change carry neither: one emits its table through
+# `display(Markdown(md))` with no label, the other captions it inline as
+# `{#tbl-plans}`, which is not a cell option. Both were invisible, so "one visual
+# per entry" was unenforced for exactly the form the model had started choosing.
+#
+# So the shared work is a helper and the two rules are two rules. Counting
+# figures by label and tables by what rendered cannot double-count: a figure
+# reaches the freeze as an image, never as pipe-markdown.
 
-@register(covers=(14, 15))
-def _visuals_and_tables(root, chapters, entries):
+
+def _visuals_of(root, entry):
     """
-    Rules 14 and 15: how many visuals an entry shows, and how big a table may be.
-
-    BOTH now read the RENDERED output, for the reason rule 15 always did: a
-    table produced by `print()` or `display(Markdown(...))` inside a cell is not
-    parseable as a table anywhere in the source. Rule 14 counted `fig-`/`tbl-`
-    cell labels, and the two entries that prompted this change carry neither --
-    one emits its table through `display(Markdown(md))` with no label, the other
-    captions it inline as `{#tbl-plans}`, which is not a cell option. Both were
-    invisible, so "one visual per entry" was unenforced for exactly the form the
-    model had started choosing.
-
-    Counting figures by label and tables by what rendered cannot double-count:
-    a figure reaches the freeze as an image, never as pipe-markdown.
+    (figure labels, tables as (rows, cols), whether the aircraft is drawn).
 
     No freeze means the source is counted instead, exactly as rule 12 -- and
     rule 12 is what keeps the freeze honest.
     """
+    text = entry.read_text()
+    figures = re.findall(r"^\s*#\|\s*label:\s*(fig-[\w-]+)", text, re.M)
+
+    # Hand-written tables in the .qmd, plus whatever the page rendered.
+    seen = tables_in(re.sub(r"```.*?```", "", text, flags=re.S))
+    frozen = (root / "_freeze" / "chapters" / entry.parent.name / entry.stem
+              / "execute-results" / "html.json")
+    if frozen.exists():
+        try:
+            md = json.loads(frozen.read_text())["result"]["markdown"]
+            # ECHOED SOURCE IS NOT A TABLE. A cell without `echo: false` puts
+            # its own text in the output, so an entry building a markdown table
+            # in an f-string had that f-string counted as a second table --
+            # `{c_root:.1f}` and all. Measured on one entry of 77; it made the
+            # rendered count 2 for a page showing 1.
+            seen += tables_in(re.sub(r"^```.*?^```", "", md, flags=re.S | re.M))
+        except (ValueError, KeyError, TypeError):
+            pass
+    return figures, seen, bool(DRAWING.search(text))
+
+
+@register(14)
+def _one_visual_per_entry(root, entries):
+    """Rule 14: an entry shows one visual, or two when one draws the aircraft."""
     found = []
     for f in entries:
-        text = f.read_text()
-        figures = re.findall(r"^\s*#\|\s*label:\s*(fig-[\w-]+)", text, re.M)
-
-        # Hand-written tables in the .qmd, plus whatever the page rendered.
-        seen = tables_in(re.sub(r"```.*?```", "", text, flags=re.S))
-        frozen = (root / "_freeze" / "chapters" / f.parent.name / f.stem
-                  / "execute-results" / "html.json")
-        if frozen.exists():
-            try:
-                md = json.loads(frozen.read_text())["result"]["markdown"]
-                # ECHOED SOURCE IS NOT A TABLE. A cell without `echo: false`
-                # puts its own text in the output, so an entry building a
-                # markdown table in an f-string had that f-string counted as a
-                # second table -- `{c_root:.1f}` and all. Measured on one entry
-                # of 77; it made the rendered count 2 for a page showing 1.
-                seen += tables_in(re.sub(r"^```.*?^```", "", md, flags=re.S | re.M))
-            except (ValueError, KeyError, TypeError):
-                pass
-
+        figures, seen, drawn = _visuals_of(root, f)
         # The cap is ONE, raised to two when one of the figures is a drawing of
         # the aircraft rather than a second plot. A schematic and a plot are
         # different claims -- "what does it look like" and "how does it behave"
         # -- and the old cap made the second displace the first, which is how
         # three chapters ended up with no picture of the aeroplane at all.
         # Lint cannot judge "schematic", but it can see which function drew it.
-        drawn = bool(DRAWING.search(text))
         cap = 2 if drawn and figures else 1
         n = len(figures) + len(seen)
         if n > cap:
@@ -1119,6 +1167,15 @@ def _visuals_and_tables(root, chapters, entries):
                 f"entry shows one" + (" (two, when one is a drawing of the "
                 f"aircraft)" if drawn else "") + f". Delete whichever is not "
                 f"carrying the answer")))
+    return found
+
+
+@register(15)
+def _table_size(root, entries):
+    """Rule 15: a table is at most 6x4, excluding the header."""
+    found = []
+    for f in entries:
+        _figures, seen, _drawn = _visuals_of(root, f)
         for rows, cols in seen:
             # 6x4, raised from 3x4-or-4x3. The tighter cap was written against a
             # table DECORATING a finding -- the failure behind rule 14 was 72
@@ -1302,27 +1359,25 @@ def limits_of(root, entry):
 
 
 
+# WHAT AN ENTRY MAY SPEND, declared by the entry. Rules 16, 17, 18 and 28, which
+# were one function called `_budget_rules`.
+#
+# These were chapter-scoped, read from an optional `_budget.py`. That file is
+# gone: budgets belong to the entry, which is both the unit of work and the unit
+# the user is asked about, since the render ceiling is granted at the prompt
+# before the run starts.
 
-@register(covers=(16, 17, 18, 28))
-def _budget_rules(root, chapters, entries):
+
+@register(28)
+def _budgets_are_declared(root, entries):
     """
-    Rules 16, 17, 18 and 28 -- what an entry may spend, declared by the entry.
+    Rule 28: both budgets declared, neither None, and the solve inside the render.
 
-    These were chapter-scoped, read from an optional `_budget.py`. That file is
-    gone: budgets belong to the entry, which is both the unit of work and the
-    unit the user is asked about, since the render ceiling is granted at the
-    prompt before the run starts.
-
-    28 BLOCKS and is the load-bearing one, because the ceiling is no longer
-    advisory -- `render_deadline()` derives an actual subprocess timeout from
-    it. An entry that declares nothing would be bounded by the notebook default
-    silently; an entry that declares None would have no bound at all, which is
-    the state that let a render hang unnoticed.
-
-    17 still WARNS below the ceiling, for the reason it always did: the same
-    solve here measured 533.9 s against a 145 s baseline purely from load, so a
-    hard block on wall clock would fail on a busy machine and pass on an idle
-    one. It blocks only PAST the ceiling, where load cannot be the explanation.
+    BLOCKS, and is the load-bearing one, because the ceiling is no longer
+    advisory -- `build/render.render_deadline()` derives an actual subprocess
+    timeout from it. An entry that declares nothing would be bounded by the
+    notebook default silently; an entry that declares None would have no bound at
+    all, which is the state that let a render hang unnoticed.
     """
     problems = []
     for e in entries:
@@ -1331,7 +1386,7 @@ def _budget_rules(root, chapters, entries):
         found_b, _ = _bound(src, "SOLVE_BUDGET")
         found_c, _ = _bound(src, "ENTRY_CEILING")
 
-        # 28: both declared, neither None.
+        # Both declared, neither None.
         for name, found, value in (("SOLVE_BUDGET", found_b, budget),
                                    ("ENTRY_CEILING", found_c, ceiling)):
             if not found:
@@ -1345,7 +1400,7 @@ def _budget_rules(root, chapters, entries):
                         f"option: the ceiling is what bounds the render, and "
                         f"a render with no bound is one that can hang"))
 
-        # 28, second half: a solve cannot outlive the render containing it.
+        # Second half: a solve cannot outlive the render containing it.
         # Declaring SOLVE_BUDGET = 60 under ENTRY_CEILING = 20 is not a slack
         # setting, it is two numbers that cannot both hold -- the render is
         # killed at 20 s and the solve budget never binds anything. Seen the
@@ -1359,13 +1414,23 @@ def _budget_rules(root, chapters, entries):
                     f"outlive the render that contains it. Lower the solve "
                     f"budget, or ask for a bigger ceiling with ask_specified; "
                     f"do not raise ENTRY_CEILING yourself, it was granted"))
+    return problems
 
-        # 18, inverted. Budgets used to be REQUIRED in the Specified callout,
-        # on the reasoning that a granted number is a Specified input. True, but
-        # it crowded out the thing the callout exists for: an entry whose only
-        # Specified items were two budgets recorded nothing about its own
-        # design. `footer()` prints them now, from the declarations themselves,
-        # so the page still shows them and the callout is free again.
+
+@register(18)
+def _budgets_are_not_inputs(root, chapters, entries):
+    """
+    Rule 18: a budget is declared in the first cell, not as a Specified input.
+
+    INVERTED from what it once was. Budgets used to be REQUIRED in the Specified
+    callout, on the reasoning that a granted number is a Specified input. True,
+    but it crowded out the thing the callout exists for: an entry whose only
+    Specified items were two budgets recorded nothing about its own design.
+    `footer()` prints them now, from the declarations themselves, so the page
+    still shows them and the callout is free again.
+    """
+    problems = []
+    for e in entries:
         spec = "".join(body for title, body in callouts_of(e.read_text())
                        if title in ("Specified", "New user specifications"))
         named = sorted(n for n in BUDGET_NAMES if n in spec)
@@ -1376,57 +1441,13 @@ def _budget_rules(root, chapters, entries):
                     f"what the DESIGN was committed to. Delete the budget "
                     f"item(s); if nothing else was specified, say `None.`"))
 
-        # 17: what the frozen page actually cost.
-        if ceiling is None:
-            continue
-        hj = (root / "_freeze" / "chapters" / e.parent.name / e.stem
-              / "execute-results" / "html.json")
-        if not hj.exists():
-            continue
-        m = RUNTIME_SECONDS.search(
-            json.loads(hj.read_text()).get("result", {}).get("markdown", ""))
-        if not m:
-            continue
-        spent = float(m.group(1))
-        if spent > ceiling:
-            problems.append(
-                (e, f"took {spent:.0f} s, past its ENTRY_CEILING of "
-                    f"{ceiling:.0f} s — make it cheaper, or ask for more"))
-        elif spent > ceiling / 2:
-            problems.append(
-                (e, f"(warning) took {spent:.0f} s, over half the "
-                    f"{ceiling:.0f} s ceiling"))
-
-    # 16: the budget is negotiated once, not overridden per call site.
-    for c in chapters:
-        f = root / "chapters" / c / "_analysis.py"
-        if not f.exists():
-            continue
-        try:
-            tree = ast.parse(f.read_text())
-        except SyntaxError:
-            continue
-        for node in ast.walk(tree):
-            if not (isinstance(node, ast.Call)
-                    and isinstance(node.func, ast.Attribute)
-                    and node.func.attr == "solve"):
-                continue
-            local = sorted(k.arg for k in node.keywords
-                           if k.arg in ("max_runtime", "behavior_on_failure"))
-            if local:
-                problems.append(
-                    (f, f"solve() on line {node.lineno} passes "
-                        f"{', '.join(local)} — that silently overrides the "
-                        f"entry's SOLVE_BUDGET. Raise the budget in the entry "
-                        f"instead, where it is on the record"))
-
-    # 18, the other half: a CHAPTER INDEX does not declare a budget. The
-    # scaffold template already says so -- "Budgets do NOT go here: each entry
-    # declares its own" -- but three indexes inherited the line from the
-    # chapter-budget era, and it is not merely stale. The index RENDERS the
-    # number, so changing the budget in force rewrites the index's output,
-    # which `check` reports as a changed value and the refactor gate then holds
-    # an unrelated entry for. That happened: `index: +4. Solve budget 60 s`.
+    # The other half: a CHAPTER INDEX does not declare a budget. The scaffold
+    # template already says so -- "Budgets do NOT go here: each entry declares
+    # its own" -- but three indexes inherited the line from the chapter-budget
+    # era, and it is not merely stale. The index RENDERS the number, so changing
+    # the budget in force rewrites the index's output, which `verify` reports as
+    # a changed value and the refactor gate then holds an unrelated entry for.
+    # That happened: `index: +4. Solve budget 60 s`.
     for c in chapters:
         index = root / "chapters" / c / "index.qmd"
         if not index.exists():
@@ -1446,32 +1467,96 @@ def _budget_rules(root, chapters, entries):
                         f"like a changed answer to `check`"))
     return problems
 
+
+@register(17)
+def _frozen_entry_stayed_under_its_ceiling(root, entries):
+    """
+    Rule 17: what the frozen page actually cost, against what it declared.
+
+    WARNS below the ceiling, for the reason it always did: the same solve here
+    measured 533.9 s against a 145 s baseline purely from load, so a hard block
+    on wall clock would fail on a busy machine and pass on an idle one. It blocks
+    only PAST the ceiling, where load cannot be the explanation.
+    """
+    problems = []
+    for e in entries:
+        _budget, ceiling = limits_of(root, e)
+        if ceiling is None:
+            continue
+        hj = (root / "_freeze" / "chapters" / e.parent.name / e.stem
+              / "execute-results" / "html.json")
+        if not hj.exists():
+            continue
+        m = RUNTIME_SECONDS.search(
+            json.loads(hj.read_text()).get("result", {}).get("markdown", ""))
+        if not m:
+            continue
+        spent = float(m.group(1))
+        if spent > ceiling:
+            problems.append(
+                (e, f"took {spent:.0f} s, past its ENTRY_CEILING of "
+                    f"{ceiling:.0f} s — make it cheaper, or ask for more"))
+        elif spent > ceiling / 2:
+            problems.append(
+                (e, f"(warning) took {spent:.0f} s, over half the "
+                    f"{ceiling:.0f} s ceiling"))
+    return problems
+
+
+@register(16)
+def _no_solve_budget_override(root, chapters):
+    """Rule 16: the budget is negotiated once, not overridden per call site."""
+    problems = []
+    for c in chapters:
+        f = root / "chapters" / c / "_analysis.py"
+        if not f.exists():
+            continue
+        try:
+            parsed = ast.parse(f.read_text())
+        except SyntaxError:
+            continue
+        for node in ast.walk(parsed):
+            if not (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "solve"):
+                continue
+            local = sorted(k.arg for k in node.keywords
+                           if k.arg in ("max_runtime", "behavior_on_failure"))
+            if local:
+                problems.append(
+                    (f, f"solve() on line {node.lineno} passes "
+                        f"{', '.join(local)} — that silently overrides the "
+                        f"entry's SOLVE_BUDGET. Raise the budget in the entry "
+                        f"instead, where it is on the record"))
+    return problems
+
 # The chapter-local modules `_model.qmd` EXECS into the page namespace. They are
 # not importable and never were: `execute-dir: project` puts the cwd at the
 # notebook root, so `chapters/NN-name/` is not on sys.path.
 EXECD = ("_model", "_analysis", "_notebook")
 
+# Rules 29 and 30 were one function, `_composition`, because they are both
+# "how a chapter composes" -- which is a good way to group a docstring and a bad
+# way to emit a finding: neither could say which rule it was. They share nothing
+# but the loop over chapters, so splitting them cost the loop twice and bought
+# both their numbers.
+#
+# The calibration that earned them stays here, above both, because it was done
+# once across every chapter of all three notebooks: rule 29 matched the two
+# lines from the failed run and nothing else, rule 30 matched that run's index
+# and nothing else.
 
-@register(covers=(29, 30))
-def _composition(root, chapters, entries):
+
+@register(29)
+def _no_importing_the_chapter(root, chapters, entries):
     """
-    Rules 29 and 30 -- the two halves of how a chapter composes.
+    Rule 29: a page importing `_model` or `_analysis` instead of using them.
 
-    Rule 29 is an ERROR, unlike its neighbours here, because the page does not
-    BUILD: `from _analysis import optimize_glider_unswept_c4` cost a whole run,
-    dying at the render with ModuleNotFoundError after lint had passed clean.
-    The names are already in scope; importing them is the mistake a fresh
-    chapter invites, because there is no sibling to copy the convention from.
-
-    Rule 30 guards the justification rule 19 rests on -- "the vehicle goes in
-    `_model.py` because the chapter index renders that file, so it is where a
-    reader looks for the aircraft". The scaffold ships that block; a model that
-    rewrites index.qmd with `write_file` rather than editing it drops the block
-    and nothing noticed, leaving a chapter whose aircraft appears nowhere.
-
-    Calibrated across every chapter of all three notebooks before being
-    written: rule 29 matched the two lines from that failed run and nothing
-    else, rule 30 matched that run's index and nothing else.
+    An ERROR, unlike its neighbours, because the page does not BUILD:
+    `from _analysis import optimize_glider_unswept_c4` cost a whole run, dying
+    at the render with ModuleNotFoundError after lint had passed clean. The
+    names are already in scope; importing them is the mistake a fresh chapter
+    invites, because there is no sibling to copy the convention from.
     """
     out = []
     for c in chapters:
@@ -1503,14 +1588,30 @@ def _composition(root, chapters, entries):
                         f"namespace, so their names are ALREADY in scope; the "
                         f"import raises ModuleNotFoundError at render. Delete "
                         f"the line and call the name directly")))
+    return out
 
-        # Rule 30. Two loose marks rather than one exact path: every index in
-        # the corpus builds the path with an f-string over a loop variable
-        # (`f"chapters/{c}/{_f}"`, with the loop named `_f`, `name` or `code`
-        # in different chapters), so the literal `chapters/NN-name/_model.py`
-        # appears in none of them. Naming the file AND its own chapter
-        # directory is what they all share -- checked against all 12 indexes
-        # across the three notebooks, where only the failing one misses both.
+
+@register(30)
+def _index_renders_its_model(root, chapters, entries):
+    """
+    Rule 30: a chapter index renders its own `_model.py`.
+
+    Guards the justification rule 19 rests on -- "the vehicle goes in
+    `_model.py` because the chapter index renders that file, so it is where a
+    reader looks for the aircraft". The scaffold ships that block; a model that
+    rewrites index.qmd with `write_file` rather than editing it drops the block
+    and nothing noticed, leaving a chapter whose aircraft appears nowhere.
+    """
+    out = []
+    for c in chapters:
+        chapter = root / "chapters" / c
+        # Two loose marks rather than one exact path: every index in the corpus
+        # builds the path with an f-string over a loop variable
+        # (`f"chapters/{c}/{_f}"`, with the loop named `_f`, `name` or `code` in
+        # different chapters), so the literal `chapters/NN-name/_model.py`
+        # appears in none of them. Naming the file AND its own chapter directory
+        # is what they all share -- checked against all 12 indexes across the
+        # three notebooks, where only the failing one misses both.
         index = chapter / "index.qmd"
         if not any(e.parent.name == c for e in entries) or not index.exists():
             continue                # same exemption as rules 19 and 24
@@ -2659,37 +2760,32 @@ def _departure_targets(root, chapters):
 
 
 
-def check(root, chapters):
-    # `Entry`, not `Path`. It answers everything a Path answers and caches the
-    # read and every parse of it, so the 33 rules that call `.read_text()` and
-    # the nine helpers invoked three to nine times each now do that work once
-    # per file for the whole run instead of once per rule. Not one rule below
-    # had to change for it: see `contract/parse.Entry`, which explains why the
-    # compatibility is the point rather than a shortcut.
-    from .contract.parse import Entry
-    entries = [Entry(f) for c in chapters
-               for f in sorted((root / "chapters" / c).glob("*.qmd"))
-               if ENTRY_FILE.match(f.name)]
-    # Chapter indexes get the prose checks too. They are prose about the model
-    # like any entry, and an unchecked index is how "5.7% thick" survived in
-    # one after the model started saying 5.6%.
-    pages = entries + [Entry(root / "chapters" / c / "index.qmd") for c in chapters
-                       if (root / "chapters" / c / "index.qmd").exists()]
+
+# =============================================================================
+# THE RULES THAT USED TO BE WRITTEN INSIDE `check()`.
+#
+# Ten rule numbers -- 1, 2, 3, 4, 5, 6, 7, 9, 10 and 13 -- were implemented as
+# code blocks in one 214-line function, sharing its locals. That is why they
+# emitted findings tagged `None`: a block in a loop has no name to register, so
+# nothing could say which rule a finding belonged to. 108 of 143 findings across
+# the corpus could not name their own rule.
+#
+# Each block is now a function with `@register(n)` on it, its comment carried
+# across unchanged. Nothing about WHAT they detect changed -- the messages are
+# the same strings and the characterization harness holds them to that; the only
+# difference is that a finding now arrives with its number.
+#
+# RE-DERIVING `text` PER RULE IS FREE, which is what made this cheap. Each of
+# these used one shared `text = f.read_text()` at the top of a loop; now each
+# reads it again through `Entry`, where the read and every parse of it is cached
+# for the whole run. Phase 3 is what pays for phase 6.
+# =============================================================================
+
+
+@register(13)
+def _footer_renders_what_it_calls(root, chapters, entries):
+    """Rule 13: an entry passes to footer() the shared helpers it calls."""
     problems = []
-
-    # Derived per chapter: two chapters model different aircraft with different
-    # helpers, and one chapter's `trim` says nothing about another's.
-    aero = {c: aero_calls_of(root / "chapters" / c) for c in chapters}
-
-    # EVERY REGISTERED CHECK, in place of twenty-four hand-written
-    # dispatch lines. Each said a rule number that was already declared in
-    # `RULES` and already had to agree with `WHY` -- three places for one
-    # fact, and the `None`s were the only record of which rules could not
-    # name themselves. `@register` beside each check carries all of it, and
-    # `contract.unattributed()` reports the gap instead of implying it.
-    problems += run_registered(root=root, chapters=chapters,
-                               entries=entries, pages=pages)
-
     # Rule 13. Scoped to `_analysis.py`: `_model.py` is rendered in full by the
     # chapter index, and `_notebook.py` is deliberately invisible, so requiring
     # either would be noise. An entry renders only what it NAMES -- an entry
@@ -2719,7 +2815,13 @@ def check(root, chapters):
             elif n_footers > 1:
                 problems.append((f, f"{n_footers} footer(…) cells — an entry "
                                     f"ends with one"))
+    return problems
 
+
+@register(5)
+def _fixed_count_solves_in_shared(root, chapters, aero):
+    """Rule 5: a counted loop around a solve, in a chapter's shared modules."""
+    problems = []
     # Rule 5 reads the shared modules too. The other rules are about how an
     # entry is written, so they only ever looked at .qmd files -- but the loop
     # that earned this rule was in _analysis.py, one tier up, where a single
@@ -2734,10 +2836,15 @@ def check(root, chapters):
                     (f, f"line {line}: `for … in range(…)` runs a solve every "
                         f"trip and cannot stop early — iterate to a tolerance "
                         f"with a guard that raises"))
+    return problems
 
+
+@register(5)
+def _fixed_count_solves_in_pages(pages, aero):
+    """Rule 5: a counted loop around a solve, in a page's own cells."""
+    problems = []
     for f in pages:
         text = f.read_text()
-
         # Rule 5 again, on the entry's own cells. The cells are concatenated to
         # parse, so a line number here would point into that join rather than
         # into the file -- the loop is named by its shape instead, which is
@@ -2750,11 +2857,27 @@ def check(root, chapters):
                 (f, "`for … in range(…)` runs a solve every trip and cannot "
                     "stop early — iterate to a tolerance with a guard that "
                     "raises"))
+    return problems
 
+
+@register(1)
+def _hand_typed_numbers(pages):
+    """Rule 1: a result number typed into prose instead of computed."""
+    problems = []
+    for f in pages:
+        text = f.read_text()
         for n in dict.fromkeys(RESULT_NUMBER.findall(prose_of(text))):
             problems.append(
                 (f, f"hand-typed number {n!r} in prose — use `{{python}} …`"))
+    return problems
 
+
+@register(1)
+def _inline_computes_nothing(pages):
+    """Rule 1, second half: an inline expression that reads and calls nothing."""
+    problems = []
+    for f in pages:
+        text = f.read_text()
         for expr in dict.fromkeys(e for e in INLINE_BODY.findall(text)
                                   if _computes_nothing(e)):
             problems.append(
@@ -2762,7 +2885,15 @@ def check(root, chapters):
                     f"variable and calls no function, so the number was typed "
                     f"by hand and rule 1 applies. Compute it, or if it belongs "
                     f"to an earlier chapter, say so in prose and link the entry"))
+    return problems
 
+
+@register(6)
+def _prose_budget(pages):
+    """Rule 6: the whole entry's running text, against one word budget."""
+    problems = []
+    for f in pages:
+        text = f.read_text()
         # The three word budgets.
         n = words(body_prose(text))
         if n > MAX_PROSE:
@@ -2770,7 +2901,15 @@ def check(root, chapters):
                 (f, f"{n} words of prose, over the {MAX_PROSE}-word budget — "
                     f"answer, warnings and any other running text, added up; "
                     f"only Specified/Assumed and figure captions are excluded"))
+    return problems
 
+
+@register(9)
+def _one_prose_section(pages):
+    """Rule 9: an entry has one prose section -- the answer."""
+    problems = []
+    for f in pages:
+        text = f.read_text()
         # Rule 9: one prose section. Every callout is stripped from the RAW text
         # first -- body_prose() has already discarded the ::: fences, so
         # stripping there would find nothing and count each callout's own title
@@ -2797,7 +2936,15 @@ def check(root, chapters):
                         f"({', '.join(l.strip()[:24] for l in leads)})"
                         f" — an entry has one: the answer. Fold the rest into "
                         f"it, or into a callout"))
+    return problems
 
+
+@register(10)
+def _siblings_are_linked(pages):
+    """Rule 10: a sibling entry named in prose is linked, not just named."""
+    problems = []
+    for f in pages:
+        text = f.read_text()
         # Rule 10: a sibling entry named in prose, not linked. Link *labels* are
         # stripped first, so "[the ballast entry](….qmd)" is the fix rather than
         # a permanent offence.
@@ -2808,14 +2955,36 @@ def check(root, chapters):
             problems.append(
                 (f, f"{ref!r} in prose — link it: [{ref}](YYYY-MM-DD-….qmd). A bare "
                     f"reference drifts when the target is retitled or removed"))
+    return problems
 
+
+@register(7)
+def _figure_caption_budget(pages):
+    """Rule 7: a figure caption says what is plotted, inside a word budget."""
+    problems = []
+    for f in pages:
+        text = f.read_text()
         for cap in re.findall(r"^\s*#\|\s*fig-cap:\s*(.+)$", text, re.M):
             n = words(cap.strip().strip('"'))
             if n > MAX_FIG_CAP:
                 problems.append(
                     (f, f"figure caption is {n} words, over {MAX_FIG_CAP} — say "
                         f"what is plotted, not what to conclude from it"))
+    return problems
 
+
+@register(8)
+def _callout_item_budget(pages):
+    """
+    Rule 8: one input item, one line of it.
+
+    The same rule as `_input_item_budget`, on the other place an item can be
+    written: that one reads `_inputs.yml`, this one reads the rendered callout in
+    an entry. Both are rule 8 and both now say so; this one emitted `None`.
+    """
+    problems = []
+    for f in pages:
+        text = f.read_text()
         for title, body in callouts_of(text):
             if title not in INPUT_TITLES:
                 continue
@@ -2827,7 +2996,15 @@ def check(root, chapters):
                         (f, f"{title} item is {n} words, over "
                             f"{MAX_CALLOUT_ITEM} — record the input, not the "
                             f"argument for it: {' '.join(item.split())[:56]}…"))
+    return problems
 
+
+@register(4)
+def _swept_without_a_decision(pages):
+    """Rule 4: a design choice swept over a few values, never asked about."""
+    problems = []
+    for f in pages:
+        text = f.read_text()
         # A swept design choice with no recorded decision.
         if "## Specified" not in text:
             code = "\n".join(re.findall(r"```\{python\}(.*?)```", text, re.S))
@@ -2838,14 +3015,28 @@ def check(root, chapters):
                         (f, f"sweeps {name!r} over {n} values with no recorded "
                             f"decision — should the user have been asked, and the "
                             f"answer put in a `## Specified` callout?"))
+    return problems
 
+
+@register(3)
+def _answer_before_the_evidence(pages):
+    """Rule 3: `**Answer.**` comes before the last code cell."""
+    problems = []
+    for f in pages:
+        text = f.read_text()
         if "**Answer.**" in text:
             last_cell = text.rfind("```{python}")
             if text.index("**Answer.**") > last_cell:
                 problems.append(
                     (f, "**Answer.** comes after the last code cell — it should "
                         "come before the evidence"))
+    return problems
 
+
+@register(2)
+def _repeated_code_blocks(entries):
+    """Rule 2: the same three code lines in two entries of one chapter."""
+    problems = []
     # WITHIN a chapter, not across the notebook. The remedy this rule names --
     # promote to `_analysis.py` -- only exists inside one chapter, because every
     # chapter has its own. Comparing across them produced a finding whose advice
@@ -2869,9 +3060,38 @@ def check(root, chapters):
                            f"({', '.join(sorted(_label(n)[:23] for n in where))}) — promote "
                            f"to {chapter}/_analysis.py:\n        "
                            + "\n        ".join(block)))
-    # The inline blocks below still append `(where, msg)`; normalise so every
-    # caller sees one shape. They are the next candidates for `_tag`, and the
-    # `None`s are what says so.
+    return problems
+
+
+def check(root, chapters):
+    # `Entry`, not `Path`. It answers everything a Path answers and caches the
+    # read and every parse of it, so the rules that call `.read_text()` and the
+    # helpers invoked repeatedly over one file now do that work once per file for
+    # the whole run. See `contract/parse.Entry`.
+    from .contract.parse import Entry
+    entries = [Entry(f) for c in chapters
+               for f in sorted((root / "chapters" / c).glob("*.qmd"))
+               if ENTRY_FILE.match(f.name)]
+    # Chapter indexes get the prose checks too. They are prose about the model
+    # like any entry, and an unchecked index is how "5.7% thick" survived in
+    # one after the model started saying 5.6%.
+    pages = entries + [Entry(root / "chapters" / c / "index.qmd") for c in chapters
+                       if (root / "chapters" / c / "index.qmd").exists()]
+
+    # Derived per chapter: two chapters model different aircraft with different
+    # helpers, and one chapter's `trim` says nothing about another's.
+    aero = {c: aero_calls_of(root / "chapters" / c) for c in chapters}
+
+    # EVERY CHECK, AND NOTHING ELSE. This function was 214 lines, of which ten
+    # rules were written inline because they had nowhere else to live; the rest
+    # was a list of twenty-four dispatch calls saying rule numbers that `RULES`
+    # already declared. Both are gone: a check declares its own rule with
+    # `@register`, and this assembles the context they ask for by name.
+    problems = run_registered(root=root, chapters=chapters, entries=entries,
+                              pages=pages, aero=aero)
+
+    # Normalised so every caller sees one shape. `_tag` already produced
+    # triples; a check returning `(where, msg)` pairs is padded with `None`.
     return [p if len(p) == 3 else (None, p[0], p[1]) for p in problems]
 
 

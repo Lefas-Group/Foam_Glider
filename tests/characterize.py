@@ -140,28 +140,44 @@ def check(strict):
             print(f"      … {len(gone) + len(new) - SHOWN} more")
 
     # ATTRIBUTION IS A SEPARATE VERDICT and must not be reported as a behaviour
-    # change. Findings carrying no rule number are the work of the refactor's
-    # second half that has not been done yet; saying "the restructure changed
-    # behaviour" about them would train whoever reads this to ignore the line
-    # that matters.
-    untagged = 0
+    # change. Saying "the restructure changed behaviour" about an unfinished
+    # attribution would train whoever reads this to ignore the line that matters.
+    #
+    # THE CONTRACT IS THE AUTHORITY, not a count of `None`s in the findings. One
+    # check -- the transcription warning -- has no rule number BY DESIGN: it is a
+    # warning outside the numbered contract, and it will emit `None` forever. A
+    # harness that failed on any `None` could never pass, so it asks the registry
+    # whether every DECLARED rule has an attributable implementation, and reports
+    # the leftover `None`s as information.
+    unattributable = []
     if strict:
+        from nb.contract import contract
+        from nb import lint                             # noqa: F401 -- registers
+        missing, bundled = contract.unattributed()
+        unattributable = missing
+        if missing:
+            print(f"  {'contract':28} {len(missing)} declared rule(s) cannot name "
+                  f"themselves: {missing}")
+            if bundled:
+                print(f"  {'':28} of those, bundled: {bundled}")
         for n in NOTEBOOKS:
             u = [r for r in findings(n) if r[0] is None]
             if u:
-                print(f"  {n:28} {len(u)} finding(s) carry no rule number, "
-                      f"e.g. {u[0][2][:58]}")
-                untagged += len(u)
+                print(f"  {n:28} {len(u)} finding(s) carry no rule number "
+                      f"(expected: a check with no rule), e.g. {u[0][2][:40]}")
 
     print()
     if bad:
         print(f"{bad} notebook(s) MOVED — the restructure changed behaviour.")
     else:
         print("findings unchanged.")
-    if strict and untagged:
-        print(f"{untagged} finding(s) not yet attributable to a rule — "
-              f"the attribution half is unfinished, which is not a regression.")
-    return 1 if bad or (strict and untagged) else 0
+    if strict and unattributable:
+        print(f"{len(unattributable)} declared rule(s) still cannot name "
+              f"themselves — the attribution half is unfinished, which is not a "
+              f"regression.")
+    elif strict:
+        print("every declared rule names itself in its findings.")
+    return 1 if bad or (strict and unattributable) else 0
 
 
 def main(argv):

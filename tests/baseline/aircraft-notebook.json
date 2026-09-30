@@ -5,132 +5,132 @@
   "differs from nb/vendored/notebook.py (first at line 15) \u2014 copy the canonical version down, or promote the local change up so every notebook gets it"
  ],
  [
-  null,
+  28,
   "chapters/00-mceagle-refined-notebook/2026-08-27-01-what-does-it-look-like.qmd",
   "declares no ENTRY_CEILING \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
  ],
  [
-  null,
+  28,
   "chapters/00-mceagle-refined-notebook/2026-08-27-01-what-does-it-look-like.qmd",
   "declares no SOLVE_BUDGET \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
  ],
  [
-  null,
+  28,
   "chapters/00-mceagle-refined-notebook/2026-08-27-02-where-does-the-ballast-go-and-how-much.qmd",
   "declares no ENTRY_CEILING \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
  ],
  [
-  null,
+  28,
   "chapters/00-mceagle-refined-notebook/2026-08-27-02-where-does-the-ballast-go-and-how-much.qmd",
   "declares no SOLVE_BUDGET \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
  ],
  [
-  null,
+  13,
   "chapters/00-mceagle-refined-notebook/2026-08-27-03-what-are-the-lift-and-drag-polars-from-15-to-15-degrees.qmd",
   "calls stall() from _analysis.py but does not render it \u2014 the footer cell passes the shared functions the entry called: footer(stall)"
  ],
  [
-  null,
+  28,
   "chapters/00-mceagle-refined-notebook/2026-08-27-03-what-are-the-lift-and-drag-polars-from-15-to-15-degrees.qmd",
   "declares no ENTRY_CEILING \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
  ],
  [
-  null,
+  28,
   "chapters/00-mceagle-refined-notebook/2026-08-27-03-what-are-the-lift-and-drag-polars-from-15-to-15-degrees.qmd",
   "declares no SOLVE_BUDGET \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
  ],
  [
-  null,
+  13,
   "chapters/00-mceagle-refined-notebook/2026-08-28-01-how-far-should-it-fly.qmd",
   "calls ballast_for(), neutral_point() from _analysis.py but does not render them \u2014 the footer cell passes the shared functions the entry called: footer(ballast_for, neutral_point, trim)"
  ],
  [
-  null,
+  28,
   "chapters/00-mceagle-refined-notebook/2026-08-28-01-how-far-should-it-fly.qmd",
   "declares no ENTRY_CEILING \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
  ],
  [
-  null,
+  28,
   "chapters/00-mceagle-refined-notebook/2026-08-28-01-how-far-should-it-fly.qmd",
   "declares no SOLVE_BUDGET \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
  ],
  [
-  null,
+  13,
   "chapters/00-mceagle-refined-notebook/2026-08-30-01-how-is-it-cut-out-and-put-together.qmd",
   "calls ballast_for(), neutral_point() from _analysis.py but does not render them \u2014 the footer cell passes the shared functions the entry called: footer(ballast_for, fin_outline, fuselage_outline, nest, neutral_point, sym_surface)"
  ],
  [
-  null,
+  28,
   "chapters/00-mceagle-refined-notebook/2026-08-30-01-how-is-it-cut-out-and-put-together.qmd",
   "declares no ENTRY_CEILING \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
  ],
  [
-  null,
+  28,
   "chapters/00-mceagle-refined-notebook/2026-08-30-01-how-is-it-cut-out-and-put-together.qmd",
   "declares no SOLVE_BUDGET \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
  ],
  [
-  null,
+  13,
   "chapters/00-mceagle-refined-notebook/2026-08-30-03-should-it-still-fly.qmd",
   "calls neutral_point() from _analysis.py but does not render it \u2014 the footer cell passes the shared functions the entry called: footer(neutral_point, stall, trim)"
  ],
  [
-  null,
+  28,
   "chapters/00-mceagle-refined-notebook/2026-08-30-03-should-it-still-fly.qmd",
   "declares no ENTRY_CEILING \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
  ],
  [
-  null,
+  28,
   "chapters/00-mceagle-refined-notebook/2026-08-30-03-should-it-still-fly.qmd",
   "declares no SOLVE_BUDGET \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
  ],
  [
-  null,
+  13,
   "chapters/00-mceagle-refined-notebook/2026-08-30-04-if-so-how-far.qmd",
   "calls neutral_point(), stall() from _analysis.py but does not render them \u2014 the footer cell passes the shared functions the entry called: footer(neutral_point, stall, trim)"
  ],
  [
-  null,
+  28,
   "chapters/00-mceagle-refined-notebook/2026-08-30-04-if-so-how-far.qmd",
   "declares no ENTRY_CEILING \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
  ],
  [
-  null,
+  28,
   "chapters/00-mceagle-refined-notebook/2026-08-30-04-if-so-how-far.qmd",
   "declares no SOLVE_BUDGET \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
  ],
  [
-  null,
+  13,
   "chapters/00-mceagle-refined-notebook/2026-08-31-04-why-was-the-built-glider-tail-heavy.qmd",
   "calls neutral_point() from _analysis.py but does not render it \u2014 the footer cell passes the shared functions the entry called: footer(ballast_for, neutral_point)"
  ],
  [
-  null,
+  28,
   "chapters/00-mceagle-refined-notebook/2026-08-31-04-why-was-the-built-glider-tail-heavy.qmd",
   "declares no ENTRY_CEILING \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
  ],
  [
-  null,
+  28,
   "chapters/00-mceagle-refined-notebook/2026-08-31-04-why-was-the-built-glider-tail-heavy.qmd",
   "declares no SOLVE_BUDGET \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
  ],
  [
-  null,
+  13,
   "chapters/00-mceagle-refined-notebook/2026-08-31-05-how-did-the-first-flight-compare.qmd",
   "calls neutral_point() from _analysis.py but does not render it \u2014 the footer cell passes the shared functions the entry called: footer(neutral_point, stall, trim)"
  ],
  [
-  null,
+  28,
   "chapters/00-mceagle-refined-notebook/2026-08-31-05-how-did-the-first-flight-compare.qmd",
   "declares no ENTRY_CEILING \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
  ],
  [
-  null,
+  28,
   "chapters/00-mceagle-refined-notebook/2026-08-31-05-how-did-the-first-flight-compare.qmd",
   "declares no SOLVE_BUDGET \u2014 every entry states what it may spend, in its own first cell; the render ceiling is the one granted at the prompt"
  ],
  [
-  null,
+  21,
   "chapters/00-mceagle-refined-notebook/_analysis.py",
   "(warning) `static_margin()` is called by no entry and no other helper \u2014 delete it, or call it"
  ],

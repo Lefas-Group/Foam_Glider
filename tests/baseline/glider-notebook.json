@@ -5,22 +5,22 @@
   "(warning) `old_sink = 0.36` is hand-typed, and 01-foam-glider publishes the same value \u2014 if it came from there, name that entry in prose and link it (rule 10). Nothing can tell you when a transcribed number goes stale, so the link is the only trail back"
  ],
  [
-  null,
+  17,
   "chapters/05-fully-optimized/2026-09-16-01-what-sink-rate-is-achieved-when-all-geometry-parameters-are-optimized.qmd",
   "(warning) took 12 s, over half the 20 s ceiling"
  ],
  [
-  null,
+  17,
   "chapters/05-fully-optimized/2026-09-16-02-does-the-fully-optimized-design-look-sensible.qmd",
   "(warning) took 13 s, over half the 20 s ceiling"
  ],
  [
-  null,
+  17,
   "chapters/05-fully-optimized/2026-09-18-01-does-a-biplane-design-make-sense-for-3-mm-foam.qmd",
   "(warning) took 31 s, over half the 35 s ceiling"
  ],
  [
-  null,
+  17,
   "chapters/06-fully-optimized-5mm/2026-09-17-01-what-sink-rate-does-a-fully-optimized-5-mm-glider-achieve.qmd",
   "(warning) took 12 s, over half the 20 s ceiling"
  ]

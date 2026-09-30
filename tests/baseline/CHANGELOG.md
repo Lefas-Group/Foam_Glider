@@ -36,3 +36,30 @@ valid on exactly one machine. This is a change to the harness, not to lint.
 **Not fixed here, deliberately:** that lint emits an absolute path to the model at
 all. Making it repo-relative would be an improvement to a message, and phase A
 may not change messages. It belongs with the phase 7 sweep.
+
+## Phase 6 — attribution
+
+**Changed:** the `rule` field of 101 of 143 findings, from `None` to a number.
+Nothing else. `(where, msg)` is byte-identical on all three notebooks, which is
+what the default projection checks and what it reported throughout.
+
+**Why:** 21 of the 40 declared rules could not name themselves. Ten were written
+as code blocks inside `check()`, sharing its locals — a block in a loop has no
+name to register. Eleven were bundled into four functions, each enforcing several
+rules, so a finding from `_budget_rules` genuinely could not say whether it was
+16, 17, 18 or 28.
+
+All 40 now do. `tests/characterize.py --check --strict` passes, which is what it
+was built to be able to say.
+
+**One finding still carries `None`, and always will.** The transcription warning
+(`_transcribed`) is a warning outside the numbered contract — it has no rule in
+`RULES` and is registered with no number. So strict mode asks
+`contract.unattributed()` whether every *declared* rule is attributable, rather
+than failing on any `None` in the findings, which it could never pass.
+
+**Faithfulness note.** Rules 21 and 22 were an `if/elif`: a helper nothing calls
+at all reported 21 and stopped. Split naively they would report both, which is a
+finding that did not exist before. Rule 22 therefore now tests `internally[n]`
+explicitly — that is exactly the branch the `elif` reached, and why the counts
+did not move.
