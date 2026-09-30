@@ -1,0 +1,134 @@
+---
+title: "How do biplane glide ratio and root bending moment compare with the baseline?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 130.9      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Evaluate biplane configuration against calibrated baseline
+res = biplane_comparison(airplane)
+
+b_bi = float(airplane.b_ref)
+gap_val = float(gap_wings)
+s_ref_val = float(airplane.s_ref)
+
+m_root_base = float(res["m_root_base"])
+m_root_upper = float(res["m_root_upper"])
+m_root_lower = float(res["m_root_lower"])
+m_root_max = float(res["m_root_bi_max"])
+bending_relief_pct = float(res["bending_relief_pct"])
+
+kappa_val = float(res["kappa"])
+induced_penalty_pct = float((res["induced_ratio"] - 1.0) * 100.0)
+
+ld_base = float(res["ld_base_max"])
+ld_bi = float(res["ld_bi_max"])
+delta_ld = float(res["delta_ld"])
+v_base_best = float(res["v_base_max"])
+v_bi_best = float(res["v_bi_max"])
+```
+
+::: {.hero}
+[`{python} f"-{bending_relief_pct:.1f}%"`]{.hero-value}
+[reduction in maximum limit root bending moment per wing relative to cantilever baseline]{.hero-label}
+:::
+
+**Answer.** Splitting the [`{python} f"{s_ref_val:.2f} m²"`]{.key} wing area across two stacked wings with [`{python} f"{b_bi:.2f} m"`]{.key} span and [`{python} f"{gap_val:.1f} m"`]{.key} vertical gap relieves limit root bending moment by [`{python} f"{bending_relief_pct:.1f}%"`]{.key} (@fig-biplane-comparison). Under limit manoeuvre loads, peak spar moment drops from [`{python} f"{m_root_base:.1f} kN·m"`]{.key} to [`{python} f"{m_root_max:.1f} kN·m"`]{.key}. However, despite Prandtl biplane interference factor [`{python} f"κ = {kappa_val:.3f}"`]{.key}, the shorter span increases induced drag by [`{python} f"{induced_penalty_pct:.1f}%"`]{.key}. Best glide ratio falls by [`{python} f"{abs(delta_ld):.2f}"`]{.key} points to [`{python} f"{ld_bi:.2f}"`]{.key} at [`{python} f"{v_bi_best:.0f} km/h"`]{.key}, compared to [`{python} f"{ld_base:.2f}"`]{.key} on the [calibrated baseline](../01-calibrated-discus-2c/2026-09-30-01-what-does-a-discus-2c-geometry-reconstructed-from-published-data-look.qmd).
+
+::: {.callout-tip}
+## New user specifications
+Asked of the user, 2026-09-30:
+
+1. **biplane wing span: `{python} f"{b_bi:.2f} m"`**, individual span.
+2. **vertical wing gap: `{python} f"{gap_val:.1f} m"`**, vertical spacing.
+:::
+
+::: {.callout-note}
+## New assumptions
+1. **wing stagger: 0.0 m**, unstaggered vertical stack.
+2. **wing area split: equal**, 50/50 upper and lower.
+:::
+
+```{python}
+#| label: fig-biplane-comparison
+#| fig-cap: "Biplane geometry layout showing stacked wings with 1.0 m gap and 12.73 m span compared with 18.0 m baseline, and glide polar trade across airspeeds."
+fig = plt.figure(figsize=(11, 4.8))
+gs = fig.add_gridspec(2, 2, width_ratios=[1.1, 1.0], height_ratios=[1.0, 0.7], hspace=0.35, wspace=0.25)
+ax_plan = fig.add_subplot(gs[0, 0])
+ax_front = fig.add_subplot(gs[1, 0])
+ax_polar = fig.add_subplot(gs[:, 1])
+
+# Baseline wing
+ap_base = res["baseline_airplane"]
+w_base = ap_base.wings[0]
+y_b = np.array([xs.xyz_le[1] for xs in w_base.xsecs])
+x_le_b = np.array([xs.xyz_le[0] for xs in w_base.xsecs])
+x_te_b = x_le_b + np.array([xs.chord for xs in w_base.xsecs])
+
+# Biplane wings
+w_up = airplane.wings[0]
+w_lo = airplane.wings[1]
+y_bi = np.array([xs.xyz_le[1] for xs in w_up.xsecs])
+x_le_bi = np.array([xs.xyz_le[0] for xs in w_up.xsecs])
+x_te_bi = x_le_bi + np.array([xs.chord for xs in w_up.xsecs])
+z_up = np.array([xs.xyz_le[2] for xs in w_up.xsecs])
+z_lo = np.array([xs.xyz_le[2] for xs in w_lo.xsecs])
+
+# Planform view
+for sgn in [1, -1]:
+    ax_plan.fill(np.concatenate([sgn * y_b, sgn * y_b[::-1]]),
+                 np.concatenate([x_le_b, x_te_b[::-1]]),
+                 color='C0', alpha=0.2, label='Baseline (18.0 m)' if sgn == 1 else "")
+    ax_plan.plot(sgn * y_b, x_le_b, 'C0-', lw=1.2)
+    ax_plan.plot(sgn * y_b, x_te_b, 'C0--', lw=1.0)
+
+    ax_plan.fill(np.concatenate([sgn * y_bi, sgn * y_bi[::-1]]),
+                 np.concatenate([x_le_bi, x_te_bi[::-1]]),
+                 color='C3', alpha=0.3, label='Biplane (12.73 m)' if sgn == 1 else "")
+    ax_plan.plot(sgn * y_bi, x_le_bi, 'C3-', lw=1.5)
+    ax_plan.plot(sgn * y_bi, x_te_bi, 'C3-', lw=1.5)
+
+ax_plan.set_ylabel('Fuselage x (m)')
+ax_plan.invert_yaxis()
+ax_plan.grid(True, alpha=0.3)
+ax_plan.legend(loc='lower right', fontsize=8)
+ax_plan.set_title('Planform Comparison', fontsize=10)
+
+# Front view
+for sgn in [1, -1]:
+    ax_front.plot(sgn * y_b, np.zeros_like(y_b) + 0.15, 'C0-', lw=1.5, label='Baseline wing' if sgn == 1 else "")
+    ax_front.plot(sgn * y_bi, z_up, 'C3-', lw=1.8, label='Upper wing' if sgn == 1 else "")
+    ax_front.plot(sgn * y_bi, z_lo, 'C3--', lw=1.8, label='Lower wing' if sgn == 1 else "")
+
+ax_front.set_xlabel('Spanwise y (m)')
+ax_front.set_ylabel('Vertical z (m)')
+ax_front.set_ylim(-0.6, 1.5)
+ax_front.grid(True, alpha=0.3)
+ax_front.legend(loc='upper right', fontsize=8)
+ax_front.set_title('Front Elevation (1.0 m gap)', fontsize=10)
+
+# Polar comparison
+ax_polar.plot(res['speeds_kmh'], res['ld_base_arr'], 'C0-o', lw=1.8, label=f"Baseline (best L/D {ld_base:.1f})")
+ax_polar.plot(res['speeds_kmh'], res['ld_bi_arr'], 'C3-s', lw=1.8, label=f"Biplane (best L/D {ld_bi:.1f})")
+ax_polar.set_xlabel('Airspeed (km/h)')
+ax_polar.set_ylabel('Glide Ratio L/D')
+ax_polar.grid(True, alpha=0.3)
+ax_polar.legend(loc='upper right', fontsize=9)
+ax_polar.set_title('Trimmed Glide Polar', fontsize=10)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(biplane_comparison)
+```
