@@ -1,0 +1,51 @@
+---
+title: "What does a Discus-2c geometry reconstructed from published data look like?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 4.7      # s the probe actually used
+
+import aerosandbox.tools.pretty_plots as p
+import matplotlib.pyplot as plt
+
+span_proj = float(main_wing.span(type="y"))
+area_proj = float(main_wing.area(type="xy"))
+aspect_ratio = float(main_wing.aspect_ratio(type="geometric"))
+mac_len = float(main_wing.mean_aerodynamic_chord())
+fuselage_length = float(fuse.length())
+htail_s = float(htail.area(type="xy"))
+wing_dihedral_val = 3.0
+m_empty = float(empty_mass_props.mass)
+```
+
+::: {.hero}
+[`{python} f"{aspect_ratio:.2f}"`]{.hero-value}
+[reconstructed wing aspect ratio]{.hero-label}
+:::
+
+**Answer.** Reconstructed from published span ([`{python} f"{span_proj:.1f} m"`]{.key}), area ([`{python} f"{area_proj:.2f} m²"`]{.key}), and empty mass ([`{python} f"{m_empty:.0f} kg"`]{.key}), the aircraft matches the certified Discus-2c baseline. The airframe combines a multi-taper wing with forward root sweep, a [`{python} f"{fuselage_length:.2f} m"`]{.key} fuselage, and a T-tail (@fig-three-view).
+
+::: {.callout-note}
+## New assumptions
+1. **fuselage length: `{python} f"{fuselage_length:.2f} m"`**, Discus-2c published length.
+2. **horizontal tail area: `{python} f"{htail_s:.2f} m²"`**, Discus-2 T-tail sizing.
+3. **wing dihedral: `{python} f"{wing_dihedral_val:.1f}°"`**, Discus-2 published dihedral.
+:::
+
+```{python}
+#| label: fig-three-view
+#| fig-cap: "Three-view drawing of the reconstructed Discus-2c sailplane geometry."
+fig, axs = p.figure3d(nrows=2, ncols=2, figsize=(10, 8), computed_zorder=False)
+_ = airplane.draw_three_view(axs=axs, show=False)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```
