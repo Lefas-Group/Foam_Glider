@@ -2820,13 +2820,20 @@ def _tag(rule, rows):
 
 
 def check(root, chapters):
-    entries = [f for c in chapters
+    # `Entry`, not `Path`. It answers everything a Path answers and caches the
+    # read and every parse of it, so the 33 rules that call `.read_text()` and
+    # the nine helpers invoked three to nine times each now do that work once
+    # per file for the whole run instead of once per rule. Not one rule below
+    # had to change for it: see `contract/parse.Entry`, which explains why the
+    # compatibility is the point rather than a shortcut.
+    from .contract.parse import Entry
+    entries = [Entry(f) for c in chapters
                for f in sorted((root / "chapters" / c).glob("*.qmd"))
                if ENTRY_FILE.match(f.name)]
     # Chapter indexes get the prose checks too. They are prose about the model
     # like any entry, and an unchecked index is how "5.7% thick" survived in
     # one after the model started saying 5.6%.
-    pages = entries + [root / "chapters" / c / "index.qmd" for c in chapters
+    pages = entries + [Entry(root / "chapters" / c / "index.qmd") for c in chapters
                        if (root / "chapters" / c / "index.qmd").exists()]
     problems = []
 
