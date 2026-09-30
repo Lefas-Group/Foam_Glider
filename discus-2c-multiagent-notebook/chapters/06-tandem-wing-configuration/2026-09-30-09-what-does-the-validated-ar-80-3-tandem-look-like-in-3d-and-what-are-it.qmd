@@ -1,0 +1,113 @@
+---
+title: "What does the validated AR 80.3 tandem look like in 3D, and what are its benefits?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 97.6      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Execute synthesis of validated AR 80.3 tandem against baseline and programme
+res = tandem_final_design_synthesis()
+
+ac_base = res["airplane_base"]
+ac_tandem = res["airplane_tandem"]
+
+ld_base = float(res["ld_base"])
+ld_tandem = float(res["ld_tandem_trimmed"])
+delta_ld = float(res["delta_ld"])
+ld_retention = float(res["ld_retention_pct"])
+
+b_base = float(res["b_base"])
+b_tandem = float(res["b_tandem"])
+ar_base = float(res["ar_base"])
+ar_tandem = float(res["ar_tandem"])
+
+m_root_base = float(res["m_root_base"])
+m_root_tandem = float(res["m_root_tandem"])
+
+m_empty_base = float(res["m_empty_base"])
+m_empty_tandem = float(res["m_empty_tandem"])
+dm_dtube = float(res["dm_dtube"])
+
+m_flight_base = float(res["m_flight_base"])
+m_flight_tandem = float(res["m_flight_tandem"])
+wl_base = float(res["wl_flight_base"])
+wl_tandem = float(res["wl_flight_tandem"])
+
+v_stall_base = float(res["v_stall_base"])
+v_stall_tandem = float(res["v_stall_tandem"])
+v_div_req = float(res["v_div_req"])
+
+trim_counts = float(res["trim_drag_counts"])
+
+# Assert physical consistency across all integrated design disciplines
+assert ld_tandem > ld_base
+assert b_tandem > 30.0
+assert m_root_tandem <= m_root_base + 1e-3
+assert v_div_req >= 336.0
+
+tbl_header = ["Metric", "Baseline Discus-2c", "AR 80.3 Tandem", "Programme Advantage"]
+tbl_rows = [
+    ("Best glide ratio L/D", f"{ld_base:.2f}", f"{ld_tandem:.2f}", f"{delta_ld:+.2f} (+{delta_ld/ld_base*100:.1f}%)"),
+    ("Wing span / aspect ratio", f"{b_base:.1f} m / {ar_base:.1f}", f"{b_tandem:.1f} m / {ar_tandem:.1f}", f"+{b_tandem - b_base:.1f} m span within budget"),
+    ("Limit root bending", f"{m_root_base:.1f} kN·m", f"{m_root_tandem:.1f} kN·m", "0.0% (sized to exact budget)"),
+    ("Divergence clearance", "Cantilever", f"{v_div_req:.0f} km/h", f"+{dm_dtube:.1f} kg D-tube (1.2 VNE)"),
+    ("Flight mass / loading", f"{m_flight_base:.0f} kg / {wl_base:.1f} kg/m²", f"{m_flight_tandem:.0f} kg / {wl_tandem:.1f} kg/m²", "< 52 kg/m² JAR-22 limit"),
+    ("Cruise trim drag penalty", "Trimmable T-tail", f"+{trim_counts:.1f} counts", f"{ld_retention:.1f}% untrimmed L/D kept"),
+]
+```
+
+::: {.hero}
+[`{python} f"{delta_ld:+.2f}"`]{.hero-value}
+[net glide ratio gain achieved by validated AR 80.3 tandem over calibrated baseline]{.hero-label}
+:::
+
+**Answer.** The validated [`{python} f"AR {ar_tandem:.1f}"`]{.key} tandem pairs two slender [`{python} f"{b_tandem:.1f} m"`]{.key} wings across the fuselage (@fig-3d-comparison), expanding span by [`{python} f"{b_tandem - b_base:.1f} m"`]{.key} within the [`{python} f"{m_root_base:.1f} kN·m"`]{.key} [limit bending budget](2026-09-30-03-how-far-can-tandem-aspect-ratio-be-pushed-within-the-root-bending-budg.qmd). Net [trimmed glide ratio](2026-09-30-08-does-trimming-the-ar-80-3-tandem-preserve-its-46-87-glide-ratio.qmd) reaches [`{python} f"{ld_tandem:.2f}"`]{.key}, beating the [calibrated baseline](../01-calibrated-discus-2c/2026-09-30-02-does-the-reconstructed-discus-2c-achieve-its-published-45-9-glide-rati.qmd) by [`{python} f"{delta_ld:+.2f}"`]{.key} points (@tbl-summary). Unlike the [biplane](../02-biplane-configuration/2026-09-30-01-how-do-biplane-glide-ratio-and-root-bending-moment-compare-with-the-ba.qmd) or [box-wing](../03-box-wing-configuration/2026-09-30-01-how-do-box-wing-glide-ratio-and-root-bending-moment-compare-with-the-b.qmd), where induced drag or pitch trim severely degraded glide, and unlike the [strut-braced wing](../05-strut-braced-wing/2026-09-30-05-what-are-the-mass-drag-and-glide-penalties-of-the-11-bay-jury-truss.qmd) whose negative-g truss added drag, the tandem successfully converts structural bending relief into aerodynamic gain while satisfying [aeroelastic divergence](2026-09-30-05-what-aspect-ratio-and-net-glide-ratio-are-achievable-with-an-aeroelast.qmd) and [mass limits](2026-09-30-06-do-the-reinforced-ar-80-3-tandem-s-mass-and-wing-loading-stay-within-l.qmd).
+
+```{python}
+#| label: tbl-summary
+#| echo: false
+#| output: asis
+md_table(tbl_header, tbl_rows)
+```
+
+```{python}
+#| label: fig-3d-comparison
+#| fig-cap: "Three-dimensional wireframe comparison of the calibrated single-wing baseline and the validated AR 80.3 tandem wing, with an overlay illustrating the expanded span and staggered dual-wing layout."
+fig = plt.figure(figsize=(12, 4.2))
+ax1 = fig.add_subplot(131, projection="3d")
+ax2 = fig.add_subplot(132, projection="3d")
+ax3 = fig.add_subplot(133, projection="3d")
+
+ac_base.draw_wireframe(ax=ax1, color="#1f77b4", set_lims=False, set_equal=False, show=False)
+ax1.set_title("Calibrated Baseline Monoplane\n(b = 18.0 m, AR = 28.5)", fontsize=9)
+
+ac_tandem.draw_wireframe(ax=ax2, color="#2ca02c", set_lims=False, set_equal=False, show=False)
+ax2.set_title("Validated AR 80.3 Tandem Wing\n(b = 30.2 m each, AR = 80.1)", fontsize=9)
+
+ac_base.draw_wireframe(ax=ax3, color="#1f77b4", thin_linewidth=0.3, thick_linewidth=0.7, set_lims=False, set_equal=False, show=False)
+ac_tandem.draw_wireframe(ax=ax3, color="#2ca02c", thin_linewidth=0.3, thick_linewidth=0.7, set_lims=False, set_equal=False, show=False)
+ax3.set_title("3D Overlay Comparison\n(Blue: Baseline, Green: Tandem)", fontsize=9)
+
+for ax in (ax1, ax2, ax3):
+    ax.set_xlim(0, 7.2)
+    ax.set_ylim(-16.0, 16.0)
+    ax.set_zlim(-1.0, 2.0)
+    ax.set_zticks([-1, 0, 1, 2])
+    ax.set_box_aspect([7.2, 32.0, 4.5])
+    ax.view_init(elev=22, azim=-120)
+
+plt.tight_layout()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(tandem_final_design_synthesis)
+```

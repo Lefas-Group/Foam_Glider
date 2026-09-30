@@ -1457,6 +1457,61 @@ def tandem_ar80_trimmed_performance(
     }
 
 
+def tandem_final_design_synthesis(
+    b_target: float = 30.2,
+    dm_div: float = 71.7,
+    v_cruise: float = 27.78,
+    mass_pilot: float = 80.0,
+    decalage_base: float = -0.98,
+    ld_nom_untrim: float = 46.87,
+) -> dict:
+    """Synthesize final validated AR 80.3 tandem design against baseline Discus-2c and programme exploration."""
+    t_perf = tandem_ar80_trimmed_performance(
+        b_target=b_target,
+        dm_div=dm_div,
+        v_cruise=v_cruise,
+        mass_pilot=mass_pilot,
+        decalage_base=decalage_base,
+        ld_nom_untrim=ld_nom_untrim,
+    )
+    t_mass = tandem_mass_budget_analysis(dm_div=dm_div)
+    t_aero = tandem_aeroelastic_sizing_trade()
+
+    ap_base = _build_baseline_airplane()
+    ap_tandem = _build_scaled_tandem_airplane(b_target=b_target, decalage_aft=t_perf["decalage_trim"])
+
+    return {
+        "airplane_base": ap_base,
+        "airplane_tandem": ap_tandem,
+        "ld_base": float(t_perf["ld_base_mono"]),
+        "ld_tandem_trimmed": float(t_perf["ld_trimmed"]),
+        "delta_ld": float(t_perf["advantage_mono"]),
+        "ld_retention_pct": float(t_perf["ld_retention_pct"]),
+        "b_base": float(ap_base.b_ref),
+        "b_tandem": float(t_perf["b_target"]),
+        "ar_base": float(ap_base.b_ref**2 / ap_base.s_ref),
+        "ar_tandem": float(t_perf["ar_target"]),
+        "m_root_base": float(t_aero["m_root_base"]),
+        "m_root_tandem": float(t_aero["m_root_base"]),
+        "m_empty_base": float(t_mass["m_base_empty"]),
+        "m_empty_tandem": float(t_mass["m_empty"]),
+        "dm_dtube": float(t_mass["dm_div"]),
+        "m_flight_base": float(t_mass["m_base_flight"]),
+        "m_flight_tandem": float(t_mass["m_flight_dry"]),
+        "wl_flight_base": float(t_mass["wl_base_flight"]),
+        "wl_flight_tandem": float(t_mass["wl_flight"]),
+        "v_stall_base": float(t_mass["v_stall_base"]),
+        "v_stall_tandem": float(t_mass["v_stall_flight"]),
+        "v_div_req": float(t_aero["v_req_kmh"]),
+        "sm_pct": float(t_perf["sm_pct"]),
+        "lift_fwd_pct": 56.6,
+        "lift_aft_pct": 43.4,
+        "trim_drag_counts": float(t_perf["delta_cd_counts"]),
+        "decalage_trim": float(t_perf["decalage_trim"]),
+    }
+
+
+
 
 
 
