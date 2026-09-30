@@ -1,6 +1,6 @@
 # `nb` — the design-notebook agent
 
-Turns a design question into a Quarto lab-notebook entry that passes a 39-rule
+Turns a design question into a Quarto lab-notebook entry that passes a 40-rule
 lint contract, renders, and is checked against its own output before it commits.
 
 ---
@@ -338,10 +338,15 @@ silently.
 
 ## Three checks
 
-**lint** reads the source. **build** renders the entry and refuses to commit a
+**lint** (`nb/lint.py`, with its contract in `nb/contract/`) reads the source and
+runs nothing. **build** (`nb/build/`) renders the entry and refuses to commit a
 page that does not execute — lint has passed by then, and nothing else would
-notice. **check** deletes invalidated freezes, re-renders, and diffs values and
-figure bytes against git — what a refactor must pass.
+notice. **verify** (`nb/build/verify.py`, once `check.py`) deletes invalidated
+freezes, re-renders, and diffs values and figure bytes against git — what a
+refactor must pass.
+
+The split is by what a function is FOR, not by what it touches: `_stale_freeze`
+reads the freeze and shells out, and is still a lint rule, because it IS rule 12.
 
 There used to be a third, `verify`: a second model call that read the rendered
 page and checked the prose against it. It produced zero findings in 32 write
@@ -373,9 +378,24 @@ not the call.
 
 ## Testing a change
 
-`python -m nb.corpus` lints all three notebooks against recorded counts. Every
-rule here was calibrated with that sweep; by hand it got the wrong answer twice.
-A change that moves the counts updates them in the same commit.
+Two sweeps, and they answer different questions.
+
+`python -m nb.corpus` lints the three stable notebooks against recorded COUNTS,
+and imports every module to prove it imports. Every rule here was calibrated with
+that sweep; by hand it got the wrong answer twice. A change that moves the counts
+updates them in the same commit, with the reason.
+
+`python tests/characterize.py --check` compares the FINDINGS themselves — every
+`(rule, file, message)` — against `tests/baseline/`. Counts are right for
+calibrating a rule and wrong for restructuring, because two findings can swap
+places and leave the count alone. Add `--strict` to also require that every
+finding names its own rule; that fails today by design, and the day it passes is
+the day the attribution work is done. `tests/baseline/CHANGELOG.md` records every
+deliberate move.
+
+Neither covers `RADICAL-GLIDER`: it gains an entry whenever a run commits one, so
+its findings move for reasons that have nothing to do with a code change. It is
+covered by actually running `nb ask` against it, which tests more than lint.
 
 ## The version before this one
 

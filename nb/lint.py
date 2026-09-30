@@ -548,9 +548,15 @@ def _notebook_drift(root):
     file outside the Quarto project -- where freeze cannot see edits to it, which
     is the failure mode that has already served stale pages here three times.
 
-    Vendoring costs propagation, so this is what buys it back: an improvement to
-    footer() or the plot style shows up as a problem in every notebook that has
-    not taken it. Byte equality is the right test because nothing in the file is
+    IT USED TO BE JUSTIFIED BY PROPAGATION as well -- "an improvement to
+    footer() shows up as a problem in every notebook that has not taken it" --
+    and that argument is now about a set of size one. `RADICAL-GLIDER` is the
+    only notebook `nb` drives; the other three are the design-notebook skill's or
+    frozen corpus, and they drift on purpose. So the two reasons above are the
+    whole of it, and both are about a SINGLE notebook: it must render without
+    `nb` installed, and freeze must be able to see edits to the file.
+
+    Byte equality is still the right test because nothing in the file is
     project-specific; any difference is either an un-propagated improvement or an
     accident, and both want a person to decide which.
     """
@@ -1222,8 +1228,8 @@ def _stale_freeze(root, chapters):
                 root / "chapters" / c / touched[0],
                 f"modified, but the freeze is not — {len(frozen)} frozen "
                 f"page(s) are serving values the current model may not produce. "
-                f"NOT YOURS TO FIX — the write phase re-proves the chapter "
-                f"itself, after lint passes and the entry builds, and will show you any "
+                f"NOT YOURS TO FIX — the run re-proves the chapter itself "
+                f"after lint passes and the entry builds, and will show you any "
                 f"answer that moved. Do not run a checker by hand: it re-"
                 f"renders the notebook, costs two to three minutes a call, and "
                 f"changes nothing the run was not going to do anyway."))

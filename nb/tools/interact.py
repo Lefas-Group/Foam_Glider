@@ -500,7 +500,9 @@ def ask_specified(session, name, why, kind="specified", options="",
     answer = _prompt("SPECIFIED INPUT NEEDED", name, body)
     session.record_answer(name, answer)
     if replaces:
-        # For the write phase: what this answer displaces, and where.
+        # For the entry, when it is written: what this answer displaces,
+        # and where. (`nb` had a separate write PHASE once; it does not now,
+        # and the note outlived the noun.)
         session.replaced[name] = (session.chapter, replaces)
     if answer.lower() in DELEGATED:
         return ("Delegated. Decide it yourself if it is answerable in a "
