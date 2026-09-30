@@ -1,0 +1,82 @@
+---
+title: "Are wing structural loads reasonable under a JAR-22 +5.3g limit manoeuvre at MTOM?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 31.2      # s the probe actually used
+
+import aerosandbox.tools.pretty_plots as p
+import matplotlib.pyplot as plt
+
+# Execute structural load analysis under JAR-22 +5.3g limit manoeuvre at MTOM
+loads = wing_structural_loads(airplane)
+
+mtom_val = 565.0
+m_root_aero_kNm = float(loads["root_moment_aero"] / 1000)
+m_root_net_ballasted_kNm = float(loads["root_moment_net_ballasted"] / 1000)
+m_root_net_dry_kNm = float(loads["root_moment_net_dry"] / 1000)
+m_relief_dry_kNm = float((loads["root_moment_aero"] - loads["root_moment_net_dry"]) / 1000)
+m_relief_ballast_kNm = float((loads["root_moment_net_dry"] - loads["root_moment_net_ballasted"]) / 1000)
+
+spar_depth_mm = 108.0
+spar_depth_m = spar_depth_mm / 1000
+root_thickness_mm = float(af_root.max_thickness() * wing_chords[0] * 1000)
+
+# Allowable limit stress for unidirectional carbon spar cap (600 MPa)
+sigma_allow_mpa = 600.0
+f_cap_dry_kn = m_root_net_dry_kNm / spar_depth_m
+spar_cap_area_cm2 = float((f_cap_dry_kn * 1000) / (sigma_allow_mpa * 1e6) * 1e4)
+
+wing_dry_mass_val = 140.0
+tank_span_str = "0.5 to 4.5 m"
+```
+
+::: {.hero}
+[`{python} f"{m_root_net_ballasted_kNm:.1f} kN·m"`]{.hero-value}
+[limit net root bending moment at MTOM (+5.3g)]{.hero-label}
+:::
+
+**Answer.** Under a JAR-22 +5.3g limit pull-up at maximum take-off mass ([`{python} f"{mtom_val:.0f} kg"`]{.key}), the [reconstructed Discus-2c](2026-09-30-01-what-does-a-discus-2c-geometry-reconstructed-from-published-data-look.qmd) develops a gross aerodynamic root bending moment of [`{python} f"{m_root_aero_kNm:.1f} kN·m"`]{.key} (@fig-wing-loads). Inertia relief from wing dry mass ([`{python} f"{m_relief_dry_kNm:.1f} kN·m"`]{.key}) and water ballast ([`{python} f"{m_relief_ballast_kNm:.1f} kN·m"`]{.key}) reduces the net limit moment to [`{python} f"{m_root_net_ballasted_kNm:.1f} kN·m"`]{.key} (or [`{python} f"{m_root_net_dry_kNm:.1f} kN·m"`]{.key} unballasted). At root spar depth [`{python} f"{spar_depth_mm:.0f} mm"`]{.key}, the required carbon spar cap area is [`{python} f"{spar_cap_area_cm2:.1f} cm²"`]{.key}, well within the [`{python} f"{root_thickness_mm:.0f} mm"`]{.key} airfoil thickness.
+
+::: {.callout-note}
+## New assumptions
+1. **wing dry mass: `{python} f"{wing_dry_mass_val:.0f} kg"`**, typical 18m fraction.
+2. **ballast span: `{python} f"{tank_span_str}"`**, inboard wing tank extent.
+:::
+
+```{python}
+#| label: fig-wing-loads
+#| fig-cap: "Spanwise shear force and bending moment distributions for the Discus-2c wing under a +5.3g limit manoeuvre at 565 kg MTOM, showing gross aerodynamic loads alongside net loads with dry wing and water ballast inertia relief."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 4))
+y = loads["y"]
+
+ax1.plot(y, loads["shear_aero"] / 1000, "b-", label="Gross aerodynamic")
+ax1.plot(y, loads["shear_net_dry"] / 1000, "g--", label="Net (dry wing)")
+ax1.plot(y, loads["shear_net_ballasted"] / 1000, "r-", label="Net (with ballast)")
+ax1.set_xlabel("Spanwise position $y$ (m)")
+ax1.set_ylabel("Shear force $V$ (kN)")
+ax1.grid(True, alpha=0.3)
+ax1.legend(fontsize=8)
+
+ax2.plot(y, loads["moment_aero"] / 1000, "b-", label="Gross aerodynamic")
+ax2.plot(y, loads["moment_net_dry"] / 1000, "g--", label="Net (dry wing)")
+ax2.plot(y, loads["moment_net_ballasted"] / 1000, "r-", label="Net (with ballast)")
+ax2.set_xlabel("Spanwise position $y$ (m)")
+ax2.set_ylabel("Bending moment $M$ (kN·m)")
+ax2.grid(True, alpha=0.3)
+ax2.legend(fontsize=8)
+
+plt.tight_layout()
+p.show_plot()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(wing_structural_loads)
+```
