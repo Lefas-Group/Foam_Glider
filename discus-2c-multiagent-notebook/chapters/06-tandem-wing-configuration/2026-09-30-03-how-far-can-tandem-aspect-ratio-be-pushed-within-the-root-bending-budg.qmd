@@ -1,0 +1,84 @@
+---
+title: "How far can tandem aspect ratio be pushed within the root bending budget?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 199.8      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Execute aspect ratio sweep for tandem wings up to baseline root bending budget
+spans_eval = np.array([18.0, 23.0, 28.0, 32.86])
+res = tandem_aspect_ratio_trade(airplane, spans=spans_eval)
+
+b_base = float(res["spans"][0])
+ar_base = float(res["ar_ref"][0])
+ar_wing_base = float(res["ar_wing"][0])
+ld_base_tandem = float(res["ld_max_arr"][0])
+m_root_18 = float(res["m_root_arr"][0])
+relief_18 = float(res["relief_arr"][0])
+
+m_root_base = float(res["m_root_base"])
+ld_base_mono = float(res["ld_base_max"])
+
+b_limit = float(res["b_limit"])
+ar_limit = float(res["ar_limit"])
+ar_wing_limit = float(res["ar_wing_limit"])
+ld_limit = float(res["ld_limit"])
+delta_ld_limit = float(res["delta_ld_limit"])
+delta_ld_base = float(ld_limit - ld_base_tandem)
+
+k_limit = float(np.interp(b_limit, res["spans"], res["k_arr"]))
+ir_limit = float(np.interp(b_limit, res["spans"], res["ir_arr"]))
+```
+
+::: {.hero}
+[`{python} f"{ar_limit:.1f}"`]{.hero-value}
+[maximum tandem aspect ratio reachable within the baseline root bending budget]{.hero-label}
+:::
+
+**Answer.** Banking [`{python} f"{relief_18:.1f}%"`]{.key} root bending relief allows aspect ratio to be pushed to [`{python} f"AR {ar_limit:.1f}"`]{.key} ([`{python} f"{b_limit:.1f} m"`]{.key} span) before reaching the [`{python} f"{m_root_base:.1f} kN·m"`]{.key} [manoeuvre bending budget](../01-calibrated-discus-2c/2026-09-30-03-are-wing-structural-loads-reasonable-under-a-jar-22-5-3g-limit-manoeuv.qmd) (@fig-tandem-ar-trade). Favorable biplane interference cuts induced drag factor to [`{python} f"{k_limit:.5f}"`]{.key} ([`{python} f"{ir_limit:.3f}×"`]{.key} baseline). At this limit, glide ratio reaches [`{python} f"{ld_limit:.2f}"`]{.key}, beating the [baseline monoplane](../01-calibrated-discus-2c/2026-09-30-02-does-the-reconstructed-discus-2c-achieve-its-published-45-9-glide-rati.qmd) ([`{python} f"{ld_base_mono:.2f}"`]{.key}) by [`{python} f"+{delta_ld_limit:.2f}"`]{.key} points and the [18 m tandem](2026-09-30-02-does-18-m-full-span-recover-tandem-glide-while-retaining-bending-relie.qmd) by [`{python} f"+{delta_ld_base:.2f}"`]{.key}.
+
+```{python}
+#| label: fig-tandem-ar-trade
+#| fig-cap: "Limit manoeuvre root bending moment and best glide ratio across tandem wing aspect ratios and spans up to the baseline cantilever bending limit."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
+
+# Subplot 1: Limit Root Bending Moment vs Span / AR
+ax1.plot(res["spans"], res["m_root_arr"], "s-", color="forestgreen", lw=2.0, label="Tandem peak spar load")
+ax1.axhline(m_root_base, color="steelblue", ls="--", lw=1.6, label=f"Baseline budget ({m_root_base:.1f} kN·m)")
+ax1.axvline(b_limit, color="crimson", ls=":", lw=1.6, label=f"Limit span ({b_limit:.1f} m, AR {ar_limit:.1f})")
+ax1.scatter([b_limit], [m_root_base], color="crimson", s=60, zorder=5)
+
+ax1.set_xlabel("Span per wing $b$ [m]")
+ax1.set_ylabel("Limit root bending moment [kN·m]")
+ax1.set_title("Limit Manoeuvre Structural Loads (+5.3g)")
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="upper left", fontsize=8)
+
+# Subplot 2: Best Glide Ratio vs Span / AR
+ax2.plot(res["spans"], res["ld_max_arr"], "o-", color="darkorange", lw=2.0, label="Tandem best L/D")
+ax2.axhline(ld_base_mono, color="steelblue", ls="--", lw=1.6, label=f"Baseline monoplane ({ld_base_mono:.1f})")
+ax2.axvline(b_limit, color="crimson", ls=":", lw=1.6, label=f"Limit span ({b_limit:.1f} m, L/D={ld_limit:.1f})")
+ax2.scatter([b_limit], [ld_limit], color="crimson", s=60, zorder=5)
+
+ax2.set_xlabel("Span per wing $b$ [m]")
+ax2.set_ylabel("Best glide ratio $L/D$ [-]")
+ax2.set_title("Glide Performance vs Aspect Ratio")
+ax2.grid(True, alpha=0.3)
+ax2.legend(loc="lower right", fontsize=8)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(tandem_aspect_ratio_trade)
+```
