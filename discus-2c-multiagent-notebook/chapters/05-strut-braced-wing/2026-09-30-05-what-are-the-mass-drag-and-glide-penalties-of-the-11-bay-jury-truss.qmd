@@ -1,0 +1,104 @@
+---
+title: "What are the mass, drag, and glide penalties of the 11-bay jury truss?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 166.3      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+out = sbw_multi_bay_jury_analysis(airplane)
+
+n_bays = int(out["n_bays"])
+n_stations = int(out["n_stations"])
+n_tubes_total = int(out["n_tubes_total"])
+l_sub = float(out["L_sub_m"])
+p_cr_bay_kn = float(out["P_cr_bay_kN"])
+p_comp_kn = float(out["P_comp_bal_kN"])
+margin_buckle_pct = float(out["margin_buckle_pct"])
+n_buckle = float(out["n_buckle"])
+
+m_tubes_kg = float(out["m_j_tubes_kg"])
+m_fittings_kg = float(out["m_j_fittings_kg"])
+m_jury_kg = float(out["m_j_total_kg"])
+
+delta_cd_jury_counts = float(out["delta_cd_jury_counts"])
+delta_cd_total_counts = float(out["delta_cd_total_vs_cant_counts"])
+
+ld_cant = float(out["ld_cant"])
+ld_base = float(out["ld_base"])
+ld_jury = float(out["ld_jury"])
+delta_ld_base = float(out["delta_ld_vs_base"])
+delta_ld_cant = float(out["delta_ld_vs_cant"])
+```
+
+::: {.hero}
+[`{python} f"{ld_jury:.2f}"`]{.hero-value}
+[honest net best glide ratio with negative-g Euler buckling prevented]{.hero-label}
+:::
+
+**Answer.** Dividing the strut into [`{python} f"{n_bays}"`]{.key} bays with [`{python} f"{l_sub:.2f} m"`]{.key} sub-bays raises Euler buckling capacity to [`{python} f"{p_cr_bay_kn:.2f} kN"`]{.key}. This survives the [`{python} f"{p_comp_kn:.1f} kN"`]{.key} [negative limit demand](2026-09-30-03-does-the-tension-sized-strut-buckle-under-the-jar-22-2-65g-negative-li.qmd) at [`{python} f"{n_buckle:.2f}g"`]{.key} with [`{python} f"{margin_buckle_pct:+.1f}%"`]{.key} margin (@fig-jury-11bay-penalties). However, the [`{python} f"{n_tubes_total}"`]{.key} jury tubes and fittings add [`{python} f"{m_jury_kg:.2f} kg"`]{.key} mass and [`{python} f"{delta_cd_jury_counts:.2f}"`]{.key} drag counts. Honest best glide ratio drops to [`{python} f"{ld_jury:.2f}"`]{.key}—[`{python} f"{abs(delta_ld_base):.2f}"`]{.key} points below [unbraced SBW](2026-09-30-04-does-a-jury-strut-fix-negative-g-buckling-and-what-penalty-does-it-cos.qmd) and [`{python} f"{abs(delta_ld_cant):.2f}"`]{.key} points below the [cantilever baseline](../01-calibrated-discus-2c/2026-09-30-02-does-the-reconstructed-discus-2c-achieve-its-published-45-9-glide-rati.qmd).
+
+::: {.callout-note}
+## New assumptions
+1. **jury strut truss fittings: `{python} f"{m_fittings_kg:.1f} kg"`**, ten stations hardware.
+:::
+
+```{python}
+#| label: fig-jury-11bay-penalties
+#| fig-cap: "Left: Glide ratio comparison across airspeeds between cantilever baseline, unbraced SBW, and 11-bay jury-braced SBW. Right: Cumulative parasitic drag and structural mass penalties imposed by the bracing system."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
+
+# Subplot 1: Glide polar comparison
+speeds = out["speeds_kmh"]
+ld_c = out["pol_cant"]["LD"]
+ld_b = out["pol_sbw_base"]["LD"]
+ld_j = out["pol_jury"]["LD"]
+
+ax1.plot(speeds, ld_c, color="steelblue", lw=2.2, label=f"Cantilever Baseline ($L/D={ld_cant:.2f}$)")
+ax1.plot(speeds, ld_b, color="darkorange", lw=2.0, ls="--", label=f"Unbraced SBW ($L/D={ld_base:.2f}$)")
+ax1.plot(speeds, ld_j, color="crimson", lw=2.2, label=f"11-Bay Jury SBW ($L/D={ld_jury:.2f}$)")
+
+ax1.set_xlabel("Airspeed $V$ (km/h)")
+ax1.set_ylabel("Glide Ratio $L/D$")
+ax1.set_title("Net Glide Ratio Comparison", fontsize=10)
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="lower center", fontsize=7.5)
+
+# Subplot 2: Mass and drag penalty breakdown
+categories = ["Main Struts\n(2 blades)", "Jury Tubes\n(40 blades)", "Jury Fittings\n(10 stns)", "Total Added\nTruss System"]
+masses = [10.38, m_tubes_kg, m_fittings_kg, 10.38 + m_jury_kg]
+drag_counts = [12.87, delta_cd_jury_counts * (m_tubes_kg / m_jury_kg), delta_cd_jury_counts * (m_fittings_kg / m_jury_kg), delta_cd_total_counts]
+
+x_pos = range(len(categories))
+ax2_twin = ax2.twinx()
+
+b1 = ax2.bar([p - 0.18 for p in x_pos], masses, width=0.35, color="navy", alpha=0.8, label="Mass Penalty (kg)")
+b2 = ax2_twin.bar([p + 0.18 for p in x_pos], drag_counts, width=0.35, color="firebrick", alpha=0.8, label="Drag Penalty (counts)")
+
+ax2.set_xticks(x_pos)
+ax2.set_xticklabels(categories, fontsize=8)
+ax2.set_ylabel("Mass (kg)", color="navy")
+ax2_twin.set_ylabel("Parasite Drag @ 98 km/h (counts)", color="firebrick")
+ax2.set_title("Bracing System Mass & Drag Impact", fontsize=10)
+ax2.grid(True, alpha=0.2, axis="y")
+
+# Combine legends
+lines = [b1, b2]
+labels = ["Mass Added (kg)", "Drag Added (counts)"]
+ax2.legend(lines, labels, loc="upper left", fontsize=7.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(sbw_multi_bay_jury_analysis)
+```
