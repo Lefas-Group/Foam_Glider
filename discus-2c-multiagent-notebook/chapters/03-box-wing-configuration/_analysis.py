@@ -255,3 +255,165 @@ def box_wing_comparison(
         "ld_base_arr": pol_b["LD"],
         "ld_box_arr": ld_box,
     }
+
+
+def box_wing_pitch_stability(
+    airplane: asb.Airplane,
+    velocity: float = 27.78,
+    alpha_eval: float = 2.0,
+    elevator_angles_deg: np.ndarray = None,
+    elevator_chord_frac: float = 0.25,
+) -> dict:
+    """Analyze pitch stability (neutral point, static margin) and aft-wing elevator control authority."""
+    if elevator_angles_deg is None:
+        elevator_angles_deg = np.array([-15.0, -10.0, -5.0, 0.0])
+
+    # 1. Baseline Discus-2c stability
+    ap_base = _build_baseline_airplane()
+    op_base = asb.OperatingPoint(velocity=velocity, alpha=alpha_eval)
+    ab_base = asb.AeroBuildup(airplane=ap_base, op_point=op_base).run_with_stability_derivatives()
+
+    x_cg_base = float(ap_base.xyz_ref[0])
+    c_ref_base = float(ap_base.c_ref)
+    x_np_base_ab = float(ab_base["x_np"][0])
+    sm_base_ab = (x_np_base_ab - x_cg_base) / c_ref_base
+
+    # 2. Box-wing AeroBuildup stability
+    op_box = asb.OperatingPoint(velocity=velocity, alpha=alpha_eval)
+    ab_box = asb.AeroBuildup(airplane=airplane, op_point=op_box).run_with_stability_derivatives()
+
+    x_cg_box = float(airplane.xyz_ref[0])
+    c_ref_box = float(airplane.c_ref)
+    x_np_box_ab = float(ab_box["x_np"][0])
+    sm_box_ab = (x_np_box_ab - x_cg_box) / c_ref_box
+    sm_box_stagger = (x_np_box_ab - x_cg_box) / 3.70
+
+    # 3. Box-wing VLM stability (2-point finite difference: 0 and 4 deg)
+    res_vlm0 = asb.VortexLatticeMethod(
+        airplane=airplane,
+        op_point=asb.OperatingPoint(velocity=velocity, alpha=0.0),
+        verbose=False,
+    ).run()
+    res_vlm4 = asb.VortexLatticeMethod(
+        airplane=airplane,
+        op_point=asb.OperatingPoint(velocity=velocity, alpha=4.0),
+        verbose=False,
+    ).run()
+    cla_vlm = float((res_vlm4["CL"] - res_vlm0["CL"]) / np.radians(4.0))
+    cma_vlm = float((res_vlm4["Cm"] - res_vlm0["Cm"]) / np.radians(4.0))
+    x_np_box_vlm = x_cg_box - (cma_vlm / cla_vlm) * c_ref_box
+    sm_box_vlm = (x_np_box_vlm - x_cg_box) / c_ref_box
+
+    # 4. Elevator sweep on aft wing
+    cms_de = []
+    cls_de = []
+    cds_de = []
+    hinge_point = 1.0 - elevator_chord_frac
+
+    af_root = asb.Airfoil("hq17")
+    af_mid = asb.Airfoil("hq2512")
+    af_tip = asb.Airfoil("hq2195")
+    af_tail = asb.Airfoil("hq010")
+    wing_ys = np.array([0.0, 2.1, 4.5, 7.5, 8.8, 9.0])
+    wing_chords = np.array([0.8093, 0.7646, 0.6653, 0.5015, 0.3128, 0.1589])
+    wing_xs_le = np.array([0.0, -0.040, 0.045, 0.250, 0.450, 0.530])
+    wing_twists = [0.0, -0.3, -0.8, -1.5, -2.2, -2.5]
+    wing_airfoils = [af_root, af_root, af_mid, af_mid, af_tip, af_tip]
+    c_aft = wing_chords * 0.5
+    rel_xs = wing_xs_le - wing_xs_le[0]
+    h_box = 0.15 * 18.0
+
+    for de in elevator_angles_deg:
+        cs = asb.ControlSurface(name="Elevator", deflection=de, hinge_point=hinge_point)
+        xsecs_aft_ctrl = [
+            asb.WingXSec(
+                xyz_le=[rel_xs[i], wing_ys[i], 0.0],
+                chord=c_aft[i],
+                twist=wing_twists[i],
+                airfoil=wing_airfoils[i],
+                control_surfaces=[cs],
+            )
+            for i in range(len(wing_ys))
+        ]
+        aft_ctrl = asb.Wing(
+            name="Aft Wing", symmetric=True, xsecs=xsecs_aft_ctrl
+        ).translate([6.00, 0.0, h_box])
+
+        ap_de = asb.Airplane(
+            name="Discus-2c-BoxWing-Elevator",
+            xyz_ref=airplane.xyz_ref,
+            wings=[airplane.wings[0], aft_ctrl, airplane.wings[2], airplane.wings[3]],
+            fuselages=airplane.fuselages,
+            s_ref=airplane.s_ref,
+            c_ref=airplane.c_ref,
+            b_ref=airplane.b_ref,
+        )
+        ab_de = asb.AeroBuildup(airplane=ap_de, op_point=op_box).run()
+        cms_de.append(float(ab_de["Cm"][0]))
+        cls_de.append(float(ab_de["CL"][0]))
+        cds_de.append(float(ab_de["CD"][0]))
+
+    cms_de = np.array(cms_de)
+    cls_de = np.array(cls_de)
+    cds_de = np.array(cds_de)
+    lds_de = cls_de / cds_de
+
+    dcm_dde = float(np.polyfit(elevator_angles_deg, cms_de, 1)[0])
+    delta_e_trim = float(np.interp(0.0, cms_de[::-1], elevator_angles_deg[::-1]))
+    cl_trim = float(np.interp(delta_e_trim, elevator_angles_deg, cls_de))
+    cd_trim = float(np.interp(delta_e_trim, elevator_angles_deg, cds_de))
+    ld_trim = cl_trim / cd_trim
+
+    # 5. Balanced CG check (10% MAC static margin)
+    x_cg_bal = x_np_box_ab - 0.10 * c_ref_box
+    ap_bal = asb.Airplane(
+        name="Discus-2c-BoxWing-Balanced",
+        xyz_ref=[x_cg_bal, 0.0, float(airplane.xyz_ref[2])],
+        wings=airplane.wings,
+        fuselages=airplane.fuselages,
+        s_ref=airplane.s_ref,
+        c_ref=airplane.c_ref,
+        b_ref=airplane.b_ref,
+    )
+    ab_bal = asb.AeroBuildup(airplane=ap_bal, op_point=op_box).run_with_stability_derivatives()
+    cl_bal = float(ab_bal["CL"][0])
+    cd_bal = float(ab_bal["CD"][0])
+    ld_bal = cl_bal / cd_bal
+    cm_bal = float(ab_bal["Cm"][0])
+
+    return {
+        "x_cg_base": x_cg_base,
+        "c_ref_base": c_ref_base,
+        "x_np_base_ab": x_np_base_ab,
+        "sm_base_ab": sm_base_ab,
+        "x_cg_box": x_cg_box,
+        "c_ref_box": c_ref_box,
+        "x_np_box_ab": x_np_box_ab,
+        "x_np_box_vlm": x_np_box_vlm,
+        "sm_box_ab": sm_box_ab,
+        "sm_box_vlm": sm_box_vlm,
+        "sm_box_stagger": sm_box_stagger,
+        "cla_box_ab": float(ab_box["CLa"][0]),
+        "cma_box_ab": float(ab_box["Cma"][0]),
+        "cla_box_vlm": cla_vlm,
+        "cma_box_vlm": cma_vlm,
+        "cm_untrimmed": float(ab_box["Cm"][0]),
+        "dcm_dde": dcm_dde,
+        "delta_e_trim": delta_e_trim,
+        "cl_untrimmed": float(ab_box["CL"][0]),
+        "cd_untrimmed": float(ab_box["CD"][0]),
+        "ld_untrimmed": float(ab_box["CL"][0]) / float(ab_box["CD"][0]),
+        "cl_trim": cl_trim,
+        "cd_trim": cd_trim,
+        "ld_trim": ld_trim,
+        "elevator_angles_deg": elevator_angles_deg,
+        "cms_de": cms_de,
+        "cls_de": cls_de,
+        "lds_de": lds_de,
+        "x_cg_bal": x_cg_bal,
+        "cl_bal": cl_bal,
+        "cd_bal": cd_bal,
+        "ld_bal": ld_bal,
+        "cm_bal": cm_bal,
+    }
+

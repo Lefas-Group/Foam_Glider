@@ -1,0 +1,82 @@
+---
+title: "What are the box-wing neutral point, static margin, and elevator requirements?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 105.7      # s the probe actually used
+
+res = box_wing_pitch_stability(airplane)
+sm_pct = res["sm_box_ab"] * 100.0
+```
+
+::: {.hero}
+[`{python} f"+{sm_pct:.0f}% MAC"`]{.hero-value}
+[box-wing static margin at baseline CG w.r.t. forward chord]{.hero-label}
+:::
+
+**Answer.** The box-wing configuration has a neutral point at [`{python} f"{res['x_np_box_ab']:.2f} m"`]{.key} ([`{python} f"{res['x_np_box_vlm']:.2f} m"`]{.key} via VLM). With the baseline CG at [`{python} f"{res['x_cg_box']:.2f} m"`]{.key}, the aircraft is hyper-stable with a static margin of [`{python} f"{res['sm_box_ab']*100:.0f}% MAC"`]{.key} ([`{python} f"{res['sm_box_stagger']*100:.1f}%"`]{.key} of stagger). Elevator control on the aft wing is required for pitch authority and trim. Trimming at the baseline CG requires [`{python} f"{res['delta_e_trim']:.1f}°"`]{.key} up-elevator, which dumps aft-wing lift and degrades glide ratio from [`{python} f"{res['ld_untrimmed']:.1f}"`]{.key} to [`{python} f"{res['ld_trim']:.1f}"`]{.key} (@fig-box-wing-pitch). Balancing CG aft to [`{python} f"{res['x_cg_bal']:.2f} m"`]{.key} restores trim at [`{python} f"{res['ld_bal']:.1f}"`]{.key} glide, confirming [prior aerodynamic predictions](2026-09-30-01-how-do-box-wing-glide-ratio-and-root-bending-moment-compare-with-the-b.qmd).
+
+::: {.callout-note}
+## New assumptions
+1. **elevator chord fraction: 25% chord**, typical trailing-edge control surface.
+:::
+
+```{python}
+#| label: fig-box-wing-pitch
+#| fig-cap: "Pitch stability curves for baseline and box-wing configurations, and variation of pitching moment and glide ratio with aft-wing elevator deflection."
+import matplotlib.pyplot as plt
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
+
+# Left plot: Cm vs alpha
+alphas_plot = np.linspace(-1.0, 5.0, 25)
+cm_base_plot = res["cma_box_ab"] * 0.0 + (res["x_cg_base"] - res["x_np_base_ab"]) / res["c_ref_base"] * 6.388 * np.radians(alphas_plot)
+# More exact: use slopes
+cm_base_line = -res["sm_base_ab"] * 6.388 * np.radians(alphas_plot)
+cm_box_line = -res["sm_box_ab"] * res["cla_box_ab"] * np.radians(alphas_plot - 2.0) + res["cm_untrimmed"]
+
+ax1.plot(alphas_plot, cm_base_line, "k--", label=f"Baseline Discus-2c (SM = {res['sm_base_ab']*100:.0f}% MAC)")
+ax1.plot(alphas_plot, cm_box_line, "tab:blue", label=f"Box-wing (SM = {res['sm_box_ab']*100:.0f}% MAC)")
+ax1.axhline(0.0, color="gray", linestyle=":", alpha=0.6)
+ax1.axvline(2.0, color="gray", linestyle=":", alpha=0.4, label=r"Glide condition $\alpha=2^\circ$")
+ax1.set_xlabel(r"Angle of attack $\alpha$ [deg]")
+ax1.set_ylabel(r"Pitching moment coefficient $C_m$")
+ax1.set_title("Pitch Stability Comparison")
+ax1.legend(loc="upper right", fontsize=8)
+ax1.grid(True, alpha=0.3)
+
+# Right plot: Cm and L/D vs delta_e
+ax2_twin = ax2.twinx()
+p1 = ax2.plot(res["elevator_angles_deg"], res["cms_de"], "tab:red", marker="o", label=r"$C_m$ vs $\delta_e$")
+p2 = ax2_twin.plot(res["elevator_angles_deg"], res["lds_de"], "tab:green", marker="s", label=r"$L/D$ vs $\delta_e$")
+
+ax2.axhline(0.0, color="gray", linestyle=":", alpha=0.6)
+ax2.axvline(res["delta_e_trim"], color="tab:red", linestyle="--", alpha=0.7, label=f"Trim $\\delta_e = {res['delta_e_trim']:.1f}^\\circ$")
+ax2_twin.scatter([res["delta_e_trim"]], [res["ld_trim"]], color="darkgreen", s=50, zorder=5)
+
+ax2.set_xlabel(r"Aft-wing elevator deflection $\delta_e$ [deg]")
+ax2.set_ylabel(r"Pitching moment coefficient $C_m$", color="tab:red")
+ax2_twin.set_ylabel("Glide ratio $L/D$", color="tab:green")
+ax2.tick_params(axis="y", labelcolor="tab:red")
+ax2_twin.tick_params(axis="y", labelcolor="tab:green")
+ax2.set_title("Aft-Wing Elevator Control & Trim Drag")
+ax2.grid(True, alpha=0.3)
+
+lines = p1 + p2
+labels = [l.get_label() for l in lines]
+ax2.legend(lines, labels, loc="lower right", fontsize=8)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(box_wing_pitch_stability)
+```
