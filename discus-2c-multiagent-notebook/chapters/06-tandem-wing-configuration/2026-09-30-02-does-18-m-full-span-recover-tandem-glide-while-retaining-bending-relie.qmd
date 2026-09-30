@@ -1,0 +1,103 @@
+---
+title: "Does 18 m full span recover tandem glide while retaining bending relief?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 196.4      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Evaluate full 18 m span tandem wing against reduced-span tandem and baseline monoplane
+res = tandem_full_span_comparison(airplane)
+
+b_18 = float(res["ap_18"].b_ref)
+ld_base_max = float(res["ld_base_max"])
+ld_red_max = float(res["ld_red_max"])
+ld_18_max = float(res["ld_18_max"])
+
+v_base_max = float(res["v_base_max"])
+v_red_max = float(res["v_red_max"])
+v_18_max = float(res["v_18_max"])
+
+delta_ld_18 = float(res["delta_ld_18"])
+recovered_ld = float(res["recovered_ld"])
+recovery_pct = float(res["recovery_pct"])
+
+k_base = float(res["k_base"])
+k_red = float(res["k_red"])
+k_18 = float(res["k_18"])
+ir_18 = float(res["induced_ratio_18"])
+e_18 = float(res["e_18"])
+
+m_root_base = float(res["m_root_base"])
+m_red_max = float(res["m_root_red_max"])
+m_fwd_18 = float(res["m_root_fwd_18"])
+m_aft_18 = float(res["m_root_aft_18"])
+m_18_max = float(res["m_root_18_max"])
+relief_18_pct = float(res["relief_18_pct"])
+relief_red_pct = float(res["relief_red_pct"])
+```
+
+::: {.hero}
+[`{python} f"{ld_18_max:.2f}"`]{.hero-value}
+[maximum glide ratio recovered with full 18 m span tandem wings]{.hero-label}
+:::
+
+**Answer.** Yes. Restoring each tandem wing to the [`{python} f"{b_18:.0f} m"`]{.key} span of the [baseline monoplane](../01-calibrated-discus-2c/2026-09-30-02-does-the-reconstructed-discus-2c-achieve-its-published-45-9-glide-rati.qmd) recovers [`{python} f"{recovered_ld:.2f}"`]{.key} glide points ([`{python} f"{recovery_pct:.1f}%"`]{.key} of the deficit in the [prior tandem study](2026-09-30-01-how-do-tandem-wing-glide-ratio-and-root-bending-moment-compare-with-th.qmd)), achieving [`{python} f"{ld_18_max:.2f}"`]{.key} glide ratio (@fig-tandem-full-span). Favorable biplane interference cuts induced drag factor to [`{python} f"{k_18:.5f}"`]{.key} ([`{python} f"{ir_18:.3f}×"`]{.key} baseline, [`{python} f"e = {e_18:.3f}"`]{.key}); the remaining [`{python} f"{abs(delta_ld_18):.2f}"`]{.key}-point penalty is purely chord Reynolds profile drag. Furthermore, splitting lift across both wings preserves [`{python} f"{relief_18_pct:.1f}%"`]{.key} limit root bending-moment relief, capping peak spar moment at [`{python} f"{m_18_max:.1f} kN·m"`]{.key} versus [`{python} f"{m_root_base:.1f} kN·m"`]{.key}.
+
+```{python}
+#| label: fig-tandem-full-span
+#| fig-cap: "Glide ratio polars and limit manoeuvre root bending moments comparing the 18 m full-span tandem wing against the baseline monoplane and 12.73 m reduced-span tandem."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
+
+# Subplot 1: Glide Polar
+ax1.plot(res["speeds_kmh"], res["ld_base_arr"], "o--", color="steelblue", lw=1.8, label=f"Baseline monoplane (L/D={ld_base_max:.1f})")
+ax1.plot(res["speeds_kmh"], res["ld_red_arr"], "^:", color="crimson", lw=1.8, label=f"12.73 m tandem (L/D={ld_red_max:.1f})")
+ax1.plot(res["speeds_kmh"], res["ld_18_arr"], "s-", color="forestgreen", lw=2.2, label=f"18.0 m tandem (L/D={ld_18_max:.1f})")
+ax1.scatter([v_base_max], [ld_base_max], color="steelblue", s=50, zorder=5)
+ax1.scatter([v_red_max], [ld_red_max], color="crimson", s=50, zorder=5)
+ax1.scatter([v_18_max], [ld_18_max], color="forestgreen", s=50, zorder=5)
+ax1.set_xlabel("Airspeed [km/h]")
+ax1.set_ylabel("Glide ratio L/D [-]")
+ax1.set_title("Glide Performance Comparison")
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="lower center", fontsize=8)
+
+# Subplot 2: Limit Root Bending Moment Bar Chart
+bars = ["Baseline\n(18 m)", "Tandem\n(12.73 m)", "Tandem Fore\n(18.0 m)", "Tandem Aft\n(18.0 m)"]
+moments = [m_root_base, m_red_max, m_fwd_18, m_aft_18]
+colors = ["steelblue", "crimson", "forestgreen", "mediumseagreen"]
+
+b_plot = ax2.bar(bars, moments, color=colors, width=0.55, edgecolor="black", linewidth=0.8)
+ax2.set_ylabel("Limit root bending moment [kN·m]")
+ax2.set_title("Limit Manoeuvre Structural Loads (+5.3g)")
+ax2.grid(True, axis="y", alpha=0.3)
+
+for bar_elem, val in zip(b_plot, moments):
+    y_pos = bar_elem.get_height()
+    pct_str = f"{- (1.0 - val / m_root_base) * 100:.1f}%" if val != m_root_base else "Ref"
+    ax2.text(
+        bar_elem.get_x() + bar_elem.get_width() / 2.0,
+        y_pos + 1.0,
+        f"{val:.1f} kN·m\n({pct_str})",
+        ha="center",
+        va="bottom",
+        fontsize=8,
+    )
+
+ax2.set_ylim(0, max(moments) * 1.25)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(tandem_full_span_comparison)
+```

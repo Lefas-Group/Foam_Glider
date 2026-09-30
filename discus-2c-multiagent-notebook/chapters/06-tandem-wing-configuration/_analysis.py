@@ -275,3 +275,283 @@ def tandem_comparison(
         "static_margin_pct": float(static_margin_pct),
         "cm_trim": float(cm_trim),
     }
+
+
+def _build_18m_tandem_airplane(decalage_aft: float = -0.98) -> asb.Airplane:
+    """Build tandem airplane with full 18 m span on both fore and aft wings, halving chords."""
+    af_root = asb.Airfoil("hq17")
+    af_mid = asb.Airfoil("hq2512")
+    af_tip = asb.Airfoil("hq2195")
+    af_tail = asb.Airfoil("hq010")
+
+    wing_ys = np.array([0.0, 2.1, 4.5, 7.5, 8.8, 9.0])
+    wing_chords = np.array([0.8093, 0.7646, 0.6653, 0.5015, 0.3128, 0.1589]) * 0.5
+    wing_xs_le = np.array([0.0, -0.040, 0.045, 0.250, 0.450, 0.530])
+    wing_dihedral_deg = 3.0
+    wing_zs_le = wing_ys * np.tand(wing_dihedral_deg)
+    wing_zs_le[-1] = wing_zs_le[-2] + 0.40
+
+    wing_twists = [0.0, -0.3, -0.8, -1.5, -2.2, -2.5]
+    wing_airfoils = [af_root, af_root, af_mid, af_mid, af_tip, af_tip]
+
+    x_fwd_root = 1.00
+    z_fwd_root = -0.10
+    xsecs_fore = [
+        asb.WingXSec(
+            xyz_le=[wing_xs_le[i], wing_ys[i], wing_zs_le[i]],
+            chord=wing_chords[i],
+            twist=wing_twists[i],
+            airfoil=wing_airfoils[i],
+        )
+        for i in range(len(wing_ys))
+    ]
+    wf = asb.Wing(name="Fore Wing", symmetric=True, xsecs=xsecs_fore).translate(
+        [x_fwd_root, 0.0, z_fwd_root]
+    )
+
+    x_aft_root = 4.30
+    z_aft_root = 0.35
+    xsecs_aft = [
+        asb.WingXSec(
+            xyz_le=[wing_xs_le[i], wing_ys[i], wing_zs_le[i]],
+            chord=wing_chords[i],
+            twist=wing_twists[i] + decalage_aft,
+            airfoil=wing_airfoils[i],
+        )
+        for i in range(len(wing_ys))
+    ]
+    wa = asb.Wing(name="Aft Wing", symmetric=True, xsecs=xsecs_aft).translate(
+        [x_aft_root, 0.0, z_aft_root]
+    )
+
+    xsecs_vtail = [
+        asb.WingXSec(xyz_le=[5.85, 0.0, -0.05], chord=0.85, airfoil=af_tail),
+        asb.WingXSec(xyz_le=[6.38, 0.0, 1.25], chord=0.45, airfoil=af_tail),
+    ]
+    vt = asb.Wing(name="Vertical Stabilizer", symmetric=False, xsecs=xsecs_vtail)
+
+    fuse_xsecs = [
+        asb.FuselageXSec(xyz_c=[0.0, 0.0, 0.0], width=0.02, height=0.02),
+        asb.FuselageXSec(xyz_c=[0.5, 0.0, 0.02], width=0.45, height=0.55),
+        asb.FuselageXSec(xyz_c=[1.1, 0.0, 0.05], width=0.62, height=0.78),
+        asb.FuselageXSec(xyz_c=[1.8, 0.0, 0.04], width=0.60, height=0.75),
+        asb.FuselageXSec(xyz_c=[2.4, 0.0, 0.00], width=0.50, height=0.65),
+        asb.FuselageXSec(xyz_c=[3.2, 0.0, -0.02], width=0.36, height=0.48),
+        asb.FuselageXSec(xyz_c=[4.5, 0.0, -0.04], width=0.20, height=0.28),
+        asb.FuselageXSec(xyz_c=[5.8, 0.0, -0.05], width=0.14, height=0.22),
+        asb.FuselageXSec(xyz_c=[6.81, 0.0, -0.05], width=0.04, height=0.15),
+    ]
+    fu = asb.Fuselage(name="Fuselage", xsecs=fuse_xsecs)
+
+    empty_props = asb.MassProperties(
+        mass=337.0, x_cg=2.832, y_cg=0.0, z_cg=0.097, Ixx=1760.5, Iyy=189.7, Izz=1934.2
+    )
+    fl_props = empty_props + asb.MassProperties(mass=80.0, x_cg=1.75, y_cg=0.0, z_cg=0.0)
+
+    return asb.Airplane(
+        name="Discus-2c-Tandem-18m",
+        xyz_ref=[fl_props.x_cg, fl_props.y_cg, fl_props.z_cg],
+        wings=[wf, wa, vt],
+        fuselages=[fu],
+        s_ref=11.39,
+        c_ref=float(wf.mean_aerodynamic_chord()),
+        b_ref=18.0,
+    )
+
+
+def tandem_full_span_comparison(
+    airplane: asb.Airplane,
+    mass_flight: float = 417.0,
+    mass_structural: float = 565.0,
+    load_factor: float = 5.3,
+    speeds_kmh: np.ndarray = None,
+) -> dict:
+    """Evaluate 18 m full-span tandem wing against reduced-span tandem and baseline monoplane."""
+    if speeds_kmh is None:
+        speeds_kmh = np.linspace(75, 180, 15)
+
+    ap_base = _build_baseline_airplane()
+    ap_red = airplane
+    ap_18 = _build_18m_tandem_airplane()
+
+    v_m = 55.56
+    target_lift = mass_structural * 9.81 * load_factor
+
+    # 1. Manoeuvre bending moments
+    def _calc_m_root_tandem(plane, split_x=2.5):
+        vx1 = asb.VortexLatticeMethod(
+            airplane=plane, op_point=asb.OperatingPoint(velocity=v_m, alpha=4.0), verbose=False
+        ).run()
+        vx2 = asb.VortexLatticeMethod(
+            airplane=plane, op_point=asb.OperatingPoint(velocity=v_m, alpha=8.0), verbose=False
+        ).run()
+        dL_da = (vx2["L"] - vx1["L"]) / 4.0
+        a_trim = 4.0 + (target_lift - vx1["L"]) / dL_da
+        sol = asb.VortexLatticeMethod(
+            airplane=plane, op_point=asb.OperatingPoint(velocity=v_m, alpha=a_trim), verbose=False
+        )
+        sol.run()
+        yx = sol.vortex_centers[:, 1]
+        xx = sol.vortex_centers[:, 0]
+        fzx = sol.forces_geometry[:, 2]
+        sb_fwd = (yx >= 0) & (xx < split_x)
+        sb_aft = (yx >= 0) & (xx >= split_x)
+        m_fwd = float(np.sum(yx[sb_fwd] * fzx[sb_fwd])) / 1000.0
+        m_aft = float(np.sum(yx[sb_aft] * fzx[sb_aft])) / 1000.0
+        return m_fwd, m_aft
+
+    vb1 = asb.VortexLatticeMethod(
+        airplane=ap_base, op_point=asb.OperatingPoint(velocity=v_m, alpha=4.0), verbose=False
+    ).run()
+    vb2 = asb.VortexLatticeMethod(
+        airplane=ap_base, op_point=asb.OperatingPoint(velocity=v_m, alpha=8.0), verbose=False
+    ).run()
+    dL_da_b = (vb2["L"] - vb1["L"]) / 4.0
+    a_trim_b = 4.0 + (target_lift - vb1["L"]) / dL_da_b
+    sol_b = asb.VortexLatticeMethod(
+        airplane=ap_base, op_point=asb.OperatingPoint(velocity=v_m, alpha=a_trim_b), verbose=False
+    )
+    sol_b.run()
+    yb = sol_b.vortex_centers[:, 1]
+    xb = sol_b.vortex_centers[:, 0]
+    fzb = sol_b.forces_geometry[:, 2]
+    sb_b = (yb >= 0) & (xb < 4.0)
+    m_root_base = float(np.sum(yb[sb_b] * fzb[sb_b])) / 1000.0
+
+    m_fwd_red, m_aft_red = _calc_m_root_tandem(ap_red)
+    m_red_max = max(m_fwd_red, m_aft_red)
+    relief_red_pct = (1.0 - m_red_max / m_root_base) * 100.0
+
+    m_fwd_18, m_aft_18 = _calc_m_root_tandem(ap_18)
+    m_18_max = max(m_fwd_18, m_aft_18)
+    relief_18_pct = (1.0 - m_18_max / m_root_base) * 100.0
+
+    # 2. Induced drag factors at cruise (V = 27.78 m/s = 100 km/h)
+    v_cruise = 27.78
+
+    def _calc_k(plane):
+        r2 = asb.VortexLatticeMethod(
+            airplane=plane, op_point=asb.OperatingPoint(velocity=v_cruise, alpha=2.0), verbose=False
+        ).run()
+        r6 = asb.VortexLatticeMethod(
+            airplane=plane, op_point=asb.OperatingPoint(velocity=v_cruise, alpha=6.0), verbose=False
+        ).run()
+        return float((r6["CD"] - r2["CD"]) / (r6["CL"] ** 2 - r2["CL"] ** 2))
+
+    k_base = _calc_k(ap_base)
+    k_red = _calc_k(ap_red)
+    k_18 = _calc_k(ap_18)
+
+    ir_red = k_red / k_base
+    ir_18 = k_18 / k_base
+
+    ar_base = float(ap_base.b_ref ** 2 / ap_base.s_ref)
+    ar_red = float(ap_red.b_ref ** 2 / ap_red.s_ref)
+    ar_18 = float(ap_18.b_ref ** 2 / ap_18.s_ref)
+
+    e_base = float((1.0 / (np.pi * ar_base)) / k_base)
+    e_red = float((1.0 / (np.pi * ar_red)) / k_red)
+    e_18 = float((1.0 / (np.pi * ar_18)) / k_18)
+
+    # 3. Glide polars
+    pol_b = _glide_polar(ap_base, mass=mass_flight, speeds_kmh=speeds_kmh)
+    pol_red = _glide_polar(ap_red, mass=mass_flight, speeds_kmh=speeds_kmh)
+    pol_18 = _glide_polar(ap_18, mass=mass_flight, speeds_kmh=speeds_kmh)
+
+    cdi_red = pol_b["CD_induced"] * ir_red
+    cdp_red = pol_red["CD_profile"]
+    cd_red = cdi_red + cdp_red
+    ld_red = pol_b["CL"] / cd_red
+
+    cdi_18 = pol_b["CD_induced"] * ir_18
+    cdp_18 = pol_18["CD_profile"]
+    cd_18 = cdi_18 + cdp_18
+    ld_18 = pol_b["CL"] / cd_18
+
+    ld_base_max = float(np.max(pol_b["LD"]))
+    v_base_max = float(speeds_kmh[np.argmax(pol_b["LD"])])
+
+    ld_red_max = float(np.max(ld_red))
+    v_red_max = float(speeds_kmh[np.argmax(ld_red)])
+    delta_ld_red = ld_red_max - ld_base_max
+
+    ld_18_max = float(np.max(ld_18))
+    v_18_max = float(speeds_kmh[np.argmax(ld_18)])
+    delta_ld_18 = ld_18_max - ld_base_max
+
+    recovered_ld = ld_18_max - ld_red_max
+    recovery_pct = (recovered_ld / (ld_base_max - ld_red_max)) * 100.0
+
+    # 4. Cruise trim and stability for 18m tandem
+    op_c1 = asb.OperatingPoint(velocity=v_cruise, alpha=2.0)
+    op_c2 = asb.OperatingPoint(velocity=v_cruise, alpha=4.0)
+    vc1_18 = asb.VortexLatticeMethod(airplane=ap_18, op_point=op_c1, verbose=False).run()
+    vc2_18 = asb.VortexLatticeMethod(airplane=ap_18, op_point=op_c2, verbose=False).run()
+    dCL_da_18 = (vc2_18["CL"] - vc1_18["CL"]) / 2.0
+    dCm_da_18 = (vc2_18["Cm"] - vc1_18["Cm"]) / 2.0
+    weight_cruise = mass_flight * 9.81
+    CL_req_cruise = weight_cruise / (0.5 * 1.225 * v_cruise ** 2 * ap_18.s_ref)
+    alpha_trim_18 = 2.0 + (CL_req_cruise - vc1_18["CL"]) / dCL_da_18
+
+    sol_trim_18 = asb.VortexLatticeMethod(
+        airplane=ap_18, op_point=asb.OperatingPoint(velocity=v_cruise, alpha=alpha_trim_18), verbose=False
+    )
+    res_trim_18 = sol_trim_18.run()
+    fzc_18 = sol_trim_18.forces_geometry[:, 2]
+    xc_18 = sol_trim_18.vortex_centers[:, 0]
+    l_fwd_18 = float(np.sum(fzc_18[xc_18 < 2.5]))
+    l_aft_18 = float(np.sum(fzc_18[xc_18 >= 2.5]))
+    l_tot_18 = l_fwd_18 + l_aft_18
+    lift_split_fwd_18 = (l_fwd_18 / l_tot_18) * 100.0
+    lift_split_aft_18 = (l_aft_18 / l_tot_18) * 100.0
+
+    h_np_18 = -float(dCm_da_18 / dCL_da_18)
+    sm_18 = h_np_18 * 100.0
+    cm_trim_18 = float(res_trim_18["Cm"])
+
+    return {
+        "m_root_base": m_root_base,
+        "m_root_fwd_red": m_fwd_red,
+        "m_root_aft_red": m_aft_red,
+        "m_root_red_max": m_red_max,
+        "relief_red_pct": relief_red_pct,
+        "m_root_fwd_18": m_fwd_18,
+        "m_root_aft_18": m_aft_18,
+        "m_root_18_max": m_18_max,
+        "relief_18_pct": relief_18_pct,
+        "k_base": k_base,
+        "k_red": k_red,
+        "k_18": k_18,
+        "induced_ratio_red": ir_red,
+        "induced_ratio_18": ir_18,
+        "e_base": e_base,
+        "e_red": e_red,
+        "e_18": e_18,
+        "speeds_kmh": speeds_kmh,
+        "ld_base_arr": pol_b["LD"],
+        "ld_red_arr": ld_red,
+        "ld_18_arr": ld_18,
+        "cdi_base_arr": pol_b["CD_induced"],
+        "cdi_red_arr": cdi_red,
+        "cdi_18_arr": cdi_18,
+        "cdp_base_arr": pol_b["CD_profile"],
+        "cdp_red_arr": cdp_red,
+        "cdp_18_arr": cdp_18,
+        "ld_base_max": ld_base_max,
+        "v_base_max": v_base_max,
+        "ld_red_max": ld_red_max,
+        "v_red_max": v_red_max,
+        "delta_ld_red": delta_ld_red,
+        "ld_18_max": ld_18_max,
+        "v_18_max": v_18_max,
+        "delta_ld_18": delta_ld_18,
+        "recovered_ld": recovered_ld,
+        "recovery_pct": recovery_pct,
+        "alpha_trim_18": float(alpha_trim_18),
+        "lift_split_fwd_18": float(lift_split_fwd_18),
+        "lift_split_aft_18": float(lift_split_aft_18),
+        "static_margin_18": float(sm_18),
+        "cm_trim_18": float(cm_trim_18),
+        "ap_18": ap_18,
+    }
+
