@@ -66,6 +66,38 @@ import sys as _sys
 _faulthandler.dump_traceback_later(PROBE_SILENCE, repeat=False,  # noqa: F821
                                    file=_sys.stderr)
 
+# DIE WITH THE RUN THAT STARTED US.
+#
+# A run is a daemon -- `detach.py` double-forks it out of the terminal's
+# session -- and this kernel is its child. Nothing about that child is
+# automatic: when the run ends cleanly, `run`'s `finally` shuts it down, but
+# when the run is KILLED, or dies down a path that never reaches that finally,
+# the kernel is simply reparented to init and keeps running. Observed: a run
+# died mid-probe and left a kernel holding a loaded chapter, with nothing left
+# alive that knew it existed.
+#
+# `atexit` in the parent cannot help, because the case that matters is the
+# parent not getting to run anything. So the check lives HERE and is the one
+# signal a SIGKILLed parent cannot suppress: our ppid changes the moment it
+# dies. Polled rather than waited on -- `os.wait` is for children, and this is
+# the other direction.
+#
+# `os._exit`, not `sys.exit`: a kernel whose run is gone has no output anyone
+# will read and no reason to unwind gracefully.
+import os as _os_guard
+import threading as _threading
+
+
+def _die_with_parent(_ppid=_os_guard.getppid()):
+    import time as _t
+    while True:
+        _t.sleep(5.0)
+        if _os_guard.getppid() != _ppid:
+            _os_guard._exit(0)
+
+
+_threading.Thread(target=_die_with_parent, daemon=True).start()
+
 # The names the chapter brought in, so `kernel.py` can tell the model what it is
 # holding from earlier probes. Taken here, before any probe has run, so the diff
 # against it later is exactly what the probes themselves defined.
