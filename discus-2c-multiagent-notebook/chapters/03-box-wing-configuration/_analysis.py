@@ -417,3 +417,176 @@ def box_wing_pitch_stability(
         "cm_bal": cm_bal,
     }
 
+
+def box_wing_stagger_gap_trade(
+    airplane: asb.Airplane,
+    velocity: float = 27.78,
+    alpha_eval: float = 2.0,
+    staggers: np.ndarray = None,
+    gaps: np.ndarray = None,
+    elevator_chord_frac: float = 0.25,
+) -> dict:
+    """Evaluate neutral point, static margin, elevator authority, and trim L/D across stagger and gap."""
+    if staggers is None:
+        staggers = np.array([3.70, 3.00, 2.50, 2.00, 1.50, 1.00, 0.60, 0.40, 0.20, 0.10, 0.00])
+    if gaps is None:
+        gaps = np.array([0.50, 1.00, 1.80, 2.70, 3.60])
+
+    af_root = asb.Airfoil("hq17")
+    af_mid = asb.Airfoil("hq2512")
+    af_tip = asb.Airfoil("hq2195")
+    af_tail = asb.Airfoil("hq010")
+
+    wing_ys = np.array([0.0, 2.1, 4.5, 7.5, 8.8, 9.0])
+    wing_chords = np.array([0.8093, 0.7646, 0.6653, 0.5015, 0.3128, 0.1589])
+    wing_xs_le = np.array([0.0, -0.040, 0.045, 0.250, 0.450, 0.530])
+    wing_twists = [0.0, -0.3, -0.8, -1.5, -2.2, -2.5]
+    wing_airfoils = [af_root, af_root, af_mid, af_mid, af_tip, af_tip]
+    c_fwd = wing_chords * 0.5
+    c_aft = wing_chords * 0.5
+    rel_xs = wing_xs_le - wing_xs_le[0]
+    hinge_point = 1.0 - elevator_chord_frac
+    x_cg = float(airplane.xyz_ref[0])
+
+    def _build_variant(stagger_val, h_box_val, de_val=0.0):
+        x_fwd_root = 2.30
+        x_aft_root = x_fwd_root + stagger_val
+
+        xsecs_fwd = [
+            asb.WingXSec(
+                xyz_le=[rel_xs[i], wing_ys[i], 0.0],
+                chord=c_fwd[i],
+                twist=wing_twists[i],
+                airfoil=wing_airfoils[i],
+            )
+            for i in range(len(wing_ys))
+        ]
+        fwd_w = asb.Wing(name="Forward Wing", symmetric=True, xsecs=xsecs_fwd).translate([x_fwd_root, 0.0, 0.0])
+
+        cs = asb.ControlSurface(name="Elevator", deflection=de_val, hinge_point=hinge_point)
+        xsecs_aft = [
+            asb.WingXSec(
+                xyz_le=[rel_xs[i], wing_ys[i], 0.0],
+                chord=c_aft[i],
+                twist=wing_twists[i],
+                airfoil=wing_airfoils[i],
+                control_surfaces=[cs] if de_val != 0.0 else None,
+            )
+            for i in range(len(wing_ys))
+        ]
+        aft_w = asb.Wing(name="Aft Wing", symmetric=True, xsecs=xsecs_aft).translate([x_aft_root, 0.0, h_box_val])
+
+        tip_ep = asb.Wing(
+            name="Tip Endplate",
+            symmetric=True,
+            xsecs=[
+                asb.WingXSec(xyz_le=[x_fwd_root + rel_xs[-1], wing_ys[-1], 0.0], chord=c_fwd[-1], airfoil=af_tail),
+                asb.WingXSec(xyz_le=[x_aft_root + rel_xs[-1], wing_ys[-1], h_box_val], chord=c_aft[-1], airfoil=af_tail),
+            ],
+        )
+
+        return asb.Airplane(
+            name="Discus-2c-BoxWing-Trade",
+            xyz_ref=airplane.xyz_ref,
+            wings=[fwd_w, aft_w, tip_ep, airplane.wings[3]],
+            fuselages=airplane.fuselages,
+            s_ref=airplane.s_ref,
+            c_ref=float(fwd_w.mean_aerodynamic_chord()),
+            b_ref=airplane.b_ref,
+        )
+
+    # 1. Stagger trade at nominal gap h_box = 2.70 m
+    stagger_res = []
+    for s in staggers:
+        ap0 = _build_variant(s, 2.70, 0.0)
+        c_ref = ap0.c_ref
+
+        # Stability derivatives
+        ab1 = asb.AeroBuildup(airplane=ap0, op_point=asb.OperatingPoint(velocity=velocity, alpha=alpha_eval - 1.0)).run()
+        ab2 = asb.AeroBuildup(airplane=ap0, op_point=asb.OperatingPoint(velocity=velocity, alpha=alpha_eval + 1.0)).run()
+        cla = (ab2["CL"][0] - ab1["CL"][0]) / np.radians(2.0)
+        cma = (ab2["Cm"][0] - ab1["Cm"][0]) / np.radians(2.0)
+        x_np = x_cg - (cma / cla) * c_ref
+        sm_mac = (x_np - x_cg) / c_ref
+
+        # Untrimmed performance
+        ab0 = asb.AeroBuildup(airplane=ap0, op_point=asb.OperatingPoint(velocity=velocity, alpha=alpha_eval)).run()
+        cm0 = float(ab0["Cm"][0])
+        cl0 = float(ab0["CL"][0])
+        cd0 = float(ab0["CD"][0])
+        ld0 = cl0 / cd0
+
+        # Elevator effectiveness
+        ap_m10 = _build_variant(s, 2.70, -10.0)
+        ab_m10 = asb.AeroBuildup(airplane=ap_m10, op_point=asb.OperatingPoint(velocity=velocity, alpha=alpha_eval)).run()
+        ap_p10 = _build_variant(s, 2.70, 10.0)
+        ab_p10 = asb.AeroBuildup(airplane=ap_p10, op_point=asb.OperatingPoint(velocity=velocity, alpha=alpha_eval)).run()
+        dcm_dde = float((ab_p10["Cm"][0] - ab_m10["Cm"][0]) / 20.0)
+
+        if abs(dcm_dde) > 1e-4:
+            de_trim = float(-cm0 / dcm_dde)
+            if -30.0 <= de_trim <= 30.0:
+                ap_tr = _build_variant(s, 2.70, de_trim)
+                ab_tr = asb.AeroBuildup(airplane=ap_tr, op_point=asb.OperatingPoint(velocity=velocity, alpha=alpha_eval)).run()
+                cl_tr = float(ab_tr["CL"][0])
+                cd_tr = float(ab_tr["CD"][0])
+                ld_tr = float(cl_tr / cd_tr)
+            else:
+                ld_tr = np.nan
+                cl_tr = np.nan
+                cd_tr = np.nan
+        else:
+            de_trim = np.nan
+            ld_tr = np.nan
+            cl_tr = np.nan
+            cd_tr = np.nan
+
+        stagger_res.append({
+            "stagger": float(s),
+            "x_aft": float(2.30 + s),
+            "x_np": float(x_np),
+            "sm_mac": float(sm_mac),
+            "cm0": cm0,
+            "dcm_dde": dcm_dde,
+            "de_trim": de_trim,
+            "ld_untrim": ld0,
+            "ld_trim": ld_tr,
+            "cl_trim": cl_tr,
+            "cd_trim": cd_tr,
+        })
+
+    # 2. Gap trade at nominal stagger = 3.70 m
+    gap_res = []
+    for h in gaps:
+        ap_g = _build_variant(3.70, h, 0.0)
+        c_ref = ap_g.c_ref
+        ab1 = asb.AeroBuildup(airplane=ap_g, op_point=asb.OperatingPoint(velocity=velocity, alpha=alpha_eval - 1.0)).run()
+        ab2 = asb.AeroBuildup(airplane=ap_g, op_point=asb.OperatingPoint(velocity=velocity, alpha=alpha_eval + 1.0)).run()
+        cla = (ab2["CL"][0] - ab1["CL"][0]) / np.radians(2.0)
+        cma = (ab2["Cm"][0] - ab1["Cm"][0]) / np.radians(2.0)
+        x_np = x_cg - (cma / cla) * c_ref
+        sm_mac = (x_np - x_cg) / c_ref
+
+        ab_g0 = asb.AeroBuildup(airplane=ap_g, op_point=asb.OperatingPoint(velocity=velocity, alpha=alpha_eval)).run()
+        cm0 = float(ab_g0["Cm"][0])
+        cl0 = float(ab_g0["CL"][0])
+        cd0 = float(ab_g0["CD"][0])
+
+        gap_res.append({
+            "h_box": float(h),
+            "hb_ratio": float(h / 18.0),
+            "x_np": float(x_np),
+            "sm_mac": float(sm_mac),
+            "cm0": cm0,
+            "ld_untrim": float(cl0 / cd0),
+        })
+
+    return {
+        "x_cg": x_cg,
+        "staggers": np.array([r["stagger"] for r in stagger_res]),
+        "stagger_res": stagger_res,
+        "gaps": np.array([r["h_box"] for r in gap_res]),
+        "gap_res": gap_res,
+    }
+
+

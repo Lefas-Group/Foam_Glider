@@ -1,0 +1,88 @@
+---
+title: "Can reducing stagger or vertical gap restore box-wing trim without moving the CG?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 179.0      # s the probe actually used
+
+res = box_wing_stagger_gap_trade(airplane)
+
+min_sm_gap = float(min(r["sm_mac"] for r in res["gap_res"]) * 100.0)
+gap_np_shift = float(max(r["x_np"] for r in res["gap_res"]) - min(r["x_np"] for r in res["gap_res"]))
+stagger_crit = 0.40
+dcm_crit = float(next(r["dcm_dde"] for r in res["stagger_res"] if abs(r["stagger"] - stagger_crit) < 1e-3))
+```
+
+::: {.hero}
+[`{python} f"+{min_sm_gap:.0f}% MAC"`]{.hero-value}
+[minimum static margin achievable by reducing vertical gap without moving CG]{.hero-label}
+:::
+
+**Answer.** No. Reducing vertical gap to [`{python} f"{res['gaps'].min():.1f} m"`]{.key} shifts the neutral point forward by only [`{python} f"{gap_np_shift:.2f} m"`]{.key}, leaving static margin hyper-stable at [`{python} f"+{min_sm_gap:.0f}% MAC"`]{.key}. Reducing stagger shrinks both untrimmed pitch moment and elevator authority proportionally to the aft wing moment arm. Below [`{python} f"{stagger_crit:.1f} m"`]{.key} stagger, elevator effectiveness [`{python} f"{dcm_crit:.4f} /°"`]{.key} collapses, preventing workable trim (@fig-box-wing-stagger-gap). Hyper-stability is not intrinsic to joined wings, but stems from imposing a staggered layout on a monoplane CG; moving the CG aft remains necessary as shown in [prior stability analysis](2026-09-30-02-what-are-the-box-wing-neutral-point-static-margin-and-elevator-require.qmd).
+
+```{python}
+#| label: fig-box-wing-stagger-gap
+#| fig-cap: "Effect of longitudinal stagger and vertical gap on box-wing static margin, aft-wing elevator control authority, and trim deflection at baseline center of gravity."
+import matplotlib.pyplot as plt
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
+
+# Left plot: Stagger trade
+s_vals = np.array([r["stagger"] for r in res["stagger_res"]])
+sm_vals = np.array([r["sm_mac"] * 100.0 for r in res["stagger_res"]])
+dcm_vals = np.array([r["dcm_dde"] for r in res["stagger_res"]])
+de_vals = np.array([r["de_trim"] for r in res["stagger_res"]])
+
+ax1_twin = ax1.twinx()
+p1 = ax1.plot(s_vals, sm_vals, "tab:blue", marker="o", label="Static margin [% MAC]")
+p2 = ax1_twin.plot(s_vals, dcm_vals, "tab:red", marker="s", label=r"Elevator effectiveness $dC_m/d\delta_e$")
+
+ax1.axhline(10.0, color="gray", linestyle=":", alpha=0.6, label="Nominal SM (10% MAC)")
+ax1_twin.axhline(0.0, color="tab:red", linestyle="--", alpha=0.4)
+ax1.set_xlabel("Longitudinal stagger [m]")
+ax1.set_ylabel("Static margin [% MAC]", color="tab:blue")
+ax1_twin.set_ylabel(r"Elevator authority $dC_m/d\delta_e$ [/deg]", color="tab:red")
+ax1.tick_params(axis="y", labelcolor="tab:blue")
+ax1_twin.tick_params(axis="y", labelcolor="tab:red")
+ax1.set_title("Stagger Trade: Stability vs Control Arm")
+ax1.grid(True, alpha=0.3)
+
+lines = p1 + p2
+labels = [l.get_label() for l in lines]
+ax1.legend(lines, labels, loc="center left", fontsize=8)
+
+# Right plot: Vertical gap effect
+h_vals = np.array([r["h_box"] for r in res["gap_res"]])
+sm_gap_vals = np.array([r["sm_mac"] * 100.0 for r in res["gap_res"]])
+xnp_gap_vals = np.array([r["x_np"] for r in res["gap_res"]])
+
+ax2_twin = ax2.twinx()
+p3 = ax2.plot(h_vals, sm_gap_vals, "tab:purple", marker="^", label="Static margin [% MAC]")
+p4 = ax2_twin.plot(h_vals, xnp_gap_vals, "tab:green", marker="d", label="Neutral point $x_{np}$ [m]")
+
+ax2.set_xlabel("Vertical gap $h_{box}$ [m]")
+ax2.set_ylabel("Static margin [% MAC]", color="tab:purple")
+ax2_twin.set_ylabel("Neutral point position [m]", color="tab:green")
+ax2.tick_params(axis="y", labelcolor="tab:purple")
+ax2_twin.tick_params(axis="y", labelcolor="tab:green")
+ax2.set_title("Vertical Gap Effect (s = 3.70 m)")
+ax2.grid(True, alpha=0.3)
+
+lines2 = p3 + p4
+labels2 = [l.get_label() for l in lines2]
+ax2.legend(lines2, labels2, loc="lower right", fontsize=8)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(box_wing_stagger_gap_trade)
+```
