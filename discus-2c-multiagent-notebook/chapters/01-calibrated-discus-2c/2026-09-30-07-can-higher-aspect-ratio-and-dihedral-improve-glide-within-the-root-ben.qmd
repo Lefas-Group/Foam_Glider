@@ -1,0 +1,101 @@
+---
+title: "Can higher aspect ratio and dihedral improve glide within the root bending budget?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 200.0      # s the probe actually used
+
+import aerosandbox.tools.pretty_plots as p
+import matplotlib.pyplot as plt
+
+configs = [
+    (28.446, 3.0),
+    (28.800, 3.0),
+    (29.000, 3.0),
+    (28.446, 6.0),
+    (28.800, 6.0),
+    (29.000, 6.0),
+]
+trade = ar_dihedral_trade(airplane, configurations=configs)
+
+base_ar = float(trade["AR"][0])
+base_d = float(trade["dihedral_deg"][0])
+base_ld = float(trade["max_LD"][0])
+base_m = float(trade["m_root_net_kNm"][0])
+m_budget = float(trade["m_budget_kNm"])
+
+# Infeasible unrelieved AR increase at AR=29.00, dihedral=3.0°
+inf_idx = 2
+inf_ar = float(trade["AR"][inf_idx])
+inf_m = float(trade["m_root_net_kNm"][inf_idx])
+
+# Dihedral relief at base AR (28.45, 6.0°)
+d_relief_idx = 3
+d_relief_m = float(base_m - trade["m_root_net_kNm"][d_relief_idx])
+
+# Optimal feasible combination (29.00, 6.0°)
+hero_idx = 5
+hero_ar = float(trade["AR"][hero_idx])
+hero_d = float(trade["dihedral_deg"][hero_idx])
+hero_ld = float(trade["max_LD"][hero_idx])
+hero_m = float(trade["m_root_net_kNm"][hero_idx])
+hero_dld = hero_ld - base_ld
+hero_margin = float(trade["budget_margin_kNm"][hero_idx])
+
+# Separate curves by dihedral
+mask_d3 = trade["dihedral_deg"] == 3.0
+mask_d6 = trade["dihedral_deg"] == 6.0
+
+ar_d3 = trade["AR"][mask_d3]
+m_d3 = trade["m_root_net_kNm"][mask_d3]
+ld_d3 = trade["max_LD"][mask_d3]
+
+ar_d6 = trade["AR"][mask_d6]
+m_d6 = trade["m_root_net_kNm"][mask_d6]
+ld_d6 = trade["max_LD"][mask_d6]
+```
+
+::: {.hero}
+[`{python} f"{hero_dld:+.2f}"`]{.hero-value}
+[net glide ratio gain combining higher aspect ratio and dihedral under root bending budget]{.hero-label}
+:::
+
+**Answer.** Yes. Under the limit manoeuvre established in the [structural baseline](2026-09-30-03-are-wing-structural-loads-reasonable-under-a-jar-22-5-3g-limit-manoeuv.qmd), the net root bending moment budget is [`{python} f"{m_budget:.2f} kN·m"`]{.key}. Increasing aspect ratio from [`{python} f"{base_ar:.2f}"`]{.key} to [`{python} f"{hero_ar:.2f}"`]{.key} at baseline [`{python} f"{base_d:.1f}°"`]{.key} dihedral increases root bending moment to [`{python} f"{inf_m:.2f} kN·m"`]{.key}, exceeding the structural budget. However, increasing dihedral to [`{python} f"{hero_d:.1f}°"`]{.key} provides [`{python} f"{d_relief_m:.2f} kN·m"`]{.key} of moment relief. The combined configuration satisfies the budget at [`{python} f"{hero_m:.2f} kN·m"`]{.key} with [`{python} f"{hero_margin:.2f} kN·m"`]{.key} of margin, achieving a net glide improvement of [`{python} f"{hero_dld:+.2f}"`]{.key} over the [calibrated baseline](2026-09-30-02-does-the-reconstructed-discus-2c-achieve-its-published-45-9-glide-rati.qmd) (@fig-ar-dihedral-trade).
+
+```{python}
+#| label: fig-ar-dihedral-trade
+#| fig-cap: "Net limit root bending moment and best glide ratio across aspect ratio and dihedral combinations, showing the structural budget boundary and feasible net glide gains."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 4))
+
+ax1.plot(ar_d3, m_d3, "b-o", label=f"Dihedral {base_d:.1f}° (baseline)")
+ax1.plot(ar_d6, m_d6, "g-s", label=f"Dihedral {hero_d:.1f}°")
+ax1.axhline(m_budget, color="r", linestyle="--", linewidth=1.2, label=f"Limit budget ({m_budget:.1f} kN·m)")
+ax1.plot(hero_ar, hero_m, "k*", markersize=11, label=f"Feasible optimum (AR={hero_ar:.1f})")
+ax1.set_xlabel("Wing aspect ratio AR")
+ax1.set_ylabel("Net root bending moment (kN·m)")
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="upper left", fontsize=8)
+
+ax2.plot(ar_d3, ld_d3, "b-o", label=f"Dihedral {base_d:.1f}° (baseline)")
+ax2.plot(ar_d6, ld_d6, "g-s", label=f"Dihedral {hero_d:.1f}°")
+ax2.axhline(base_ld, color="k", linestyle=":", linewidth=1.0, label=f"Baseline L/D ({base_ld:.2f})")
+ax2.plot(hero_ar, hero_ld, "k*", markersize=11, label=f"Combined optimum ({hero_ld:.2f})")
+ax2.set_xlabel("Wing aspect ratio AR")
+ax2.set_ylabel("Best glide ratio (L/D)")
+ax2.grid(True, alpha=0.3)
+ax2.legend(loc="lower right", fontsize=8)
+
+plt.tight_layout()
+p.show_plot()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(ar_dihedral_trade)
+```

@@ -506,5 +506,131 @@ def sweep_trade(
     }
 
 
+def _scale_airplane_ar_dihedral(
+    airplane: asb.Airplane,
+    ar_target: float,
+    dihedral_deg: float,
+    base_ar: float = 28.446,
+    base_s_ref: float = 11.39,
+) -> asb.Airplane:
+    """Scale wing aspect ratio and set dihedral while preserving taper and winglet geometry."""
+    k = np.sqrt(ar_target / base_ar)
+    wing_orig = airplane.wings[0]
+
+    xs_le = np.array([xsec.xyz_le[0] for xsec in wing_orig.xsecs])
+    ys_le = np.array([xsec.xyz_le[1] for xsec in wing_orig.xsecs])
+    chords = np.array([xsec.chord for xsec in wing_orig.xsecs])
+    twists = [xsec.twist for xsec in wing_orig.xsecs]
+    airfoils = [xsec.airfoil for xsec in wing_orig.xsecs]
+
+    scaled_ys = ys_le * k
+    scaled_chords = chords / k
+
+    x_c4 = xs_le + 0.25 * chords
+    x_c4_scaled = x_c4[0] + (x_c4 - x_c4[0]) * k
+    scaled_xs = x_c4_scaled - 0.25 * scaled_chords
+
+    z_root = wing_orig.xsecs[0].xyz_le[2]
+    scaled_zs = z_root + scaled_ys * np.tand(dihedral_deg)
+    delta_winglet = wing_orig.xsecs[-1].xyz_le[2] - wing_orig.xsecs[-2].xyz_le[2]
+    scaled_zs[-1] = scaled_zs[-2] + delta_winglet
+
+    xsecs_scaled = [
+        asb.WingXSec(
+            xyz_le=[scaled_xs[i], scaled_ys[i], scaled_zs[i]],
+            chord=scaled_chords[i],
+            twist=twists[i],
+            airfoil=airfoils[i],
+        )
+        for i in range(len(scaled_ys))
+    ]
+
+    wing_scaled = asb.Wing(
+        name="Main Wing",
+        symmetric=True,
+        xsecs=xsecs_scaled,
+    )
+
+    return asb.Airplane(
+        name=f"Discus-2c-AR{ar_target:.2f}-d{dihedral_deg:.1f}deg",
+        xyz_ref=airplane.xyz_ref,
+        wings=[wing_scaled, airplane.wings[1], airplane.wings[2]],
+        fuselages=airplane.fuselages,
+        s_ref=base_s_ref,
+        c_ref=float(wing_scaled.mean_aerodynamic_chord()),
+        b_ref=float(airplane.b_ref * k),
+    )
+
+
+def ar_dihedral_trade(
+    airplane: asb.Airplane,
+    configurations: list = None,
+    mass_flight: float = 417.0,
+    mass_structural: float = 565.0,
+    load_factor: float = 5.3,
+    speeds_kmh: np.ndarray = None,
+) -> dict:
+    """Evaluate glide performance and limit root bending moments for AR-dihedral combinations."""
+    if configurations is None:
+        configurations = [
+            (28.446, 3.0),
+            (28.446, 6.0),
+            (28.800, 3.0),
+            (28.800, 5.0),
+            (29.000, 3.0),
+            (29.000, 6.0),
+        ]
+    if speeds_kmh is None:
+        speeds_kmh = np.linspace(95, 125, 7)
+
+    ars = []
+    dihedrals = []
+    spans = []
+    max_lds = []
+    best_speeds_kmh = []
+    m_root_nets = []
+    m_root_aeros = []
+    budget_margins = []
+
+    base_loads = wing_structural_loads(
+        airplane, mass=mass_structural, load_factor=load_factor
+    )
+    m_budget = float(base_loads["root_moment_net_ballasted"] / 1000)
+
+    for ar, d in configurations:
+        ac = _scale_airplane_ar_dihedral(airplane, ar, d)
+        pol = glide_polar(ac, mass=mass_flight, speeds_kmh=speeds_kmh)
+        best_i = int(np.argmax(pol["LD"]))
+        loads = wing_structural_loads(
+            ac, mass=mass_structural, load_factor=load_factor
+        )
+
+        m_net = float(loads["root_moment_net_ballasted"] / 1000)
+        m_aero = float(loads["root_moment_aero"] / 1000)
+        ld_val = float(pol["LD"][best_i])
+
+        ars.append(ar)
+        dihedrals.append(d)
+        spans.append(float(ac.b_ref))
+        max_lds.append(ld_val)
+        best_speeds_kmh.append(float(pol["speeds_kmh"][best_i]))
+        m_root_nets.append(m_net)
+        m_root_aeros.append(m_aero)
+        budget_margins.append(m_budget - m_net)
+
+    return {
+        "AR": np.array(ars),
+        "dihedral_deg": np.array(dihedrals),
+        "span_m": np.array(spans),
+        "max_LD": np.array(max_lds),
+        "best_speed_kmh": np.array(best_speeds_kmh),
+        "m_root_net_kNm": np.array(m_root_nets),
+        "m_root_aero_kNm": np.array(m_root_aeros),
+        "budget_margin_kNm": np.array(budget_margins),
+        "m_budget_kNm": m_budget,
+    }
+
+
+
 
 
