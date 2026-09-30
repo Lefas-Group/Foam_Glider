@@ -1,0 +1,73 @@
+---
+title: "Does the reconstructed Discus-2c achieve its published 45.9 glide ratio?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 98.9      # s the probe actually used
+
+import aerosandbox.tools.pretty_plots as p
+import matplotlib.pyplot as plt
+
+# Compute glide polar across placarded speed range
+polar = glide_polar(airplane, mass=float(flight_mass_props.mass))
+best_idx = int(np.argmax(polar["LD"]))
+best_speed_kmh = float(polar["speeds_kmh"][best_idx])
+max_ld_ab = float(polar["LD"][best_idx])
+best_v = best_speed_kmh / 3.6
+best_a = float(polar["alpha"][best_idx])
+
+# Evaluate across aerodynamic model fidelities at the best-glide operating point
+fids = evaluate_fidelities(airplane, velocity=best_v, alpha=best_a)
+best_ld_ll = float(fids["LiftingLine"]["LD"])
+ld_vlm = float(fids["VLM"]["LD"])
+prof_drag_pct = float(polar["CD_profile"][best_idx] / polar["CD"][best_idx] * 100)
+
+min_sink_idx = int(np.argmin(polar["sink_rate"]))
+min_sink = float(polar["sink_rate"][min_sink_idx])
+min_sink_speed_kmh = float(polar["speeds_kmh"][min_sink_idx])
+published_ld = 45.9
+```
+
+::: {.hero}
+[`{python} f"{best_ld_ll:.1f}"`]{.hero-value}
+[best glide ratio from lifting-line analysis (published 45.9)]{.hero-label}
+:::
+
+**Answer.** The [reconstructed Discus-2c](2026-09-30-01-what-does-a-discus-2c-geometry-reconstructed-from-published-data-look.qmd) reaches a peak glide ratio of [`{python} f"{max_ld_ab:.1f}"`]{.key} at [`{python} f"{best_speed_kmh:.0f} km/h"`]{.key} with AeroBuildup, and [`{python} f"{best_ld_ll:.1f}"`]{.key} with lifting-line theory, closely bracketing the published value of [`{python} f"{published_ld:.1f}"`]{.key} (@fig-polar). Minimum sink is [`{python} f"{min_sink:.2f} m/s"`]{.key} at [`{python} f"{min_sink_speed_kmh:.0f} km/h"`]{.key}. A viscous three-dimensional model is mandatory: profile and parasitic drag constitute [`{python} f"{prof_drag_pct:.0f}%"`]{.key} of total drag at best glide, causing inviscid potential flow (VLM) to overestimate L/D threefold at [`{python} f"{ld_vlm:.0f}"`]{.key}.
+
+```{python}
+#| label: fig-polar
+#| fig-cap: "Glide ratio and sink rate polars across airspeed for the reconstructed Discus-2c at 417 kg, comparing AeroBuildup and LiftingLine against the published best glide ratio."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 4))
+
+ax1.plot(polar["speeds_kmh"], polar["LD"], "b-", label="AeroBuildup")
+ax1.plot(best_speed_kmh, best_ld_ll, "ro", label="LiftingLine")
+ax1.axhline(published_ld, color="k", linestyle="--", alpha=0.7, label="Published benchmark")
+ax1.set_xlabel("Airspeed (km/h)")
+ax1.set_ylabel("Glide ratio (L/D)")
+ax1.set_ylim(18, 49)
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="lower left", fontsize=9)
+
+ax2.plot(polar["speeds_kmh"], polar["sink_rate"], "b-", label="AeroBuildup")
+ax2.plot(min_sink_speed_kmh, min_sink, "gs", label="Min sink")
+ax2.set_xlabel("Airspeed (km/h)")
+ax2.set_ylabel("Sink rate (m/s)")
+ax2.set_ylim(3.0, 0.4)
+ax2.grid(True, alpha=0.3)
+ax2.legend(loc="upper right", fontsize=9)
+
+plt.tight_layout()
+p.show_plot()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(glide_polar, evaluate_fidelities)
+```
