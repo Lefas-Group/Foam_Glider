@@ -964,3 +964,137 @@ def tandem_aeroelastic_analysis(
     }
 
 
+def tandem_aeroelastic_sizing_trade(
+    spans: np.ndarray = None,
+    m_root_base: float = 28.20,
+    ld_base_mono: float = 45.00,
+    v_ne: float = 77.78,
+    v_req_factor: float = 1.20,
+    rho_comp: float = 1550.0,
+    t_skin_0: float = 0.0015,
+    mass_dtube_0: float = 24.73,
+) -> dict:
+    """Analyze achievable aspect ratio and net glide ratio with aeroelastically sized D-tube."""
+    if spans is None:
+        spans = np.linspace(14.0, 32.86, 30)
+
+    v_req = v_req_factor * v_ne
+    q_req = 0.5 * 1.225 * v_req**2
+    q_ne = 0.5 * 1.225 * v_ne**2
+
+    res_data = []
+    for b in spans:
+        ae = tandem_aeroelastic_analysis(b_target=b, t_skin=t_skin_0)
+        vs = ae["v_div_strip_kmh"]
+        vb = ae["v_div_beam_kmh"]
+        ks = max(1.0, ae["reinforce_factor_strip"])
+        kb = max(1.0, ae["reinforce_factor_beam"])
+        dm_s = (ks - 1.0) * mass_dtube_0
+        dm_b = (kb - 1.0) * mass_dtube_0
+        ts_s = t_skin_0 * ks * 1000.0
+        ts_b = t_skin_0 * kb * 1000.0
+
+        # Nominal manoeuvre root bending moment from calibrated tandem aspect ratio sweep
+        m_root_nom = 11.62 * (b / 18.0) ** 1.478
+        m_root_honest_s = m_root_nom * (565.0 + dm_s) / 565.0
+        m_root_honest_b = m_root_nom * (565.0 + dm_b) / 565.0
+
+        # Glide ratio calibrated across spans
+        if b >= 18.0:
+            ld_nom = 42.63 + (47.78 - 42.63) * ((b - 18.0) / (32.86 - 18.0))
+        else:
+            ld_nom = 36.30 + (42.63 - 36.30) * ((b - 12.73) / (18.0 - 12.73))
+
+        res_data.append(
+            {
+                "b": b,
+                "ar": b**2 / 11.39,
+                "v_div_strip": vs,
+                "v_div_beam": vb,
+                "k_strip": ks,
+                "k_beam": kb,
+                "dm_strip": dm_s,
+                "dm_beam": dm_b,
+                "t_skin_strip_mm": ts_s,
+                "t_skin_beam_mm": ts_b,
+                "m_root_nom": m_root_nom,
+                "m_root_honest_s": m_root_honest_s,
+                "m_root_honest_b": m_root_honest_b,
+                "ld_nom": ld_nom,
+            }
+        )
+
+    b_arr = np.array([r["b"] for r in res_data])
+    ar_arr = np.array([r["ar"] for r in res_data])
+    vs_arr = np.array([r["v_div_strip"] for r in res_data])
+    vb_arr = np.array([r["v_div_beam"] for r in res_data])
+    dm_s_arr = np.array([r["dm_strip"] for r in res_data])
+    dm_b_arr = np.array([r["dm_beam"] for r in res_data])
+    ts_s_arr = np.array([r["t_skin_strip_mm"] for r in res_data])
+    ts_b_arr = np.array([r["t_skin_beam_mm"] for r in res_data])
+    m_root_nom_arr = np.array([r["m_root_nom"] for r in res_data])
+    m_root_hs_arr = np.array([r["m_root_honest_s"] for r in res_data])
+    m_root_hb_arr = np.array([r["m_root_honest_b"] for r in res_data])
+    ld_arr = np.array([r["ld_nom"] for r in res_data])
+
+    # Unreinforced AR limits (t_skin = 1.5 mm)
+    b_unreinf_cert = float(np.interp(v_req * 3.6, vs_arr[::-1], b_arr[::-1]))
+    ar_unreinf_cert = b_unreinf_cert**2 / 11.39
+    ld_unreinf_cert = float(np.interp(b_unreinf_cert, b_arr, ld_arr))
+
+    b_unreinf_vne = float(np.interp(v_ne * 3.6, vs_arr[::-1], b_arr[::-1]))
+    ar_unreinf_vne = b_unreinf_vne**2 / 11.39
+    ld_unreinf_vne = float(np.interp(b_unreinf_vne, b_arr, ld_arr))
+
+    # Honest AR limits with D-tube sized for 1.20 V_NE within 28.2 kN*m bending budget
+    b_honest_s = float(np.interp(m_root_base, m_root_hs_arr, b_arr))
+    ar_honest_s = b_honest_s**2 / 11.39
+    ld_honest_s = float(np.interp(b_honest_s, b_arr, ld_arr))
+    dm_honest_s = float(np.interp(b_honest_s, b_arr, dm_s_arr))
+    ts_honest_s = float(np.interp(b_honest_s, b_arr, ts_s_arr))
+
+    b_honest_b = float(np.interp(m_root_base, m_root_hb_arr, b_arr))
+    ar_honest_b = b_honest_b**2 / 11.39
+    ld_honest_b = float(np.interp(b_honest_b, b_arr, ld_arr))
+    dm_honest_b = float(np.interp(b_honest_b, b_arr, dm_b_arr))
+    ts_honest_b = float(np.interp(b_honest_b, b_arr, ts_b_arr))
+
+    return {
+        "spans": b_arr,
+        "ar": ar_arr,
+        "v_div_strip": vs_arr,
+        "v_div_beam": vb_arr,
+        "dm_strip": dm_s_arr,
+        "dm_beam": dm_b_arr,
+        "t_skin_strip_mm": ts_s_arr,
+        "t_skin_beam_mm": ts_b_arr,
+        "m_root_nom": m_root_nom_arr,
+        "m_root_honest_s": m_root_hs_arr,
+        "m_root_honest_b": m_root_hb_arr,
+        "ld_arr": ld_arr,
+        "m_root_base": m_root_base,
+        "ld_base_mono": ld_base_mono,
+        "v_ne_kmh": v_ne * 3.6,
+        "v_req_kmh": v_req * 3.6,
+        "b_unreinf_cert": b_unreinf_cert,
+        "ar_unreinf_cert": ar_unreinf_cert,
+        "ld_unreinf_cert": ld_unreinf_cert,
+        "b_unreinf_vne": b_unreinf_vne,
+        "ar_unreinf_vne": ar_unreinf_vne,
+        "ld_unreinf_vne": ld_unreinf_vne,
+        "b_honest_s": b_honest_s,
+        "ar_honest_s": ar_honest_s,
+        "ld_honest_s": ld_honest_s,
+        "delta_ld_honest_s": ld_honest_s - ld_base_mono,
+        "dm_honest_s": dm_honest_s,
+        "ts_honest_s": ts_honest_s,
+        "b_honest_b": b_honest_b,
+        "ar_honest_b": ar_honest_b,
+        "ld_honest_b": ld_honest_b,
+        "delta_ld_honest_b": ld_honest_b - ld_base_mono,
+        "dm_honest_b": dm_honest_b,
+        "ts_honest_b": ts_honest_b,
+    }
+
+
+
