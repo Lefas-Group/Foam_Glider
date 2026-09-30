@@ -1323,6 +1323,141 @@ def tandem_ar80_trim_analysis(
     }
 
 
+def tandem_ar80_trimmed_performance(
+    b_target: float = 30.2,
+    dm_div: float = 71.7,
+    v_cruise: float = 27.78,
+    mass_pilot: float = 80.0,
+    decalage_base: float = -0.98,
+    ld_nom_untrim: float = 46.87,
+    speeds_kmh: np.ndarray = None,
+) -> dict:
+    """Analyze trimmed glide performance and trim drag across speeds for AR 80.3 tandem wing."""
+    if speeds_kmh is None:
+        speeds_kmh = np.array([80.0, 95.0, 100.0, 115.0, 130.0, 150.0])
+
+    t_res = tandem_ar80_trim_analysis(
+        b_target=b_target,
+        dm_div=dm_div,
+        v_cruise=v_cruise,
+        mass_pilot=mass_pilot,
+        decalage_base=decalage_base,
+        speeds_kmh=speeds_kmh,
+    )
+
+    s_ref = 11.39
+    m_flight = t_res["m_flight"]
+    weight = m_flight * 9.81
+    q_cruise = 0.5 * 1.225 * v_cruise**2
+    cl_cruise = weight / (q_cruise * s_ref)
+    dec_trim_cruise = t_res["decalage_trim"]
+
+    p_untrim = _build_scaled_tandem_airplane(b_target, decalage_aft=decalage_base)
+    p_trim = _build_scaled_tandem_airplane(b_target, decalage_aft=dec_trim_cruise)
+
+    ru2 = asb.VortexLatticeMethod(
+        airplane=p_untrim, op_point=asb.OperatingPoint(velocity=v_cruise, alpha=2.0), verbose=False
+    ).run()
+    ru6 = asb.VortexLatticeMethod(
+        airplane=p_untrim, op_point=asb.OperatingPoint(velocity=v_cruise, alpha=6.0), verbose=False
+    ).run()
+    k_untrim = float((ru6["CD"] - ru2["CD"]) / (ru6["CL"] ** 2 - ru2["CL"] ** 2))
+
+    rt2 = asb.VortexLatticeMethod(
+        airplane=p_trim, op_point=asb.OperatingPoint(velocity=v_cruise, alpha=2.0), verbose=False
+    ).run()
+    rt6 = asb.VortexLatticeMethod(
+        airplane=p_trim, op_point=asb.OperatingPoint(velocity=v_cruise, alpha=6.0), verbose=False
+    ).run()
+    k_trim = float((rt6["CD"] - rt2["CD"]) / (rt6["CL"] ** 2 - rt2["CL"] ** 2))
+    delta_k_pct = (k_trim - k_untrim) / k_untrim * 100.0
+
+    alphas_eval = np.linspace(-1.0, 8.0, 37)
+    ab_u = asb.AeroBuildup(airplane=p_untrim, op_point=asb.OperatingPoint(velocity=v_cruise, alpha=alphas_eval)).run()
+    ab_t = asb.AeroBuildup(airplane=p_trim, op_point=asb.OperatingPoint(velocity=v_cruise, alpha=alphas_eval)).run()
+
+    q_eval = 0.5 * 1.225 * v_cruise**2 * s_ref
+    cdp_u_cruise = float(np.interp(cl_cruise, ab_u["CL"], ab_u["CD"] - ab_u["D_induced"] / q_eval))
+    cdp_t_cruise = float(np.interp(cl_cruise, ab_t["CL"], ab_t["CD"] - ab_t["D_induced"] / q_eval))
+
+    cdi_u_cruise = k_untrim * cl_cruise**2
+    cdi_t_cruise = k_trim * cl_cruise**2
+
+    delta_cdp = cdp_t_cruise - cdp_u_cruise
+    delta_cdi = cdi_t_cruise - cdi_u_cruise
+    delta_cd_trim = (cdp_t_cruise + cdi_t_cruise) - (cdp_u_cruise + cdi_u_cruise)
+
+    cd_nom = cl_cruise / ld_nom_untrim
+    cd_trimmed = cd_nom + delta_cd_trim
+    ld_trimmed = cl_cruise / cd_trimmed
+    delta_ld = ld_trimmed - ld_nom_untrim
+    ld_retention_pct = (ld_trimmed / ld_nom_untrim) * 100.0
+
+    # Calibration offset to match calibrated sizing model at cruise
+    cd_raw_cruise = cdp_t_cruise + cdi_t_cruise
+    cd_calib = cd_trimmed - cd_raw_cruise
+
+    speed_results = []
+    for pt in t_res["sweep_data"]:
+        sp = pt["speed_kmh"]
+        v_s = sp / 3.6
+        clr = pt["cl_req"]
+        dec_s = pt["decalage_trim_deg"]
+
+        q_s = 0.5 * 1.225 * v_s**2 * s_ref
+        cdi_s = k_trim * clr**2
+        ab_s = asb.AeroBuildup(
+            airplane=_build_scaled_tandem_airplane(b_target, decalage_aft=dec_s),
+            op_point=asb.OperatingPoint(velocity=v_s, alpha=pt["alpha_trim_deg"]),
+        ).run()
+        cdp_s = float(ab_s["CD"][0] - ab_s["D_induced"][0] / q_s)
+        cd_s = cdp_s + cdi_s + cd_calib
+        ld_s = clr / cd_s
+
+        speed_results.append({
+            "speed_kmh": sp,
+            "cl_req": clr,
+            "decalage_deg": dec_s,
+            "alpha_deg": pt["alpha_trim_deg"],
+            "cd_profile": cdp_s,
+            "cd_induced": cdi_s,
+            "cd_total": cd_s,
+            "ld": ld_s,
+        })
+
+    return {
+        "b_target": b_target,
+        "ar_target": b_target**2 / s_ref,
+        "m_flight": m_flight,
+        "v_cruise_kmh": v_cruise * 3.6,
+        "cl_cruise": cl_cruise,
+        "sm_pct": t_res["sm_pct"],
+        "decalage_base": decalage_base,
+        "decalage_trim": dec_trim_cruise,
+        "delta_decalage": dec_trim_cruise - decalage_base,
+        "k_untrim": k_untrim,
+        "k_trim": k_trim,
+        "delta_k_pct": delta_k_pct,
+        "cdp_untrim": cdp_u_cruise,
+        "cdp_trim": cdp_t_cruise,
+        "delta_cdp": delta_cdp,
+        "delta_cdi": delta_cdi,
+        "delta_cd_trim": delta_cd_trim,
+        "delta_cd_counts": delta_cd_trim * 1e4,
+        "ld_nom_untrim": ld_nom_untrim,
+        "ld_trimmed": ld_trimmed,
+        "delta_ld": delta_ld,
+        "ld_retention_pct": ld_retention_pct,
+        "speed_results": speed_results,
+        "ld_base_mono": 45.00,
+        "advantage_mono": ld_trimmed - 45.00,
+        "box_wing_ld_untrim": 24.0,
+        "box_wing_ld_trim": 14.5,
+        "box_wing_loss_pct": -39.6,
+    }
+
+
+
 
 
 

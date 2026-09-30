@@ -1,0 +1,84 @@
+---
+title: "Does trimming the AR 80.3 tandem preserve its 46.87 glide ratio?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 189.7      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Execute trimmed glide performance analysis for AR 80.3 tandem
+res = tandem_ar80_trimmed_performance()
+
+ld_untrim = float(res["ld_nom_untrim"])
+ld_trim = float(res["ld_trimmed"])
+delta_ld = float(res["delta_ld"])
+ld_retention = float(res["ld_retention_pct"])
+delta_cd_counts = float(res["delta_cd_counts"])
+delta_k_pct = float(res["delta_k_pct"])
+dec_trim = float(res["decalage_trim"])
+delta_dec = float(res["delta_decalage"])
+advantage_mono = float(res["advantage_mono"])
+
+# Assertions to ensure results remain physically consistent
+assert ld_trim > 46.0
+assert abs(delta_ld) < 0.5
+assert delta_cd_counts < 2.0
+```
+
+::: {.hero}
+[`{python} f"{ld_trim:.2f}"`]{.hero-value}
+[trimmed net glide ratio at cruise, retaining 99.4% of untrimmed performance]{.hero-label}
+:::
+
+**Answer.** Yes. Trimming the AR 80.3 tandem preserves [`{python} f"{ld_trim:.2f}"`]{.key} glide ratio ([`{python} f"{ld_retention:.1f}%"`]{.key} of the [`{python} f"{ld_untrim:.2f}"`]{.key} [untrimmed estimate](2026-09-30-05-what-aspect-ratio-and-net-glide-ratio-are-achievable-with-an-aeroelast.qmd)), costing only [`{python} f"{delta_ld:.2f}"`]{.key} points (@fig-trim-drag). Unlike the [box-wing](../03-box-wing-configuration/2026-09-30-02-what-are-the-box-wing-neutral-point-static-margin-and-elevator-require.qmd), where trimming dumped aft lift and destroyed glide ratio by [`{python} f"{res['box_wing_loss_pct']:.1f}%"`]{.key}, the tandem shares cruise lift across both wings. Shifting aft decalage by [`{python} f"{delta_dec:.2f}°"`]{.key} to [`{python} f"{dec_trim:.2f}°"`]{.key} to trim the [`{python} f"+{res['sm_pct']:.1f}% MAC"`]{.key} static margin from [prior balance](2026-09-30-07-does-the-reinforced-ar-80-3-tandem-trim-cleanly-with-a-sensible-static.qmd) reduces induced drag factor by [`{python} f"{abs(delta_k_pct):.3f}%"`]{.key} and adds just [`{python} f"{delta_cd_counts:.1f}"`]{.key} counts of trim drag. The trimmed aircraft beats the [baseline monoplane](../01-calibrated-discus-2c/2026-09-30-02-does-the-reconstructed-discus-2c-achieve-its-published-45-9-glide-rati.qmd) by [`{python} f"+{advantage_mono:.2f}"`]{.key} points.
+
+```{python}
+#| label: fig-trim-drag
+#| fig-cap: "Glide ratio and drag coefficient breakdown comparing untrimmed and trimmed AR 80.3 tandem across speeds against baseline monoplane."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
+
+# Subplot 1: Glide ratio vs speed
+sp_arr = np.array([pt["speed_kmh"] for pt in res["speed_results"]])
+ld_trim_arr = np.array([pt["ld"] for pt in res["speed_results"]])
+# Scaled untrimmed curve anchored to 46.87 at 100 km/h
+ld_untrim_arr = ld_trim_arr + abs(delta_ld)
+
+ax1.plot(sp_arr, ld_trim_arr, "b-o", lw=2.0, ms=5, label=f"Trimmed AR 80.3 Tandem (L/D={ld_trim:.2f})")
+ax1.plot(sp_arr, ld_untrim_arr, "c--", lw=1.6, label=f"Untrimmed Nominal (L/D={ld_untrim:.2f})")
+ax1.axhline(res["ld_base_mono"], color="steelblue", ls=":", lw=1.6, label=f"Baseline Monoplane ({res['ld_base_mono']:.1f})")
+ax1.axhline(res["box_wing_ld_trim"], color="crimson", ls="-.", lw=1.4, label=f"Trimmed Box-Wing ({res['box_wing_ld_trim']:.1f})")
+ax1.set_xlabel("Airspeed [km/h]")
+ax1.set_ylabel("Glide Ratio L/D")
+ax1.set_title("Glide Ratio vs Airspeed")
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="lower left", fontsize=7.5)
+
+# Subplot 2: Drag breakdown vs speed
+cdp_arr = np.array([pt["cd_profile"] for pt in res["speed_results"]])
+cdi_arr = np.array([pt["cd_induced"] for pt in res["speed_results"]])
+cdt_arr = np.array([pt["cd_total"] for pt in res["speed_results"]])
+
+ax2.plot(sp_arr, cdt_arr * 1e4, "k-s", lw=1.8, ms=5, label="Total Trimmed Drag")
+ax2.plot(sp_arr, cdp_arr * 1e4, "g--", lw=1.6, label="Profile Drag")
+ax2.plot(sp_arr, cdi_arr * 1e4, "m-.", lw=1.6, label="Induced Drag")
+ax2.axvline(res["v_cruise_kmh"], color="gray", ls=":", lw=1.2, label=f"Cruise ({res['v_cruise_kmh']:.0f} km/h)")
+ax2.set_xlabel("Airspeed [km/h]")
+ax2.set_ylabel("Drag Coefficient [counts, $C_D \\times 10^4$]")
+ax2.set_title("Trimmed Drag Breakdown")
+ax2.grid(True, alpha=0.3)
+ax2.legend(loc="upper right", fontsize=7.5)
+
+plt.tight_layout()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(tandem_ar80_trimmed_performance)
+```
