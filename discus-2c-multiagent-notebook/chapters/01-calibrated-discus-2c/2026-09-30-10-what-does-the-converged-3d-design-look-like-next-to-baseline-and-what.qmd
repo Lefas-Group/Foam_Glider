@@ -1,0 +1,96 @@
+---
+title: "What does the converged 3D design look like next to baseline, and what are its benefits?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 30.3      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Retrieve converged design geometry and performance synthesis
+res = final_design_synthesis(airplane)
+ac_final = res["airplane_final"]
+
+base_ld, final_ld = float(res["ld_base"]), float(res["ld_final"])
+hero_delta_ld = float(res["delta_ld"])
+v_base, v_final = float(res["v_base_kmh"]), float(res["v_final_kmh"])
+delta_v = v_final - v_base
+
+m_base, m_final = float(res["m_root_base_kNm"]), float(res["m_root_final_kNm"])
+delta_m = m_final - m_base
+bending_pct = float(delta_m / m_base * 100)
+
+tau_base, tau_final = float(res["tau_box_base_MPa"]), float(res["tau_box_final_MPa"])
+tau_margin = float(res["tau_margin_MPa"])
+
+# Roll restoring stability derivative Cl_beta at best glide speed
+op_b = asb.OperatingPoint(velocity=v_base / 3.6, alpha=3.0, beta=2.0)
+op_f = asb.OperatingPoint(velocity=v_final / 3.6, alpha=3.0, beta=2.0)
+ab_b = asb.AeroBuildup(airplane=airplane, op_point=op_b).run_with_stability_derivatives()
+ab_f = asb.AeroBuildup(airplane=ac_final, op_point=op_f).run_with_stability_derivatives()
+clb_base = float(ab_b["Clb"][0])
+clb_final = float(ab_f["Clb"][0])
+roll_gain_pct = float(abs(clb_final / clb_base - 1.0) * 100)
+
+tbl_header = ["Metric", "Baseline", "Converged", "Advantage"]
+tbl_rows = [
+    ("Best glide ratio L/D", f"{base_ld:.2f}", f"{final_ld:.2f}", f"{hero_delta_ld:+.2f} (+{hero_delta_ld/base_ld*100:.1f}%)"),
+    ("Best L/D speed (km/h)", f"{v_base:.0f}", f"{v_final:.0f}", f"{delta_v:+.0f} km/h (slower sink)"),
+    ("Roll derivative Cl_beta", f"{clb_base:.4f}", f"{clb_final:.4f}", f"+{roll_gain_pct:.0f}% restoring roll"),
+    ("Root bending moment", f"{m_base:.2f} kN·m", f"{m_final:.2f} kN·m", f"{delta_m:+.2f} kN·m (+{bending_pct:.1f}%)"),
+    ("D-tube shear margin", f"{tau_base:.1f} MPa", f"{tau_final:.1f} MPa", f"+{tau_margin:.1f} MPa margin"),
+]
+```
+
+::: {.hero}
+[`{python} f"{hero_delta_ld:+.2f}"`]{.hero-value}
+[net glide ratio gain achieved by converged 3D design over calibrated baseline]{.hero-label}
+:::
+
+**Answer.** The [converged design](2026-09-30-09-how-do-glide-and-structural-margins-of-the-converged-design-compare-wi.qmd) combines an extended aspect ratio, increased dihedral, and aft sweep into a refined 3D airframe next to the [calibrated baseline](2026-09-30-01-what-does-a-discus-2c-geometry-reconstructed-from-published-data-look.qmd) (@fig-3d-comparison). Best glide ratio improves by [`{python} f"{hero_delta_ld:+.2f}"`]{.key} to [`{python} f"{final_ld:.2f}"`]{.key} at a [`{python} f"{delta_v:+.0f} km/h"`]{.key} slower speed, enhancing thermalling climb (@tbl-summary). [Dihedral relief](2026-09-30-05-how-does-varying-wing-dihedral-change-glide-ratio-and-lateral-directio.qmd) boosts roll restoring stability by [`{python} f"{roll_gain_pct:.0f}%"`]{.key}. Under [limit manoeuvre loads](2026-09-30-03-are-wing-structural-loads-reasonable-under-a-jar-22-5-3g-limit-manoeuv.qmd), [aft sweep](2026-09-30-06-how-does-wing-sweep-trade-glide-ratio-against-root-structural-loads.qmd) contains root bending within [`{python} f"{bending_pct:+.1f}%"`]{.key} of baseline, while the [D-tube torsion box](2026-09-30-08-can-the-bending-spar-absorb-forward-sweep-root-torque-without-a-torsio.qmd) maintains a [`{python} f"{tau_margin:.1f} MPa"`]{.key} shear safety margin.
+
+```{python}
+#| label: tbl-summary
+#| echo: false
+#| output: asis
+md_table(tbl_header, tbl_rows)
+```
+
+```{python}
+#| label: fig-3d-comparison
+#| fig-cap: "Three-dimensional wireframe comparison of the calibrated baseline Discus-2c and the converged final design, with an overlay highlighting changes in span, dihedral, and aft sweep."
+fig = plt.figure(figsize=(12, 4.2))
+ax1 = fig.add_subplot(131, projection="3d")
+ax2 = fig.add_subplot(132, projection="3d")
+ax3 = fig.add_subplot(133, projection="3d")
+
+airplane.draw_wireframe(ax=ax1, color="#1f77b4", set_lims=False, set_equal=False, show=False)
+ax1.set_title("Calibrated Baseline\n(AR=28.5, Γ=3.0°, Λ=0.0°)", fontsize=9)
+
+ac_final.draw_wireframe(ax=ax2, color="#2ca02c", set_lims=False, set_equal=False, show=False)
+ax2.set_title("Converged Design\n(AR=29.0, Γ=6.0°, Λ=+4.0°)", fontsize=9)
+
+airplane.draw_wireframe(ax=ax3, color="#1f77b4", thin_linewidth=0.3, thick_linewidth=0.7, set_lims=False, set_equal=False, show=False)
+ac_final.draw_wireframe(ax=ax3, color="#2ca02c", thin_linewidth=0.3, thick_linewidth=0.7, set_lims=False, set_equal=False, show=False)
+ax3.set_title("3D Overlay Comparison\n(Blue: Baseline, Green: Converged)", fontsize=9)
+
+for ax in (ax1, ax2, ax3):
+    ax.set_xlim(0, 7.5)
+    ax.set_ylim(-9.5, 9.5)
+    ax.set_zlim(-0.8, 2.2)
+    ax.set_box_aspect([7.5, 19.0, 3.0])
+    ax.view_init(elev=28, azim=-122)
+
+plt.tight_layout()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(final_design_synthesis)
+```
