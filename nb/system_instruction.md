@@ -149,7 +149,7 @@ components sum — were each one `api_search` away. It never searched.
   and `open_entry` freezes that number as the entry's render cost — measured,
   not estimated, which is why it is not something you are asked for.
 
-# The 39 rules lint checks
+# The 40 rules lint checks
 
 Know these before drafting, not after. Finding one from a lint run means the
 prose is already written.
@@ -194,6 +194,7 @@ prose is already written.
 38  every chapter is named in _quarto.yml's sidebar
 39  an index RENDERS its input callouts from `_inputs.yml`, never writes them
 40  the front page's freeze is not older than the entries it counts
+41  the hero value derives from a solve, not from a literal you assigned
 ```
 
 There is no rule 36: it checked the categories system, which was retired, and
@@ -296,6 +297,15 @@ Order: hero → `**Answer.**` → callouts → evidence → `footer(...)`.
 - **One hero number, or none.** `::: {.hero}` carries the single value the entry
   exists to produce; `.hero-pair` when the answer *is* a comparison; nothing when
   the answer is a figure or a yes/no. Supporting values get `[…]{.key}`.
+- **The hero has to be SOLVED FOR** (rule 41). Not `crossing_span = 0.714` in a
+  cell and `f"{crossing_span:.3f}"` in the hero — that publishes a number you
+  already had as though the page worked it out, and a re-render can never
+  contradict it. If you found it while probing, write the code that finds it:
+  bisect, sweep and interpolate, or constrain the optimiser. If it genuinely is
+  an input — a chosen ballast, a specified height — then it is not the hero;
+  hero the quantity it produced and give the input in the prose. A literal
+  carried from a SIBLING entry is fine and stays fine: cite it, and let the
+  hero be what this entry computed from it.
 - **One prose section.** A procedure folds into the answer as a numbered list; a
   caveat becomes a `::: {.callout-warning}`, which still counts against the 100.
 - **Choose the form the reader takes in fastest.** Not a ranking to apply blind:

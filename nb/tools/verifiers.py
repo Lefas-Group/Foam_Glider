@@ -39,7 +39,24 @@ from ..log import say
 # against the message text -- so rewording the message would have silently
 # turned the filter off, and what comes back then is the deadlock it exists to
 # prevent. `lint.check` yields the rule now, so this cannot go stale.
-FREEZE_STALE_RULE = 12
+#
+# RULE 40 JOINED IT on 2026-09-29, and it is the same deadlock one level up:
+# rule 12 watches a chapter's freeze, rule 40 watches the notebook front page's,
+# and for both the render IS the fix. Rule 40 was worse, because it is
+# self-restoring: it compares each entry's .qmd MTIME against the index freeze,
+# so every `edit_file` re-breaks it -- and editing is the only thing that
+# invalidates the lint cache below. The model therefore could not observe it
+# going clean. Rendering `index.qmd` fixed it and returned "nothing in this
+# chapter has changed"; editing to force a fresh answer re-broke it.
+#
+# Measured on two runs of the same question, 2026-09-29: pro reached its answer
+# at turn 9 and spent 27 of its 36 turns in that loop, 76% of its wall clock,
+# quitting on a cached message having never seen a clean lint. Flash spent 14 of
+# 37. Both committed, because the gate that matters re-checks from scratch.
+#
+# Still enforced where it can be acted on: `write.py` re-renders the front page
+# before every commit, and `check.py` runs the full rule set POST-render.
+FREEZE_STALE_RULES = frozenset({12, 40})
 
 
 def _problems(root, chapters, pre_render=True):
@@ -53,13 +70,14 @@ def _problems(root, chapters, pre_render=True):
     lets a run that fails lint record WHICH rules blocked it in `run.json`
     rather than only in a log line saying "3 blocking".
 
-    `pre_render` drops rule 12, which no edit can satisfy -- the render IS its
-    fix, and gating the render on it deadlocks. See `FREEZE_STALE_RULE`.
+    `pre_render` drops rules 12 and 40, which no edit can satisfy -- the render
+    IS their fix, and gating the render on them deadlocks. See
+    `FREEZE_STALE_RULES`.
     """
     import lint
     blocking, warnings = [], []
     for rule, where, msg in lint.check(root, chapters):
-        if pre_render and rule == FREEZE_STALE_RULE:
+        if pre_render and rule in FREEZE_STALE_RULES:
             continue
         label = "" if where is None else f"{where.name}: "
         (warnings if "(warning)" in msg else blocking).append(
@@ -84,11 +102,25 @@ def _word_budgets(notebook, chapter):
 
 def _chapter_digest(notebook, chapter):
     """
-    One hash over everything in the chapter that lint reads.
+    One hash over everything in the chapter that lint reads -- plus the
+    notebook-level state some of its rules read.
 
     Sorted by name, and the NAME is hashed with the bytes -- otherwise renaming
     an entry, or adding an empty one, leaves the digest unmoved. Unreadable
     files hash as absent, which is the same answer lint gives them.
+
+    THE CHAPTER IS NOT THE WHOLE INPUT, which is what the name used to imply.
+    Rules 34, 39 and 40 read the notebook's front page and its brief, and the
+    cache claimed "nothing lint reads has changed" while both were free to move.
+    Rule 40 made that concrete: a run could render `index.qmd`, genuinely
+    clearing it, and be told the answer was unchanged -- because the fix landed
+    somewhere the key did not look. Rule 40 no longer reaches the model at all
+    (see `FREEZE_STALE_RULES`), but the key was wrong independently of it, and
+    the next notebook-scoped rule would have inherited the same blind spot.
+
+    The front page's FREEZE is hashed by mtime rather than by bytes: it is the
+    mtime that rule 40 compares, and re-rendering an unchanged page rewrites it
+    without changing much of the content.
     """
     import hashlib
     h = hashlib.blake2b(digest_size=16)
@@ -101,6 +133,17 @@ def _chapter_digest(notebook, chapter):
             h.update(f.read_bytes())
         except OSError:
             pass
+    for extra in (notebook.root / "index.qmd", notebook.root / "_inputs.yml"):
+        h.update(extra.name.encode())
+        try:
+            h.update(extra.read_bytes())
+        except OSError:
+            pass
+    frozen = notebook.root / "_freeze" / "index" / "execute-results" / "html.json"
+    try:
+        h.update(str(frozen.stat().st_mtime).encode())
+    except OSError:
+        pass
     return h.hexdigest()
 
 
