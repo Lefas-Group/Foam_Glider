@@ -1,0 +1,87 @@
+---
+title: "How does wing aspect ratio trade glide ratio against root bending moment?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 182.3      # s the probe actually used
+
+import aerosandbox.tools.pretty_plots as p
+import matplotlib.pyplot as plt
+
+s_area = float(airplane.s_ref)
+
+# Execute aspect ratio sweep at fixed wing area
+ars = np.array([20.0, 24.0, 28.45, 32.0, 36.0])
+trade = aspect_ratio_trade(airplane, aspect_ratios=ars)
+
+ar_min = float(trade["AR"][0])
+ar_max = float(trade["AR"][-1])
+ar_base = float(trade["AR"][2])
+
+span_min = float(trade["span"][0])
+span_max = float(trade["span"][-1])
+
+ld_min = float(trade["max_LD"][0])
+ld_max = float(trade["max_LD"][-1])
+ld_base = float(trade["max_LD"][2])
+pct_ld = float((ld_max - ld_min) / ld_min * 100)
+
+maero_min = float(trade["root_moment_aero_kNm"][0])
+maero_max = float(trade["root_moment_aero_kNm"][-1])
+pct_maero = float((maero_max - maero_min) / maero_min * 100)
+
+mbal_min = float(trade["root_moment_net_ballasted_kNm"][0])
+mbal_max = float(trade["root_moment_net_ballasted_kNm"][-1])
+pct_mbal = float((mbal_max - mbal_min) / mbal_min * 100)
+
+trade_ratio = float(pct_mbal / pct_ld)
+```
+
+::: {.hero}
+[`{python} f"{trade_ratio:.2f}"`]{.hero-value}
+[percent increase in net limit root bending moment per percent glide gain]{.hero-label}
+:::
+
+**Answer.** At fixed wing area ([`{python} f"{s_area:.2f} m²"`]{.key}), expanding span from [`{python} f"{span_min:.1f} m"`]{.key} to [`{python} f"{span_max:.1f} m"`]{.key} increases best glide ratio by [`{python} f"{pct_ld:.1f}%"`]{.key}. Best L/D rises from [`{python} f"{ld_min:.1f}"`]{.key} to [`{python} f"{ld_max:.1f}"`]{.key} and brackets the [calibrated baseline](2026-09-30-02-does-the-reconstructed-discus-2c-achieve-its-published-45-9-glide-rati.qmd) at [`{python} f"{ld_base:.1f}"`]{.key} (@fig-ar-trade). Under the [JAR-22 +5.3g manoeuvre](2026-09-30-03-are-wing-structural-loads-reasonable-under-a-jar-22-5-3g-limit-manoeuv.qmd), gross aerodynamic root moment grows [`{python} f"{pct_maero:.1f}%"`]{.key} to [`{python} f"{maero_max:.1f} kN·m"`]{.key}. Net ballasted root moment grows [`{python} f"{pct_mbal:.1f}%"`]{.key} to [`{python} f"{mbal_max:.1f} kN·m"`]{.key}, exacting a [`{python} f"{trade_ratio:.2f}%"`]{.key} structural moment penalty per percent aerodynamic glide gain.
+
+::: {.callout-note}
+## New assumptions
+1. **planform scaling: geometric**, preserves area and taper.
+2. **aspect ratio range: 20–36**, sailplane design space.
+:::
+
+```{python}
+#| label: fig-ar-trade
+#| fig-cap: "Variation of best glide ratio and limit wing-root bending moments with wing aspect ratio at fixed wing area, showing aerodynamic glide gains alongside structural moment penalties."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 4))
+
+ax1.plot(trade["AR"], trade["max_LD"], "bo-", label="Best L/D (AeroBuildup)")
+ax1.plot(ar_base, ld_base, "rs", markersize=7, label=f"Baseline AR={ar_base:.1f}")
+ax1.set_xlabel("Wing aspect ratio AR")
+ax1.set_ylabel("Best glide ratio (L/D)")
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="lower right", fontsize=8)
+
+ax2.plot(trade["AR"], trade["root_moment_aero_kNm"], "b^-", label="Gross aerodynamic")
+ax2.plot(trade["AR"], trade["root_moment_net_dry_kNm"], "g--", label="Net (dry wing)")
+ax2.plot(trade["AR"], trade["root_moment_net_ballasted_kNm"], "r-o", label="Net (with ballast)")
+ax2.plot(ar_base, trade["root_moment_net_ballasted_kNm"][2], "ks", markersize=7, label="Baseline limit")
+ax2.set_xlabel("Wing aspect ratio AR")
+ax2.set_ylabel("Root bending moment (kN·m)")
+ax2.grid(True, alpha=0.3)
+ax2.legend(loc="upper left", fontsize=8)
+
+plt.tight_layout()
+p.show_plot()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(aspect_ratio_trade)
+```

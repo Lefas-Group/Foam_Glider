@@ -200,3 +200,107 @@ def wing_structural_loads(
         "lift_centroid_y": float(moment_aero[0] / shear_aero[0]),
     }
 
+
+def _scale_airplane_aspect_ratio(
+    airplane: asb.Airplane,
+    ar_target: float,
+    base_ar: float = 28.446,
+    base_s_ref: float = 11.39,
+) -> asb.Airplane:
+    """Scale the wing aspect ratio at fixed wing area while preserving planform taper and twist."""
+    k = np.sqrt(ar_target / base_ar)
+    wing_orig = airplane.wings[0]
+
+    xs_le = np.array([xsec.xyz_le[0] for xsec in wing_orig.xsecs])
+    ys_le = np.array([xsec.xyz_le[1] for xsec in wing_orig.xsecs])
+    chords = np.array([xsec.chord for xsec in wing_orig.xsecs])
+    twists = [xsec.twist for xsec in wing_orig.xsecs]
+    airfoils = [xsec.airfoil for xsec in wing_orig.xsecs]
+
+    scaled_ys = ys_le * k
+    scaled_chords = chords / k
+
+    x_c4 = xs_le + 0.25 * chords
+    x_c4_scaled = x_c4[0] + (x_c4 - x_c4[0]) * k
+    scaled_xs = x_c4_scaled - 0.25 * scaled_chords
+
+    scaled_zs = 0.15 + scaled_ys * np.tan(np.radians(3.0))
+    scaled_zs[-1] = scaled_zs[-2] + 0.40
+
+    xsecs_scaled = [
+        asb.WingXSec(
+            xyz_le=[scaled_xs[i], scaled_ys[i], scaled_zs[i]],
+            chord=scaled_chords[i],
+            twist=twists[i],
+            airfoil=airfoils[i],
+        )
+        for i in range(len(scaled_ys))
+    ]
+
+    wing_scaled = asb.Wing(
+        name="Main Wing",
+        symmetric=True,
+        xsecs=xsecs_scaled,
+    )
+
+    return asb.Airplane(
+        name=f"Discus-2c-AR{ar_target:.1f}",
+        xyz_ref=airplane.xyz_ref,
+        wings=[wing_scaled, airplane.wings[1], airplane.wings[2]],
+        fuselages=airplane.fuselages,
+        s_ref=base_s_ref,
+        c_ref=float(wing_scaled.mean_aerodynamic_chord()),
+        b_ref=float(airplane.b_ref * k),
+    )
+
+
+def aspect_ratio_trade(
+    airplane: asb.Airplane,
+    aspect_ratios: np.ndarray = None,
+    mass_flight: float = 417.0,
+    mass_structural: float = 565.0,
+    load_factor: float = 5.3,
+    speeds_kmh: np.ndarray = None,
+) -> dict:
+    """Sweep wing aspect ratio at fixed area, returning best glide and limit structural loads."""
+    if aspect_ratios is None:
+        aspect_ratios = np.array([20.0, 24.0, 28.45, 32.0, 36.0])
+    if speeds_kmh is None:
+        speeds_kmh = np.linspace(85, 140, 12)
+
+    spans = []
+    macs = []
+    max_lds = []
+    best_speeds_kmh = []
+    m_aeros = []
+    m_net_drys = []
+    m_net_bals = []
+
+    for ar in aspect_ratios:
+        ac = _scale_airplane_aspect_ratio(airplane, ar)
+        pol = glide_polar(ac, mass=mass_flight, speeds_kmh=speeds_kmh)
+        best_i = int(np.argmax(pol["LD"]))
+        loads = wing_structural_loads(
+            ac, mass=mass_structural, load_factor=load_factor
+        )
+
+        spans.append(float(ac.b_ref))
+        macs.append(float(ac.c_ref))
+        max_lds.append(float(pol["LD"][best_i]))
+        best_speeds_kmh.append(float(pol["speeds_kmh"][best_i]))
+        m_aeros.append(float(loads["root_moment_aero"] / 1000))
+        m_net_drys.append(float(loads["root_moment_net_dry"] / 1000))
+        m_net_bals.append(float(loads["root_moment_net_ballasted"] / 1000))
+
+    return {
+        "AR": np.array(aspect_ratios),
+        "span": np.array(spans),
+        "MAC": np.array(macs),
+        "max_LD": np.array(max_lds),
+        "best_speed_kmh": np.array(best_speeds_kmh),
+        "root_moment_aero_kNm": np.array(m_aeros),
+        "root_moment_net_dry_kNm": np.array(m_net_drys),
+        "root_moment_net_ballasted_kNm": np.array(m_net_bals),
+    }
+
+
