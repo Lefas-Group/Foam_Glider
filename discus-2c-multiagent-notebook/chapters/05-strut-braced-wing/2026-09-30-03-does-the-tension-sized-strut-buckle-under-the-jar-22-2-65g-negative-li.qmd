@@ -1,0 +1,99 @@
+---
+title: "Does the tension-sized strut buckle under the JAR-22 -2.65g negative limit case?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 73.9      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Execute strut buckling and negative manoeuvre analysis
+res = sbw_strut_buckling_analysis(airplane)
+
+p_comp_bal = float(res["P_comp_bal_kN"])
+p_comp_dry = float(abs(res["T_neg_dry565_kN"]))
+l_strut = float(res["L_strut_m"])
+slenderness = float(res["slenderness"])
+p_cr_kn = float(res["P_cr_pinned_kN"])
+p_cr_clamp_kn = float(res["P_cr_clamped_kN"])
+n_buckle = float(res["n_buckle"])
+overload_ratio = float(res["overload_ratio"])
+overload_clamped = float(res["overload_ratio_clamped"])
+m_root_cant_bal = float(res["m_root_cant_bal_kNm"])
+m_peak_sbw_pos = float(res["m_peak_sbw_pos_kNm"])
+spar_overload = float(abs(m_root_cant_bal) / m_peak_sbw_pos)
+
+e_strut_gpa = 70.0
+```
+
+::: {.hero}
+[`{python} f"{overload_ratio:.0f}×"`]{.hero-value}
+[ratio of negative limit compressive load to strut Euler buckling capacity]{.hero-label}
+:::
+
+**Answer.** Under the JAR-22 negative limit manoeuvre, downforce puts the strut into [`{python} f"{p_comp_bal:.1f} kN"`]{.key} compression ([`{python} f"{p_comp_dry:.1f} kN"`]{.key} dry). Sized purely for [+5.3g tension](2026-09-30-02-how-far-can-aspect-ratio-be-pushed-before-strut-penalties-erode-glide.qmd), the [`{python} f"{l_strut:.2f} m"`]{.key} slender strut has a slenderness ratio of [`{python} f"{slenderness:.0f}"`]{.key} and Euler buckling capacity of only [`{python} f"{p_cr_kn:.2f} kN"`]{.key} (@fig-sbw-buckling). It buckles almost instantly at [`{python} f"{n_buckle:.3f}g"`]{.key}, overloaded by [`{python} f"{overload_ratio:.0f}×"`]{.key} ([`{python} f"{overload_clamped:.0f}×"`]{.key} clamped). Shedding compressive loads, the wing acts as an unbraced cantilever resisting [`{python} f"{abs(m_root_cant_bal):.1f} kN·m"`]{.key} root bending, overloading the relieved spar by [`{python} f"{spar_overload:.1f}×"`]{.key}.
+
+::: {.callout-note}
+## New assumptions
+1. **strut elastic modulus: 70 GPa**, carbon composite estimate.
+2. **strut end fixity: pinned-pinned**, spherical bearing attachments.
+:::
+
+```{python}
+#| label: fig-sbw-buckling
+#| fig-cap: "Left: Strut axial force across manoeuvre load factors showing compressive buckling threshold. Right: Euler critical buckling load versus effective column length across end fixities compared to negative limit compressive demand."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
+
+# Subplot 1: Axial load vs load factor
+ns = np.linspace(-2.65, 5.3, 100)
+# Strut axial force accounts for inertial relief direction in positive vs negative g
+t_struts = np.where(ns >= 0, ns * (res["T_pos_bal_kN"] / 5.3), ns * (p_comp_bal / 2.65))
+
+ax1.plot(ns, t_struts, color="navy", lw=2.2, label="Strut Axial Load")
+ax1.axhline(0, color="gray", ls="--", lw=0.8)
+ax1.axhline(-p_cr_kn, color="crimson", ls=":", lw=1.8, label=f"Euler Buckling ($P_{{cr}} = {p_cr_kn:.2f}$ kN)")
+ax1.axvline(n_buckle, color="firebrick", ls="-.", lw=1.2, label=f"Buckling Onset ($n = {n_buckle:.3f}g$)")
+ax1.scatter([n_buckle], [-p_cr_kn], color="crimson", s=50, zorder=5)
+ax1.scatter([-2.65], [-p_comp_bal], color="darkred", s=50, zorder=5, label=f"-2.65g Demand ($-{p_comp_bal:.1f}$ kN)")
+
+ax1.set_xlabel("Manoeuvre Load Factor $n$ (g)")
+ax1.set_ylabel("Strut Axial Force (kN)")
+ax1.set_title("Strut Load vs Load Factor", fontsize=10)
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="upper left", fontsize=7.5)
+
+# Subplot 2: Euler buckling vs unbraced column length
+lengths = np.linspace(1.0, 5.0, 100)
+i_xx = res["I_xx_total_mm4"] * 1e-12
+e_comp = 70e9
+
+p_cr_pin_curve = (np.pi**2 * e_comp * i_xx / lengths**2) / 1e3
+p_cr_clamp_curve = (np.pi**2 * e_comp * i_xx / (0.5 * lengths)**2) / 1e3
+
+ax2.plot(lengths, p_cr_pin_curve, color="crimson", lw=2.0, label="Pinned-Pinned ($K=1.0$)")
+ax2.plot(lengths, p_cr_clamp_curve, color="forestgreen", lw=1.8, ls="--", label="Clamped-Clamped ($K=0.5$)")
+ax2.axhline(p_comp_bal, color="darkred", ls="-.", lw=1.8, label=f"-2.65g Demand ({p_comp_bal:.1f} kN)")
+ax2.axvline(l_strut, color="gray", ls=":", lw=1.5, label=f"Strut Length ($L={l_strut:.2f}$ m)")
+ax2.scatter([l_strut], [p_cr_kn], color="crimson", s=50, zorder=5)
+
+ax2.set_xlabel("Unbraced Strut Length $L$ (m)")
+ax2.set_ylabel("Critical Buckling Load $P_{cr}$ (kN)")
+ax2.set_title("Euler Buckling Capacity vs Length", fontsize=10)
+ax2.set_ylim(0, 35)
+ax2.grid(True, alpha=0.3)
+ax2.legend(loc="upper right", fontsize=7.5)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(sbw_strut_buckling_analysis)
+```

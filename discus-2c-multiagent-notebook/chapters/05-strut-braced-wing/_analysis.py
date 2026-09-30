@@ -1478,6 +1478,111 @@ def sbw_drag_mass_trade(
     }
 
 
+def sbw_strut_buckling_analysis(
+    airplane: asb.Airplane,
+    mass_flight: float = 417.0,
+    mass_structural: float = 565.0,
+    load_factor_pos: float = 5.3,
+    load_factor_neg: float = -2.65,
+    sigma_allow: float = 350e6,
+    t_skin: float = 0.0012,
+    E_composite: float = 70e9,
+    K_end: float = 1.0,
+) -> dict:
+    """Analyze strut compression and Euler column buckling under JAR-22 negative limit manoeuvre."""
+    # Positive limit manoeuvre (+5.3g)
+    loads_pos = strut_braced_structural_loads(
+        airplane, mass=mass_structural, load_factor=load_factor_pos
+    )
+    T_pos_bal = float(loads_pos["T_strut_ballasted"])
+    T_pos_dry = float(loads_pos["T_strut_dry"])
+    L_strut = float(loads_pos["L_strut"])
+
+    # Strut geometry
+    c_strut = 0.12
+    af = asb.Airfoil("hq010").repanel(n_points_per_side=200)
+    c_pts = af.coordinates
+    x_pts = c_pts[:, 0] * c_strut
+    y_pts = c_pts[:, 1] * c_strut
+
+    # Numerical integration for shell
+    dl = np.sqrt(np.diff(x_pts) ** 2 + np.diff(y_pts) ** 2)
+    y_mid = 0.5 * (y_pts[:-1] + y_pts[1:])
+    perimeter = float(np.sum(dl))
+    A_shell = perimeter * t_skin
+    I_xx_shell = float(np.sum(y_mid**2 * dl) * t_skin)
+
+    # Tensile core sized for +5.3g tension with FS = 1.5
+    A_core = 1.5 * T_pos_bal / sigma_allow
+    h_core = 0.009  # 9 mm height in 12 mm max thickness section
+    b_core = A_core / h_core
+    I_xx_core = (1.0 / 12.0) * b_core * h_core**3
+
+    A_total = A_shell + A_core
+    I_xx_total = I_xx_shell + I_xx_core
+    r_gyration = float(np.sqrt(I_xx_total / A_total))
+    slenderness = float(L_strut / r_gyration)
+
+    # Euler buckling critical loads
+    P_cr_pinned = float((np.pi**2 * E_composite * I_xx_total) / (K_end * L_strut) ** 2)
+    P_cr_clamppin = float((np.pi**2 * E_composite * I_xx_total) / (0.7 * L_strut) ** 2)
+    P_cr_clamped = float((np.pi**2 * E_composite * I_xx_total) / (0.5 * L_strut) ** 2)
+
+    # Negative limit manoeuvre (-2.65g)
+    loads_neg = strut_braced_structural_loads(
+        airplane, mass=mass_structural, load_factor=load_factor_neg
+    )
+    loads_neg_dry417 = strut_braced_structural_loads(
+        airplane, mass=mass_flight, load_factor=load_factor_neg, water_ballast_mass=0.0
+    )
+
+    T_neg_bal = float(loads_neg["T_strut_ballasted"])
+    T_neg_dry565 = float(loads_neg["T_strut_dry"])
+    T_neg_dry417 = float(loads_neg_dry417["T_strut_dry"])
+
+    # Applied compressive load is magnitude of negative tension
+    P_comp_bal = abs(T_neg_bal)
+    P_comp_dry565 = abs(T_neg_dry565)
+    P_comp_dry417 = abs(T_neg_dry417)
+
+    overload_ratio = float(P_comp_bal / P_cr_pinned)
+    n_buckle = float(-P_cr_pinned / (P_comp_bal / abs(load_factor_neg)))
+
+    # Cantilever wing loads under -2.65g (fallback once strut buckles)
+    loads_cant_neg = wing_structural_loads(
+        airplane, mass=mass_structural, load_factor=load_factor_neg
+    )
+    m_root_cant_bal = float(loads_cant_neg["root_moment_net_ballasted"])
+    m_root_cant_dry = float(loads_cant_neg["root_moment_net_dry"])
+
+    return {
+        "T_pos_bal_kN": T_pos_bal / 1e3,
+        "T_pos_dry_kN": T_pos_dry / 1e3,
+        "L_strut_m": L_strut,
+        "A_shell_mm2": A_shell * 1e6,
+        "A_core_mm2": A_core * 1e6,
+        "A_total_mm2": A_total * 1e6,
+        "I_xx_total_mm4": I_xx_total * 1e12,
+        "r_gyration_mm": r_gyration * 1e3,
+        "slenderness": slenderness,
+        "P_cr_pinned_kN": P_cr_pinned / 1e3,
+        "P_cr_clamppin_kN": P_cr_clamppin / 1e3,
+        "P_cr_clamped_kN": P_cr_clamped / 1e3,
+        "T_neg_bal_kN": T_neg_bal / 1e3,
+        "T_neg_dry565_kN": T_neg_dry565 / 1e3,
+        "T_neg_dry417_kN": T_neg_dry417 / 1e3,
+        "P_comp_bal_kN": P_comp_bal / 1e3,
+        "overload_ratio": overload_ratio,
+        "overload_ratio_clamped": float(P_comp_bal / P_cr_clamped),
+        "n_buckle": n_buckle,
+        "m_root_cant_bal_kNm": m_root_cant_bal / 1e3,
+        "m_root_cant_dry_kNm": m_root_cant_dry / 1e3,
+        "m_root_sbw_pos_kNm": float(loads_pos["root_moment_sbw_ballasted"]) / 1e3,
+        "m_peak_sbw_pos_kNm": float(loads_pos["peak_moment_sbw_ballasted"]) / 1e3,
+    }
+
+
+
 
 
 
