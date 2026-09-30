@@ -13,6 +13,38 @@ Three layers, each one the previous one distilled:
 
 You watch it all from one place: `nb board`.
 
+## Setup, from nothing
+
+Four binaries on PATH, one API key, and Claude Code if you want the skill.
+
+| | why | |
+|---|---|---|
+| **[uv](https://docs.astral.sh/uv/)** | runs everything; installs Python 3.13 and the deps itself | required |
+| **[Quarto CLI](https://quarto.org/docs/download/)** | renders the notebooks | required |
+| **git** | `nb` commits each entry, and scopes freezes by diff | required |
+| **[Node](https://nodejs.org/)** | `nb` drives its file edits through `npx @modelcontextprotocol/server-filesystem` | required by `nb`, not by rendering |
+| **[Claude Code](https://claude.com/claude-code)** | runs the `coordinate-design` skill | only for the skill |
+
+The API key is read from the environment — there is no `.env`. Runs detach into
+the background, so it has to be exported in the shell that launches them:
+
+```bash
+export GEMINI_API_KEY=...        # aistudio.google.com/apikey
+```
+
+Then check the whole lot at once, which is faster than finding out mid-run:
+
+```bash
+uv run --group nb python -m nb.preflight RADICAL-GLIDER
+```
+
+It reports every missing binary, an unset key, and anything wrong with the
+notebook's own structure. `preflight ok` means `nb ask` will get as far as the
+model. No separate install step: `uv run` syncs from `uv.lock` on first use.
+
+Rendering a notebook needs only uv and Quarto — the `nb` group, Node and the key
+are for running the agent.
+
 ## `coordinate-design` — start here
 
 Give Claude a direction rather than a question, and the skill drives the rest:
@@ -49,10 +81,9 @@ uv run --group nb python -m nb ask glider-notebook \
   --chapter 04-thinner-foam "How much does 3 mm foam cost in sink rate?"
 ```
 
-Probes the chapter's model, writes the entry, lints it against a 39-rule
+Probes the chapter's model, writes the entry, lints it against a 40-rule
 contract, renders it, and commits — about five minutes. It stops only for a new
-chapter or a refactor, both of which later entries would be built on. Needs
-`GEMINI_API_KEY`.
+chapter or a refactor, both of which later entries would be built on.
 
 [`nb/README.md`](nb/README.md) is the real documentation: the loop, the rules,
 the budgets, and why each is shaped the way it is.
@@ -63,9 +94,8 @@ the budgets, and why each is shaped the way it is.
 uv run quarto preview glider-notebook --port 4321
 ```
 
-Needs [uv](https://docs.astral.sh/uv/) and the
-[Quarto CLI](https://quarto.org/docs/download/). Each `_freeze/` is committed,
-so a fresh clone renders without re-solving anything.
+Each `_freeze/` is committed, so a fresh clone renders without re-solving
+anything.
 
 - **`RADICAL-GLIDER`** — live. The FliteTest X-Wing in flat-plate foam.
 - **`glider-notebook`** — live. A 300 mm-span foam glider, six chapters.

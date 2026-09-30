@@ -154,10 +154,21 @@ def check(root):
     if not (notebook.root / "_quarto.yml").exists():
         bad.append(f"no _quarto.yml in {notebook.root}")
 
-    # check.py shells out to both. Without quarto it cannot render; without git
-    # it silently falls back to re-rendering everything, which is correct but
-    # slow enough to look like a hang.
-    for binary, why in (("quarto", "render"), ("git", "freeze scoping and diffs")):
+    # check.py shells out to the first two. Without quarto it cannot render;
+    # without git it silently falls back to re-rendering everything, which is
+    # correct but slow enough to look like a hang.
+    #
+    # `npx` is not check.py's -- it is ours, and it was the one binary this
+    # check did not name. `mcp_fs` spawns
+    # `npx -y @modelcontextprotocol/server-filesystem` with no fallback, and
+    # that server IS `read_text_file`, `edit_file` and `write_file`. So on a
+    # machine without Node this whole function said "ok", the run started,
+    # FORKED INTO THE BACKGROUND, and then died where nobody was looking. A
+    # green light followed by a detached failure is the worst shape a missing
+    # dependency can take, and it is the first thing a fresh clone hits.
+    for binary, why in (("quarto", "render"),
+                        ("git", "freeze scoping and diffs"),
+                        ("npx", "the MCP filesystem server -- install Node")):
         if shutil.which(binary) is None:
             bad.append(f"{binary} not on PATH -- needed for {why}")
 
