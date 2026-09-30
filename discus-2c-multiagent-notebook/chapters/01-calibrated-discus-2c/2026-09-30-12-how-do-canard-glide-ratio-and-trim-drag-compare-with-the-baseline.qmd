@@ -1,0 +1,122 @@
+---
+title: "How do canard glide ratio and trim drag compare with the baseline?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 148.2      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Evaluate canard configuration against calibrated baseline
+canard_station = 0.60
+static_margin_pct = 10.0
+res = canard_configuration_analysis(airplane, canard_x_le=canard_station, static_margin=static_margin_pct / 100.0)
+ac_c = res["canard_airplane"]
+
+hero_delta_ld = float(res["delta_ld_max"])
+ld_canard_max = float(res["ld_canard_max"])
+ld_base_max = float(res["ld_base_max"])
+delta_x_np = float(res["delta_x_np"] * 1000)
+delta_x_cg = float(res["delta_x_cg"] * 1000)
+delta_cd_glide = float(res["trim_drag_penalty_at_best_glide_counts"])
+delta_cd_thermal = float(res["delta_CD"][1] * 1e4)
+```
+
+::: {.hero}
+[`{python} f"{hero_delta_ld:+.2f}"`]{.hero-value}
+[change in maximum trimmed glide ratio of canard configuration relative to baseline]{.hero-label}
+:::
+
+**Answer.** Moving the horizontal stabiliser forward as a lifting canard and removing the aft tailplane shifts the neutral point forward by [`{python} f"{abs(delta_x_np):.0f} mm"`]{.key} (@fig-canard-comparison). Maintaining [`{python} f"{static_margin_pct:.0f}%"`]{.key} static margin requires ballasting the center of gravity forward by [`{python} f"{abs(delta_x_cg):.0f} mm"`]{.key}. Best trimmed glide ratio drops by [`{python} f"{hero_delta_ld:+.2f}"`]{.key} to [`{python} f"{ld_canard_max:.2f}"`]{.key} compared to the [calibrated baseline](2026-09-30-01-what-does-a-discus-2c-geometry-reconstructed-from-published-data-look.qmd). Positive canard lift incurs a [`{python} f"{delta_cd_glide:+.1f}-count"`]{.key} trim drag penalty at best glide, surging to [`{python} f"{delta_cd_thermal:+.0f} counts"`]{.key} at thermalling speeds where high local angles of attack provoke canard stall.
+
+::: {.callout-tip}
+## New user specifications
+Asked of the user, 2026-09-30:
+
+1. **canard static margin: `{python} f"{static_margin_pct:.0f}% MAC"`** — pitch stability.
+:::
+
+::: {.callout-note}
+## New assumptions
+1. **canard longitudinal station: `{python} f"{canard_station:.2f} m"`**, forward nose deck.
+:::
+
+```{python}
+#| label: fig-canard-comparison
+#| fig-cap: "Planform geometry layout and trimmed glide polar comparison between baseline and canard configurations across airspeeds."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
+
+# Subplot 1: Planform geometry layout
+w_main = airplane.wings[0]
+y_m = np.array([xs.xyz_le[1] for xs in w_main.xsecs])
+x_le_m = np.array([xs.xyz_le[0] for xs in w_main.xsecs])
+x_te_m = x_le_m + np.array([xs.chord for xs in w_main.xsecs])
+
+w_ht = airplane.wings[1]
+y_ht = np.array([xs.xyz_le[1] for xs in w_ht.xsecs])
+x_le_ht = np.array([xs.xyz_le[0] for xs in w_ht.xsecs])
+x_te_ht = x_le_ht + np.array([xs.chord for xs in w_ht.xsecs])
+
+w_c = ac_c.wings[1]
+y_c = np.array([xs.xyz_le[1] for xs in w_c.xsecs])
+x_le_c = np.array([xs.xyz_le[0] for xs in w_c.xsecs])
+x_te_c = x_le_c + np.array([xs.chord for xs in w_c.xsecs])
+
+fx = np.array([xs.xyz_c[0] for xs in fuse.xsecs])
+fw = np.array([xs.width / 2.0 for xs in fuse.xsecs])
+ax1.plot(fw, fx, 'k-', lw=1.2)
+ax1.plot(-fw, fx, 'k-', lw=1.2)
+ax1.fill_betweenx(fx, -fw, fw, color='gray', alpha=0.15)
+
+for sgn in [1, -1]:
+    ax1.fill(np.concatenate([sgn * y_m, sgn * y_m[::-1]]),
+             np.concatenate([x_le_m, x_te_m[::-1]]),
+             color='#1f77b4', alpha=0.25, label='Main wing' if sgn == 1 else "")
+    ax1.plot(sgn * y_m, x_le_m, color='#1f77b4', lw=1.2)
+    ax1.plot(sgn * y_m, x_te_m, color='#1f77b4', lw=1.2)
+
+    ax1.fill(np.concatenate([sgn * y_ht, sgn * y_ht[::-1]]),
+             np.concatenate([x_le_ht, x_te_ht[::-1]]),
+             color='#7f7f7f', alpha=0.3, label='Baseline aft tail' if sgn == 1 else "")
+    ax1.plot(sgn * y_ht, x_le_ht, 'k--', lw=1.0)
+    ax1.plot(sgn * y_ht, x_te_ht, 'k--', lw=1.0)
+
+    ax1.fill(np.concatenate([sgn * y_c, sgn * y_c[::-1]]),
+             np.concatenate([x_le_c, x_te_c[::-1]]),
+             color='#d62728', alpha=0.5, label='Lifting canard' if sgn == 1 else "")
+    ax1.plot(sgn * y_c, x_le_c, color='#d62728', lw=1.5)
+    ax1.plot(sgn * y_c, x_te_c, color='#d62728', lw=1.5)
+
+ax1.plot(0, res['x_cg_base'], 'bo', markersize=6, label=f"Baseline CG ({res['x_cg_base']:.2f} m)")
+ax1.plot(0, res['x_cg_canard'], 'ro', markersize=6, label=f"Canard CG ({res['x_cg_canard']:.2f} m)")
+
+ax1.set_xlabel("Spanwise position y (m)")
+ax1.set_ylabel("Fuselage station x (m)")
+ax1.set_title("Planform Layout: Baseline vs Canard", fontsize=10)
+ax1.invert_yaxis()
+ax1.axis('equal')
+ax1.legend(loc='lower right', fontsize=8)
+ax1.grid(True, linestyle=':', alpha=0.6)
+
+# Subplot 2: Trimmed glide ratio polar
+ax2.plot(res["speeds_kmh"], res["LD_base"], 'b-o', lw=1.8, label=f"Baseline (max L/D = {res['ld_base_max']:.1f})")
+ax2.plot(res["speeds_kmh"], res["LD_canard"], 'r-s', lw=1.8, label=f"Canard (max L/D = {res['ld_canard_max']:.1f})")
+ax2.set_xlabel("Airspeed (km/h)")
+ax2.set_ylabel("Trimmed glide ratio L/D")
+ax2.set_title("Trimmed Glide Polar", fontsize=10)
+ax2.grid(True, linestyle=':', alpha=0.6)
+ax2.legend(loc='upper right', fontsize=8)
+
+plt.tight_layout()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(canard_configuration_analysis)
+```

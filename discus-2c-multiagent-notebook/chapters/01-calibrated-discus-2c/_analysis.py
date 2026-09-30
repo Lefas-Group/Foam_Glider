@@ -971,6 +971,268 @@ def box_wing_reconfiguration(
     }
 
 
+def canard_configuration_analysis(
+    airplane: asb.Airplane,
+    canard_x_le: float = 0.60,
+    canard_z_le: float = 0.10,
+    static_margin: float = 0.10,
+    mass_flight: float = 417.0,
+    speeds_kmh: np.ndarray = None,
+) -> dict:
+    """Evaluate canard configuration against baseline Discus-2c in trim, drag, and glide ratio."""
+    if speeds_kmh is None:
+        speeds_kmh = np.array([75.0, 85.0, 95.0, 105.0, 120.0, 140.0, 160.0, 180.0, 200.0])
+
+    speeds_mps = np.array(speeds_kmh) / 3.6
+    weight = mass_flight * 9.81
+    s_ref = airplane.s_ref
+    b_ref = airplane.b_ref
+    main_w = airplane.wings[0]
+    htail_w = airplane.wings[1]
+    vtail_w = airplane.wings[2]
+    fuse_b = airplane.fuselages[0]
+    c_mac = float(main_w.mean_aerodynamic_chord())
+
+    # Build canard surface using htail cross-section geometry
+    xsecs_canard = [
+        asb.WingXSec(
+            xyz_le=[canard_x_le + (xs.xyz_le[0] - htail_w.xsecs[0].xyz_le[0]), xs.xyz_le[1], canard_z_le],
+            chord=xs.chord,
+            twist=0.0,
+            airfoil=xs.airfoil,
+        )
+        for xs in htail_w.xsecs
+    ]
+    canard_w = asb.Wing(name="Canard", symmetric=True, xsecs=xsecs_canard)
+
+    # Reference condition for stability derivatives
+    v_ref = 25.0
+    op0 = asb.OperatingPoint(velocity=v_ref, alpha=0.0)
+    opa = asb.OperatingPoint(velocity=v_ref, alpha=4.0)
+
+    # 1. Baseline stability and neutral point
+    x_cg_b = float(airplane.xyz_ref[0])
+    vb0 = asb.VortexLatticeMethod(airplane=airplane, op_point=op0, verbose=False).run()
+    vba = asb.VortexLatticeMethod(airplane=airplane, op_point=opa, verbose=False).run()
+    CLa_b = (vba["CL"] - vb0["CL"]) / 4.0
+    Cma_b = (vba["Cm"] - vb0["Cm"]) / 4.0
+    x_np_b = x_cg_b - (Cma_b / CLa_b) * c_mac
+    sm_b = (x_np_b - x_cg_b) / c_mac
+
+    # Baseline control derivative (twist = -3 deg on tail, delta = -2 deg from base -1)
+    htail_d = asb.Wing(
+        name="Horizontal Stabilizer Deflected",
+        symmetric=True,
+        xsecs=[
+            asb.WingXSec(xyz_le=xs.xyz_le, chord=xs.chord, twist=xs.twist - 2.0, airfoil=xs.airfoil)
+            for xs in htail_w.xsecs
+        ],
+    )
+    ap_bd = asb.Airplane(
+        xyz_ref=[x_cg_b, 0, airplane.xyz_ref[2]],
+        wings=[main_w, htail_d, vtail_w],
+        fuselages=[fuse_b],
+        s_ref=s_ref,
+        c_ref=c_mac,
+        b_ref=b_ref,
+    )
+    vbd = asb.VortexLatticeMethod(airplane=ap_bd, op_point=op0, verbose=False).run()
+    CLd_b = (vbd["CL"] - vb0["CL"]) / (-2.0)
+    Cmd_b = (vbd["Cm"] - vb0["Cm"]) / (-2.0)
+
+    # 2. Canard stability and neutral point
+    ap_c_test = asb.Airplane(
+        xyz_ref=[x_cg_b, 0, airplane.xyz_ref[2]],
+        wings=[main_w, canard_w, vtail_w],
+        fuselages=[fuse_b],
+        s_ref=s_ref,
+        c_ref=c_mac,
+        b_ref=b_ref,
+    )
+    vc0_test = asb.VortexLatticeMethod(airplane=ap_c_test, op_point=op0, verbose=False).run()
+    vca_test = asb.VortexLatticeMethod(airplane=ap_c_test, op_point=opa, verbose=False).run()
+    CLa_c = (vca_test["CL"] - vc0_test["CL"]) / 4.0
+    Cma_c = (vca_test["Cm"] - vc0_test["Cm"]) / 4.0
+    x_np_c = x_cg_b - (Cma_c / CLa_c) * c_mac
+
+    # Canard CG positioned for specified static margin
+    x_cg_c = x_np_c - static_margin * c_mac
+    canard_airplane = asb.Airplane(
+        name="Discus-2c-Canard",
+        xyz_ref=[x_cg_c, 0.0, airplane.xyz_ref[2]],
+        wings=[main_w, canard_w, vtail_w],
+        fuselages=[fuse_b],
+        s_ref=s_ref,
+        c_ref=c_mac,
+        b_ref=b_ref,
+    )
+
+    # Canard stability derivatives about its balanced CG
+    vc0 = asb.VortexLatticeMethod(airplane=canard_airplane, op_point=op0, verbose=False).run()
+    vca = asb.VortexLatticeMethod(airplane=canard_airplane, op_point=opa, verbose=False).run()
+    CLa_c_bal = (vca["CL"] - vc0["CL"]) / 4.0
+    Cma_c_bal = (vca["Cm"] - vc0["Cm"]) / 4.0
+
+    # Canard control derivative (twist = +4 deg)
+    canard_d = asb.Wing(
+        name="Canard Deflected",
+        symmetric=True,
+        xsecs=[
+            asb.WingXSec(xyz_le=xs.xyz_le, chord=xs.chord, twist=xs.twist + 4.0, airfoil=xs.airfoil)
+            for xs in canard_w.xsecs
+        ],
+    )
+    ap_cd = asb.Airplane(
+        xyz_ref=[x_cg_c, 0, airplane.xyz_ref[2]],
+        wings=[main_w, canard_d, vtail_w],
+        fuselages=[fuse_b],
+        s_ref=s_ref,
+        c_ref=c_mac,
+        b_ref=b_ref,
+    )
+    vcd = asb.VortexLatticeMethod(airplane=ap_cd, op_point=op0, verbose=False).run()
+    CLd_c = (vcd["CL"] - vc0["CL"]) / 4.0
+    Cmd_c = (vcd["Cm"] - vc0["Cm"]) / 4.0
+
+    # 3. Trim linear systems
+    A_b = np.array([[CLa_b, CLd_b], [Cma_b, Cmd_b]])
+    A_c = np.array([[CLa_c_bal, CLd_c], [Cma_c_bal, Cmd_c]])
+
+    CL_reqs = 2 * weight / (1.225 * s_ref * speeds_mps**2)
+    _lin_solve = np.linalg.solve
+
+    trim_alpha_b = []
+    trim_delta_b = []
+    trim_alpha_c = []
+    trim_delta_c = []
+    cd_b_arr = []
+    cd_c_arr = []
+    cdi_b_arr = []
+    cdi_c_arr = []
+    cdp_b_arr = []
+    cdp_c_arr = []
+    ld_b_arr = []
+    ld_c_arr = []
+
+    for i, v in enumerate(speeds_mps):
+        cl_req = CL_reqs[i]
+
+        # Solve baseline trim
+        rhs_b = np.array([cl_req - vb0["CL"], -vb0["Cm"]])
+        ab, db = _lin_solve(A_b, rhs_b)
+        trim_alpha_b.append(float(ab))
+        trim_delta_b.append(float(db))
+
+        # Solve canard trim
+        rhs_c = np.array([cl_req - vc0["CL"], -vc0["Cm"]])
+        ac, dc = _lin_solve(A_c, rhs_c)
+        trim_alpha_c.append(float(ac))
+        trim_delta_c.append(float(dc))
+
+        # Baseline AeroBuildup evaluation at trimmed state
+        ht_twist = htail_w.xsecs[0].twist + db
+        ap_b_cur = asb.Airplane(
+            xyz_ref=[x_cg_b, 0, airplane.xyz_ref[2]],
+            wings=[
+                main_w,
+                asb.Wing(
+                    name="H",
+                    symmetric=True,
+                    xsecs=[
+                        asb.WingXSec(xyz_le=xs.xyz_le, chord=xs.chord, twist=ht_twist, airfoil=xs.airfoil)
+                        for xs in htail_w.xsecs
+                    ],
+                ),
+                vtail_w,
+            ],
+            fuselages=[fuse_b],
+            s_ref=s_ref,
+            c_ref=c_mac,
+            b_ref=b_ref,
+        )
+        res_b = asb.AeroBuildup(airplane=ap_b_cur, op_point=asb.OperatingPoint(velocity=v, alpha=ab)).run()
+        cd_b = float(res_b["CD"][0])
+        cdi_b = float(res_b["D_induced"][0] / (0.5 * 1.225 * v**2 * s_ref))
+        cl_b = float(res_b["CL"][0])
+
+        # Canard AeroBuildup evaluation at trimmed state
+        ap_c_cur = asb.Airplane(
+            xyz_ref=[x_cg_c, 0, airplane.xyz_ref[2]],
+            wings=[
+                main_w,
+                asb.Wing(
+                    name="C",
+                    symmetric=True,
+                    xsecs=[
+                        asb.WingXSec(xyz_le=xs.xyz_le, chord=xs.chord, twist=dc, airfoil=xs.airfoil)
+                        for xs in canard_w.xsecs
+                    ],
+                ),
+                vtail_w,
+            ],
+            fuselages=[fuse_b],
+            s_ref=s_ref,
+            c_ref=c_mac,
+            b_ref=b_ref,
+        )
+        res_c = asb.AeroBuildup(airplane=ap_c_cur, op_point=asb.OperatingPoint(velocity=v, alpha=ac)).run()
+        cd_c = float(res_c["CD"][0])
+        cdi_c = float(res_c["D_induced"][0] / (0.5 * 1.225 * v**2 * s_ref))
+        cl_c = float(res_c["CL"][0])
+
+        cd_b_arr.append(cd_b)
+        cd_c_arr.append(cd_c)
+        cdi_b_arr.append(cdi_b)
+        cdi_c_arr.append(cdi_c)
+        cdp_b_arr.append(cd_b - cdi_b)
+        cdp_c_arr.append(cd_c - cdi_c)
+        ld_b_arr.append(cl_b / cd_b)
+        ld_c_arr.append(cl_c / cd_c)
+
+    ld_b_arr = np.array(ld_b_arr)
+    ld_c_arr = np.array(ld_c_arr)
+    cd_b_arr = np.array(cd_b_arr)
+    cd_c_arr = np.array(cd_c_arr)
+    cdi_b_arr = np.array(cdi_b_arr)
+    cdi_c_arr = np.array(cdi_c_arr)
+
+    idx_b_max = int(np.argmax(ld_b_arr))
+    idx_c_max = int(np.argmax(ld_c_arr))
+
+    return {
+        "canard_airplane": canard_airplane,
+        "x_np_base": x_np_b,
+        "x_np_canard": x_np_c,
+        "delta_x_np": x_np_c - x_np_b,
+        "x_cg_base": x_cg_b,
+        "x_cg_canard": x_cg_c,
+        "delta_x_cg": x_cg_c - x_cg_b,
+        "sm_base": sm_b,
+        "sm_canard": static_margin,
+        "speeds_kmh": speeds_kmh,
+        "CL": CL_reqs,
+        "alpha_base": np.array(trim_alpha_b),
+        "delta_base": np.array(trim_delta_b),
+        "alpha_canard": np.array(trim_alpha_c),
+        "delta_canard": np.array(trim_delta_c),
+        "alpha_canard_local": np.array(trim_alpha_c) + np.array(trim_delta_c),
+        "CD_base": cd_b_arr,
+        "CD_canard": cd_c_arr,
+        "delta_CD": cd_c_arr - cd_b_arr,
+        "CDi_base": cdi_b_arr,
+        "CDi_canard": cdi_c_arr,
+        "LD_base": ld_b_arr,
+        "LD_canard": ld_c_arr,
+        "ld_base_max": float(ld_b_arr[idx_b_max]),
+        "ld_canard_max": float(ld_c_arr[idx_c_max]),
+        "delta_ld_max": float(ld_c_arr[idx_c_max] - ld_b_arr[idx_b_max]),
+        "v_base_max": float(speeds_kmh[idx_b_max]),
+        "v_canard_max": float(speeds_kmh[idx_c_max]),
+        "trim_drag_penalty_at_best_glide_counts": float((cd_c_arr[idx_b_max] - cd_b_arr[idx_b_max]) * 1e4),
+    }
+
+
+
 
 
 
