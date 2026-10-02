@@ -14,10 +14,14 @@ output needs extracting.
 - `- auto: "chapters"` crashes on an empty `chapters/` with
   `TypeError: Cannot convert undefined or null to object`. Keep the line
   commented out until the first chapter directory exists.
-- **A cell whose last expression returns an object renders that object's repr as
-  a second output**, which demotes the figure to a subfigure captioned "(a)" and
-  dumps something like `array([[<Axes3D: …>]])` beneath it. Bind the result:
-  `_ = bfg.draw_three_view(show=True)`.
+- **A cell's last expression is never displayed.** `_notebook.py` sets
+  `ast_node_interactivity = "none"`, because a figure cell ending in
+  `draw_three_view(...)` used to dump `array([[<Axes3D: …>]])` under its own
+  figure. The cost is that the ordinary pandas idiom — a cell ending in `df` or
+  `df.style.format(...)` — prints NOTHING, silently: caption, cross-reference
+  and code fold all render, with a gap between them. Build tables with
+  `md_table(header, rows)` in an `output: asis` cell; print is untouched. Rule
+  42 checks it.
 - **Matplotlib figures overflow the content column** and make the page scroll
   sideways — they carry their native pixel width. The notebook's `styles.css`
   fixes this globally; keep it wired in via `css:` in `_quarto.yml`.

@@ -149,7 +149,7 @@ components sum — were each one `api_search` away. It never searched.
   and `open_entry` freezes that number as the entry's render cost — measured,
   not estimated, which is why it is not something you are asked for.
 
-# The 40 rules lint checks
+# The 41 rules lint checks
 
 Know these before drafting, not after. Finding one from a lint run means the
 prose is already written.
@@ -194,7 +194,8 @@ prose is already written.
 38  every chapter is named in _quarto.yml's sidebar
 39  an index RENDERS its input callouts from `_inputs.yml`, never writes them
 40  the front page's freeze is not older than the entries it counts
-41  the hero value derives from a solve, not from a literal you assigned
+41  the hero value derives from a solve, not from a literal
+42  a cell labelled `tbl-…` renders a table — `md_table(header, rows)`, never a trailing DataFrame
 ```
 
 There is no rule 36: it checked the categories system, which was retired, and

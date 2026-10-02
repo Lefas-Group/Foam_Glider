@@ -229,6 +229,7 @@ RULES = {
     39: "an index carries its input callouts, in order, and nothing else",
     40: "the front page's freeze is not older than the entries it counts",
     41: "the hero value derives from a solve, not from a literal",
+    42: "a cell labelled `tbl-…` renders a table",
 }
 
 

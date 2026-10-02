@@ -34,7 +34,7 @@ from .shared import (
     INPUT_CALLOUTS, INPUT_TITLES, MAX_CALLOUT_ITEM, MAX_FIG_CAP,
     MAX_INLINE_PER_SENTENCE, MAX_PROSE, MAX_TITLE_WORDS, PLACEHOLDER,
     RESULT_NUMBER, RUNTIME_SECONDS, SENTENCE, SWEPT_LITERAL, _bound,
-    _code_only, _computes_nothing, _defs_of, _departure_targets,
+    _code_only, _computes_nothing, _defs_of, _departure_targets, tables_in,
     _helper_usage, _label, _one_drift, _plausible_parent, _rendered_numbers,
     _visuals_of, body_prose, callouts_of, code_of, declared_items,
     entry_calls, entry_cells, fixed_count_solves, limits_of, notebook_items,
@@ -1908,3 +1908,62 @@ def _repeated_code_blocks(entries):
                            f"to {chapter}/_analysis.py:\n        "
                            + "\n        ".join(block)))
     return problems
+
+
+
+@register(42)
+def _labelled_table_renders(root, entries):
+    """
+    Rule 42. A cell labelled `tbl-…` actually renders a table.
+
+    `_notebook.py` sets `ast_node_interactivity = "none"`, which stops Jupyter
+    echoing a cell's last expression -- it exists because a figure cell ending
+    in `draw_three_view(...)` published `array([[<Axes3D: ...>]])` under its own
+    figure. The note there records that it was checked against every freeze
+    first and that nothing relied on last-expression display, which was true of
+    the entries that existed then.
+
+    It stopped being true the moment an entry built a table the ordinary pandas
+    way and ended on `df.style.hide(axis="index").format(...)`. That value is a
+    Styler, Jupyter renders a Styler by its repr, and the repr is what is turned
+    off. Nothing failed: the page rendered, the caption rendered, `@tbl-mass`
+    resolved to "Table 1", the code fold held the code that would have built it,
+    and between them was nothing at all. It survived a render, a re-render and a
+    read-back of the page before anyone noticed the table was not there.
+
+    So the check is on the RENDERED output, which is the only place the
+    difference is visible: an entry that labels a cell `tbl-...` is promising a
+    table, and the frozen markdown has to contain one. `md_table()` prints, and
+    print is untouched by the suppression -- which is why the notebook's own
+    idiom was never affected and why it is the remedy.
+
+    Numbers are deliberately not compared. One `tbl-` label and one rendered
+    table is the whole test; rule 15 is what reads their size.
+    """
+    out = []
+    for f in entries:
+        labels = re.findall(r"^\s*#\|\s*label:\s*(tbl-[\w-]+)", f.read_text(), re.M)
+        if not labels:
+            continue
+        frozen = (root / "_freeze" / "chapters" / f.parent.name / f.stem
+                  / "execute-results" / "html.json")
+        if not frozen.exists():
+            continue          # rule 12 owns the missing-freeze case
+        try:
+            md = json.loads(frozen.read_text())["result"]["markdown"]
+        except (ValueError, KeyError, TypeError):
+            continue
+        for label in labels:
+            # The cell's own div, not the whole page: a sibling table elsewhere
+            # would otherwise answer for a cell that rendered nothing.
+            block = re.search(r"::: \{#" + re.escape(label) + r"[ \n].*?\n:::", md, re.S)
+            if block and not tables_in(block.group(0)):
+                out.append((f, (
+                    f"`{label}` labels a cell that renders no table — the "
+                    f"caption and the cross-reference come out, and nothing "
+                    f"comes out between them. A last expression is not "
+                    f"displayed (`_notebook.py` turns the echo off), so a cell "
+                    f"ending in a DataFrame or a Styler prints nothing: build "
+                    f"it with `md_table(header, rows)` in an `output: asis` "
+                    f"cell instead")))
+    return out

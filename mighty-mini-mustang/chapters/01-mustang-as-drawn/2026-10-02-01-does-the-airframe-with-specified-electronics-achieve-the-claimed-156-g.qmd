@@ -31,26 +31,21 @@ m_claimed = 156.0
 ```{python}
 #| label: tbl-mass
 #| tbl-cap: "Subsystem dry mass breakdown for flat-plate build."
-import pandas as pd
+#| echo: false
+#| output: asis
 
-df = pd.DataFrame({
-    "Subsystem": ["Foam airframe", "Electronics", "Hardware", "Hot glue", "Total dry mass"],
-    "Mass (g)": [
-        breakdown_flat["foam_g"],
-        breakdown_flat["electronics_g"],
-        breakdown_flat["hardware_g"],
-        breakdown_flat["glue_g"],
-        breakdown_flat["dry_total_g"],
-    ],
-    "Share (%)": [
-        100.0 * breakdown_flat["foam_g"] / breakdown_flat["dry_total_g"],
-        100.0 * breakdown_flat["electronics_g"] / breakdown_flat["dry_total_g"],
-        100.0 * breakdown_flat["hardware_g"] / breakdown_flat["dry_total_g"],
-        100.0 * breakdown_flat["glue_g"] / breakdown_flat["dry_total_g"],
-        100.0,
-    ],
-})
-df.style.hide(axis="index").format({"Mass (g)": "{:.1f}", "Share (%)": "{:.1f}%"})
+header = ["Subsystem", "Mass", "Share"]
+rows = [
+    (name, f"{grams:.1f} g", f"{100.0 * grams / m_dry_flat:.1f}%")
+    for name, grams in (
+        ("Foam airframe", breakdown_flat["foam_g"]),
+        ("Electronics", breakdown_flat["electronics_g"]),
+        ("Hardware", breakdown_flat["hardware_g"]),
+        ("Hot glue", breakdown_flat["glue_g"]),
+    )
+]
+rows.append(("Total dry mass", f"{m_dry_flat:.1f} g", "100.0%"))
+md_table(header, rows)
 ```
 
 ```{python}
