@@ -37,6 +37,15 @@ $code-block-bg: #1b1f24 !default;
   --nb-muted:   #959da4;
   --nb-rule:    #{$border-color};
   --nb-card-bg: #1b1f24;
+
+  /* The lineage diagram, which follows the page rather than taking a white
+     card -- it is a drawing of the notebook, not a printed artefact of a run.
+     The amber lightens for the same reason the accent does: #b8860b is a
+     3.0:1 against this ground and the ticks are 4px wide. */
+  --nb-graph-box-bg: #1d3b37;
+  --nb-graph-line:   #{$accent};
+  --nb-graph-tick:   #d9a93f;
+  --nb-graph-edge:   #6e777e;
 }
 
 /* ---------------------------------------------------------------------------
@@ -51,9 +60,13 @@ $code-block-bg: #1b1f24 !default;
    the page. Standard practice for technical sites, and it is also the honest
    option: the figure is a printed artefact of the run, and it looks the same
    here as it does in the PNG on disk.
+
+   NOT the SVGs. The only SVG on the site is the lineage diagram, which is a
+   drawing OF the notebook rather than a result from a run, and whose four
+   colours styles.css restates per theme. A card would single out the one
+   figure that does not need one.
    --------------------------------------------------------------------------- */
-.cell-output-display img,
-.cell-output-display svg {
+.cell-output-display img {
   background: #ffffff;
   border-radius: 6px;
   padding: 0.5rem;

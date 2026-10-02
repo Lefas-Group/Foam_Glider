@@ -65,12 +65,24 @@ $code-block-bg: #f7f8f9 !default;
   --nb-muted:   #5c6670;
   --nb-rule:    #{$border-color};
   --nb-card-bg: #ffffff;
+
+  /* The lineage diagram. Read by styles.css, which overrides what graphviz
+     baked into the SVG -- see the note there. */
+  --nb-graph-box-bg: #eaf2f0;
+  --nb-graph-line:   #{$accent};
+  --nb-graph-tick:   #b8860b;
+  --nb-graph-edge:   #8a939b;
 }
 
 /* Links in prose only. Bootstrap underlines every link, which puts a rule
-   under every sidebar row and breadcrumb as well. */
+   under every sidebar row and breadcrumb as well.
+
+   `svg a` is excluded by hand. Every box in the lineage diagram is a link, and
+   inside an SVG an underline is drawn THROUGH the middle of a label sitting in
+   a box that already reads as clickable. styles.css said so and turned it off;
+   this rule is more specific than that one and turned it back on. */
 a { text-decoration: none; }
-main a:not(.quarto-title-block a) { text-decoration: underline; text-underline-offset: 0.15em; text-decoration-thickness: 0.06em; }
+main a:not(.quarto-title-block a):not(svg a) { text-decoration: underline; text-underline-offset: 0.15em; text-decoration-thickness: 0.06em; }
 
 /* The title block. An entry's title IS a question, so it is set as one thing
    to read rather than as a banner -- larger than a heading, tight, with a

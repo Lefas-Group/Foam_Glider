@@ -142,22 +142,35 @@ print("//| fig-width: 6.4")
 print("digraph lineage {")
 print('  bgcolor="transparent"; rankdir=TB; nodesep=0.22;')
 print('  ranksep="0.05 equally"; splines=spline;')
-# The site's own palette, read out of its stylesheet rather than picked. A
-# chapter box takes the callout-note blue -- #0d6efd on its own pale ground --
-# because a box is both a link and the same kind of object a callout is. The
-# ticks take the callout-tip green, so entries read as a different KIND of
-# thing from the chapters they hang off rather than as smaller ones. The lines
-# are black: they are the structure everything else sits on.
+# The site's palette, and the LIGHT half of it. A chapter box takes the teal
+# accent -- the hero colour, C0 in the plot cycle -- because a box is a link to
+# a chapter and the accent is what a link is. The ticks take the amber, C1, so
+# entries read as a different KIND of thing from the chapters they hang off
+# rather than as smaller ones. The lines are the muted grey rather than black:
+# they are structure, and at 1.2pt across a whole page black was the heaviest
+# thing on it.
+#
+# These colours are overridden by styles.css, which restates all four as CSS
+# and so can give the dark theme its own set -- graphviz runs once at render
+# time and cannot know which theme a reader is in. They are written here anyway
+# so the SVG is correct on its own: presentation attributes are what CSS
+# overrides, and an SVG with no colours in it has nothing to fall back to.
+# The font stays Helvetica, and is the one thing here NOT matched to the rest
+# of the site. Graphviz MEASURES the label to size the box, using metrics for
+# the font it is given -- it has Helvetica's and no way to learn Inter's, which
+# is a little wider. Naming Inter laid every box out to Helvetica's widths and
+# the browser then set the text in Inter, so the longer labels ran out past
+# the rounded ends. A box that fits is worth more than a matching face.
 print('  node [shape=box style="rounded,filled" fontname="Helvetica" '
       'fontsize=11 height=0.22 margin="0.2,0.03" penwidth=1.2 '
-      'fillcolor="#e7f0ff" color="#0d6efd" fontcolor="#0d6efd"];')
-print('  edge [color="#000000" arrowsize=0.55 penwidth=1.2 arrowhead=none];')
+      'fillcolor="#eaf2f0" color="#14655c" fontcolor="#14655c"];')
+print('  edge [color="#8a939b" arrowsize=0.55 penwidth=1.2 arrowhead=none];')
 for _n in _seq:
     print(f'  "{_n}" [label="{_ch[_n]["label"]}" '
           f'URL="chapters/{_n}/index.html"];')
     for _i in range(1, _ch[_n]["total"] + 1):
-        print(f'  "{_n}__e{_i}" [shape=point width=0.055 color="#198754" '
-              f'fillcolor="#198754"];')
+        print(f'  "{_n}__e{_i}" [shape=point width=0.055 color="#b8860b" '
+              f'fillcolor="#b8860b"];')
 for _n in _seq:
     _prev = f'"{_n}"'
     for _i in range(1, _ch[_n]["total"] + 1):

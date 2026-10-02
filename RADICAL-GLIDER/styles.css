@@ -121,3 +121,52 @@ figure img,
 .cell-output-display svg a text {
   text-decoration: none;
 }
+
+/* ---------------------------------------------------------------------------
+   The lineage diagram's colours.
+
+   Graphviz runs ONCE, at render time, and writes its colours into the SVG as
+   presentation attributes. It therefore cannot know which theme a reader is
+   in -- and the diagram is the one figure on the site that is not a printed
+   artefact of a run but a drawing OF the notebook, so unlike a three-view it
+   should follow the page rather than sit on a card of its own.
+
+   Presentation attributes lose to any CSS rule at all, which is what makes
+   this work with no `!important` anywhere: the four tokens are declared per
+   theme, and the attributes graphviz wrote are simply outranked. index.qmd
+   still writes the light values, so the SVG is also correct standing alone.
+
+   Scoped to `g.node`/`g.edge`, which only graphviz emits -- a matplotlib SVG
+   has neither, so nothing here can reach a plot.
+   --------------------------------------------------------------------------- */
+/* Descendant, not child: a box that is a link comes out as
+   `g.node > g#a_nodeN > a > path`, so `g.node > a` matches nothing and the
+   box silently keeps whatever graphviz baked in -- which is the LIGHT fill,
+   and so is invisible until the dark theme is looked at. */
+.cell-output-display svg g.node path {
+  fill: var(--nb-graph-box-bg);
+  stroke: var(--nb-graph-line);
+}
+
+.cell-output-display svg g.node text {
+  fill: var(--nb-graph-line);
+}
+
+/* A tick is an entry. Drawn as `shape=point`, so it is an ellipse rather than
+   a path, and it carries the accent's counterpart -- the same amber as C1 in
+   the plot cycle and as a tip callout. */
+.cell-output-display svg g.node ellipse {
+  fill: var(--nb-graph-tick);
+  stroke: var(--nb-graph-tick);
+}
+
+/* Lines and the fork arrowheads. `arrowhead=none` on the spine means only a
+   fork edge has a polygon, so colouring both keeps the pair consistent. */
+.cell-output-display svg g.edge path {
+  stroke: var(--nb-graph-edge);
+}
+
+.cell-output-display svg g.edge polygon {
+  fill: var(--nb-graph-edge);
+  stroke: var(--nb-graph-edge);
+}
