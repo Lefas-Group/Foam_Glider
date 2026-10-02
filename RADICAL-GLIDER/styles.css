@@ -136,6 +136,12 @@ figure img,
    theme, and the attributes graphviz wrote are simply outranked. index.qmd
    still writes the light values, so the SVG is also correct standing alone.
 
+   Each token carries the light value as a fallback. An undefined var() does
+   not leave the attribute alone -- it makes the property invalid, and `fill`
+   then inherits, which turns the whole diagram black. That is what this page
+   looks like opened without the theme's stylesheet, and the fallback is what
+   stops it.
+
    Scoped to `g.node`/`g.edge`, which only graphviz emits -- a matplotlib SVG
    has neither, so nothing here can reach a plot.
    --------------------------------------------------------------------------- */
@@ -144,29 +150,29 @@ figure img,
    box silently keeps whatever graphviz baked in -- which is the LIGHT fill,
    and so is invisible until the dark theme is looked at. */
 .cell-output-display svg g.node path {
-  fill: var(--nb-graph-box-bg);
-  stroke: var(--nb-graph-line);
+  fill: var(--nb-graph-box-bg, #eaf2f0);
+  stroke: var(--nb-graph-line, #14655c);
 }
 
 .cell-output-display svg g.node text {
-  fill: var(--nb-graph-line);
+  fill: var(--nb-graph-line, #14655c);
 }
 
 /* A tick is an entry. Drawn as `shape=point`, so it is an ellipse rather than
    a path, and it carries the accent's counterpart -- the same amber as C1 in
    the plot cycle and as a tip callout. */
 .cell-output-display svg g.node ellipse {
-  fill: var(--nb-graph-tick);
-  stroke: var(--nb-graph-tick);
+  fill: var(--nb-graph-tick, #b8860b);
+  stroke: var(--nb-graph-tick, #b8860b);
 }
 
 /* Lines and the fork arrowheads. `arrowhead=none` on the spine means only a
    fork edge has a polygon, so colouring both keeps the pair consistent. */
 .cell-output-display svg g.edge path {
-  stroke: var(--nb-graph-edge);
+  stroke: var(--nb-graph-edge, #8a939b);
 }
 
 .cell-output-display svg g.edge polygon {
-  fill: var(--nb-graph-edge);
-  stroke: var(--nb-graph-edge);
+  fill: var(--nb-graph-edge, #8a939b);
+  stroke: var(--nb-graph-edge, #8a939b);
 }

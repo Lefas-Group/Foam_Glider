@@ -187,5 +187,43 @@ for _n in _seq:
     print(f'  "{_p}__e{_at}" -> "{_n}" [constraint=false arrowhead=normal];')
 print("}")
 print("```")
+
+# ---------------------------------------------------------------------------
+# Hold the diagram to its natural size.
+#
+# Quarto stamps a FIXED pixel width on a `dot` block's SVG -- 614px from the
+# fig-width above, and 672px if fig-width is removed -- no matter how big the
+# graph it drew actually is. The viewBox then scales the drawing to fill it.
+# For this notebook that is roughly 1:1 and looks right; for a notebook with
+# one chapter and three entries the graph is 97pt wide and gets blown up about
+# tenfold, so three boxes and a line arrive at the size of a headline.
+#
+# Only the DOM knows the natural size -- it is in the viewBox, and CSS cannot
+# read it -- so this is the one thing on the site that needs script. It caps
+# the SVG at its own width (viewBox units are points, hence 96/72) and leaves
+# `width: 100%` in styles.css to do the rest: a small graph draws at 1:1, a
+# large one still shrinks to the column. With script off nothing happens and
+# the behaviour is what it was.
+#
+# Emitted here rather than through `include-after-body`, because this page is
+# the only one on the site that draws a graph, and a site-wide script for a
+# single page is a thing nobody would find again.
+# ---------------------------------------------------------------------------
+# The width and height attributes go as well, and not only because they are
+# the fixed size being escaped: quarto writes a PAIR whose aspect ratio is not
+# the viewBox's, so the drawing is letterboxed inside its own frame -- scaled
+# down to fit the tighter of the two axes and then banded with slack on the
+# other. Dropping both leaves the viewBox as the only aspect in play.
+print("""
+<script>
+document.querySelectorAll(".cell-output-display svg").forEach(function (svg) {
+  var box = svg.viewBox && svg.viewBox.baseVal;
+  if (!box || !box.width) return;
+  svg.removeAttribute("width");
+  svg.removeAttribute("height");
+  svg.style.maxWidth = (box.width * 96 / 72) + "px";
+});
+</script>
+""")
 ```
 
