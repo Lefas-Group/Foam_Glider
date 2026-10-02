@@ -1,0 +1,13 @@
+# What this chapter changed, and from what. Read by rule 31,
+# by the chapter index, and by the lineage diagram on the
+# book index -- one source, three readers.
+parent: 01-airframe-reconstruction
+at: 7ad273a
+at_entry: 4
+summary: "Biplane wing cellule with equal total area and mutual interference"
+changes:
+  - AUW increased by 32 g for second wing panel, spar, and struts
+  - monoplane wing replaced by lower and upper wing panels of 440 mm span and 95 mm gap
+  - reference area set to total two-panel wing area (0.0685 m2)
+overwrites:
+  - 01-airframe-reconstruction/wing-dihedral: biplane wings have 0 deg dihedral
