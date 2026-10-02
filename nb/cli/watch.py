@@ -19,6 +19,7 @@ import sys
 import time
 
 from ..config import Notebook
+from ..process import desktop
 from ..process.log import tell
 
 
@@ -33,7 +34,14 @@ DEFAULT_QUIET = 120.0
 # grace period exists because the last thing a run says -- the commit sha, or
 # why it stopped -- is the thing most worth reading, and a window that vanishes
 # as it arrives is worse than one that lingers.
-LINGER = 30.0
+#
+# FIVE SECONDS, not thirty. The outcome line is one line and it is already on
+# screen when the countdown starts, so the grace period only has to cover the
+# glance -- and the window is not the place that line is kept anyway: it is in
+# `run.json` and in the log, both readable long after. Thirty seconds was long
+# enough that a handful of `nb ask`s left a drift of windows waiting to go,
+# which is the pile-up `--until-done` exists to prevent.
+LINGER = 5.0
 
 # Dimming happens HERE, not in the log. The run writes plain text -- the file
 # is read by `tail`, by grep, and one day by a coordinator, and escape codes in
@@ -178,7 +186,8 @@ def _quiet_note(idle, limit, run_dir, pid):
             f"{limit:.0f} s deadline{who}")
 
 
-def follow(path, from_start=False, poll=0.25, until_done=False):
+def follow(path, from_start=False, poll=0.25, until_done=False,
+           close_window=False):
     """
     Print `path` as it grows, like `tail -f`, and say when it stops growing.
 
@@ -259,6 +268,11 @@ def follow(path, from_start=False, poll=0.25, until_done=False):
                     tell(f"\n  run ended ({state['outcome']}) — "
                          f"closing in {LINGER:.0f}s")
                     time.sleep(LINGER)
+                    if close_window:
+                        # Launched here rather than after `follow` returns so
+                        # it is on the one path that means "the run ended" --
+                        # a Ctrl-C or a dead log should leave the window up.
+                        desktop.close_own_window()
                     return
             time.sleep(poll)
     except KeyboardInterrupt:
@@ -272,16 +286,22 @@ def main(argv):
     if not argv:
         print("usage: uv run --group nb python -m nb watch <notebook> [run] "
               "[--all] [--until-done]")
-        print("  --all         from the first line, not from now")
-        print("  --until-done  close once the run records an outcome")
+        print("  --all           from the first line, not from now")
+        print("  --until-done    stop once the run records an outcome")
+        print("  --close-window  …and close the window this is running in")
         return 2
     notebook = Notebook(argv[0], run_id=argv[1] if len(argv) > 1
                         and not argv[1].startswith("--") else None)
     log = notebook.run / "status.log"
     tell(f"  watching   {log}"
          f"{'' if log.exists() else '  (waiting for a run to start)'}")
+    # `--close-window` IS SEPARATE FROM `--until-done` and is passed only by
+    # the spawner in `nb run`. Someone who types `nb watch --until-done` in a
+    # terminal of their own wants the watcher to stop, not their window to
+    # vanish underneath them.
     follow(log, from_start="--all" in argv,
-           until_done="--until-done" in argv)
+           until_done="--until-done" in argv,
+           close_window="--close-window" in argv)
     return 0
 
 

@@ -22,6 +22,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import sys
 import webbrowser
 
 from .log import tell
@@ -166,3 +167,84 @@ def terminal(argv, cwd, what=""):
     tell(f"  window    no terminal found for {what or 'this'}; run it yourself:")
     tell(f"    cd {cwd} && {cmd}")
     return False
+
+
+# CLOSING THE WINDOW THE CALLER IS SITTING IN -- the other half of `terminal`,
+# and the one that is only ever needed on macOS.
+#
+# Every other terminal here already does this by itself: tmux drops the window
+# when the pane's process exits, and `gnome-terminal -- cmd` / `xterm -e cmd`
+# OWN the command and exit with it. Terminal.app does not, because `do script`
+# hands the line to a shell it has already started, and its "when the shell
+# exits" setting defaults to keeping the window. So `nb watch --until-done`
+# was exiting exactly on time and leaving the window standing -- the promise
+# kept, the windows piling up anyway, which is what was reported.
+#
+# TWO THINGS MAKE THIS WORK, both found by measurement on 2026-10-02:
+#
+# 1. IT CANNOT CLOSE ITS OWN WINDOW SYNCHRONOUSLY. A `close` issued by a
+#    process running in that window is accepted and silently does nothing --
+#    no error, exit 0, window still there. Closing works only once the window
+#    is back to an idle shell. Hence `start_new_session=True` and the delay:
+#    the closer is detached from this tty, so when the watcher returns the tab
+#    goes idle, and the close then lands.
+#
+# 2. `close w` ON A LOOP VARIABLE IS ALSO A SILENT NO-OP. The window has to be
+#    re-fetched by id -- `close (first window whose id is wid)` -- so the loop
+#    below resolves an id and closes that, rather than closing `w` in place.
+#
+# Degrades the way the rest of this module does: a window that will not close
+# is a window someone closes by hand, which is where they already were.
+_CLOSE_BY_TTY = """
+tell application "Terminal"
+  set wid to missing value
+  repeat with w in windows
+    repeat with t in tabs of w
+      if tty of t is "{tty}" then set wid to id of w
+    end repeat
+  end repeat
+  if wid is not missing value then close (first window whose id is wid)
+end tell
+"""
+
+
+def close_own_window(delay=1.0):
+    """
+    Close the Terminal.app window this process is running in. Returns whether
+    a closer was launched -- not whether the window went, which happens after
+    this process has exited and so cannot be observed from here.
+
+    NO-OP ANYWHERE THAT IS NOT TERMINAL.APP, and deliberately so -- this is
+    the only platform that needs it. Three gates, narrowest first:
+
+    - not macOS, so nothing here applies;
+    - no `osascript`, so nothing could be said to Terminal.app anyway;
+    - stdout is not a tty -- piped, redirected, or a daemon -- so there is no
+      window to name.
+
+    A fourth gate is in the AppleScript itself: it closes a window only after
+    positively matching this tty against a Terminal.app tab, so a `tmux` pane
+    or an iTerm2 session finds no match and nothing is closed. That is what
+    makes it safe to call unconditionally rather than only when the window is
+    known to have come from `_applescript`.
+    """
+    if sys.platform != "darwin":
+        return False
+    if shutil.which("osascript") is None:
+        return False
+    try:
+        tty = os.ttyname(sys.stdout.fileno())
+    except (OSError, ValueError, AttributeError):
+        return False                        # not a terminal; nothing to close
+    script = _CLOSE_BY_TTY.format(tty=tty)
+    try:
+        subprocess.Popen(                   # noqa: S603 -- fixed argv
+            ["bash", "-c", f"sleep {delay:g}; exec osascript -e "
+                           f"{shlex.quote(script)}"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True)         # see (1) above -- must outlive us
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return False

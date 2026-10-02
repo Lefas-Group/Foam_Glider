@@ -90,13 +90,22 @@ def _start(notebook, quiet, answers, watch=True):
             # that window's parent a process nobody can see.
             #
             # `--all` so the window carries the run from its first line rather
-            # than from whenever it happened to open, and `--until-done` so it
-            # closes itself: one of these per `nb ask` would otherwise pile up
+            # than from whenever it happened to open, and `--until-done` so the
+            # watcher stops: one of these per `nb ask` would otherwise pile up
             # forever, since `follow()` is a `while True`.
+            #
+            # `--close-window` IS THE SEPARATE HALF, and only this caller sends
+            # it. Stopping the watcher is enough everywhere the terminal owns
+            # the command it was given -- tmux, `gnome-terminal -- …`, `xterm
+            # -e …` all exit with it -- but Terminal.app keeps the window, so
+            # on macOS the watcher has to close it by hand. Someone who types
+            # `nb watch --until-done` in a terminal of their own gets the stop
+            # without having their window pulled out from under them.
             if watch:
                 desktop.terminal(
                     [sys.executable, "-m", "nb", "watch", notebook.root.name,
-                     notebook.run_id, "--all", "--until-done"],
+                     notebook.run_id, "--all", "--until-done",
+                     "--close-window"],
                     cwd=notebook.repo, what="this run")
             tell("  detail:")
             tell(f"    uv run --group nb python -m nb watch "
