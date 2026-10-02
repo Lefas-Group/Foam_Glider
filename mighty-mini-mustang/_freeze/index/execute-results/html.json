@@ -1,0 +1,12 @@
+{
+  "hash": "02f612cfe63a1c7673843a99f84f38bb",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: \"Mighty Mini Mustang\"\n---\n\n::: {.callout-tip}\n## Initial user specifications\n\n1. **Wing span**: 622 mm (24.5 in), per plan.\n2. **Wing area**: 115 in2 (7.42 dm2), per plan.\n3. **Length**: 482 mm (19 in), per plan.\n4. **CG**: 25 mm aft of wing leading edge.\n5. **Dry weight**: 156 g; all-up weight 222 g.\n6. **Wing loading**: 29.9 g/dm2 (9.8 oz/ft2), published.\n7. **Wing cubic loading**: 10.9, published.\n8. **Root chord**: 133 mm, measured off full-size plan.\n9. **Tip chord**: 87 mm; taper ratio 0.65, measured.\n10. **Wing section**: folded 4.7 mm DTFB, flat-bottom, t/c 3.5%.\n11. **Horizontal stab**: span 213 mm, area 16 in2, +/-10%.\n12. **Control throws**: 12 deg all surfaces, 30% expo.\n13. **Motor**: 2205 2300 kv, 6x4.5 prop.\n14. **Battery**: 850 mAh 3S LiPo, 25 A ESC.\n15. **Servos**: four 5 g; four channels.\n16. **Vertical stab area**: not extracted; assume and declare it.\n17. **Tail moment arm**: not extracted; assume and declare it.\n18. **Fuselage cross-sections**: not extracted; assume and declare them.\n19. **Dihedral**: gauge on plan, angle unread; assume and declare.\n:::\n\n::: {.callout-note}\n## Initial assumptions\n\n1. **Claimed top speed** 87 km/h on 3S, to verify.\n2. **Claimed unlimited vertical climb**, to verify.\n3. **Claimed knife-edge capability**, to verify.\n4. **Claimed park-field slow flight**, to verify.\n:::\n\n\n\n```{dot}\n//| fig-width: 6.4\ndigraph lineage {\n  bgcolor=\"transparent\"; rankdir=TB; nodesep=0.22;\n  ranksep=\"0.05 equally\"; splines=spline;\n  node [shape=box style=\"rounded,filled\" fontname=\"Helvetica\" fontsize=11 height=0.22 margin=\"0.2,0.03\" penwidth=1.2 fillcolor=\"#eaf2f0\" color=\"#14655c\" fontcolor=\"#14655c\"];\n  edge [color=\"#8a939b\" arrowsize=0.55 penwidth=1.2 arrowhead=none];\n  \"01-airframe-reconstruction\" [label=\"Airframe reconstruction\" URL=\"chapters/01-airframe-reconstruction/index.html\"];\n}\n```\n\n<script>\ndocument.querySelectorAll(\".cell-output-display svg\").forEach(function (svg) {\n  var box = svg.viewBox && svg.viewBox.baseVal;\n  if (!box || !box.width) return;\n  svg.removeAttribute(\"width\");\n  svg.removeAttribute(\"height\");\n  svg.style.maxWidth = (box.width * 96 / 72) + \"px\";\n});\n</script>\n\n\n\n",
+    "supporting": [
+      "index_files"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}

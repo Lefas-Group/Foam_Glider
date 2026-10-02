@@ -1,0 +1,36 @@
+# THE BRIEF for the aircraft. True of the whole aircraft, inherited by every
+# chapter and every entry, and never superseded: a fork that departs from one
+# of these is not a fork, it is a different aircraft and so a different
+# notebook. Written by a PERSON, never by a run.
+#
+# Rendered into index.qmd. Same format as a chapter's `_inputs.yml`:
+# `- <id>: <text>`, ten words each.
+#
+# The test for what belongs here rather than in the first chapter: IF THIS
+# CHANGED, WOULD IT STILL BE THE SAME AEROPLANE? A 300 mm span, no. Foam 5 mm
+# — yes, that is the same project at a different thickness, so it is a chapter.
+specified:
+  - wing-span-622: "**Wing span**: 622 mm (24.5 in), per plan."
+  - wing-area-115: "**Wing area**: 115 in2 (7.42 dm2), per plan."
+  - length-482-mm: "**Length**: 482 mm (19 in), per plan."
+  - cg-25-mm: "**CG**: 25 mm aft of wing leading edge."
+  - dry-weight-156: "**Dry weight**: 156 g; all-up weight 222 g."
+  - wing-loading-29: "**Wing loading**: 29.9 g/dm2 (9.8 oz/ft2), published."
+  - wing-cubic-loading: "**Wing cubic loading**: 10.9, published."
+  - root-chord-133: "**Root chord**: 133 mm, measured off full-size plan."
+  - tip-chord-87: "**Tip chord**: 87 mm; taper ratio 0.65, measured."
+  - wing-section-folded: "**Wing section**: folded 4.7 mm DTFB, flat-bottom, t/c 3.5%."
+  - horizontal-stab-span: "**Horizontal stab**: span 213 mm, area 16 in2, +/-10%."
+  - control-throws-12: "**Control throws**: 12 deg all surfaces, 30% expo."
+  - motor-2205-2300: "**Motor**: 2205 2300 kv, 6x4.5 prop."
+  - battery-850-mah: "**Battery**: 850 mAh 3S LiPo, 25 A ESC."
+  - servos-four-5: "**Servos**: four 5 g; four channels."
+  - vertical-stab-area: "**Vertical stab area**: not extracted; assume and declare it."
+  - tail-moment-arm: "**Tail moment arm**: not extracted; assume and declare it."
+  - fuselage-cross-sections: "**Fuselage cross-sections**: not extracted; assume and declare them."
+  - dihedral-gauge-on: "**Dihedral**: gauge on plan, angle unread; assume and declare."
+assumed:
+  - claimed-top-speed: "**Claimed top speed** 87 km/h on 3S, to verify."
+  - claimed-unlimited-vertical: "**Claimed unlimited vertical climb**, to verify."
+  - claimed-knife-edge: "**Claimed knife-edge capability**, to verify."
+  - claimed-park-field: "**Claimed park-field slow flight**, to verify."
