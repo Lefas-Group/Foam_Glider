@@ -166,6 +166,23 @@ def ask_render_ceiling(default, source=""):
 REDO = re.compile(r"^\s*redo\b[\s:,.\u2014-]*", re.I)
 
 
+# How long the assumptions confirmation waits before taking its safe default.
+#
+# `stuck.ASK_WAIT` (300 s) is the floor and stays the answer for a small batch.
+# Above `_CONFIRM_FREE`, each further assumption adds `_CONFIRM_PER`, up to
+# `_CONFIRM_MAX`. The shape is deliberately crude -- the point is only that
+# answering ten is more work than answering two, not that any particular
+# seconds-per-assumption is right.
+_CONFIRM_FREE, _CONFIRM_PER, _CONFIRM_MAX = 4, 90.0, 1800.0
+
+
+def _confirm_wait(n):
+    """Seconds to wait on a batch of `n` assumptions. Never below the floor."""
+    from ..agent import stuck
+    extra = max(0, n - _CONFIRM_FREE) * _CONFIRM_PER
+    return min(_CONFIRM_MAX, stuck.ASK_WAIT + extra)
+
+
 def confirm_assumptions(session):
     """
     Show every assumption the probe made, and take corrections.
@@ -221,8 +238,21 @@ def confirm_assumptions(session):
     tell(f"\n{how}")
     # A confirmation with a safe default: accepting is the right answer if
     # nobody replies, so an unattended run is never stranded by one.
+    #
+    # THE WAIT SCALES WITH THE BATCH, because what the answerer has to DO
+    # scales with it. Five minutes is ample to correct a number already known.
+    # It is not enough to open a plan and measure a part off it -- and that is
+    # exactly the work this prompt is for once a run declares the dimensions it
+    # assumed rather than writing them straight into `_model.py`. A batch of
+    # ten arriving against a five-minute clock defaults to "accepted as
+    # stated", which is how an unchecked airframe reaches a commit while the
+    # record says the user confirmed it.
+    #
+    # Still bounded, and still safe on timeout: an unattended run is never
+    # stranded, it just gets longer to be attended.
     answer = MAILBOX.ask(
         "assumptions", "assumptions", listing, default="",
+        wait=_confirm_wait(len(assumed)),
         prompt="Are these assumptions sound?",
         how='Enter accepts · "1: 2.5e-4" corrects · "1: redo — why" rejects',
     ).strip()

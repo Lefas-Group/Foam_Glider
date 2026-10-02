@@ -46,10 +46,14 @@ class Input(BaseModel):
         description=(
             "asked: a different answer changes WHAT WE ARE BUILDING and you "
             "put it to the user with ask_specified. decided: you asked, they "
-            "handed it back, and you chose -- say why. guessed: nobody knows, "
-            "a different answer changes HOW ACCURATELY it is modelled, so you "
-            "assumed it and said what it costs. If the model or the plans "
-            "already contain it, it is none of these: compute it."))
+            "handed it back, and you chose -- say why. guessed: a different "
+            "answer changes HOW ACCURATELY it is modelled, so you assumed it "
+            "and said what it costs -- this covers BOTH what nobody knows AND "
+            "what a document would settle but you do not have that document. "
+            "If the MODEL already contains it, it is none of these: compute "
+            "it. A dimension of a real aircraft that the brief did not give "
+            "you is guessed, however confident the recollection: declare it, "
+            "and say in `why` that it was not measured."))
     why: str = Field(description="Ten words at most -- lint rule 8 counts them")
 
     @model_validator(mode="after")

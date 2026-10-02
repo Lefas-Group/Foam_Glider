@@ -234,6 +234,61 @@ def main(notebook_path, question, verbose=True,
                     make_config, verbose, accept_refactor=False)
 
 
+def _disk_state(notebook, chapter, stem):
+    """
+    What the chapter actually holds, for the resume brief.
+
+    THE BRIEF USED TO ASSERT IT. "Its entry is already on disk at
+    `{chapter}/{stem}.qmd` -- you wrote it in an earlier process" was true for
+    the case the resume path was built for, and false for the other one: a run
+    that hit the turn cap having ALLOCATED a stem and never written the file.
+
+    Measured on `20261002-100435-b81e`. The resumed run believed the entry
+    existed, read for it, got ENOENT, and spent the next nine tool calls
+    orienting -- `list_directory .`, `list_directory 01-…`, `search_files *`,
+    `search_files **/*` -- before tripping the NO PROGRESS detector and
+    needing a human to say "write the entry". Nothing was wrong with the
+    chapter. It had simply been told something untrue about it and believed it
+    over what the tools kept returning.
+
+    So: look, and say. Sizes rather than contents -- the files are readable and
+    `_model.py` is quoted in the prefix already; what the run cannot infer is
+    which of them exist and whether its own entry is among them.
+    """
+    d = notebook.chapters_dir / chapter
+    entry = d / f"{stem}.qmd"
+    rows = []
+    if entry.exists():
+        n = len(entry.read_text().splitlines())
+        rows.append(f"- `{chapter}/{stem}.qmd` EXISTS, {n} lines. This is your "
+                    f"entry. Read it first: it is the record of what you "
+                    f"decided.")
+    else:
+        rows.append(f"- `{chapter}/{stem}.qmd` DOES NOT EXIST. The name is "
+                    f"reserved for you and nothing has been written to it. "
+                    f"Writing it is the job -- do not go looking for it.")
+    for name in ("_model.py", "_analysis.py"):
+        f = d / name
+        try:
+            body = f.read_text()
+        except OSError:
+            rows.append(f"- `{chapter}/{name}` is missing.")
+            continue
+        lines = [ln for ln in body.splitlines() if ln.strip()]
+        defs = [ln.split("(")[0].removeprefix("def ").strip()
+                for ln in lines if ln.startswith("def ")]
+        rows.append(
+            f"- `{chapter}/{name}`: {len(lines)} non-blank lines"
+            + (f", defines {', '.join(f'`{n}()`' for n in defs)}" if defs
+               else ", no functions defined")
+            + ("." if lines else " — still the empty scaffold."))
+    others = sorted(p.name for p in d.glob("20*.qmd") if p.stem != stem)
+    if others:
+        rows.append(f"- sibling entries already committed here: "
+                    f"{', '.join(f'`{o}`' for o in others)}.")
+    return "\n".join(rows)
+
+
 def resume(notebook_path, run_id=None, allow_refactor=False,
            accept_refactor=False, header=True, quiet=False, answers=None):
     """
@@ -340,7 +395,8 @@ def resume(notebook_path, run_id=None, allow_refactor=False,
            if session.allow_refactor else
            "Run `lint` with chapter " + chapter + " and fix what it reports.")
     contents = [{"role": "user", "parts": [{"text": briefs.RESUME.format(
-        chapter=chapter, stem=stem, question=question, why=why)}]}]
+        question=question, why=why,
+        state=_disk_state(notebook, chapter, stem))}]}]
     return _execute(notebook, session, contents, run_metrics, fs, handlers,
                     make_config, verbose=True, accept_refactor=accept_refactor)
 

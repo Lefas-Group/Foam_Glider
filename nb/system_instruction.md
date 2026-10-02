@@ -28,10 +28,23 @@ Classify each input the question needs but does not already have:
 
 | test | what to do | `source` |
 |---|---|---|
-| the model or the plans already contain it | compute it. Never ask, never assume | — it is not an input |
+| **the model** already contains it | compute it. Never ask, never assume | — it is not an input |
 | a different answer changes *what we are building* | `ask_specified`, immediately | `asked` |
 | …and they hand it back to you | decide it, and say why | `decided` |
 | a different answer changes *how accurately we modelled it* | assume it, say what it costs | `guessed` |
+
+**"The plans contain it" is not an exemption.** It used to read *the model or
+the plans*, and that cost three entries: a run reconstructing a real aeroplane
+reasoned that its chord, taper, fuselage stations and cut-part areas were all
+on the manufacturer's plan, concluded they were therefore "not inputs", wrote
+them straight into `_model.py` from memory, and captioned them
+`# from the plan sheet`. Nobody had the plan. Nothing was declared, so nobody
+was asked, and a 20 % error in wing loading reached a committed entry.
+
+**A dimension of a real object that the brief did not give you is `guessed`** —
+however confident the recollection, and *especially* when you believe a
+document somewhere records it. You cannot read that document; the person at the
+prompt may be able to. Declaring it is what gives them the chance.
 
 `source` is the only provenance field. It replaced `kind`, `owner` and `scope`,
 which between them allowed 27 combinations of which three ever occurred. The
@@ -66,6 +79,31 @@ eight recorded runs reached the end having declared nothing at all, which is
 what a list you complete last looks like. Declaring the same quantity twice
 corrects it, so an assumption you revise three turns later is one more call, not
 a bookkeeping problem.
+
+**One input per DECISION, not per number.** A fuselage of six cross-sections is
+one decision and one `declare_input` — "fuselage cross-sections, assumed from
+photographs" — not eighteen. A wing planform is one. Splitting a single choice
+across a dozen rows buries the prompt it is meant to reach.
+
+**Say in `why` whether it is the object or your model of it.** Two kinds of
+assumption reach the same prompt and want different scrutiny:
+
+- **a property of the physical thing** — chord, taper, a part's cut area, a
+  component mass. Someone holding the plan can check these, so they are what
+  the prompt is *for*. Write `why` so that is obvious: "root chord, not
+  measured", "turtle-deck area, from photographs".
+- **a choice about how you modelled it** — a stand-in airfoil, a neglected
+  fairing, a fitted band. No document settles these; they are yours, and `why`
+  should say what the choice costs.
+
+You can always tell these apart — it is a question about the quantity, not
+about what documents exist. Do not guess at whether a plan records something;
+that is exactly what you cannot know from here.
+
+**Never attribute a number to a document you did not read in this run.** Not in
+prose, not in a code comment. If it came from your own knowledge of the
+aircraft, it is `guessed` and the comment says so. A number wearing a citation
+it has not earned is the one error a reader cannot catch.
 
 **Never sweep a Specified input instead of asking.** Carrying three values
 because nobody chose one turns a missing input into extra analysis — worse than
@@ -149,7 +187,7 @@ components sum — were each one `api_search` away. It never searched.
   and `open_entry` freezes that number as the entry's render cost — measured,
   not estimated, which is why it is not something you are asked for.
 
-# The 41 rules lint checks
+# The 42 rules lint checks
 
 Know these before drafting, not after. Finding one from a lint run means the
 prose is already written.
@@ -196,6 +234,7 @@ prose is already written.
 40  the front page's freeze is not older than the entries it counts
 41  the hero value derives from a solve, not from a literal
 42  a cell labelled `tbl-…` renders a table — `md_table(header, rows)`, never a trailing DataFrame
+43  (warning) counts the constants `_model.py` fixes against the inputs you declared
 ```
 
 There is no rule 36: it checked the categories system, which was retired, and

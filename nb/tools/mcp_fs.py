@@ -182,7 +182,29 @@ class FileSystem:
         out = "\n".join(parts) if parts else "(no content)"
         if getattr(res, "isError", False):
             return f"error: {out}" + self._path_hint(out)
-        return head(out)
+        return head(self._relative(out))
+
+    def _relative(self, out):
+        """
+        Absolute paths in a RESULT, rewritten to what the model should type.
+
+        `search_files` answers with absolute paths while `list_directory`
+        answers with bare names, and the model reads its next path off
+        whichever it saw last. Measured on run `20261002-100435-b81e`: the
+        first call returned
+        `/Users/.../mighty-mini-mustang/chapters/01-mustang-as-drawn`, from
+        which the run concluded that paths look like `chapters/01-…`. `_abs`
+        accepts that spelling AND the bare one, so neither was ever refused and
+        nothing corrected the confusion -- it alternated between the two forms
+        for 103 tool calls, and nine of them were spent re-orienting after a
+        file it asked for by one spelling came back ENOENT for an unrelated
+        reason.
+
+        So the root is stripped on the way out, leaving exactly the form `_abs`
+        round-trips. Forgiving input, consistent output -- the model stops
+        having to infer the layout from two tools that disagree.
+        """
+        return out.replace(f"{self.allowed}/", "").replace(str(self.allowed), ".")
 
     def _path_hint(self, out):
         """

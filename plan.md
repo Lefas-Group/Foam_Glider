@@ -301,16 +301,30 @@ That is wrong. A root chapter inherits the brief; the prefix says so in as many
 words. A reader opening `01-mustang-as-drawn` sees no constraints at all when
 seven are in force.
 
-- **Render the brief rows alongside the inherited ones**, and retitle
-  *"Maintained from earlier chapters (N)"* to something that covers both —
-  *"Specifications and assumptions in force (N)"*. Every chapter then carries
-  the block, including the first.
-- **Keep the two kinds distinct inside the callout.** A brief row can never be
-  superseded — departing from one makes it a different notebook — while an
-  inherited chapter item can be overwritten by a fork. Two sub-headings under
-  the one collapsed callout: *From the brief (never superseded)* and
-  *Inherited from earlier chapters*. One flat list would blur a distinction the
-  rest of the system enforces.
+**Two callouts, not one merged block.** A brief row can never be superseded —
+departing from one makes it a different notebook — while an inherited chapter
+item can be overwritten by a fork, so they are not one list. Render them as
+separate collapsed callouts, *From the brief (N)* above *Inherited from earlier
+chapters (N)*, each omitting itself when empty exactly as `_render_active`
+already does.
+
+Sub-headings inside one callout were considered and are worse:
+
+- **The brief is identical on every chapter page; the inherited set is not.**
+  Merged, the page-specific half hides behind the half the reader has already
+  seen on every other page. Separate callouts let the invariant one stay shut
+  and the varying one open.
+- **Separate counts carry information.** *(7)* and *(3)* says more than
+  *(10)*, which merges two populations under different rules.
+- **One callout per concept is already this file's pattern** —
+  `chapter_inputs` renders *overwrote* and *newly declares* as separate
+  callouts, not as sub-headings of one.
+
+Chapter 01 then shows exactly one box, which is the honest answer. The cost is
+that a deep chapter reaches about five collapsed callouts — measured:
+`RADICAL-GLIDER` chapter 04 already renders four. Order them widest scope to
+narrowest — brief, inherited, overwritten, newly declared — so the stack reads
+as a sequence rather than a pile.
 
 **Cheaper than it looks.** `_render_active` runs with cwd at the notebook root,
 and the notebook's own `index.qmd` already parses `_inputs.yml` with a plain

@@ -1967,3 +1967,62 @@ def _labelled_table_renders(root, entries):
                     f"it with `md_table(header, rows)` in an `output: asis` "
                     f"cell instead")))
     return out
+
+
+@register(43)
+def _constants_against_inputs(root, chapters, entries):
+    """
+    Rule 43, a warning, and a COUNT rather than a judgement.
+
+    `_model.py` fixes a number of constants; the chapter declares a number of
+    inputs. Neither figure is wrong on its own and no ratio between them is
+    required -- so this reports both and stops, which is the whole design.
+
+    WHY IT DOES NOT TRY TO FIND GEOMETRY. The failure it exists for is a run
+    that wrote a whole airframe -- chord, taper, six fuselage stations, five
+    cut-part areas -- from memory and declared four mass inputs, so nobody was
+    ever asked about the shape. The obvious rule is "flag undeclared geometry
+    constants", and it cannot be written: `c_root_w = 0.140` and
+    `SOLVE_BUDGET = 10.0` are the same thing to a parser, and a rule that
+    catches one phrasing of a thing and misses the next is worse than no rule,
+    because `lint clean` stops meaning CHECKED and starts meaning PROBABLY
+    FINE. That false assurance is the same failure as a number carrying a
+    citation it has not earned.
+
+    So this computes a fact -- 23 against 4, on the run that prompted it -- and
+    leaves the judgement with the person at the assumptions prompt, who is the
+    one who can open the plan. Reported once per chapter that has an entry.
+    """
+    out = []
+    for c in chapters:
+        if not any(e.parent.name == c for e in entries):
+            continue
+        model = root / "chapters" / c / "_model.py"
+        try:
+            tree = ast.parse(model.read_text())
+        except (OSError, SyntaxError):
+            continue
+        # Module level only. A constant inside a function is a local detail;
+        # the vehicle is what the module binds.
+        fixed = []
+        for node in tree.body:
+            if not isinstance(node, ast.Assign):
+                continue
+            if not isinstance(node.value, ast.Constant):
+                continue
+            if not isinstance(node.value.value, (int, float)) \
+                    or isinstance(node.value.value, bool):
+                continue
+            fixed += [t.id for t in node.targets if isinstance(t, ast.Name)]
+        if not fixed:
+            continue
+        declared = len(declared_items(root, c))
+        out.append((model, (
+            f"(warning) `_model.py` fixes {len(fixed)} numeric constants and "
+            f"this chapter declares {declared} input(s). Not a fault in "
+            f"itself -- but every one of those {len(fixed)} that is a "
+            f"dimension of the real aircraft, rather than something the model "
+            f"computes, is a `declare_input` the person at the prompt never "
+            f"got to check: {', '.join(f'`{n}`' for n in fixed[:6])}"
+            f"{' …' if len(fixed) > 6 else ''}")))
+    return out

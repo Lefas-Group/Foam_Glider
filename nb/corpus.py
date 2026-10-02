@@ -82,7 +82,12 @@ EXPECTED = {
     # `_probe_base.py` that differed from the canonical one; `aircraft-notebook`
     # never had the file at all. Both findings were real under the old rule and
     # are not findings under the new one.
-    "aircraft-notebook": (31, 32),
+    # +1 warning from rule 43, which reports how many numeric constants
+    # `_model.py` fixes against how many inputs the chapter declares. A
+    # count, not a verdict: it fires on every chapter with an entry and a
+    # module-level constant, so a rise here is the rule working rather
+    # than the notebook changing. Blocking is unmoved.
+    "aircraft-notebook": (31, 33),
     # +3 blocking from rule 31: its four chapters hold four copies of one
     # _model.py, three of them byte-identical to an earlier chapter and
     # none carrying a fork header. Correct, and frozen.
@@ -120,7 +125,12 @@ EXPECTED = {
     # `_probe_base.py` that differed from the canonical one; `aircraft-notebook`
     # never had the file at all. Both findings were real under the old rule and
     # are not findings under the new one.
-    "optimised-glider-notebook": (82, 106),
+    # +4 warnings from rule 43, which reports how many numeric constants
+    # `_model.py` fixes against how many inputs the chapter declares. A
+    # count, not a verdict: it fires on every chapter with an entry and a
+    # module-level constant, so a rise here is the rule working rather
+    # than the notebook changing. Blocking is unmoved.
+    "optimised-glider-notebook": (82, 110),
 }
 
 

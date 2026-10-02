@@ -60,6 +60,19 @@ then `read_figure` it. Rehearsing cells that are about to become an entry is
 better done by writing the entry and rendering it — `render` reports what broke,
 and the freeze is the thing you actually need.
 
+**Ask the figure two questions, not one.** Clipping, centring and legibility
+are the easy half, and a read-back that stops there passes drawings it should
+not. A run drawing a three-view of a reconstructed warbird inspected it twice,
+concluded *"no cropping, no awkward edges"*, and shipped an airframe that did
+not resemble the aircraft — the picture was well composed and wrong.
+
+So when the figure shows a SHAPE rather than a curve, also ask: **is this the
+right shape?** Does the planform, the fuselage depth, the tail size match what
+this aircraft is known to look like? If the answer is no, the model is wrong,
+not the plot — say so in the entry rather than adjusting the axes. If nothing
+is to hand to compare against, say *that*, and do not write that the geometry
+matches a source you never saw.
+
 - **Cell code runs from the notebook root**, not from `_scratch/`, because the
   project sets `execute-dir: project`. Any path inside a probe is relative to the
   notebook directory. A probe's own cwd is its run directory, so a bare filename

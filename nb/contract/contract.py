@@ -153,6 +153,19 @@ WHY = {
         "title that restated what index.qmd already said. Measured across 35 "
         "entries: 34 are one sentence ending in '?', median eight words, "
         "longest legitimate eighteen.",
+    43: "A run reconstructing a real aeroplane wrote its chord, taper, six "
+        "fuselage stations and five cut-part areas straight into `_model.py` "
+        "from memory, declared four mass inputs and nothing else, and "
+        "captioned the lot `# from the plan sheet`. Nobody had the plan, so "
+        "nobody was ever asked, and a wing loading 20% above the "
+        "manufacturer's published figure reached a committed entry. The "
+        "obvious rule -- flag undeclared GEOMETRY constants -- cannot be "
+        "written: `c_root_w = 0.140` and `SOLVE_BUDGET = 10.0` are the same "
+        "thing to a parser. A rule that catches one phrasing and misses the "
+        "next is worse than none, because `lint clean` stops meaning CHECKED "
+        "and starts meaning PROBABLY FINE. So this counts, and leaves the "
+        "judgement with the person at the assumptions prompt, who is the one "
+        "who can open the plan.",
 }
 
 def unexplained():
@@ -230,6 +243,7 @@ RULES = {
     40: "the front page's freeze is not older than the entries it counts",
     41: "the hero value derives from a solve, not from a literal",
     42: "a cell labelled `tbl-…` renders a table",
+    43: "(warning) how many constants `_model.py` fixes, against inputs declared",
 }
 
 

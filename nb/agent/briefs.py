@@ -172,17 +172,21 @@ are handled after you finish.
 # common case, entry written and lint clean, this is never sent at all: the
 # loop is skipped entirely.
 RESUME = """\
-This run is being RESUMED. Its entry is already on disk at
-`{chapter}/{stem}.qmd` -- you wrote it in an earlier process, and that
+This run is being RESUMED. You worked on it in an earlier process, and that
 conversation is gone.
 
 The question was:
 
     {question}
 
-Read the entry first; it is the record of what you decided. Then fix what is
-below and stop. Do not rewrite what is already there, and do not start a
-different entry: the filename is allocated and the chapter is claimed.
+WHAT IS ACTUALLY ON DISK, read just now -- trust this over any expectation
+about what you had finished:
+
+{state}
+
+The filename is allocated and the chapter is claimed, so do not start a
+different entry. Fix what is below and stop; do not rewrite what is already
+good.
 
 {why}
 """

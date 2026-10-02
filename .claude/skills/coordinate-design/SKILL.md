@@ -264,6 +264,68 @@ overwrites. It returns 0 only when the scaffold lints, preflights *and* renders.
 
 **A new notebook is a new aircraft. Confirm before creating one.**
 
+### If the aircraft already exists, find its plan FIRST
+
+**The agent cannot research.** No network, sandboxed to `chapters/`. Every
+dimension you do not supply, it supplies from memory — and it will not look
+any different in the entry from one you measured.
+
+Measured, on the three entries of `mighty-mini-mustang`: a brief of seven
+scalar rows said nothing about form, so the run invented chord, taper,
+dihedral, six fuselage stations and five cut-part areas, and captioned them
+`# from the plan sheet`. Flite Test publish the plan free. Page one is a
+specification table giving length, CG, span, area, dry weight, all-up weight
+and **wing loading** — and the entry's computed wing loading was 20 % above the
+published figure. Nobody had looked.
+
+```bash
+curl -sL -o <notebook>/<plan>.pdf "<url>"       # commit it; a URL 404s, a file does not
+pdftoppm -png -r 150 -f 1 -l 1 <plan>.pdf pg    # page 1 is usually the spec table
+```
+
+FT plans print 1:1 and carry an inch/cm scale bar, so a render at a known dpi
+measures in millimetres directly — no scaling, no perspective correction.
+Tiles split parts across pages, so an exact planform needs stitching; that is
+real work, and 1b below is usually cheaper than doing it up front.
+
+Then put what you found in as `--spec` rows, one dimension each. The ten-word
+cap is **per row** and nothing caps the number of rows, so a dimension table
+fits:
+
+```bash
+--spec "**Root chord**: 140 mm (5.5 in)." --spec "**Tip chord**: 99 mm."
+```
+
+**Record what you could not find, too** — `--spec "**Fuselage**: not
+published; assume and declare it."` An unknown you name is one the run
+declares; an unknown you leave silent is one it invents and attributes.
+
+### Check the assumptions prompt against the plan
+
+The other half, and the one that needs nothing built. The prompt is already a
+list of every number the run made up, shown to the only party holding the
+plan, at the cheapest moment to change one — it fires **before `_model.py` is
+written**, so a correction costs about one probe, not a re-render.
+
+```
+ASSUMPTIONS — confirm, correct a value, or reject one
+  1. Wing taper ratio: 0.704
+  2. Fuselage cross-sections: from photographs
+```
+
+When a row is a **property of the real aircraft** — a chord, a cut area, a
+component mass — and you hold the plan, *check it before accepting*. Correct
+with `nb answer <nb> <run-id> "1: 0.85"`. Rows that are **modelling choices**
+— a stand-in airfoil, a neglected fairing — are the run's to make; judge the
+cost, not the value. The run marks which is which in each row's reason.
+
+**Accepting a number you could have checked is how the taper ratio got in.**
+Enter accepts everything, and an unanswered prompt accepts everything after it
+times out — the wait scales with batch size, but it is still a clock.
+
+Where you already know a value, pre-empt it with `--answers` so the question
+never costs a round trip at all.
+
 ## When a run goes wrong
 
 - `nb stop <nb> <run-id> "why"` — cooperative, frees a run blocked on a
