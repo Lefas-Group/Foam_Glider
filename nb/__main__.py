@@ -8,12 +8,15 @@
              "<question>"                      …the chapter is REQUIRED
              [--pool N] [--ceiling N]         …budgets, instead of being asked
              [--quiet] [--answers f.json]     …no board on this terminal;
+             [--no-watch]                     …and no window for this run;
                                               …replies keyed by question name:
                                               …a quantity, or a chapter name
     nb resume <notebook> [run]               resume: a gate, a refactor, a
              [--allow-refactor]               …run that died with work on disk
              [--accept-refactor]              …committing a diff you have read
     nb view  <notebook> [--force]            render the whole site
+    nb open  <notebook>                      the board in a window, the
+                                             site in a browser
     nb eval  <notebook>                      what each model actually did
     nb board <notebook> [--all]              N agents, one terminal
     nb answer <notebook> [run] "<value>"     reply to a waiting run
@@ -28,7 +31,8 @@
     nb listen <notebook> [--timeout N]       the inverse: block until a RUN
                                              asks, ends or dies
     nb stop  <notebook> [run] ["why"]        ask a run to stop, and record it
-    nb watch <notebook> [run] [--all]        follow the detail, live
+    nb watch <notebook> [run]                follow the detail, live
+             [--all] [--until-done]           …from the top; …until it ends
     nb clean <notebook> [run] [--keep N]     drop spent run directories
              [--yes]                          …a named run, or all but the last N
 
@@ -173,7 +177,8 @@ def main(argv):
                  if i and i not in taken and not r.startswith("--")
                  and not r.endswith(".json")]
         return ask(rest[0], " ".join(words), quiet=quiet, answers=answers,
-                   pool=pool, ceiling=ceiling, chapter=chapter)
+                   pool=pool, ceiling=ceiling, chapter=chapter,
+                   watch="--no-watch" not in rest)
 
     # `resume` is the crash path and the two approvals now, not the routine
     # one: a run that is answered at the keyboard never comes back here. `write`
@@ -205,6 +210,13 @@ def main(argv):
             return 2
         from .cli.board import main as board
         return board(rest)
+
+    if cmd == "open":
+        if not rest:
+            print(USAGE)
+            return 2
+        from .cli.open_ import main as open_notebook
+        return open_notebook(rest)
 
     if cmd in ("note", "escalate", "await", "listen", "direction"):
         if not rest:

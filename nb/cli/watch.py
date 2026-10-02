@@ -28,6 +28,13 @@ from ..process.log import tell
 # think does not trip it.
 DEFAULT_QUIET = 120.0
 
+# How long an `--until-done` watcher stays after the run it follows has ended.
+# It exists so a window opened per run does not have to be closed by hand; the
+# grace period exists because the last thing a run says -- the commit sha, or
+# why it stopped -- is the thing most worth reading, and a window that vanishes
+# as it arrives is worse than one that lingers.
+LINGER = 30.0
+
 # Dimming happens HERE, not in the log. The run writes plain text -- the file
 # is read by `tail`, by grep, and one day by a coordinator, and escape codes in
 # it would be noise to all three. The reader is the one that knows it is
@@ -65,25 +72,88 @@ def _console():
     return Console(soft_wrap=True)
 
 
+# THE BOARD'S VOCABULARY, so the two views read as one system. A person follows
+# a programme by looking at both -- the board for which runs exist and how they
+# ended, a watcher for what one of them is doing -- and until this table existed
+# the second was undifferentiated grey text beside the first's coloured panels.
+#
+# Borrowed deliberately rather than invented: green is a thing that worked,
+# yellow a thing that wants a person, red a failure, cyan the structural
+# announcements, grey50 metadata. That is exactly `board.ENDINGS` and the
+# styles around it, and the point is that `commit` here is the same green as
+# `committed` there.
+KINDS = {
+    # The backbone of a transcript, and the one line a reader scans for. Bold
+    # with no colour of its own: the first cut made it grey50 with the rest of
+    # the metadata, which left the most important line on the screen the
+    # dimmest thing on it.
+    "turn":     "default",
+    "commit":   "green",
+    "answer":   "green",
+    "waiting":  "yellow",
+    "ask":      "yellow",
+    "stuck":    "yellow",
+    "inputs":   "yellow",
+    "refactor": "yellow",
+    "lint":     "cyan",
+    "render":   "cyan",
+    "site":     "cyan",
+    "page":     "cyan",
+    "check":    "cyan",
+    "notebook": "cyan",
+    "chapter":  "cyan",
+    "entry":    "cyan",
+}
+# Everything else -- budget, kernel, models -- is metadata about how the run is
+# going rather than about what it is doing or what it decided.
+KIND_DEFAULT = "grey50"
+
+LINE = re.compile(r"^(\d{2}:\d{2}:\d{2})  (\S+)(\s+)(.*)$")
+BANNER = re.compile(r"^[═─]{8,}$")
+
+
 def _emit(console, text):
     """
-    Print, dimming the model's reasoning so the run's own report stands out.
+    Print the log, styled to match the board.
 
     Through `rich` rather than by hand. The hand-rolled version emitted
     `\x1b[2m`, which is correct and which macOS Terminal.app ignores, so the
     dimming never appeared and nothing in code review could show that. A library
     that asks the terminal what it supports is the fix; `dim` degrades to a grey
     where faint is unsupported, and to nothing at all when piped.
+
+    STYLING ONLY, NEVER REWRITING. The same file is read by `tail`, by `grep`
+    and by a coordinator, so the writer keeps it plain and the reader decides
+    how it looks -- the split the telemetry rests on. Nothing here changes a
+    character; it colours the three parts of a line that already exist.
     """
     if console is None:
         sys.stdout.write(text)
         sys.stdout.flush()
         return
+    from rich.text import Text
     for line in text.splitlines():
+        # The model's reasoning, which the run gutters. Dim, so the run's own
+        # report stands out of it.
         if line.lstrip().startswith(GUTTER):
             console.print(line, style="grey50", highlight=False)
-        else:
-            console.print(line, highlight=False, markup=False)
+            continue
+        if BANNER.match(line.strip()):
+            console.print(line, style="cyan", highlight=False, markup=False)
+            continue
+        m = LINE.match(line)
+        if not m:
+            # MCP chatter and anything else unstamped: present, and not worth
+            # a reader's attention.
+            console.print(line, style="grey50", highlight=False, markup=False)
+            continue
+        stamp, kind, gap, rest = m.groups()
+        out = Text()
+        out.append(stamp + "  ", style="grey50")
+        out.append(kind, style=f"bold {KINDS.get(kind, KIND_DEFAULT)}")
+        out.append(gap)
+        out.append(rest)
+        console.print(out, highlight=False)
 
 
 def _quiet_note(idle, limit, run_dir, pid):
@@ -108,7 +178,7 @@ def _quiet_note(idle, limit, run_dir, pid):
             f"{limit:.0f} s deadline{who}")
 
 
-def follow(path, from_start=False, poll=0.25):
+def follow(path, from_start=False, poll=0.25, until_done=False):
     """
     Print `path` as it grows, like `tail -f`, and say when it stops growing.
 
@@ -123,7 +193,15 @@ def follow(path, from_start=False, poll=0.25):
     Handles a file that does not exist yet -- `nb watch` is usually opened
     BEFORE the run it is watching -- and a file that shrinks, which means a new
     run truncated it.
+
+    `until_done` makes this RETURN, which it otherwise never does. `nb ask`
+    opens one of these per run, so without it the windows accumulate forever.
+    The run's own `run.json` is the authority -- an `outcome` is written exactly
+    once, by the run, when it is finished with -- rather than guessing from the
+    log's content or from the pid going away, which also happens when a run is
+    killed mid-question and has nothing to report.
     """
+    from ..process import runstate
     handle, size = None, 0
     pid, limit, last, warned = None, None, time.time(), False
     pending = ""
@@ -167,6 +245,21 @@ def follow(path, from_start=False, poll=0.25):
                 handle, from_start = None, True
                 continue
             size = now
+
+            if until_done:
+                state = runstate.read(path.parent) or {}
+                if state.get("outcome"):
+                    # One more read first: the outcome is written before the
+                    # last lines are flushed, so returning on the instant would
+                    # cut off the commit line this window exists to show.
+                    time.sleep(poll)
+                    rest = handle.read()
+                    if rest:
+                        _emit(console, rest if rest.endswith("\n") else rest + "\n")
+                    tell(f"\n  run ended ({state['outcome']}) — "
+                         f"closing in {LINGER:.0f}s")
+                    time.sleep(LINGER)
+                    return
             time.sleep(poll)
     except KeyboardInterrupt:
         pass
@@ -177,14 +270,18 @@ def follow(path, from_start=False, poll=0.25):
 
 def main(argv):
     if not argv:
-        print("usage: uv run --group nb python -m nb watch <notebook> [--all]")
+        print("usage: uv run --group nb python -m nb watch <notebook> [run] "
+              "[--all] [--until-done]")
+        print("  --all         from the first line, not from now")
+        print("  --until-done  close once the run records an outcome")
         return 2
     notebook = Notebook(argv[0], run_id=argv[1] if len(argv) > 1
                         and not argv[1].startswith("--") else None)
     log = notebook.run / "status.log"
     tell(f"  watching   {log}"
          f"{'' if log.exists() else '  (waiting for a run to start)'}")
-    follow(log, from_start="--all" in argv)
+    follow(log, from_start="--all" in argv,
+           until_done="--until-done" in argv)
     return 0
 
 

@@ -39,7 +39,7 @@ from ..preflight import check as preflight
 from ..tools import guards, kernel, verifiers
 from ..tools.interact import ask_pool, ask_render_ceiling, ask_stuck
 from ..agent import briefs
-from ..process import metrics, runstate
+from ..process import desktop, metrics, runstate
 from .view import site
 from ..agent.setup import setup, report, spoken_calls
 from ..build.publish import (_ceiling_problem, _commit, _refresh_active,
@@ -71,7 +71,7 @@ DETAIL = {
 }
 
 
-def _start(notebook, quiet, answers):
+def _start(notebook, quiet, answers, watch=True):
     """Mailbox, fork, log redirection -- identical for a fresh run and a resume."""
     from ..process.mailbox import Mailbox
     from ..tools.interact import use_mailbox
@@ -84,6 +84,20 @@ def _start(notebook, quiet, answers):
             # Nothing will be drawn over, so say where the run went. Printed
             # BEFORE detaching, because every later `tell` goes only to the log.
             tell(f"  run       {notebook.run_id}")
+            # A WINDOW PER RUN, opened from the PARENT. This is the last moment
+            # a process here still has the terminal -- everything after the fork
+            # below is a daemon, and a daemon spawning a terminal would make
+            # that window's parent a process nobody can see.
+            #
+            # `--all` so the window carries the run from its first line rather
+            # than from whenever it happened to open, and `--until-done` so it
+            # closes itself: one of these per `nb ask` would otherwise pile up
+            # forever, since `follow()` is a `while True`.
+            if watch:
+                desktop.terminal(
+                    [sys.executable, "-m", "nb", "watch", notebook.root.name,
+                     notebook.run_id, "--all", "--until-done"],
+                    cwd=notebook.repo, what="this run")
             tell("  detail:")
             tell(f"    uv run --group nb python -m nb watch "
                  f"{notebook.root.name} {notebook.run_id}")
@@ -124,7 +138,7 @@ def _start(notebook, quiet, answers):
 
 def main(notebook_path, question, verbose=True,
          pool=None, ceiling=None, run_id=None, quiet=False,
-         answers=None, chapter=None):
+         answers=None, chapter=None, watch=True):
     bad = preflight(notebook_path)
     if bad:
         for b in bad:
@@ -144,9 +158,14 @@ def main(notebook_path, question, verbose=True,
         tell(f"  no chapter {chapter!r} in {notebook.root.name}.")
         tell(f"  It has: {', '.join(known) if known else '(none)'}")
         return 2
-    _start(notebook, quiet, answers)          # forks; takes the lock first
+    _start(notebook, quiet, answers, watch)   # forks; takes the lock first
+    # `watch` RIDES IN run.json rather than down four signatures. `_finish`
+    # runs in the daemon and wants it too, to decide whether to open the
+    # committed page; threading it through `_execute` would touch both of that
+    # function's callers for a flag neither of them cares about. A `nb resume`
+    # then inherits what the original `nb ask` was told, which is correct.
     runstate.write(notebook, phase="run", question=question,
-                   chapter=chapter, turn=0, waiting_on=None)
+                   chapter=chapter, turn=0, waiting_on=None, watch=watch)
     open_log(notebook, "run", question)
     run_metrics = metrics.Run(notebook, "run", question)
 
@@ -677,8 +696,15 @@ def _finish(notebook, session, run_metrics, first_pass, moved, accepted):
     # After the commit, never before: a project render touches every page in
     # the notebook, and an unrelated broken one must not be able to block an
     # entry that has already passed lint and built on its own terms.
-    site(notebook, page=notebook.root / "_site" / "chapters" / chapter
-                        / f"{stem}.html")
+    page = notebook.root / "_site" / "chapters" / chapter / f"{stem}.html"
+    site(notebook, page=page)
+
+    # AND PUT IT IN FRONT OF SOMEONE. The same gate as the watcher window, so
+    # `--no-watch` means "this run opens nothing" rather than suppressing one
+    # of the two. Last, because a browser tab is worth nothing if the commit
+    # did not happen, and `site()` is what writes the page being opened.
+    if (runstate.read(notebook) or {}).get("watch", True):
+        desktop.browse(page)
     return 0
 
 
