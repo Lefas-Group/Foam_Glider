@@ -1,0 +1,60 @@
+---
+title: "Does the airframe with specified electronics achieve the claimed 156 g?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 120.0
+SOLVE_BUDGET = 10.0
+
+breakdown_flat = mass_breakdown("flat")
+breakdown_folded = mass_breakdown("folded")
+
+m_dry_flat = breakdown_flat["dry_total_g"]
+m_delta_flat = breakdown_flat["delta_g"]
+m_foam_flat = breakdown_flat["foam_g"]
+m_elec_flat = breakdown_flat["electronics_g"]
+
+m_dry_folded = breakdown_folded["dry_total_g"]
+m_diff_folded = m_dry_folded - m_dry_flat
+m_claimed = 156.0
+```
+
+::: {.hero}
+[`{python} f"{m_dry_flat:.1f} g"`]{.hero-value}
+[calculated dry mass of flat-plate airframe]{.hero-label}
+:::
+
+**Answer.** No. The airframe with specified electronics reaches [`{python} f"{m_dry_flat:.1f} g"`]{.key} dry, exceeding the claimed `{python} f"{m_claimed:.0f} g"` specification by [`{python} f"{m_delta_flat:.1f} g"`]{.key} (@tbl-mass). The bare Maker Foam airframe accounts for [`{python} f"{m_foam_flat:.1f} g"`]{.key} and the powertrain and avionics add [`{python} f"{m_elec_flat:.1f} g"`]{.key}. As a sensitivity, folding the wing skin per the Flite Test plan increases wing foam area, adding [`{python} f"{m_diff_folded:.1f} g"`]{.key} to reach [`{python} f"{m_dry_folded:.1f} g"`]{.key}, representing the dominant mass uncertainty.
+
+```{python}
+#| label: tbl-mass
+#| tbl-cap: "Subsystem dry mass breakdown for flat-plate build."
+import pandas as pd
+
+df = pd.DataFrame({
+    "Subsystem": ["Foam airframe", "Electronics", "Hardware", "Hot glue", "Total dry mass"],
+    "Mass (g)": [
+        breakdown_flat["foam_g"],
+        breakdown_flat["electronics_g"],
+        breakdown_flat["hardware_g"],
+        breakdown_flat["glue_g"],
+        breakdown_flat["dry_total_g"],
+    ],
+    "Share (%)": [
+        100.0 * breakdown_flat["foam_g"] / breakdown_flat["dry_total_g"],
+        100.0 * breakdown_flat["electronics_g"] / breakdown_flat["dry_total_g"],
+        100.0 * breakdown_flat["hardware_g"] / breakdown_flat["dry_total_g"],
+        100.0 * breakdown_flat["glue_g"] / breakdown_flat["dry_total_g"],
+        100.0,
+    ],
+})
+df.style.hide(axis="index").format({"Mass (g)": "{:.1f}", "Share (%)": "{:.1f}%"})
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(mass_breakdown)
+```

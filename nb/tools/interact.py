@@ -29,8 +29,8 @@ it was reasonable to ask. Here the cap is only good manners.
 import json
 import re
 
-from ..schema import Input
-from ..log import say, tell
+from ..agent.schema import Input
+from ..process.log import say, tell
 
 
 # Set by `ask` and `write` before anything can be asked. Every run has one:
@@ -54,7 +54,7 @@ def ask_stuck(found, phase):
     nobody being there must all mean carry on. A detector that can kill an
     unattended run when it guesses wrong would be worse than no detector.
     """
-    from .. import stuck
+    from ..agent import stuck
 
     def asker(why, options, default):
         tell(f"\n{'─' * 72}\nNO PROGRESS — {phase} phase\n{'─' * 72}")
@@ -278,7 +278,7 @@ def confirm_inherited(notebook, chapter, parent=None):
     A CHAPTER WITH NO ANCESTOR IS SHOWN THE BRIEF AND ASKED NOTHING. With no
     parent, `inherited()` falls back to the notebook's own `_inputs.yml`, and
     offering those for striking is an offer that cannot be honoured twice over.
-    Mechanically: resolving a strike calls `lint.input_ids(root, "<notebook>")`,
+    Mechanically: resolving a strike calls `shared.input_ids(root, "<notebook>")`,
     which looks for `chapters/<notebook>/_inputs.yml`, finds nothing and matches
     no id -- so the strike was silently discarded, and rule 31 now refuses the
     `overwrites:` row it would have written. In principle: the brief is never
@@ -328,8 +328,8 @@ def confirm_inherited(notebook, chapter, parent=None):
     that can strand an unattended run is worse than one that occasionally
     carries an item too many.
     """
-    from ..inputs import ancestry, inherited
-    from ..inputs import short as _short
+    from ..domain.inputs import ancestry, inherited
+    from ..domain.inputs import short as _short
     items, superseded = inherited(notebook, chapter, parent)
     if not items:
         return [], []
@@ -449,7 +449,7 @@ def ask_specified(session, name, why, kind="specified", options="",
     #
     # NOT when `replaces` is given: that IS the deliberate change, and naming
     # the item is how you say so.
-    from ..inputs import settled
+    from ..domain.inputs import settled
     already = None if replaces else settled(
         session.notebook, session.chapter, name)
     if already:
@@ -459,8 +459,8 @@ def ask_specified(session, name, why, kind="specified", options="",
         # first is something `replaces=` can name. Told apart by the date
         # prefix every entry stem carries, not by guessing at the string: an id
         # may legally start with a digit.
-        import lint
-        this_id = (None if lint.ENTRY_FILE.match(where) or where == session.chapter
+        from ..contract import shared
+        this_id = (None if shared.ENTRY_FILE.match(where) or where == session.chapter
                    else where)
         raise ValueError(
             f"chapters/{session.chapter} has already settled this. In force:\n"
@@ -480,8 +480,8 @@ def ask_specified(session, name, why, kind="specified", options="",
               "inherit it.")
     body = f"  {name}\n  {why}"
     if replaces:
-        import lint
-        ids = lint.input_ids(session.notebook.root, session.chapter or "")
+        from ..contract import shared
+        ids = shared.input_ids(session.notebook.root, session.chapter or "")
         if replaces not in ids:
             raise ValueError(
                 f"replaces={replaces!r} is not an id declared by "
@@ -500,7 +500,9 @@ def ask_specified(session, name, why, kind="specified", options="",
     answer = _prompt("SPECIFIED INPUT NEEDED", name, body)
     session.record_answer(name, answer)
     if replaces:
-        # For the write phase: what this answer displaces, and where.
+        # For the entry, when it is written: what this answer displaces,
+        # and where. (`nb` had a separate write PHASE once; it does not now,
+        # and the note outlived the noun.)
         session.replaced[name] = (session.chapter, replaces)
     if answer.lower() in DELEGATED:
         return ("Delegated. Decide it yourself if it is answerable in a "
@@ -672,7 +674,7 @@ def fork_chapter(session, name, title, defines):
     only ever return `rejected: already exists`, and it made ownership
     ambiguous on the one path that is structurally irreversible.
     """
-    from ..locks import claim_chapter, release_chapter
+    from ..process.locks import claim_chapter, release_chapter
     from ..tools.guards import bodies
     from ..tools.scaffold import create_chapter
     notebook = session.notebook
@@ -708,10 +710,10 @@ def fork_chapter(session, name, title, defines):
     kept, struck = confirm_inherited(notebook, name, parent=parent or None)
     struck_ids = []
     if struck:
-        import lint
+        from ..contract import shared
         for _kind, item, where in struck:
             src = where.partition("/")[0]
-            for _id, _text in lint.input_ids(notebook.root, src).items():
+            for _id, _text in shared.input_ids(notebook.root, src).items():
                 if _text == item:
                     struck_ids.append((src, _id))
     session.inherited_kept, session.inherited_struck = kept, struck
@@ -746,7 +748,7 @@ def fork_chapter(session, name, title, defines):
     session.before_bodies = {n: bodies(d / n)
                              for n in ("_model.py", "_analysis.py")}
     session.siblings = len(notebook.entries(name))
-    from .. import runstate
+    from ..process import runstate
     runstate.write(notebook, chapter=name)
     if session.metrics is not None:
         session.metrics.set(chapter=name)
@@ -756,7 +758,7 @@ def fork_chapter(session, name, title, defines):
 
 def _inherited_note(session):
     """What the user agreed the new chapter carries, for the model to honour."""
-    from ..inputs import short as _short
+    from ..domain.inputs import short as _short
     kept, struck = session.inherited_kept, session.inherited_struck
     if not (kept or struck):
         return ""
@@ -777,7 +779,7 @@ def _inherited_note(session):
         # made cannot -- it has no id to name. Both are struck; only the first
         # renders as "Overwritten from …". Saying otherwise would tell the
         # model its work was done when half of it was not.
-        import lint
+        from ..contract import shared
         lines += ["", "STRUCK — the user says this chapter BREAKS these, so "
                   "they do NOT carry forward. Where this chapter needs its own "
                   "value for one of them, that value is NEW and goes in this "
@@ -785,7 +787,7 @@ def _inherited_note(session):
         rows, loose = [], []
         for k, i, w_ in struck:
             s_ = w_.partition("/")[0]
-            ids = lint.input_ids(session.notebook.root, s_)
+            ids = shared.input_ids(session.notebook.root, s_)
             (rows if any(t == i for t in ids.values()) else loose).append(
                 f"  [{k}] {i}   (was from {_short(w_, '')})")
         if rows:
@@ -844,7 +846,7 @@ def declare_input(session, name, value="", source="guessed", why="",
     item = Input(name=name, value=str(value) or None, source=source,
                  why=" ".join(str(why).split()))
     if replaces:
-        from ..inputs import committed, short
+        from ..domain.inputs import committed, short
         rows = committed(session.notebook, session.chapter)
         hit = next((r for r in rows if r[2] == replaces), None)
         if hit is None:
@@ -931,8 +933,9 @@ def open_entry(session, title, inputs_none_because=""):
     Everything here is a refusal the model can act on and then retry. Nothing
     here ends the run.
     """
-    from .. import briefs, runstate
-    from ..phases.write import _stem
+    from ..agent import briefs
+    from ..process import runstate
+    from ..build.publish import _stem
     import datetime
     notebook = session.notebook
     title = " ".join(str(title).split())
@@ -1055,8 +1058,8 @@ def open_entry(session, title, inputs_none_because=""):
                    ceiling=session.render_ceiling)
     say(f"  entry     {session.chapter}/{stem}.qmd")
 
-    import lint as _lint
-    default_solve, default_ceiling = _lint._defaults(notebook.root)
+    from ..contract import shared
+    default_solve, default_ceiling = shared._defaults(notebook.root)
     ceiling = session.render_ceiling
     total = session.probe_pool or 0.0
     left = session.probe_left if session.probe_left is not None else 0.0

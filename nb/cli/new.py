@@ -1,0 +1,265 @@
+"""
+`nb new` -- scaffold a notebook, then prove it.
+
+Creating a notebook is a deliberate act: a second notebook is a second aircraft,
+and `references/forking.md` treats that as a decision, not a convenience. So this
+is a command you run rather than something the agent can reach -- there is no
+`new_notebook` route, and `create_chapter` is not a tool either.
+
+What makes it worth a command rather than a documented procedure is the failure
+mode. `_notebook.py` is COPIED into every notebook -- Quarto execs it at render
+time, so a notebook must render without `nb` installed -- and lint rule 11
+requires it byte-identical to the seed in `nb/scaffold/`. Copied by hand, a stray
+edit or a truncated paste is silent until the first lint run. Copied here, it
+cannot drift, and the command lints and preflights before it returns.
+"""
+
+import pathlib
+import re
+import shutil
+import subprocess
+import sys
+
+from ..config import SCAFFOLD, Notebook
+from ..tools.scaffold import NAME as CHAPTER_NAME
+from ..tools.scaffold import create_chapter
+from ..process.log import say, tell
+
+# `_freeze/chapters/` is deliberately NOT here -- committing it is what lets a
+# fresh clone render without re-solving. Everything else Quarto writes is a build
+# artefact: the first notebook to get a project render put 22 of them into
+# history, including a 180 KB icon font.
+GITIGNORE = ("/.quarto/\n"
+             "**/*.quarto_ipynb\n"
+             "/_site/\n"
+             "/_freeze/site_libs/\n"
+             # Quarto writes a <page>-listing.json beside every page carrying a
+             # listing: build output, regenerated on every render, and it churns.
+             "**/*-listing.json\n"
+             # Per-run working state: probe scripts, logs, run.json, the
+             # render lock. This repo's root .gitignore already covers it, so
+             # a notebook created HERE was fine by accident -- one created in a
+             # sibling directory, which `nb new` exists to support, would have
+             # committed a directory per run.
+             # CONTENTS, not the directory: a negation cannot re-include a
+             # file whose parent directory is excluded.
+             #
+             # Nothing is re-included any more. `_scratch/_probe_base.py` was,
+             # because rule 11 required it and preflight refused to start
+             # without it -- probes run in a kernel `nb` starts now, and the
+             # cell that loads the chapter ships with `nb`. `_scratch/` is
+             # working state end to end again.
+             "/_scratch/*\n")
+
+# COPIED VERBATIM, not templated -- which is the only thing separating it from
+# the seven `.tmpl` files beside it in `scaffold/`. Nothing in it is
+# project-specific, so there is nothing to substitute; rule 11 then holds the
+# notebook's copy to it byte-for-byte.
+#
+# It used to be called vendoring and live in `nb/vendored/`, beside four modules
+# that were never copied anywhere. `probe_base.py` was the second entry here
+# until probes moved into a kernel -- it had to be copied down because a probe
+# subprocess started from the notebook directory and could reach nothing else.
+# `nb` starts the kernel now, and the loader is `nb/tools/probe_init.py`:
+# ordinary `nb` code, propagated by being imported rather than by being copied.
+COPIED_VERBATIM = (("_notebook.py", "_notebook.py"),)
+
+
+def _render(name, title, subject, chapter):
+    """Template substitution. Kept blunt on purpose -- these are four files."""
+    return (name.replace("<Project>", title)
+                .replace("<the aircraft>", subject)
+                .replace("NN-name", chapter))
+
+
+def _slug(text, taken):
+    """A short, unique id for a brief item, from its first few words."""
+    words = re.findall(r"[a-z0-9]+", re.sub(r"\*\*", " ", text.lower()))
+    base = "-".join(words[:3])[:28].strip("-") or "item"
+    slug, n = base, 1
+    while slug in taken:
+        n += 1
+        slug = f"{base}-{n}"
+    taken.add(slug)
+    return slug
+
+
+def _brief(specs, assumes):
+    """The root `_inputs.yml` body, or "" to leave the template placeholders."""
+    if not specs and not assumes:
+        return ""
+    taken = set()
+    out = []
+    for key, rows in (("specified", specs), ("assumed", assumes)):
+        if not rows:
+            continue
+        out.append(f"{key}:")
+        for text in rows:
+            text = " ".join(str(text).split())
+            out.append(f'  - {_slug(text, taken)}: "{text}"')
+    return "\n".join(out) + "\n"
+
+
+def main(path, title=None, subject=None, chapter=None,
+         chapter_title=None, defines=None, verbose=True,
+         specs=(), assumes=()):
+    root = pathlib.Path(path).resolve()
+    if root.exists() and any(root.iterdir()):
+        tell(f"  {root} exists and is not empty")
+        return 1
+    # THE FIRST CHAPTER IS NAMED AT BIRTH, which is what removed the stub.
+    # Quarto's `auto: "chapters"` dies on an empty `chapters/`, so this command
+    # must create a chapter before anyone has asked a question -- and it used
+    # to create `01-first-chapter` carrying a placeholder, which the first real
+    # chapter then took over by renaming the directory underneath itself. That
+    # bought three conditions in `claimable_stub`, an atomic rename, a
+    # re-templating pass, a freeze sweep and a special case in `fork_chapter`,
+    # all to avoid asking one question at the only moment it is cheap.
+    #
+    # So it is asked. A notebook is created once per aircraft; whoever runs
+    # this knows what its first chapter holds.
+    if not (chapter_title or "").strip() or not (defines or "").strip():
+        tell("  --chapter-title and --defines are required.")
+        tell("  Quarto cannot render a notebook with no chapters, so this "
+             "command creates the")
+        tell("  first one — and a chapter created without a name is one that "
+             "gets renamed")
+        tell("  later, underneath entry stems and freeze paths. Name it now:")
+        tell('\n    nb new <dir> "<Title>" --chapter-title "Trimmed glide" \\')
+        tell('      --defines "AVL at fixed alpha, NACA4405, fuselage drag '
+             'neglected."\n')
+        return 1
+    # Derived from the title, so there is one name to give rather than two.
+    # Always 01: it is the first chapter by construction.
+    slug = "-".join(w for w in re.split(r"[^a-z0-9]+", chapter_title.lower()) if w)
+    chapter = chapter or f"01-{slug[:40].rstrip('-')}"
+    if not CHAPTER_NAME.match(chapter):
+        tell(f"  {chapter!r} is not NN-kebab-case — check --chapter-title")
+        return 1
+
+    # THE TITLE IS THE DIRECTORY NAME, and that is the whole of it. It always
+    # defaulted to this; what it also had was a POSITIONAL free-text argument,
+    # which is how `RADICAL GLIDER # once per aircraft` became the site heading
+    # in four files -- "everything that is not a flag" swallowed a trailing
+    # shell comment. A name you have already chosen, typed twice, is a name
+    # that can disagree with itself.
+    #
+    # `-notebook` IS STRIPPED, because `_quarto.yml` appends " Notebook". Three
+    # of the four notebooks here are named `*-notebook` and each was given an
+    # explicit title at creation, which is the only reason nobody ever saw
+    # "Aircraft Notebook Notebook".
+    if not title:
+        title = root.name.replace("-", " ").replace("_", " ").title()
+        if title.lower().endswith(" notebook"):
+            title = title[:-len(" notebook")]
+    subject = subject or "the aircraft"
+    # THE TITLE IS SUBSTITUTED INTO FOUR FILES BY BLIND STRING REPLACEMENT, and
+    # `_render` is deliberately blunt about it. Nothing downstream catches a bad
+    # one: rule 24's placeholder regex looks for `<...>`, so a title carrying a
+    # shell comment renders, lints clean and ships. RADICAL-GLIDER did exactly
+    # that -- `_quarto.yml` still reads
+    #
+    #     title: "RADICAL GLIDER # once per aircraft Notebook"
+    #
+    # from a command whose trailing comment landed inside the quotes. It is the
+    # site's heading, the browser tab and the description, and it is wrong in
+    # git for ever unless someone notices by eye.
+    #
+    # Refused rather than sanitised: stripping to the `#` would be a guess at
+    # what was meant, and the answer is one keystroke away at the prompt. `"`
+    # is here because these are YAML values, and a newline because it is a
+    # title.
+    bad = [c for c in ('#', '"', '\n', '\r') if c in title]
+    if bad or not title.strip() or len(title) > 60:
+        why = (f"contains {', '.join(repr(c) for c in bad)}" if bad
+               else "is empty" if not title.strip()
+               else f"is {len(title)} characters, and 60 is the cap")
+        tell(f"  the title {why}: {title!r}")
+        tell("  It becomes the site heading, the browser tab and the "
+             "description, in four files.")
+        tell('  Quote it as one argument:  nb new <dir> "Radical Glider"')
+        return 1
+
+    (root / "chapters").mkdir(parents=True)
+    (root / "_scratch").mkdir(parents=True)
+
+    for seed, dest in COPIED_VERBATIM:
+        shutil.copy(SCAFFOLD / seed, root / dest)
+
+    (root / ".gitignore").write_text(GITIGNORE)
+    # No probe scaffold: probing is a tool call into the run's kernel, so the
+    # `probe.qmd`/`probe.py` pair the skill used was never read by this system
+    # and there is no longer a file in `_scratch/` to sit beside.
+    for tmpl, dest in (("_quarto.yml.tmpl", "_quarto.yml"),
+                       ("styles.css.tmpl", "styles.css"),
+                       # The site's front page. Without it Quarto serves a
+                       # synthesised stub -- not a 404, but nothing that says
+                       # what the aircraft is or how the chapters relate.
+                       ("book-index.qmd.tmpl", "index.qmd"),
+                       # The brief, as data. The front page renders it; nothing
+                       # in a run writes it. Its placeholders are what rule 24
+                       # sees when nobody has filled the brief in.
+                       ("_inputs.root.yml.tmpl", "_inputs.yml")):
+        text = _render((SCAFFOLD / tmpl).read_text(), title, subject, chapter)
+        # `--spec` / `--assume`, written in place of the placeholders. The
+        # prefix is built ONCE at `nb ask`, so a brief left for a hand-edit
+        # afterwards is a first run with no notebook level at all -- and rule
+        # 24 now watches this file, so the placeholders are a lint failure the
+        # moment anything is written.
+        if dest == "_inputs.yml":
+            body = _brief(specs, assumes)
+            if body:
+                head = text.split("specified:")[0]
+                text = head + body
+        (root / dest).write_text(text)
+
+    notebook = Notebook(root)
+    chapter, msg = create_chapter(notebook, chapter, chapter_title, defines)
+    if msg.startswith("rejected"):
+        tell(f"  {msg}")
+        return 1
+
+    if verbose:
+        tell(f"  created   {root}")
+        tell(f"  scaffold  {', '.join(d for _, d in COPIED_VERBATIM)}  (rule 11)")
+        tell(f"  chapter   chapters/{chapter}/")
+
+    # Prove it rather than claim it. A notebook that does not lint is a notebook
+    # whose first `nb ask` fails at preflight, several minutes later.
+    from .. import contract
+    problems = [m for _, _, m in contract.check(root, [chapter])
+                if "(warning)" not in m]
+    tell(f"  lint      {'clean' if not problems else f'{len(problems)} problem(s)'}")
+    for m in problems:
+        tell(f"              {m}")
+
+    from ..preflight import check as preflight
+    bad = [b for b in preflight(root) if "GEMINI_API_KEY" not in b]
+    tell(f"  preflight {'ok' if not bad else 'FAILED'}")
+    for b in bad:
+        tell(f"              {b}")
+
+    # PROVE IT RENDERS, not merely that it lints. "It lints" says the source
+    # satisfies the contract; it says nothing about whether Quarto can execute
+    # the front page, find `_notebook.py`, or resolve the sidebar -- and the
+    # first notebook created by this command discovered all three inside its
+    # first `nb ask`, minutes in and with an API bill attached. Nothing here
+    # solves: the chapter model is a bare scaffold and the front page reads
+    # source, so it is seconds.
+    render = subprocess.run(["uv", "run", "quarto", "render"], cwd=root,
+                            capture_output=True, text=True, timeout=600)
+    ok = render.returncode == 0
+    tell(f"  render    {'ok' if ok else 'FAILED'}")
+    if not ok:
+        for line in (render.stdout + render.stderr).strip().splitlines()[-12:]:
+            tell(f"              {line}")
+
+    if not problems and not bad and ok:
+        tell(f"\n  Fill chapters/{chapter}/_model.py with the vehicle. Then:"
+              f"\n\n    uv run --group nb python -m nb ask {root.name} \\"
+              f"\n      --chapter {chapter} \"<question>\"\n")
+    return 1 if (problems or bad or not ok) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(*sys.argv[1:]))

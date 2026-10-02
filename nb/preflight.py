@@ -36,11 +36,11 @@ def _rule_list_problems(text):
     ITSELF: heading count, contiguity, duplicates. All three passed, because a
     list can be perfectly self-consistent and still describe a different system.
 
-    So it is compared against `lint.RULES` now, which is what a check of a copy
+    So it is compared against `contract.RULES` now, which is what a check of a copy
     has to be. Contiguity is gone with it: 36 was retired and its number is not
     reused, so the registry -- not `range(1, max)` -- decides what exists.
     """
-    import lint
+    from .contract.contract import RULES
     head = RULE_HEADING.search(text)
     if not head:
         return ["system instruction has no '# The N rules lint checks' heading"]
@@ -55,13 +55,13 @@ def _rule_list_problems(text):
     if dupes:
         out.append("rule list: duplicated: rule "
                    + ", ".join(str(d) for d in dupes))
-    missing = sorted(set(lint.RULES) - set(nums))
+    missing = sorted(set(RULES) - set(nums))
     if missing:
         out.append("rule list: lint enforces "
-                   + ", ".join(f"{n} ({lint.RULES[n]})" for n in missing)
+                   + ", ".join(f"{n} ({RULES[n]})" for n in missing)
                    + " and the model is never told — add it to "
                      "system_instruction.md")
-    extra = sorted(set(nums) - set(lint.RULES))
+    extra = sorted(set(nums) - set(RULES))
     if extra:
         out.append("rule list: names rule "
                    + ", ".join(str(n) for n in extra)
@@ -142,13 +142,13 @@ def check(root):
     notebook = Notebook(root)
     bad = []
 
-    # Rule 11, run through the vendored linter itself rather than reimplemented,
+    # Rule 11, run through the contract's own check rather than reimplemented,
     # so the two can never disagree about what "byte-identical" means. It covers
     # `_notebook.py` alone now; `_scratch/_probe_base.py` was the second until
     # probes moved into a kernel and its job passed to `nb/tools/probe_init.py`,
     # which ships with `nb` and so cannot drift.
-    import lint
-    for where, msg in lint._notebook_drift(notebook.root):
+    from .contract.rules import _notebook_drift
+    for where, msg in _notebook_drift(notebook.root):
         bad.append(f"rule 11: {where.name if where else ''} {msg}")
 
     if not (notebook.root / "_quarto.yml").exists():

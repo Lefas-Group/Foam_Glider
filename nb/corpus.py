@@ -27,7 +27,6 @@ cannot act on is itself a defect.
 import pathlib
 import sys
 
-from .config import VENDOR  # noqa: F401  -- importing it puts vendor/ on the path
 
 # (blocking, total). Total carries the warnings, which are the half most likely
 # to move silently: they do not fail a run, so nothing else would notice.
@@ -75,7 +74,15 @@ EXPECTED = {
     #
     # +1/+1 rule 39, which now asks an index to carry its input callouts and
     # nothing else: this one still heads its code dump "## The model".
-    "aircraft-notebook": (32, 33),
+    #
+    # -1/-1 when rule 11 stopped checking `_scratch/_probe_base.py`. Probes run
+    # in a kernel `nb` starts, so the chapter loader is `nb/tools/probe_init.py`
+    # -- ordinary `nb` code, propagated by being imported rather than copied --
+    # and there is no second copied file to drift. This notebook had a
+    # `_probe_base.py` that differed from the canonical one; `aircraft-notebook`
+    # never had the file at all. Both findings were real under the old rule and
+    # are not findings under the new one.
+    "aircraft-notebook": (31, 32),
     # +3 blocking from rule 31: its four chapters hold four copies of one
     # _model.py, three of them byte-identical to an earlier chapter and
     # none carrying a fork header. Correct, and frozen.
@@ -105,13 +112,22 @@ EXPECTED = {
     # chapters do it. The count falling is the false positives going, not
     # coverage: chapter 04 of RADICAL-GLIDER still reports its four genuinely
     # unreferenced helpers, and this notebook keeps thirteen of its own.
-    "optimised-glider-notebook": (83, 107),
+    #
+    # -1/-1 when rule 11 stopped checking `_scratch/_probe_base.py`. Probes run
+    # in a kernel `nb` starts, so the chapter loader is `nb/tools/probe_init.py`
+    # -- ordinary `nb` code, propagated by being imported rather than copied --
+    # and there is no second copied file to drift. This notebook had a
+    # `_probe_base.py` that differed from the canonical one; `aircraft-notebook`
+    # never had the file at all. Both findings were real under the old rule and
+    # are not findings under the new one.
+    "optimised-glider-notebook": (82, 106),
 }
 
 
 def counts(root):
-    import lint
-    problems = lint.check(root, lint.chapters_of(root))
+    from .contract import check
+    from .contract.shared import chapters_of
+    problems = check(root, chapters_of(root))
     blocking = [m for _, _, m in problems if "(warning)" not in m]
     return len(blocking), len(problems)
 
@@ -132,6 +148,19 @@ def _imports():
     broken = []
     for mod in pkgutil.walk_packages([str(pathlib.Path(__file__).parent)], "nb."):
         if mod.name.endswith(".corpus"):
+            continue
+        # NOT A MODULE, despite living here. `nb.tools.probe_init` is the source
+        # text `kernel.py` sends as a probe kernel's first cell: it execs the
+        # chapter into whatever namespace it lands in and reads $NB_ROOT to know
+        # which one. Importing it runs that at import time, in a process where
+        # neither is true.
+        #
+        # It is a real file rather than a string literal in `kernel.py` so that
+        # it is linted and syntax-checked like everything else -- which this
+        # loop would otherwise be the one thing to refuse. Skipped by name
+        # because the alternative, a try/except around the env read, would make
+        # a kernel that never loaded its chapter look healthy.
+        if mod.name == "nb.tools.probe_init":
             continue
         try:
             importlib.import_module(mod.name)
@@ -165,15 +194,15 @@ def main(argv=()):
     # THE CONTRACT'S OWN HEALTH, beside the counts. A rule nobody wrote a
     # reason for is a rule nobody can argue with, which is how a contract
     # accumulates lines that fire on things that look fine -- and it used to be
-    # an impression rather than a number. `lint.WHY` and the `Rule N.`
+    # an impression rather than a number. `contract.WHY` and the `Rule N.`
     # docstrings are the two homes; this counts what is in neither.
-    import lint
-    gaps = lint.unexplained()
+    from .contract.contract import RULES, unexplained
+    gaps = unexplained()
     if gaps:
-        print(f"\n  {len(gaps)} of {len(lint.RULES)} rules have no recorded "
-              f"reason, in lint.WHY or a check's docstring:")
+        print(f"\n  {len(gaps)} of {len(RULES)} rules have no recorded "
+              f"reason, in contract.WHY or a check's docstring:")
         for n in gaps:
-            print(f"    {n:3}  {lint.RULES[n]}")
+            print(f"    {n:3}  {RULES[n]}")
     if not bad:
         print("\ncorpus unchanged.")
         return 0

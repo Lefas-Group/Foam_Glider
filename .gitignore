@@ -40,10 +40,20 @@ optimised-glider-notebook/.quarto/
 # And `**/` because a slash anywhere but the end anchors a pattern to this
 # file's directory -- `_scratch/*` would match only at the repo root.
 **/_scratch/*
-# ...except the vendored probe base, which rule 11 REQUIRES and preflight
-# refuses to start without. Ignoring it meant no notebook was reproducible from
-# git: a fresh clone could not run `nb ask` on anything until the file was
-# restored by hand. Found by checking out an old commit and watching it fail.
+# ...except `_probe_base.py` in the two notebooks the design-notebook SKILL
+# owns. It was every notebook's, and the negation was global: rule 11 required
+# the file and preflight refused to start without it, so ignoring it left no
+# notebook reproducible from git -- a fresh clone could not run anything until
+# somebody restored it by hand. Found by checking out an old commit and watching
+# it fail.
+#
+# `nb` no longer uses it at all: probes run in a kernel `nb` starts and the
+# chapter loader is `nb/tools/probe_init.py`, which ships with `nb`. The skill
+# still has its own copy and its own rule 11 checking for this one, so the
+# notebooks it lints keep theirs, listed rather than matched by a pattern --
+# RADICAL-GLIDER is `nb`'s and must NOT get one back.
+!glider-notebook/_scratch/_probe_base.py
+!optimised-glider-notebook/_scratch/_probe_base.py
 
 # macOS
 .DS_Store

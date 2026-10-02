@@ -23,15 +23,26 @@ def _furniture():
     """
     The notebook helpers `api_search` does NOT index, by name.
 
-    Read out of `vendor/notebook.py` rather than listed here, so it cannot go
+    Read out of `scaffold/_notebook.py` rather than listed here, so it cannot go
     stale the way a hand-kept list does -- the same reason `api()` introspects
     instead of quoting.
 
     Public names only: a probe reaching for `_render_inputs` is not the case
     this exists for.
+
+    THE PATH COMES FROM `contract.shared`, which is the one place that knows
+    where the seed lives. This built its own -- `__file__.parent.parent /
+    "vendor" / "notebook.py"` -- and the file moved twice under it, so this
+    raised FileNotFoundError from the moment `vendor/` was renamed. Nothing
+    caught it: it runs only when `api_search` MISSES, which no sweep does.
+    Degrades to an empty list rather than raising, because an api_search miss is
+    already the model's bad turn and a traceback on top of it helps nobody.
     """
-    src = pathlib.Path(__file__).parent.parent / "vendor" / "notebook.py"
-    tree = ast.parse(src.read_text())
+    from ..contract.shared import SCAFFOLD_NOTEBOOK
+    try:
+        tree = ast.parse(SCAFFOLD_NOTEBOOK.read_text())
+    except (OSError, SyntaxError):
+        return []
     return sorted(n.name for n in tree.body
                   if isinstance(n, ast.FunctionDef) and not n.name.startswith("_"))
 
@@ -68,7 +79,7 @@ def _miss(query):
 
 
 def api_search(query, kind="all", limit=25):
-    import library_explorer as lx
+    from . import library_explorer as lx
     r = lx.search(query, kind=kind, limit=limit)
     if not r.get("results"):
         return _miss(query)
@@ -106,7 +117,7 @@ def api_list(kind, area="", include_numpy_shadows=False):
     API the model already knows. The 39 aerosandbox-original helpers
     (cosspace, softmax, blend, rotation_matrix_3D) are always shown.
     """
-    import library_explorer as lx
+    from . import library_explorer as lx
     if kind == "classes":
         r = lx.list_classes(area)
     elif kind == "functions":
@@ -140,7 +151,7 @@ def api_list(kind, area="", include_numpy_shadows=False):
 
 
 def api_signature(path, methods=False):
-    import library_explorer as lx
+    from . import library_explorer as lx
     r = lx.get_methods(path) if methods else lx.get_docstring(path)
     if "error" in r:
         return f"{r['error']}"
@@ -212,7 +223,7 @@ def block():
     one implicit cache object to serve them all, so this cannot be built per
     run.
     """
-    import library_explorer as lx
+    from . import library_explorer as lx
     out = [HEADER]
     for path, keep in SURFACE.items():
         r = lx.get_methods(path, docstring_lines=1, include_signature=True)
@@ -234,9 +245,11 @@ def block():
 
 
 def main():
-    import sys
+    # The sys.path insert that used to be here put `nb/vendor` on the path so
+    # that `import library_explorer` would resolve. It is `nb.tools.library_-
+    # explorer` now, a sibling of this file, and `block()` imports it relatively
+    # -- so there is nothing to arrange before calling it.
     from ..config import REFERENCES
-    sys.path.insert(0, str(REFERENCES.parent))
     text = block()
     dest = REFERENCES / "aerosandbox-api.md"
     dest.write_text(text)

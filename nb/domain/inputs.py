@@ -1,0 +1,495 @@
+"""
+What the notebook has already been given, and what it has guessed.
+
+A LIBRARY, not a command. `nb inputs` printed this as a report, grouped by
+lineage -- and it was a read over callouts that are already on every page, for
+a register that does not exist yet. What earns its place is the lookup:
+
+  * `declared()` is what `probe._inputs_notice` puts to the model after its
+    first probe, which is what made `ask_specified` fire at all -- it was 3 of
+    8 runs before;
+  * `inherited()` is the candidate set a NEW chapter carries forward, reviewed
+    at the new-chapter stop.
+
+Read from the chapter INDEXES, whose callouts hold what the chapter was given
+rather than what one entry computed. The entry-level read went with the
+command: the source holds `{python} f"{sm:.2f}"` where only the freeze holds
+`0.10`, and nothing needed it.
+"""
+
+import re
+def declared(notebook, chapter):
+    """
+    (specified, assumed) counts for ONE chapter.
+
+    Delegated to `shared.declared_items`, which knows both sources: a chapter
+    with `_inputs.yml` is read from it, one without from its index callouts.
+    This used to carry its own regex over the markdown, and the day the items
+    moved into a data file that copy would have returned zero -- silently, for
+    the notice that is the only reason `ask_specified` fires at all.
+    """
+    from ..contract import shared
+    items = shared.declared_items(notebook.root, chapter)
+    spec = sum(1 for k, _ in items if k == "Specified")
+    return spec, len(items) - spec
+
+
+# Words too common to mean anything on their own. A name is matched on what is
+# distinctive in it, so "static margin" finds "center of gravity (or static
+# margin): 10%" and "wing" alone finds nothing useful.
+_NOISE = {"the", "a", "an", "of", "for", "and", "or", "in", "at", "to",
+          "value", "used", "per", "its"}
+
+
+def _words(text):
+    """Significant words, case-folded, punctuation gone."""
+    return {w for w in re.sub(r"[^a-z0-9]+", " ", str(text).lower()).split()
+            if len(w) > 2 and w not in _NOISE}
+
+
+def _pairs(block):
+    """`[(handle, why)]` from an `overwrites:` block, whatever shape it came in."""
+    out = []
+    for row in (block or []):
+        h, _, why = (row if isinstance(row, str) else
+                     f"{row[0]}: {row[1]}" if len(row) > 1 else row[0]).partition(":")
+        out.append((h.strip(), why.strip()))
+    return out
+
+
+def own(notebook, chapter, entries_before=None):
+    """
+    [(kind, text, handle)] this chapter declares ITSELF, both tiers.
+
+    `_inputs.yml` holds what is true of every entry here and the handle is its
+    id; an entry's callout holds what that question introduced and the handle
+    is its stem. Only the first was ever read back, so an `ask_specified`
+    answer -- which lands in the second -- was invisible to the next run, and
+    the same quantity got asked twice.
+
+    `entries_before` takes only the first N entries, for an ancestor seen
+    through a fork: see `_lineage`.
+    """
+    from ..contract import shared
+    # THE HANDLE IS ALSO PART OF THE IDENTITY for a chapter item, because the
+    # format is `- <id>: <text>` and the text never repeats the name.
+    # `- dihedral: 20 degrees determines the cross-angle` says nothing about
+    # dihedral except in its id, so matching on text alone let "dihedral angle"
+    # be asked again.
+    ids = {t: i for i, t in shared.input_ids(notebook.root, chapter).items()}
+    out = [(k, t, ids.get(t, chapter))
+           for k, t in shared.declared_items(notebook.root, chapter)]
+    standing = [_words(t) | _words(w) for _, t, w in out]
+
+    # WHAT THIS CHAPTER SAYS NO LONGER HOLDS. `_inputs.yml`'s `overwrites:`
+    # is the within-chapter twin of `_fork.yml`'s: an entry may revise an
+    # assumption without asking anyone, and the register has to know which
+    # value is in force rather than reporting both. Handles are dropped
+    # wherever they came from -- an entry's stem, or an inherited
+    # `<chapter>/<handle>`, which `_ancestral` checks separately.
+    data = shared.read_inputs(notebook.root, chapter) or {}
+    dead = {h for h, _ in _pairs(data.get("overwrites"))}
+
+    rows = [r for r in shared.entry_items(notebook.root, chapter)
+            if r[2] not in dead]
+    if entries_before is not None:
+        keep = {e.stem for e in notebook.entries(chapter)[:entries_before]}
+        rows = [r for r in rows if r[2] in keep]
+    # An entry that introduced an item the chapter later took into its
+    # `_inputs.yml` still carries its own callout -- correctly, because that
+    # callout says what THAT entry introduced. Listing both says the same
+    # commitment twice, so the restatement is dropped: the chapter's wording is
+    # the standing one. Same subset test as `settled` below, which is the only
+    # notion of "these are the same quantity" this file has.
+    for kind, text, where in rows:
+        words = _words(text)
+        if any(w and w <= words for w in standing):
+            continue
+        out.append((kind, text, where))
+    return out
+
+
+def _lineage(notebook, chapter, parent=None):
+    """
+    [(ancestor, entries_at_the_fork)] nearest first, or [] for a root.
+
+    THE CUTOFF IS THE POINT OF IT. `_fork.yml` records `at_entry:` -- how many
+    entries the parent had written when the copy was taken -- and that is
+    exactly what decides which of the parent's assumptions this chapter was
+    built on. An entry written in the parent AFTERWARDS was never part of what
+    this chapter inherited: nobody reviewed it at the fork, and the human who
+    approved the inheritance approved the set that existed then.
+
+    It compounds down a chain: C sees B's entries up to C's `at_entry`, and A's
+    up to B's. Each step carries its own cutoff, which is the one its own
+    `_fork.yml` recorded.
+
+    `parent` seeds the walk for a chapter that does not exist yet, which is
+    what the fork-time review needs -- there is no `_fork.yml` to read until
+    `create_chapter` has run.
+    """
+    from ..contract import shared
+    out, seen, cur = [], {chapter}, chapter
+    if parent and parent != chapter and (notebook.chapters_dir / parent).is_dir():
+        out.append((parent, None))     # not forked yet: everything it has
+        seen.add(parent)
+        cur = parent
+    for _ in range(len(notebook.chapters())):
+        fork = shared.read_fork(notebook.root, cur) or {}
+        nxt = (fork.get("parent") or "").strip()
+        if not nxt or nxt in seen or not (notebook.chapters_dir / nxt).is_dir():
+            break
+        try:
+            at = int(fork.get("at_entry") or 0) or None
+        except (TypeError, ValueError):
+            at = None
+        seen.add(nxt)
+        out.append((nxt, at))
+        cur = nxt
+    return out
+
+
+def _ancestral(notebook, chapter, parent=None):
+    """
+    (carried, dropped) from this chapter's ancestors. The one walk both
+    `committed` and `inherited` project from.
+
+    `carried` is [(kind, text, ancestor, handle)]: the ancestor is what the
+    review groups by, and the handle is the id or entry stem WITHIN it. Both
+    are needed and neither substitutes -- `<ancestor>/<handle>` is exactly the
+    `overwrites:` syntax, and the handle alone is what carries an item's
+    identity when its text does not (`- dihedral: 20 degrees…` names dihedral
+    only in its id).
+    """
+    from ..contract import shared
+    chain = _lineage(notebook, chapter, parent)
+    gone = shared.departures(notebook.root, notebook.chapters())
+    # THIS CHAPTER'S OWN OVERWRITES COUNT. The test was against the ancestors
+    # alone -- written when this only ever ran for a chapter that did not exist
+    # yet and so could not have overwritten anything. Used for a chapter that
+    # DOES exist, an item it had already struck came straight back.
+    breakers = {c for c, _ in chain} | {chapter}
+    # An inherited item this chapter overwrote in its own `_inputs.yml`, by the
+    # `<ancestor>/<handle>` the register reports.
+    from ..contract import shared
+    mine = {h for h, _ in _pairs(
+        (shared.read_inputs(notebook.root, chapter) or {}).get("overwrites"))}
+    carried, dropped = [], []
+    for c, at in chain:
+        ids = shared.input_ids(notebook.root, c)
+        for kind, text, handle in own(notebook, c, entries_before=at):
+            if any(t == text for _, t, _, _ in carried):
+                continue
+            if f"{c}/{handle}" in mine:
+                dropped.append((kind, text, c, chapter))
+                continue
+            item_id = next((i for i, t in ids.items() if t == text), None)
+            by = gone.get((c, item_id)) if item_id else None
+            if by and by in breakers:
+                dropped.append((kind, text, c, by))
+                continue
+            carried.append((kind, text, c, handle))
+    return carried, dropped
+
+
+def carried(notebook, chapter, parent=None, own_rows=None):
+    """
+    [(kind, text, where)] this chapter carries from ABOVE it.
+
+    ONE QUERY, TWO MOMENTS. The fork review asks it before the chapter exists,
+    seeding the walk with `parent`; the chapter index and `committed` ask it
+    afterwards. Those were two functions returning the same rows from the same
+    `_ancestral` walk, alike enough that they agreed only because one author
+    kept them so -- and `active` was the second definition of a word the probe
+    notice already had a first definition of.
+
+    THE RESTATEMENT FILTER IS UNCONDITIONAL, which is what let them merge. It
+    drops an ancestor's item this chapter states in its own words, so the
+    chapter's wording wins; at fork time the chapter has no words yet, `own()`
+    is empty, and the filter is a no-op. The one behaviour that cannot be
+    shared is the notebook brief, which `inherited` falls back to for a root
+    chapter and which must never reach `committed` -- so that stays with the
+    caller that wants it.
+
+    `where` is `<ancestor>/<handle>`: what `overwrites:` takes, what
+    `_active.yml` keys a row by, and what `short` formats for a terminal.
+    `own_rows` is the caller's already-read `own(...)`, which `committed` has.
+    """
+    have = [_words(t) | _words(w)
+            for _, t, w in (own(notebook, chapter) if own_rows is None
+                            else own_rows)]
+    out = []
+    for kind, text, anc, handle in _ancestral(notebook, chapter, parent)[0]:
+        words = _words(text) | _words(handle)
+        if any(w and w <= words for w in have):
+            continue
+        out.append((kind, text, f"{anc}/{handle}"))
+    return out
+
+
+def committed(notebook, chapter):
+    """
+    [(kind, text, where)] -- everything in force for an entry written here.
+
+    THE CHAPTER'S OWN, AND ITS ANCESTORS'. A fork COPIES its parent's
+    `_model.py`, so every assumption the parent's entries made while building
+    that vehicle comes across in the most literal way there is -- and this used
+    to read the current chapter alone, so the first entry in a fresh fork was
+    shown nothing at all. Measured on 02-wings-at-rear: it inherits eight items
+    and `committed` reported zero.
+
+    An ancestor's item keeps `<ancestor>/<handle>` as its `where`, so the
+    register SHOWS provenance rather than asserting the item as this chapter's
+    own -- and that string is the one `overwrites:` takes. The distinction is
+    what makes including an ancestor's ENTRY-level assumptions safe: "velocity:
+    5 m/s (from 01-first-chapter)" is a fact about where to look, not a claim
+    that every entry here assumes it. Promoting the same item into this
+    chapter's `_inputs.yml` WOULD be that claim, and would be false for roughly
+    half of them.
+
+    NOT the notebook's brief, which `inherited` falls back to for a chapter
+    with no ancestor. It is true of every chapter equally, the prefix quotes it
+    under its own heading, and a root chapter picking it up here while a forked
+    one did not would make the register mean two different things depending on
+    where you stood.
+    """
+    rows = list(own(notebook, chapter))
+    return rows + carried(notebook, chapter, own_rows=rows)
+
+
+# An entry's callout is markdown written for THAT page, so it may carry an
+# inline `{python} ...` expression that only resolves in that entry's session --
+# `**Launch height: `{python} f"{h:.0f}"` m**` is a real one, from
+# 01-foam-glider. Rendered verbatim onto a descendant's index it executes there,
+# where `h` was never defined, and takes the whole page down. The number is not
+# recoverable from source (only the freeze holds it), so the expression becomes
+# an ellipsis and the provenance points at the entry that has the value.
+_INLINE = re.compile(r"`\{=?python\}[^`]*`|\{\{<[^>]*>\}\}")
+
+
+def _flatten(text):
+    """One line of plain markdown, safe to render on a page that is not its own."""
+    return " ".join(_INLINE.sub("…", str(text)).split())
+
+
+def write_active(notebook, chapter):
+    """
+    Regenerate `chapters/<c>/_active.yml`. True when the bytes changed.
+
+    DERIVED, and the only derived file in a chapter -- which is the cost of
+    putting the inherited set on the page. `_notebook.py` renders at Quarto
+    time with no `nb` on the path, so it cannot call `carried()`; it reads what
+    this wrote. The alternative was porting `_lineage`/`_ancestral` into the
+    shared runtime, which would make the word "inherited" mean whatever two
+    copies of that walk happened to agree on.
+
+    Stale is the failure to fear, so every commit rewrites EVERY chapter's
+    copy. NOT because a new entry moves what a descendant inherits -- it
+    cannot: `_lineage` freezes each fork at its `at_entry` cutoff, a new entry
+    always lands after every existing cutoff, and 02-wings-at-rear still shows
+    3 of 01-first-chapter's 6 entry-level items long after 01 grew past entry
+    5. This comment used to claim the opposite, which would have had the next
+    reader reasoning from a property the cutoff specifically denies.
+
+    What DOES move a descendant's copy is an ancestor's `_inputs.yml` changing
+    (rule 2 promotion), an `overwrites:` being added, or a refactor editing an
+    entry from BEFORE the cutoff. Rare, and never in the chapter being
+    written -- which is the actual argument for doing all of them: the file
+    that goes wrong is not the one this run touched, and the sweep costs a YAML
+    read each.
+
+    Empty `_active.yml` is still written for a root chapter, so that "no file"
+    means "never generated" rather than "nothing inherited" -- the two want
+    different fixes and the renderer cannot tell them apart.
+
+    The handle is written WHOLE. It was `short`ened while the page printed it
+    as provenance, and that collapsed an entry stem to its date -- putting
+    three unrelated entries under the key `2026-09-24` in 01-first-chapter the
+    moment a chapter contributed several of its own. Nothing displays it now,
+    so its jobs are to name the declaration a row came from and to say, by the
+    presence of a `/`, whether that was an ancestor or an earlier entry here.
+
+    Two rows CAN still share a handle, and that is not the collision above: it
+    is one entry that declared two assumptions. The handle names the
+    declaration and not one line of it -- the same thing `_item_text` says when
+    it joins them.
+    """
+    # ANCESTORS ONLY. This chapter's own entry-level assumptions were in here
+    # briefly and should not have been: a chapter is CHRONOLOGICAL, and an
+    # assumption the fourth entry made is not a premise of the page -- hoisting
+    # it to the top asserts at the head of the chapter what only becomes true
+    # part way down, which is the one thing a dated lab notebook must not do.
+    # They are already stated in their place, on the entry that made them.
+    #
+    # What DOES belong is an ancestor's, including the entry-level ones it
+    # declared BEFORE the fork -- `_lineage`'s `at_entry` cutoff -- because
+    # those were premises of the vehicle this chapter copied.
+    rows = carried(notebook, chapter)
+    lines = ["# GENERATED by `nb` on every commit, from the ancestor chain.",
+             "# Not hand-edited: the next commit overwrites it. What a chapter",
+             "# declares ITSELF is `_inputs.yml`, which is the file to edit.",
+             "#",
+             "# Rendered by `chapter_inputs()` as one collapsed callout, so a",
+             "# reader sees what is in force here without walking the chain.",
+             "#",
+             "# Every row is `<ancestor>/<handle>`: what this chapter was",
+             "# forked with. What its own entries assume stays on those entries.",
+             ""]
+    for key, kind in (("specified", "Specified"), ("assumed", "Assumed")):
+        lines.append(f"{key}:")
+        for k, text, where in rows:
+            if k == kind:
+                lines.append(f"  - {where}: {_flatten(text)}")
+    body = "\n".join(lines) + "\n"
+    f = notebook.chapters_dir / chapter / "_active.yml"
+    try:
+        if f.read_text() == body:
+            return False
+    except OSError:
+        pass
+    f.write_text(body)
+    return True
+
+
+def refresh_active(notebook):
+    """
+    Rewrite every chapter's `_active.yml`. Returns the chapters that changed.
+
+    Whole-notebook because inheritance is: the run writes into one chapter and
+    can move what any descendant of it inherits. Cheap enough to be
+    unconditional -- it reads YAML and entry callouts and solves nothing.
+    """
+    return [c for c in notebook.chapters() if write_active(notebook, c)]
+
+
+def short(handle, chapter=""):
+    """
+    A handle as it reads in a listing: an id whole, an entry as its date.
+
+    An id IS the thing `replaces=` and `overwrites:` take, so truncating it
+    makes it useless -- `foam-thick` is not a handle. An entry stem is 70
+    characters of slug whose front is a date, and the date is what places it
+    against the entries the prefix already lists.
+
+    FOR A TERMINAL OR THE MODEL, never for a page. Its three callers are the
+    probe notice, the fork review and `_inherited_note`. `_active.yml` keys its
+    rows by the WHOLE handle and the chapter index prints no provenance at all,
+    so shortening there only cost uniqueness -- three unrelated entries landing
+    on one `2026-09-24`.
+    """
+    from ..contract import shared
+    if handle == chapter:
+        return ""
+    if not shared.is_entry(handle):
+        return handle
+    anc, _, tail = handle.rpartition("/")
+    return f"{anc}/{tail[:10]}" if anc else handle[:10]
+
+
+def settled(notebook, chapter, name):
+    """
+    The committed item this question is about, or None.
+
+    A QUANTITY IS SETTLED WHEN EVERY DISTINCTIVE WORD OF ITS NAME IS ALREADY IN
+    THE REGISTER. "static margin" matches "center of gravity (or static
+    margin): 10%", which is the case this was written for -- asked on one entry
+    and asked again, verbatim, two entries later.
+
+    Deliberately a subset test and not a similarity score. It fires when the
+    thing being asked about is named in something already agreed, which is
+    exactly when the user would be answering the same question twice; anything
+    looser starts refusing genuinely new inputs, and a refusal the model cannot
+    understand is worse than a duplicate.
+    """
+    want = _words(name)
+    if not want:
+        return None
+    for kind, text, where in committed(notebook, chapter):
+        if kind == "Specified" and want <= (_words(text) | _words(where)):
+            return kind, text, where
+    return None
+
+
+def ancestry(notebook, chapter, parent=None):
+    """
+    `[parent, grandparent, ...]` from the `_fork.yml` chain. Empty for a root.
+
+    `parent` SEEDS the walk, for a chapter that does not exist yet. That is the
+    case the inheritance review is for and the case it never handled: it runs
+    before `create_chapter`, so `chapters/<chapter>/_fork.yml` is not there,
+    the walk returned empty, and every new chapter -- fork or not -- was
+    offered the notebook's brief instead of its parent's declarations. The
+    fallback was doing the work of the lookup, silently and always.
+
+    Cycles are impossible by construction -- `create_chapter` only ever names
+    an EARLIER chapter -- but a hand-edited file could make one, and a lint run
+    that hangs is worse than one that is wrong. So the walk is bounded by the
+    number of chapters.
+    """
+    out, seen, cur = [], {chapter}, chapter
+    if parent and parent != chapter and (notebook.chapters_dir / parent).is_dir():
+        out.append(parent)
+        seen.add(parent)
+        cur = parent
+    for _ in range(len(notebook.chapters())):
+        f = notebook.chapters_dir / cur / "_fork.yml"
+        try:
+            m = re.search(r"^parent:\s*(.+?)\s*$", f.read_text(), re.M)
+        except OSError:
+            break
+        if not m:
+            break
+        cur = m.group(1).strip()
+        if cur in seen or not (notebook.chapters_dir / cur).is_dir():
+            break
+        seen.add(cur)
+        out.append(cur)
+    return out
+
+
+def inherited(notebook, chapter, parent=None):
+    """
+    (kept, dropped) -- what this chapter carries from its ANCESTORS.
+
+    COMPUTED, not asked. With the parent named in `_fork.yml` the candidate set
+    is a lookup -- no model judgement and no turn. What cannot be computed is
+    whether the fork BREAKS an item: forking 5 mm to 3 mm inherits "tail
+    dimensions remain 100x30 mm", and that may or may not survive. So this
+    produces the list and the human strikes what the fork invalidates, which is
+    a review rather than an open question.
+
+    BOTH TIERS, through `own`. It read `_inputs.yml` alone, which is half of
+    what a fork actually carries: measured on the fork that moved the X-Wing's
+    wings to the rear, it was offered two items and inherited eight, and the
+    one it explicitly broke ("Wing position: x=0.25 m, placed near
+    mid-fuselage") was not among the two. The human could not strike what they
+    were never shown.
+
+    Each ancestor is seen AS OF THE FORK, via `_lineage`'s cutoff: an entry
+    written in the parent afterwards was never part of what this chapter was
+    built on.
+
+    A chapter with no ancestor inherits from the NOTEBOOK instead -- the front
+    page states what the aircraft is, and a new aircraft in an existing
+    notebook is where the most is open, not the least.
+
+    `dropped` is [(kind, item, from, overwritten_by)] -- items an ancestor
+    declared that a LATER chapter replaced. They used to be in the list:
+    chapter 06 was offered "Foam thickness: 3 mm" (04) beside "Foam 5 mm,
+    174.4 g/m2 sheet throughout" (01) as thirteen peers. `_fork.yml`'s
+    `overwrites:` records the override now, so it is mechanical and the dropped
+    set is reported rather than silently missing.
+    """
+    from ..contract import shared
+    if not _lineage(notebook, chapter, parent):
+        # The brief has no ancestor and no handle to point at -- it is stated
+        # once, at the notebook root, and `where` carries that name so the row
+        # shape holds even here.
+        return [(k, t, notebook.root.name)
+                for k, t in shared.notebook_items(notebook.root)], []
+    # THE SAME ROWS THE PAGE WILL SHOW, from `carried` -- this is the review
+    # of exactly what the new chapter is about to be given, so computing it a
+    # second way here is how the two come to disagree. `dropped` still needs
+    # the raw walk, which reports what a later chapter already replaced.
+    return (carried(notebook, chapter, parent),
+            _ancestral(notebook, chapter, parent)[1])

@@ -1,0 +1,86 @@
+---
+title: "What is the level-flight stall speed with an 850 mAh pack?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 150.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 220.0        # s granted for the probe
+PROBE_SPENT = 3.9      # s the probe actually used
+
+import matplotlib.pyplot as plt
+import numpy as _np
+
+m_dry_g = 195.2  # dry mass from 2026-10-02-01-does-the-airframe-with-specified-electronics-achieve-the-claimed-156-g
+m_battery_g = 72.0  # 850 mAh 3S LiPo pack specified in prompt
+m_flight_kg = (m_dry_g + m_battery_g) * 1e-3
+
+stall = compute_stall_characteristics(airplane, mass_kg=m_flight_kg)
+v_stall_ms = stall["V_stall"]
+v_stall_mph = stall["V_stall_mph"]
+cl_max = stall["CL_max"]
+alpha_stall = stall["alpha_stall_deg"]
+wing_loading = stall["wing_loading_g_dm2"]
+v_cruise_ms = v_stall_ms * 1.3
+v_cruise_mph = v_stall_mph * 1.3
+
+op_post = asb.OperatingPoint(atmosphere=asb.Atmosphere(altitude=0), velocity=v_stall_ms, alpha=11.0)
+cl_11deg = float(asb.AeroBuildup(airplane=airplane, op_point=op_post).run()["CL"][0])
+cl_drop_pct = (1.0 - cl_11deg / cl_max) * 100.0
+```
+
+::: {.hero}
+[`{python} f"{v_stall_ms:.2f} m/s ({v_stall_mph:.1f} mph)"`]{.hero-value}
+[level-flight stall speed at total flying mass]{.hero-label}
+:::
+
+**Answer.** Level-flight stall speed is [`{python} f"{v_stall_ms:.2f} m/s"`]{.key} ([`{python} f"{v_stall_mph:.1f} mph"`]{.key}) at [`{python} f"α = {alpha_stall:.1f}°"`]{.key} and [`{python} f"C_L = {cl_max:.3f}"`]{.key} (@fig-stall). Combining the `{python} f"{m_battery_g:.0f} g"` battery pack with the [`{python} f"{m_dry_g:.1f} g"` dry airframe](2026-10-02-01-does-the-airframe-with-specified-electronics-achieve-the-claimed-156-g.qmd) yields [`{python} f"{wing_loading:.1f} g/dm²"`]{.key} wing loading. This refutes the 'slow' flight claim: comfortable cruise requires [`{python} f"{v_cruise_ms:.1f} m/s"`]{.key} ([`{python} f"{v_cruise_mph:.1f} mph"`]{.key}) and hand launches need a firm throw. However, the 'steady with good stall characteristics' claim is supported: lift drops only [`{python} f"{cl_drop_pct:.1f}%"`]{.key} beyond stall into a flat plateau without snapping, backed by strong nose-down restoring pitch moments.
+
+```{python}
+#| label: fig-stall
+#| fig-cap: "Airplane lift and pitching moment curves alongside required level-flight airspeed across angle of attack, showing the stall boundary."
+alphas_plot = _np.linspace(0, 14, 141)
+op_plot = asb.OperatingPoint(atmosphere=asb.Atmosphere(altitude=0), velocity=v_stall_ms, alpha=alphas_plot)
+aero_plot = asb.AeroBuildup(airplane=airplane, op_point=op_plot).run()
+
+CL_plot = aero_plot["CL"]
+Cm_plot = aero_plot["Cm"]
+W_plot = m_flight_kg * 9.80665
+rho_plot = 1.225
+S_plot = airplane.s_ref
+V_req = _np.sqrt(2 * W_plot / (rho_plot * S_plot * _np.maximum(CL_plot, 1e-4)))
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.5, 3.2))
+
+ax1.plot(alphas_plot, CL_plot, color="tab:blue", lw=2, label="$C_L$")
+ax1.plot(alphas_plot, Cm_plot, color="tab:orange", lw=1.8, linestyle="--", label="$C_m$")
+ax1.plot(alpha_stall, cl_max, "ro", markersize=5)
+ax1.annotate(f"Stall ($C_{{L,\\max}}={cl_max:.3f}$)", (alpha_stall, cl_max), textcoords="offset points", xytext=(-55, 8), fontsize=8)
+ax1.set_xlabel("Angle of attack $\\alpha$ (deg)")
+ax1.set_ylabel("Coefficients $C_L$, $C_m$")
+ax1.set_xlim(0, 14)
+ax1.set_ylim(-0.4, 0.9)
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="center left", frameon=False, fontsize=8.5)
+
+ax2.plot(alphas_plot[10:], V_req[10:], color="tab:green", lw=2, label="Required $V$")
+ax2.axhline(v_stall_ms, color="gray", linestyle=":", lw=1.5, label=f"Stall ({v_stall_ms:.1f} m/s)")
+ax2.plot(alpha_stall, v_stall_ms, "ro", markersize=5)
+ax2.set_xlabel("Angle of attack $\\alpha$ (deg)")
+ax2.set_ylabel("Airspeed (m/s)")
+ax2.set_xlim(0, 14)
+ax2.set_ylim(5, 30)
+ax2.grid(True, alpha=0.3)
+ax2.legend(loc="upper right", frameon=False, fontsize=8.5)
+
+fig.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(compute_stall_characteristics)
+```

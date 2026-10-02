@@ -94,7 +94,7 @@ class FileSystem:
         is worth. `nb watch` is unaffected: it measures whether the file GREW,
         not what the lines say.
         """
-        from ..log import _log
+        from ..process.log import _log
         import os
         return _log if _log is not None else open(os.devnull, "w")
 

@@ -1,24 +1,34 @@
 """
-Paths, model settings and budgets. Imported first by everything else, because
-importing it is what puts `nb/vendor` on the path.
+Paths, model settings and budgets. Imported early by everything else, for the
+constants below.
 
-The vendored modules (`lint`, `check`, `freezediff`, `library_explorer`) use
-same-directory imports of each other, so they have to be reachable as top-level
-names rather than as `nb.vendor.lint`.
+IT USED TO PUT `nb/vendor` ON sys.path. Four modules lived there -- `lint`,
+`check`, `freezediff`, `library_explorer` -- importing each other by bare name,
+and the insert was what made that work. None of them was ever vendored anywhere:
+they sat in `vendor/` because they had been lifted out of the design-notebook
+skill, where they were loose files in a project directory.
+
+They are ordinary `nb` modules now and import each other relatively, so the path
+mutation is gone with them. It was not free: `sys.path.insert` at import time
+means any `import lint` ANYWHERE in the process resolves to this one, including
+in code that has nothing to do with `nb`.
+
+AND THERE IS NO `vendored/` EITHER. One file genuinely is copied into each
+notebook -- `_notebook.py`, which Quarto execs at render time, so it has to be a
+file inside the Quarto project and a notebook has to render without `nb`
+installed. But "vendored" was never what that made it: `nb new` writes it
+alongside `_model.qmd`, `_quarto.yml` and five others, and it lives with them in
+`scaffold/`. Rule 11 still polices the copy; it just polices it against the seed
+it was scaffolded from rather than against a library.
 """
 
 import os
 import pathlib
-import sys
 
 NB = pathlib.Path(__file__).resolve().parent
-VENDOR = NB / "vendor"
-REFERENCES = VENDOR / "references"
+REFERENCES = NB / "references"
 SCAFFOLD = NB / "scaffold"
 SYSTEM_INSTRUCTION = NB / "system_instruction.md"
-
-if str(VENDOR) not in sys.path:
-    sys.path.insert(0, str(VENDOR))
 
 # ---------------------------------------------------------------- model
 
@@ -114,7 +124,7 @@ MAX_LINT_ATTEMPTS = 3   # write -> lint -> write
 # for a reason the entry did not cause: exit 124, killed on a deadline sized as
 # if the freeze would spare its pages, which a TARGETED render never does. Two
 # runs died that way on 2026-09-18, one of them ending `verify_failed` having
-# never verified anything. `lint.will_execute` removes that cause; this makes
+# never verified anything. `build.render.will_execute` removes that cause; this makes
 # the next one survivable rather than terminal, at the price of one extra turn
 # on the rare genuine guess.
 MAX_RENDER_FIXES = 2
@@ -162,7 +172,7 @@ API_TIMEOUT_MS = 300_000
 
 # No DEFAULT_ENTRY_CEILING here. There was one, and nothing read it: the prompt
 # default and lint's fallback both come from the NOTEBOOK's own `_notebook.py`
-# via `lint._defaults`, which is right -- a notebook has to render without `nb`
+# via `contract.shared._defaults`, which is right -- a notebook has to render without `nb`
 # installed, so the number it renders under belongs to it. A second copy here
 # could only ever disagree, and did: this one said 20 s while the notebook said
 # 200 s, and the notebook won every time.
@@ -256,14 +266,14 @@ class Notebook:
         return self.run / "transcript.jsonl"
 
     def chapters(self):
-        import lint
-        return lint.chapters_of(self.root)
+        from .contract.shared import chapters_of
+        return chapters_of(self.root)
 
     def entries(self, chapter):
         """Entry .qmd files, date-prefixed, in chronological order."""
-        import lint
+        from .contract.shared import ENTRY_FILE
         d = self.chapters_dir / chapter
-        return sorted(p for p in d.glob("*.qmd") if lint.ENTRY_FILE.match(p.name))
+        return sorted(p for p in d.glob("*.qmd") if ENTRY_FILE.match(p.name))
 
     def __repr__(self):
         return f"Notebook({self.root.name})"

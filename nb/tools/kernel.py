@@ -51,7 +51,7 @@ import re
 import sys
 import time
 
-from ..log import say
+from ..process.log import say
 
 # One per run directory. Keyed by path rather than held on the session because
 # `run_probe` takes the session optionally and the run directory is the thing

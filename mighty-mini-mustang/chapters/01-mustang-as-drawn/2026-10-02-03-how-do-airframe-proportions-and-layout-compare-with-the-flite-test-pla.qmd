@@ -1,0 +1,39 @@
+---
+title: "How do airframe proportions and layout compare with the Flite Test plan?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 180.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 220.0        # s granted for the probe
+PROBE_SPENT = 4.6      # s the probe actually used
+
+props = compute_geometry_proportions(airplane)
+
+b_w_spec = b_w
+s_w_spec = S_w_spec
+area_err_pct = abs(props["s_w"] - s_w_spec) / s_w_spec * 100.0
+```
+
+**Answer.** The reconstructed airframe faithfully matches the Flite Test planform (@fig-three-view). The wing preserves the plan's `{python} f"{b_w_spec*1e3:.0f} mm"` span and `{python} f"{s_w_spec*1e4:.0f} cm²"` area within [`{python} f"{area_err_pct:.3f}%"`]{.key}. Aspect ratio is [`{python} f"{props['ar_w']:.2f}"`]{.key} with a taper ratio of [`{python} f"{props['taper_w']:.3f}"`]{.key}. Tail surfaces provide [`{python} f"{props['sh_sw']*100:.1f}%"`]{.key} wing area for the horizontal tail and [`{python} f"{props['sv_sw']*100:.1f}%"`]{.key} for the vertical fin, with tail volume coefficients of [`{python} f"{props['vh']:.3f}"`]{.key} and [`{python} f"{props['vv']:.3f}"`]{.key}. Fuselage length is [`{python} f"{props['l_fuse']*1e3:.0f} mm"`]{.key}, spanning [`{python} f"{props['lfuse_bw']*100:.1f}%"`]{.key} of wingspan.
+
+```{python}
+#| label: fig-three-view
+#| fig-cap: "Standard four-panel three-view projection of the reconstructed FT Mighty Mini Mustang MKR2 airframe showing top, front, side, and isometric perspectives."
+import matplotlib.pyplot as plt
+
+axs = airplane.draw_three_view(show=False)
+for ax in axs.flat:
+    ax.set_xlim3d([-0.08, 0.58])
+    ax.set_ylim3d([-0.36, 0.36])
+    ax.set_zlim3d([-0.30, 0.42])
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(compute_geometry_proportions)
+```
