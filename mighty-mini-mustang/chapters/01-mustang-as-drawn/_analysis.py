@@ -149,3 +149,121 @@ def compute_stall_characteristics(
         "iterations": it,
     }
 
+
+def compute_geometry_proportions(airplane: asb.Airplane) -> dict:
+    """
+    Compute airframe geometry proportions and tail volume coefficients.
+
+    Parameters
+    ----------
+    airplane : asb.Airplane
+        The aircraft model.
+
+    Returns
+    -------
+    dict
+        Geometric dimensions, area ratios, span ratios, moment arms,
+        and tail volume coefficients.
+    """
+    wing = None
+    htail = None
+    vtail = None
+    fuse = airplane.fuselages[0] if len(airplane.fuselages) > 0 else None
+
+    for w in airplane.wings:
+        name_lower = w.name.lower()
+        if "vert" in name_lower or "fin" in name_lower:
+            vtail = w
+        elif "horiz" in name_lower or "stab" in name_lower:
+            htail = w
+        else:
+            wing = w
+
+    b_w = float(wing.span())
+    b_w_proj = float(wing.span("xy"))
+    s_w = float(wing.area())
+    ar_w = float(wing.aspect_ratio())
+    c_mac_w = float(wing.mean_aerodynamic_chord())
+    c_root_w = float(wing.xsecs[0].chord)
+    c_tip_w = float(wing.xsecs[-1].chord)
+    taper_w = c_tip_w / c_root_w
+
+    # Wing aerodynamic center (approx quarter-chord of MAC)
+    y_mac_w = (b_w / 6) * (1 + 2 * taper_w) / (1 + taper_w)
+    x_le_root_w = wing.xsecs[0].xyz_le[0]
+    x_le_tip_w = wing.xsecs[-1].xyz_le[0]
+    x_le_mac_w = x_le_root_w + (x_le_tip_w - x_le_root_w) * (y_mac_w / (b_w / 2))
+    x_ac_w = x_le_mac_w + 0.25 * c_mac_w
+
+    # Horizontal tail
+    b_h = float(htail.span())
+    s_h = float(htail.area())
+    ar_h = float(htail.aspect_ratio())
+    c_mac_h = float(htail.mean_aerodynamic_chord())
+    c_root_h = float(htail.xsecs[0].chord)
+    c_tip_h = float(htail.xsecs[-1].chord)
+    taper_h = c_tip_h / c_root_h
+
+    y_mac_h = (b_h / 6) * (1 + 2 * taper_h) / (1 + taper_h)
+    x_le_root_h = htail.xsecs[0].xyz_le[0]
+    x_le_tip_h = htail.xsecs[-1].xyz_le[0]
+    x_le_mac_h = x_le_root_h + (x_le_tip_h - x_le_root_h) * (y_mac_h / (b_h / 2))
+    x_ac_h = x_le_mac_h + 0.25 * c_mac_h
+
+    l_h = x_ac_h - x_ac_w
+    vh = (s_h * l_h) / (s_w * c_mac_w)
+
+    # Vertical tail
+    b_v = float(vtail.span())
+    s_v = float(vtail.area())
+    ar_v = float(vtail.aspect_ratio())
+    c_mac_v = float(vtail.mean_aerodynamic_chord())
+    c_root_v = float(vtail.xsecs[0].chord)
+    c_tip_v = float(vtail.xsecs[-1].chord)
+    taper_v = c_tip_v / c_root_v
+
+    z_mac_v = (b_v / 3) * (1 + 2 * taper_v) / (1 + taper_v)
+    x_le_root_v = vtail.xsecs[0].xyz_le[0]
+    x_le_tip_v = vtail.xsecs[-1].xyz_le[0]
+    x_le_mac_v = x_le_root_v + (x_le_tip_v - x_le_root_v) * (z_mac_v / b_v)
+    x_ac_v = x_le_mac_v + 0.25 * c_mac_v
+
+    l_v = x_ac_v - x_ac_w
+    vv = (s_v * l_v) / (s_w * b_w)
+
+    # Fuselage
+    l_fuse = float(fuse.length()) if fuse else 0.0
+
+    return {
+        "b_w": b_w,
+        "b_w_proj": b_w_proj,
+        "s_w": s_w,
+        "ar_w": ar_w,
+        "c_mac_w": c_mac_w,
+        "c_root_w": c_root_w,
+        "c_tip_w": c_tip_w,
+        "taper_w": taper_w,
+        "x_ac_w": x_ac_w,
+        "b_h": b_h,
+        "s_h": s_h,
+        "ar_h": ar_h,
+        "c_mac_h": c_mac_h,
+        "x_ac_h": x_ac_h,
+        "l_h": l_h,
+        "vh": vh,
+        "sh_sw": s_h / s_w,
+        "bh_bw": b_h / b_w,
+        "b_v": b_v,
+        "s_v": s_v,
+        "ar_v": ar_v,
+        "c_mac_v": c_mac_v,
+        "x_ac_v": x_ac_v,
+        "l_v": l_v,
+        "vv": vv,
+        "sv_sw": s_v / s_w,
+        "bv_bw": b_v / b_w,
+        "l_fuse": l_fuse,
+        "lfuse_bw": l_fuse / b_w if b_w > 0 else 0.0,
+    }
+
+
