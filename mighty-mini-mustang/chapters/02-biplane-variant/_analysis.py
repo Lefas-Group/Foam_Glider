@@ -211,3 +211,303 @@ def find_stall_speed(
         "cla_ratio": cla_ratio,
         "cl_max_isolated": cl_max_isolated,
     }
+
+
+def build_aileron_airplanes(
+    delta_a_deg: float = 12.0,
+) -> dict[str, asb.Airplane]:
+    """Construct monoplane and biplane models with equivalent aileron area.
+
+    Parameters
+    ----------
+    delta_a_deg : float
+        Aileron deflection throw in degrees.
+
+    Returns
+    -------
+    dict[str, asb.Airplane]
+        Dictionary containing 'monoplane', 'biplane_4ail', and 'biplane_2ail'.
+    """
+    # Monoplane baseline
+    b_m = 0.622
+    c_r_m = 0.133
+    c_t_m = 0.087
+    s_m = 0.068485
+    sweep_m = 5.0
+    dih_m = 2.5
+
+    def chord_m(y: float) -> float:
+        return c_r_m - (c_r_m - c_t_m) * (y / (b_m / 2.0))
+
+    y_in_m = 0.50 * (b_m / 2.0)
+    y_out_m = 0.95 * (b_m / 2.0)
+    x_in_m = y_in_m * np.tan(np.radians(sweep_m))
+    x_out_m = y_out_m * np.tan(np.radians(sweep_m))
+    x_tip_m = (b_m / 2.0) * np.tan(np.radians(sweep_m))
+    z_in_m = y_in_m * np.tan(np.radians(dih_m))
+    z_out_m = y_out_m * np.tan(np.radians(dih_m))
+    z_tip_m = (b_m / 2.0) * np.tan(np.radians(dih_m))
+
+    wing_mono = asb.Wing(
+        name="Monoplane Wing",
+        symmetric=True,
+        xsecs=[
+            asb.WingXSec(xyz_le=[0.0, 0.0, 0.0], chord=c_r_m, airfoil=asb.Airfoil("naca2404")),
+            asb.WingXSec(
+                xyz_le=[x_in_m, y_in_m, z_in_m],
+                chord=chord_m(y_in_m),
+                airfoil=asb.Airfoil("naca2404"),
+                control_surfaces=[asb.ControlSurface(name="aileron", symmetric=False, deflection=delta_a_deg, hinge_point=0.75)],
+            ),
+            asb.WingXSec(
+                xyz_le=[x_out_m, y_out_m, z_out_m],
+                chord=chord_m(y_out_m),
+                airfoil=asb.Airfoil("naca2404"),
+                control_surfaces=[asb.ControlSurface(name="aileron", symmetric=False, deflection=delta_a_deg, hinge_point=0.75)],
+            ),
+            asb.WingXSec(xyz_le=[x_tip_m, b_m / 2.0, z_tip_m], chord=c_t_m, airfoil=asb.Airfoil("naca2404")),
+        ],
+    )
+
+    # Empennage and fuselage
+    b_htail = 0.213
+    c_r_h = 0.060
+    c_t_h = 0.037
+    x_h_le = 0.28325
+    x_tip_h = (b_htail / 2.0) * np.tan(np.radians(8.0))
+    htail = asb.Wing(
+        name="Horizontal Tail",
+        symmetric=True,
+        xsecs=[
+            asb.WingXSec(xyz_le=[x_h_le, 0.0, 0.02], chord=c_r_h, airfoil=asb.Airfoil("naca0008")),
+            asb.WingXSec(xyz_le=[x_h_le + x_tip_h, b_htail / 2.0, 0.02], chord=c_t_h, airfoil=asb.Airfoil("naca0008")),
+        ],
+    )
+
+    b_vtail = 0.088
+    c_r_v = 0.065
+    c_t_v = 0.032
+    x_v_le = x_h_le - 0.005
+    x_tip_v = b_vtail * np.tan(np.radians(20.0))
+    vtail = asb.Wing(
+        name="Vertical Tail",
+        symmetric=False,
+        xsecs=[
+            asb.WingXSec(xyz_le=[x_v_le, 0.0, 0.02], chord=c_r_v, airfoil=asb.Airfoil("naca0008")),
+            asb.WingXSec(xyz_le=[x_v_le + x_tip_v, 0.0, 0.02 + b_vtail], chord=c_t_v, airfoil=asb.Airfoil("naca0008")),
+        ],
+    )
+
+    fuse = asb.Fuselage(
+        name="Fuselage",
+        xsecs=[
+            asb.FuselageXSec(xyz_c=[-0.100, 0.0, 0.000], width=0.020, height=0.020, shape=4),
+            asb.FuselageXSec(xyz_c=[-0.070, 0.0, 0.000], width=0.045, height=0.055, shape=4),
+            asb.FuselageXSec(xyz_c=[ 0.000, 0.0, 0.010], width=0.048, height=0.075, shape=4),
+            asb.FuselageXSec(xyz_c=[ 0.060, 0.0, 0.020], width=0.048, height=0.085, shape=4),
+            asb.FuselageXSec(xyz_c=[ 0.150, 0.0, 0.010], width=0.045, height=0.080, shape=4),
+            asb.FuselageXSec(xyz_c=[ 0.250, 0.0, 0.010], width=0.035, height=0.060, shape=4),
+            asb.FuselageXSec(xyz_c=[ 0.350, 0.0, 0.015], width=0.020, height=0.035, shape=4),
+            asb.FuselageXSec(xyz_c=[ 0.382, 0.0, 0.020], width=0.010, height=0.025, shape=4),
+        ],
+    )
+
+    airplane_mono = asb.Airplane(
+        name="FT Mighty Mini Mustang Monoplane",
+        xyz_ref=[0.025, 0.0, 0.0],
+        wings=[wing_mono, htail, vtail],
+        fuselages=[fuse],
+        s_ref=s_m,
+        c_ref=wing_mono.mean_aerodynamic_chord(),
+        b_ref=b_m,
+    )
+
+    # Biplane geometries
+    b_b = 0.440
+    gap_b = 0.095
+    s_b = s_m
+    taper_b = 0.087 / 0.133
+    c_r_b = (s_b / 2.0) / (b_b / 2.0 * (1.0 + taper_b))
+    c_t_b = c_r_b * taper_b
+
+    def chord_b(y: float) -> float:
+        return c_r_b - (c_r_b - c_t_b) * (y / (b_b / 2.0))
+
+    y_in_b = 0.50 * (b_b / 2.0)
+    y_out_b = 0.95 * (b_b / 2.0)
+    x_in_b = y_in_b * np.tan(np.radians(5.0))
+    x_out_b = y_out_b * np.tan(np.radians(5.0))
+    x_tip_b = (b_b / 2.0) * np.tan(np.radians(5.0))
+
+    # 4-aileron biplane (both wings, cf/c = 0.25)
+    wing_lower_4ail = asb.Wing(
+        name="Lower Wing 4-ail",
+        symmetric=True,
+        xsecs=[
+            asb.WingXSec(xyz_le=[0.0, 0.0, 0.0], chord=c_r_b, airfoil=asb.Airfoil("naca2404")),
+            asb.WingXSec(
+                xyz_le=[x_in_b, y_in_b, 0.0],
+                chord=chord_b(y_in_b),
+                airfoil=asb.Airfoil("naca2404"),
+                control_surfaces=[asb.ControlSurface(name="aileron", symmetric=False, deflection=delta_a_deg, hinge_point=0.75)],
+            ),
+            asb.WingXSec(
+                xyz_le=[x_out_b, y_out_b, 0.0],
+                chord=chord_b(y_out_b),
+                airfoil=asb.Airfoil("naca2404"),
+                control_surfaces=[asb.ControlSurface(name="aileron", symmetric=False, deflection=delta_a_deg, hinge_point=0.75)],
+            ),
+            asb.WingXSec(xyz_le=[x_tip_b, b_b / 2.0, 0.0], chord=c_t_b, airfoil=asb.Airfoil("naca2404")),
+        ],
+    )
+
+    wing_upper_4ail = asb.Wing(
+        name="Upper Wing 4-ail",
+        symmetric=True,
+        xsecs=[
+            asb.WingXSec(xyz_le=[0.0, 0.0, gap_b], chord=c_r_b, airfoil=asb.Airfoil("naca2404")),
+            asb.WingXSec(
+                xyz_le=[x_in_b, y_in_b, gap_b],
+                chord=chord_b(y_in_b),
+                airfoil=asb.Airfoil("naca2404"),
+                control_surfaces=[asb.ControlSurface(name="aileron", symmetric=False, deflection=delta_a_deg, hinge_point=0.75)],
+            ),
+            asb.WingXSec(
+                xyz_le=[x_out_b, y_out_b, gap_b],
+                chord=chord_b(y_out_b),
+                airfoil=asb.Airfoil("naca2404"),
+                control_surfaces=[asb.ControlSurface(name="aileron", symmetric=False, deflection=delta_a_deg, hinge_point=0.75)],
+            ),
+            asb.WingXSec(xyz_le=[x_tip_b, b_b / 2.0, gap_b], chord=c_t_b, airfoil=asb.Airfoil("naca2404")),
+        ],
+    )
+
+    airplane_bi_4ail = asb.Airplane(
+        name="FT Mighty Mini Mustang Biplane 4-Aileron",
+        xyz_ref=[0.025, 0.0, 0.0],
+        wings=[wing_lower_4ail, wing_upper_4ail, htail, vtail],
+        fuselages=[fuse],
+        s_ref=s_b,
+        c_ref=wing_lower_4ail.mean_aerodynamic_chord(),
+        b_ref=b_b,
+    )
+
+    # 2-aileron biplane (lower wing only, cf/c = 0.50)
+    wing_lower_2ail = asb.Wing(
+        name="Lower Wing 2-ail",
+        symmetric=True,
+        xsecs=[
+            asb.WingXSec(xyz_le=[0.0, 0.0, 0.0], chord=c_r_b, airfoil=asb.Airfoil("naca2404")),
+            asb.WingXSec(
+                xyz_le=[x_in_b, y_in_b, 0.0],
+                chord=chord_b(y_in_b),
+                airfoil=asb.Airfoil("naca2404"),
+                control_surfaces=[asb.ControlSurface(name="aileron", symmetric=False, deflection=delta_a_deg, hinge_point=0.50)],
+            ),
+            asb.WingXSec(
+                xyz_le=[x_out_b, y_out_b, 0.0],
+                chord=chord_b(y_out_b),
+                airfoil=asb.Airfoil("naca2404"),
+                control_surfaces=[asb.ControlSurface(name="aileron", symmetric=False, deflection=delta_a_deg, hinge_point=0.50)],
+            ),
+            asb.WingXSec(xyz_le=[x_tip_b, b_b / 2.0, 0.0], chord=c_t_b, airfoil=asb.Airfoil("naca2404")),
+        ],
+    )
+
+    wing_upper_noail = asb.Wing(
+        name="Upper Wing No-ail",
+        symmetric=True,
+        xsecs=[
+            asb.WingXSec(xyz_le=[0.0, 0.0, gap_b], chord=c_r_b, airfoil=asb.Airfoil("naca2404")),
+            asb.WingXSec(xyz_le=[x_tip_b, b_b / 2.0, gap_b], chord=c_t_b, airfoil=asb.Airfoil("naca2404")),
+        ],
+    )
+
+    airplane_bi_2ail = asb.Airplane(
+        name="FT Mighty Mini Mustang Biplane 2-Aileron",
+        xyz_ref=[0.025, 0.0, 0.0],
+        wings=[wing_lower_2ail, wing_upper_noail, htail, vtail],
+        fuselages=[fuse],
+        s_ref=s_b,
+        c_ref=wing_lower_2ail.mean_aerodynamic_chord(),
+        b_ref=b_b,
+    )
+
+    return {
+        "monoplane": airplane_mono,
+        "biplane_4ail": airplane_bi_4ail,
+        "biplane_2ail": airplane_bi_2ail,
+    }
+
+
+def evaluate_roll_performance(
+    airplane: asb.Airplane,
+    velocity: float,
+    b_ref: float,
+    delta_a_deg: float = 12.0,
+) -> dict[str, float]:
+    """Compute linear stability derivatives and nonlinear roll trim rate.
+
+    Parameters
+    ----------
+    airplane : asb.Airplane
+        Aircraft model with ailerons deflected.
+    velocity : float
+        Flight speed in m/s.
+    b_ref : float
+        Reference wingspan in meters.
+    delta_a_deg : float
+        Aileron deflection angle in degrees.
+
+    Returns
+    -------
+    dict[str, float]
+        Dictionary of Clp, Cl_da, linear roll rate [deg/s], and nonlinear roll rate [deg/s].
+    """
+    # 1. Damping at delta_a = 0
+    ap_0 = airplane.deepcopy()
+    for w in ap_0.wings:
+        for xs in w.xsecs:
+            if xs.control_surfaces:
+                for cs in xs.control_surfaces:
+                    cs.deflection = 0.0
+
+    op_trim = asb.OperatingPoint(velocity=velocity, alpha=0.0)
+    res_0 = asb.AeroBuildup(airplane=ap_0, op_point=op_trim).run_with_stability_derivatives(p=True)
+    clp = float(np.ravel(res_0["Clp"])[0])
+
+    # 2. Control power at delta_a = 1.0 deg
+    ap_eps = airplane.deepcopy()
+    for w in ap_eps.wings:
+        for xs in w.xsecs:
+            if xs.control_surfaces:
+                for cs in xs.control_surfaces:
+                    cs.deflection = 1.0
+    res_eps = asb.AeroBuildup(airplane=ap_eps, op_point=op_trim).run()
+    cl_eps = float(np.ravel(res_eps["Cl"])[0])
+    cl_da = cl_eps / np.radians(1.0)
+
+    # Linear roll rate
+    delta_a_rad = np.radians(delta_a_deg)
+    pb_2v_lin = - (cl_da * delta_a_rad) / clp
+    p_lin_deg = float(np.degrees(pb_2v_lin * (2.0 * velocity / b_ref)))
+
+    # 3. Direct nonlinear roll trim
+    def res_p(p_rad: float) -> float:
+        op = asb.OperatingPoint(velocity=velocity, alpha=0.0, p=p_rad)
+        ab = asb.AeroBuildup(airplane=airplane, op_point=op).run()
+        return float(np.ravel(ab["Cl"])[0])
+
+    sol = root_scalar(res_p, bracket=[-80.0, 0.0], method="brentq")
+    p_nonlin_rad = float(sol.root)
+    p_nonlin_deg = float(np.degrees(p_nonlin_rad))
+
+    return {
+        "clp": clp,
+        "cl_da": cl_da,
+        "pb_2v_lin": pb_2v_lin,
+        "p_lin_deg": abs(p_lin_deg),
+        "p_nonlin_deg": abs(p_nonlin_deg),
+        "p_nonlin_rad": abs(p_nonlin_rad),
+    }
+
