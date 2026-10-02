@@ -1,0 +1,22 @@
+# THE BRIEF for the aircraft. True of the whole aircraft, inherited by every
+# chapter and every entry, and never superseded: a fork that departs from one
+# of these is not a fork, it is a different aircraft and so a different
+# notebook. Written by a PERSON, never by a run.
+#
+# Rendered into index.qmd. Same format as a chapter's `_inputs.yml`:
+# `- <id>: <text>`, ten words each.
+#
+# The test for what belongs here rather than in the first chapter: IF THIS
+# CHANGED, WOULD IT STILL BE THE SAME AEROPLANE? A 300 mm span, no. Foam 5 mm
+# — yes, that is the same project at a different thickness, so it is a chapter.
+specified:
+  - wing-span-18: "**Wing span**: 18 m."
+  - wing-area-11: "**Wing area**: 11.39 m²."
+  - empty-mass-337: "**Empty mass**: 337 kg."
+  - maximum-take-off: "**Maximum take-off mass**: 565 kg."
+  - maximum-water-ballast: "**Maximum water ballast**: 208 L."
+  - maximum-wing-loading: "**Maximum wing loading**: 52 kg/m²."
+  - published-best-glide: "**Published best glide ratio**: 45.9."
+  - placarded-speed-range: "**Placarded speed range**: 75-280 km/h."
+assumed:
+  - airfoil-unknown-for: "**Airfoil** unknown for the 2c; assume a DFVLR HQ-series section."
