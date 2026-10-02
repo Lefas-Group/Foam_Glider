@@ -1,0 +1,19 @@
+# THE BRIEF for the aircraft. True of the whole aircraft, inherited by every
+# chapter and every entry, and never superseded: a fork that departs from one
+# of these is not a fork, it is a different aircraft and so a different
+# notebook. Written by a PERSON, never by a run.
+#
+# Rendered into index.qmd. Same format as a chapter's `_inputs.yml`:
+# `- <id>: <text>`, ten words each.
+#
+# The test for what belongs here rather than in the first chapter: IF THIS
+# CHANGED, WOULD IT STILL BE THE SAME AEROPLANE? A 300 mm span, no. Foam 5 mm
+# — yes, that is the same project at a different thickness, so it is a chapter.
+specified:
+  - subject-ft-mighty: "**FT Mighty Mini Mustang MKR2**, Flite Test plan."
+  - construction-flat-plate: "**Flat plate foam**, hand cut and hot glued."
+  - span-622-mm: "**Span**: 622 mm (24.5 in) tip to tip."
+  - wing-area-0: "**Wing area**: 0.0742 m2 (115 in2), aspect ratio 5.2."
+  - cg-25-mm: "**CG**: 25 mm aft of the wing leading edge."
+  - power-2205-2300: "**Power**: 2205 2300 kv motor, 6x4.5 prop, 3S LiPo."
+  - controls-aileron-elevator: "**Controls**: aileron, elevator and rudder, 12 degree throws."
