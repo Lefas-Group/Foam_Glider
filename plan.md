@@ -1,281 +1,380 @@
-# Probes in a persistent kernel
+# Sourcing geometry, and the clause that skipped it
 
-Written 2026-09-30. Replaces the earlier plan, which proposed a solve cache and
-rejected a kernel; that rejection rested on a leaked-monkeypatch scenario that
-restart-on-kill removes, and on a simplicity claim that did not survive looking
-at what each end state has to carry. Nothing here is implemented yet.
+Written 2026-10-02. Replaces the kernel plan, which is implemented — every run
+below carries a `kernel.log` and spent 17–67 probes without exhausting its
+pool. Nothing here is implemented yet.
 
-Evidence throughout is one run:
-`RADICAL-GLIDER/_scratch/runs/20260930-074952-19aa` — *"Does replacing the
-hand-rolled mass geometry with `Wing.area()` and `Fuselage.volume()` move any
-answer in this chapter?"*, 39 turns, 258.8 s of a 300 s probe pool, committed as
-`464848c`.
+Evidence throughout is one programme, `mighty-mini-mustang`, three committed
+entries reconstructing the FT Mighty Mini Mustang MKR2 from its published
+specification:
+
+| run | question | tool calls | outcome |
+|---|---|---:|---|
+| `20261002-100435-b81e` | does it hit the claimed 156 g dry? | 103 | `max_turns`, resumed, stalled once, committed |
+| `20261002-101821-023a` | level-flight stall speed? | 35 | committed |
+| `20261002-102433-a21b` | what does it look like? | 44 | committed |
 
 ## The problem
 
-Every probe is a fresh `uv run python probe.py` subprocess. Nothing survives it.
-Where that run's pool went:
+All three entries are wrong in the same way, and the notebook cannot tell.
 
-| | seconds | share |
-|---|---:|---:|
-| Solves that produced an answer used once | ~119 | 46% |
-| Solves re-run because an earlier result was lost or discarded | 50–65 | ~20% |
-| The killed probe at turn 34 | 62 | 24% |
-| Graph build + IPOPT setup inside each optimiser call | ~40 | 15% |
-| Process start + AeroSandbox import + chapter exec | ~36 | 12% |
+The brief carried seven scalar rows — span, area, aspect ratio, CG, power,
+controls, construction. Nothing about form. Every other dimension in
+`_model.py` was supplied by the model from its own memory of what a Mustang
+looks like:
 
-(Rows overlap — the killed probe contains solve time — so they do not sum.)
+```python
+c_root_w = 0.140      c_tip_w = 0.0986     dihedral_w = 3.0
+x_le_w   = 0.120      b_h = 0.240          b_v = 0.120
+fuse: 6 superellipse stations, shape=4.0, 485 mm long
+S_fuse_shell = 0.0873   S_turtle_canopy = 0.0220   S_belly_scoop = 0.0150
+S_formers_doublers = 0.0100   S_power_pod = 0.0200
+```
 
-Less than half the pool bought an answer used once. Three symptoms, one cause:
+Only `b_w` and `S_w_spec` came from the brief. Three consequences, in
+increasing order of seriousness:
 
-- **Results are discarded.** `optimize_geometry_for_sink_rate(get_airplane)` was
-  solved for the identical baseline at turns 26, 40 and 52.
-- **A kill destroys everything.** Turn 34 printed its entry-03 result at ~20 s
-  and its entry-04 result at ~45 s, then died at 62 s. Both were lost — `os._exit`
-  skips stdio flushing and `capture_output` makes stdout a block-buffered pipe.
-  Turns 40 and 42 re-ran four solves to recover them.
-- **Every probe re-pastes its setup.** A 30-line helper plus a
-  `__globals__` lookup, repeated verbatim in six consecutive probes. That
-  boilerplate is part of why turn 34 overran.
+- **The mass answer may be an artefact.** Those five foam areas total
+  0.134 m² — nearly twice the wing — and are ~47 g of the 87.2 g foam total.
+  The headline finding was 195.2 g against a claimed 156 g. The 39 g overshoot
+  is within the span of the invented areas.
+- **The stall answer rests on a substitution.** The wing uses
+  `asb.Airfoil("naca0006")` while the brief Specifies flat plate. Commented,
+  never declared.
+- **The notebook claims a provenance it does not have.** `_model.py` carries
+  `# Reference surface areas of cut foam parts from FT plan sheet`. An invented
+  number is wearing a citation.
 
-The run ended with 41 s left and two of the chapter's nine entries never
-re-solved under the new mass model. Pool waste became scope loss.
+Across 182 tool calls there were **four** `declare_input` calls — foam density,
+electronics, hardware, glue. All mass, none geometry. The one that was declared
+is the one that got corrected: the coordinator checked 348.7 g/m² against Flite
+Test's own measurement at the assumptions prompt. The mechanism works. It was
+never reached.
 
-## The change
+And the entry whose job was to show the shape certified itself — *"faithfully
+matches the Flite Test planform … within 0.006 %"* — by comparing the model
+against the two numbers the brief supplied. Circular, and it reads as external
+validation.
 
-One IPython kernel per run, started on the first probe, living until the run
-ends. `run_probe` sends the model's question as a cell instead of writing and
-spawning a script. Names survive between probes.
+**And the plan was one search away.** Nobody looked.
 
-Nothing in the `probe` tool's contract changes for the model except one addition:
-each result says what is currently held, and `reset=True` starts clean.
+### The clause that caused it
 
-## Four rules that make it safe
+`nb/agent/schema.py:44-51`, the `source` field description, ends:
 
-These are not optional extras; each one closes a specific failure this run
-exhibited or would have exhibited.
+> *"guessed: nobody knows, a different answer changes HOW ACCURATELY it is
+> modelled, so you assumed it and said what it costs. **If the model or the
+> plans already contain it, it is none of these: compute it.**"*
 
-**1. A budget kill kills the kernel, not the cell.**
+That last sentence assumes the plans are **present**. The run classified taper
+ratio as a plan-derived quantity — correctly, it is on the plan — and the
+instruction says plan-derived quantities are "none of these", so it did not
+declare, it just wrote the number. Then it wrote `# from FT plan sheet`,
+because that is the category it had been told to assign.
 
-`budgets.py` already records the measurement that settles this: *"A signal cannot
-stop a CasADi solve — it lands when the C call returns, 1.15 s measured against a
-0.3 s limit. Killing the process can, at the cost of whatever was in memory."*
-So `KeyboardInterrupt` into a running solve is not an option, and the kill stays
-a process kill followed by a restart.
+The agent followed the instruction. The instruction has a hole for the case
+where the quantity is on a plan nobody has.
 
-The safety consequence is the important half. Every probe from turn 26 onward did
-`optimize_geometry_for_sink_rate.__globals__['_get_mass_properties_casadi'] =
-get_mass_props_library` and restored it afterwards. **Turn 34 was killed with the
-patch installed.** Under a kernel that survives its own kill, turn 40's "orig"
-baseline would silently have been the library model and the entry would have
-shipped wrong with no error anywhere. Restart-on-kill makes that impossible: a
-kill degrades exactly to today's behaviour.
+This supersedes an earlier draft of this plan, which proposed a fourth `source`
+value (`recalled`) for "knowable from a document we do not have". That was
+wrong: `guessed` was always sufficient — had taper ratio been declared
+`guessed`, it would have reached the assumptions prompt and been caught, as the
+foam density was. The failure was declaring **nothing**, and the cause is one
+sentence, not a missing category. The `why` field already carries "recalled
+from memory, not measured" in free text at no cost.
 
-**2. A chapter-source change restarts the kernel.**
+## What the plan actually contains
 
-The run edited `_analysis.py` at turn 56 and probed it at turn 58. Hash
-`_model.py`, `_analysis.py` and `_notebook.py` before each probe; on a change,
-restart and say so in the result. ~5 lines, and it removes the whole staleness
-class.
+Retrieved 2026-10-02, 462 KB, 18 pages, http 200, now committed to the notebook
+root as `FT-Mini-Mustang-v1.0-Tiled.pdf`:
 
-**3. `_IN_KERNEL` stops standing in for "am I a render".**
+```
+s3.amazonaws.com/plans.flitetest.com/stonekap/FT Mini Mustang v1.0 Tiled.pdf
+```
 
-`_notebook.py` uses it as that proxy in two places, and both currently disarm
-under a kernel:
+Page 1 is a specification table:
 
-- `:280` — `ipopt.max_wall_time` is set only outside a kernel. The comment is
-  explicit: *"WALL TIME ONLY OUTSIDE A KERNEL — that is, in a probe and not in a
-  render."* The reason is sound and must be preserved: a render killed on wall
-  time is handed to the model as an error to fix, so a solve slowed by a
-  neighbouring process presents as a bug in a correct entry, and the spurious fix
-  ships. (`max_runtime` → `ipopt.max_cpu_time` is set in both cases and survives.)
-- `:407` — the probe watchdog arms only outside a kernel.
+| | imperial | metric |
+|---|---|---|
+| Length | 19 in | 482 mm |
+| CG | 1.00 in | 25 mm |
+| Wing span | 24 in | 622 mm |
+| Wing area | 115 in² | 7.4 dm² |
+| Dry weight | 5.5 oz | 156 g |
+| **All-up weight** | 7.8 oz | **222 g** |
+| **Wing loading** | 9.8 oz/ft² | **29.9 g/dm²** |
+| Wing cubic loading | — | 10.9 |
 
-Run probes in a kernel without splitting this and **both wall-clock defences
-silently vanish.** Replace the proxy with an explicit signal — `NB_PROBE=1` in
-the kernel's environment, read into a module global by the init cell — so
-"probe" and "render" are distinguished by what they are rather than by how they
-happen to be hosted.
+Page 2 is a drawing key, and every entry in it is a fold type — A (above),
+B (beside), C (cover). **The plan folds the wing.** The flat-plate row in the
+brief is wrong at the source, not merely approximate.
 
-**4. A chapter change restarts the kernel.**
+**Measurement off the tiles is feasible and self-calibrating.** FT tiles print
+at 100 %, and each carries an inch/cm scale bar, so `pdftoppm -r 150` yields
+real millimetres directly from pixel counts — no span-scaling, no perspective
+correction. Verified on tile 5 (`REAR TURTLE DECK`): page renders 7.5 × 10.5 in
+at 150 dpi, outline recovered by thresholding at 128. One real cost: tiled
+plans split parts across page boundaries, so an exact planform needs the tiles
+stitched first. Scriptable, not free.
 
-`chapter` is a per-probe argument today; a kernel binds one. Runs are
-single-chapter in practice, so restart on change rather than maintaining a
-kernel per chapter.
+**Identity caveat.** This is the FT Mini Mustang **v1.0**; the programme's
+subject is the **Mighty Mini MKR2**. Same 115 in² area, 156 g dry weight and
+25 mm CG, but 24 in span against the store page's 24.5 in. Same lineage, not
+provably the same airframe. Do not transplant its numbers without checking.
 
-## Components
+### A quantified defect in a committed entry
 
-**`nb/tools/probe_init.py` — new, ordinary module, not vendored.**
+`023a` computed 36.0 g/dm² wing loading from the invented 195.2 g dry mass and
+derived an 8.80 m/s stall. The plan publishes **29.9 g/dm²**. That is 20 % high,
+and the stall speed is overstated with it — nearer 8.0 m/s at the published
+loading.
 
-The bootstrap `_probe_base.py` performs today: resolve the chapter from
-`$NB_CHAPTER`, then `exec(compile(path.read_text(), str(path), "exec"))` over
-`_notebook.py`, `_model.py`, `_analysis.py`. The `compile()` with a real path is
-load-bearing and must be carried over verbatim — a bare `exec()` of file text
-labels every function `<string>`, `inspect.getsource` then raises `OSError`, and
-`show_source()` and `api()` go silent. This run leaned on `inspect.getsource`
-four times.
+No longer a suspected weakness: a measurable error in committed work, and the
+strongest argument for item 1. The number that would have caught it was on page
+one of a free PDF, before any modelling began.
 
-The runner reads this module's source and sends it as the kernel's init cell. A
-real file, so it is linted and formatted like everything else — not a Python
-program living in a string literal.
+## A principle for the lint items
 
-`_scratch/_probe_base.py` is then deleted, along with its rule-11 entry and its
-`.gitignore` exception. It has exactly one consumer once the kernel lands: the
-hand-probe path it was written for is not used. **`.claude/skills/design-notebook/SKILL.md`
-references it in three places and must be updated in the same change** — leaving
-a skill documenting a deleted file is how the next session gets confidently lost.
+**A rule that misses is worse than no rule**, because "lint clean" stops
+meaning *checked* and starts meaning *probably fine*. That false assurance is
+the same disease as the false citation.
 
-**`nb/tools/kernel.py` — new.**
+So: lint reports facts it can compute exactly — counts, diffs, presence. Where
+only a fuzzy match is available, the rule belongs in the system instruction
+instead, where it reads as guidance rather than a guarantee. Two rules an
+earlier draft proposed are cut below on exactly this test.
 
-Start, send-and-collect, health check, restart, shutdown. `jupyter_client` and
-`ipykernel` are already installed (8.9.1 / 7.3.0) via the core `jupyter`
-dependency Quarto needs, so nothing new is added to `pyproject.toml`.
+## The changes
 
-Kernel cwd is the run directory, as the subprocess's is today — a probe that
-saves a figure writes a relative filename and it must land beside its own run.
+### 1. The coordinator sources the geometry first — skill only, no code
 
-Collection reads iopub until idle, accumulating `stream` (stdout and stderr) and
-`error` payloads into the single string `run_probe` already returns. Output
-arrives as it is produced, so **partial output on a kill is free rather than a
-bug to fix**.
+`MAX_CALLOUT_ITEM = 10` (`contract/shared.py:204`) caps words **per row**, and
+nothing caps the number of rows. `"**Root chord**: 140 mm (5.5 in)."` is seven
+words. The brief could always have carried a dimension table; seven rows were
+written where twenty would have fitted. The channel was not missing — it was
+unused.
 
-**`nb/tools/probe.py` — rewritten around the kernel.**
+Add to *Starting an aircraft* in `coordinate-design`, conditional so
+from-scratch notebooks are untouched:
 
-Deleted: `PREAMBLE`, the `sys.path` insert, the per-run `probe.py` write,
-`subprocess.run` with its `stdin=DEVNULL` workaround (and the SIGTTIN incident
-that forced it), the `TimeoutExpired` branch and its partial-output salvage, and
-the double-timeout arrangement.
+> **If the aircraft already exists, source its geometry before the first ask.**
+> The agent cannot research — no network, sandboxed to `chapters/`. Every
+> dimension you do not supply, it supplies from memory.
+>
+> Find the plan. FT plans are free, print 1:1 and carry a scale bar, so
+> `pdftoppm -r 150` measures them in millimetres. Page one is usually a
+> specification table — read it before modelling anything. Commit the file at
+> the notebook root, as `RADICAL-GLIDER` already does with its X-Wing plan: a
+> dated local copy outlives any URL.
+>
+> Put what you found in as `--spec` rows, one dimension each. **Record what you
+> could not find, too**: `"**Fuselage**: not published; assume and declare
+> it."` An unknown you name is one the run declares; an unknown you leave
+> silent is one it invents and attributes.
 
-Kept unchanged, because they operate on the returned output string and the
-session: `_inputs_notice`, `_scope_hint`, the budget line, the `ENTRY_CEILING`
-notice, `budgets.aero_cost` parsing (`aero_report()` still prints the same line),
-`session.take_probe_budget` / `record_probe` / `record_cost`, and `tail`.
+Also under *Ask*: pre-empt with `--answers` where the value is already known,
+so the question never costs a round trip.
 
-Added: the four restart triggers above, and a held-names line on each result.
+Zero code, available immediately, and it would have caught the wing-loading
+error on its own. This is why it leads.
 
-**`nb/vendor/notebook.py` — loses the watchdog.**
+### 2. Fix the clause
 
-`_probe_budget()`, `_probe_guard_armed`, `_probe_watch`, `_probe_too_long`, the
-`faulthandler` arming and the `NB_PROBE_BUDGET` env channel: ~60 lines, dead once
-no probe runs in its own process. The budget timer moves to the runner, which is
-the only place that knows the pool. The file stays vendored — render needs the
-rest of it — so the change propagates to every notebook.
+One string in `nb/agent/schema.py:50-51`:
 
-Keep `faulthandler.dump_traceback_later(PROBE_SILENCE)` in the init cell. Saying
-*where* a probe is stuck, from its own thread and through a C call, is worth
-keeping and does not depend on who decides to kill it.
+```
+  ...If the model or the plans already contain it, it is none of these:
+  compute it.
 
-**`nb/vendor/lint.py` — rule 11 covers one file instead of two.**
+→ ...If the MODEL already contains it, compute it. If a document would
+  contain it but you do not have that document, it is guessed — declare it
+  and say it was not measured.
+```
 
-**`nb/budgets.py` — the four-layer docstring becomes three.** Layer 2 is gone;
-layer 3 stops being a backstop above a watchdog and becomes the enforcement
-itself, so `WATCHDOG_HEADROOM` shrinks to whatever covers kernel start and
-collection rather than a 15 s polling interval.
+No enum change, no `Literal` widening, and **none of the three `interact.py`
+dispatch sites need touching** (`:207` building the confirmation list, `:886`
+and `:1067` rendering Specified-vs-Assumed). Those three were the bulk of the
+cut `recalled` proposal and the part most likely to silently no-op if one were
+missed. Deleting that proposal removes the risk with it.
 
-## What the model sees
+### 3. Make geometry reach the declaration
 
-Two additions to the `probe` schema, and nothing else:
+The reworded clause removes the excuse; this makes the habit explicit.
 
-- Each result ends with what is held: `[kernel: holding s1_orig, p1_orig,
-  get_mass_props_library (+6 more). Reuse them; re-deriving one costs a solve.]`
-  Without this the win is unrealised — the saving is model-directed, and a model
-  that does not know state persists will not reach for it.
-- `reset=True` to start from a clean namespace.
+- **`system_instruction.md`** — a dimension of a real object not supplied in
+  the brief is `guessed`, declared when written, not at the end. One input per
+  *decision*, not per number: "fuselage cross-sections, assumed from
+  photographs" is one row, not eighteen. That granularity rule already exists
+  for inputs generally and only needs applying.
+- **Also in `system_instruction.md`, not in lint:** never attribute a number to
+  a document unless it was read in this run. An earlier draft made this a lint
+  regex over *from the plan* / *per the drawing*; cut, because it catches one
+  phrasing and misses the next, and a missed false citation is precisely the
+  failure being guarded. It is also close to redundant once item 2 lands, since
+  the clause is what created the false category.
+- **An exact lint report, not a judgement.** Parse `_model.py` with `ast`,
+  count module-level numeric constant assignments, print it beside the number
+  of declared inputs: *"`_model.py` assigns 23 numeric constants; this chapter
+  declares 4 inputs."* A computed fact with no semantics and no false
+  negatives. It does not claim to find geometry — it reports a ratio and leaves
+  the judgement to the human at the prompt. (This chapter would have read
+  roughly 23 against 4.)
 
-And when the runner restarts on its own, the result must say so loudly:
-`[kernel restarted — _analysis.py changed since the last probe. Nothing is
-held.]` A silent restart is a wrong-answer generator.
+### 4. Plumbing — the Q1 stall
 
-## Pros
+Three independent causes, all cheap, all measured in `b81e`:
 
-- **Removes the largest waste with no reconstruction problem.** The alternative —
-  a solve cache — has to persist what `optimize_geometry_for_sink_rate` returns:
-  an `asb.Airplane` with ten monkey-attached floats. Pickle is brittle across
-  AeroSandbox versions; the clean boundary (`Opti.solve`) has no stable key,
-  since what you would hash is a CasADi graph; and storing the floats to rebuild
-  the object requires knowing each helper's return shape, which makes it a
-  convention the model must follow. A kernel does not tear the object down, so
-  none of that exists.
-- **Recovers the partial-output loss as a property, not a patch.** iopub streams.
-- **Removes the re-pasting.** A helper defined once stays defined — the boilerplate
-  that pushed turn 34 over its budget.
-- **~36 s of process start and import**, unconditionally, on every run.
-- **Net simplification.** ~60 vendored lines plus the subprocess plumbing deleted;
-  one fewer vendored file; rule 11 halved. The bootstrap versions with `nb`
-  instead of being copied into four notebooks, two of which have already drifted.
-- **Failure mode is "lost state, re-run"**, not "confidently wrong" — provided
-  rules 1 and 2 hold.
+- **`search_files` returns absolute paths; `list_directory` returns bare
+  names.** The first call returned
+  `/Users/…/mighty-mini-mustang/chapters/01-mustang-as-drawn`, from which the
+  run concluded paths look like `chapters/01-…`. Return root-relative paths.
+- **`mcp_fs.py:156` strips both `chapters/` and the notebook name**, so
+  `chapters/01-x/f` and `01-x/f` both resolve. Forgiving, but the run was never
+  corrected and oscillated between the two forms for 103 calls. Keep accepting
+  both; echo the canonical form back.
+- **Resume is blind.** `nb resume` restored a run whose `stem` was set without
+  telling it an entry was already open. It read for a file that did not exist,
+  then ran `list_directory .`, `list_directory 01-…`, `search_files *`,
+  `search_files **/*` back to back and hit `NO PROGRESS`. That episode is most
+  of why Q1 needed two human interventions. Inject a state summary on resume:
+  entry open, stem, what is written.
 
-## Cons and risks
+### 5. Figure read-back: ask whether the shape is right
 
-- **The safety knob and the benefit knob are the same knob.** Residual hidden
-  state comes from a probe that *raises partway* — turn 22 did exactly that —
-  leaving half-applied state behind with no kill and no restart. Reset-by-default
-  removes the risk and the benefit together. This plan leans to carrying by
-  default, and pays for it with visibility (the held-names line) rather than with
-  resets. It is a judgement, not a proof.
-- **The saving is model-directed.** The cache would have been automatic; this is
-  not. If the model does not reuse carried names, the kernel recovers only the
-  ~36 s of startup. **This is the number to measure before building anything
-  further.**
-- **Kernel lifecycle is the failure-prone kind of complexity** — half-dead
-  kernels, zombies when the runner dies, a restart racing a run that holds
-  `run.lock`. Bounded to one module, but it is where the long tail will be.
-- **It does not touch the ~40 s of graph build and IPOPT setup**, the largest
-  per-probe overhead after solving. That row wants a warm start in the helper,
-  and is out of scope here.
-- **Rule 3 is a genuine trap.** Getting the kernel working and forgetting the
-  `_IN_KERNEL` split leaves a system that looks correct and enforces no wall
-  clock. Write that test first.
-- **`_notebook.py` propagation.** `aircraft-notebook` and
-  `optimised-glider-notebook` already differ from `nb/vendor/notebook.py`. They
-  will surface as rule 11 failures the moment this propagates. Decide up front
-  whether they are resynced or dead.
+The run looked at its own three-view twice. Its reasoning, verbatim:
 
-## Sequence
+> *"Ah, finally, a clean one! … That top-down and front view are perfect; I can
+> see those wingtips with plenty of breathing room, no cropping, no awkward
+> edges."*
 
-0. **Flush, now, as a stopgap.** `PYTHONUNBUFFERED=1` in the probe env plus
-   `sys.stdout.flush()` before `os._exit(9)`. One line of real change; protects
-   every run between now and the kernel landing; deleted when it arrives. Do not
-   let it delay anything.
-1. **Split `_IN_KERNEL`** into "am I a render" and "am I in a kernel", with a test
-   that a probe still gets `ipopt.max_wall_time` and a render still does not.
-   Ships safely on its own, before any kernel exists.
-2. **`probe_init.py`**, still executed by the subprocess path. Delete
-   `_probe_base.py`, its rule-11 entry, its `.gitignore` exception; update
-   `SKILL.md`. Provable with the existing runner — a probe that can still call
-   `show_source()` proves `compile()`-with-path survived.
-3. **`kernel.py` + `run_probe` rewrite**, with restart-on-kill and
-   restart-on-source-change from the first commit, not added after.
-4. **Delete the vendored watchdog**; propagate `_notebook.py`; resolve the two
-   drifted notebooks.
-5. **Measure, then decide what is next.**
+It inspected a drawing that does not resemble a Mustang and passed it, because
+the read-back instruction is about rendering quality — clipping, centring,
+legibility — and never about fidelity. Add the fidelity question for any entry
+drawing a reconstructed airframe. An instruction, not a rule; weak without a
+reference in front of it, which is why it is last.
 
-## What to measure
+## Cut from an earlier draft
 
-Baseline is the run above: 258.8 s pool, 18 probes, ~2 s per trivial probe,
-8–13 s of non-solve overhead per solving probe, and three solves of the identical
-baseline configuration.
+Recorded so they are not re-proposed:
 
-After: probes per run, pool spent, and — the one that decides whether any further
-work is justified — **how many probes reuse a name carried from an earlier probe.**
-If that number is near zero the kernel is worth only its startup saving, and the
-automatic-but-harder solve cache comes back onto the table. If it is high, nothing
-further is needed.
+- **A fourth `source` value, `recalled`** — "knowable from a document we do not
+  have". Two independent reasons, either sufficient.
 
-## Deferred
+  First, **it is not decidable by the party that would apply it.** To mark
+  something `recalled` you must know the document exists and contains it. The
+  agent cannot know that: from inside a sandbox with no network, *on the plan*
+  and *nobody knows* are indistinguishable — both are things it cannot check,
+  so it would have had to guess which category its guess belonged to. And for
+  an agent that can never fetch anything, the category covers every fact about
+  a real aircraft not supplied in the brief; a label that applies to everything
+  in its class discriminates nothing. The coordinator *can* tell, because the
+  coordinator can fetch — but discovering a source exists means having it, so
+  the knowledge and the need for the label are mutually exclusive. **A
+  taxonomy value only works if whoever must apply it can tell when it
+  applies.**
 
-- **Solve cache.** Superseded unless the reuse measurement disappoints. Its
-  serialization core is the reason it is not the primary path.
-- **`keep(...)` explicit value pickling.** The kernel subsumes it.
-- **Warm-starting the optimiser** to attack the ~40 s graph-build row. Separate
-  work, larger prize, touches chapter code rather than tooling.
+  Second, it is unnecessary: item 2 shows the schema clause, not a missing
+  category, is what skipped the declaration. `guessed` was always sufficient.
 
-## Out of scope, but noted
+  The one residual case is a source confirmed to exist but unreachable — the
+  Mustang plans are also on Scribd behind a paywall, and only the S3 copy made
+  this session's retrieval possible. Rare, and free text covers it:
+  `why = "taper: on v1.0 plan, paywalled, estimated"`.
 
-- The chapter now carries two near-identical 40-line optimisers, because
-  `declare_refactor`'s re-solve cost pushed the run into copy-paste rather than
-  adding a `mass_fn=` parameter. A real cost of the refactor rule, and a separate
-  decision.
-- Entries 07 and 09 were never re-solved under the library mass model. Whether
-  `464848c` needs strengthening is a notebook question, not a tooling one.
+  Cutting it removes a schema change, three dispatch-site edits and a concept
+  every future author would have to learn.
+- **A per-chapter shape-provenance mode** (`plan:` / `recalled` / `designed`).
+  Duplicates the assumptions system rather than extending it, and forces every
+  from-scratch notebook to opt out of machinery built for reconstruction.
+  `RADICAL-GLIDER` needs none of it.
+- **A `_refs/` directory and a `read_plan` tool.** The auditability half is
+  free today: the plan sits at the notebook root, which is what
+  `RADICAL-GLIDER` already does. The only thing left would be the agent reading
+  the plan itself — and once the coordinator has extracted the dimensions into
+  the brief, there is nothing for it to read them *for*. Infrastructure for a
+  need that could not be demonstrated. Revisit only if coordinator extraction
+  proves to be the bottleneck in practice.
+- **A lint regex for claimed provenance.** Fails the principle above; moved
+  into the system instruction.
+- **A new "geometry question" kind.** `ask_specified` already exists and was
+  not used, and the reason looks structural: *specified*, *chapter* and
+  *refactor* questions wait an hour, then exit `no_answer`. Asking is a bet
+  that a human is at the board, and losing it kills the run; facing a dozen
+  unknowns, an agent would take that bet twelve times, so it guesses instead.
+  The five-minute assumptions prompt is already the cheap non-blocking ask. One
+  gap left open: five minutes is short if the coordinator wants to go and find
+  the plan — a longer default for larger batches would close it.
+
+## Rejected: web research tools for the agent
+
+Not on principle — for reasons specific to this system.
+
+- **It does not fix the failure.** A run that invents and writes
+  `# from FT plan sheet` will also skim a page and cite it. Web access without
+  items 1–3 makes false provenance more convincing, not less.
+- **Turn budget.** `b81e` hit `max_turns` at 103 calls with no network at all.
+  A search–fetch–disambiguate loop is a turn sink dropped into a budget that is
+  already failing.
+- **Source quality.** Retailer listings quote 200 g for a Maker Foam sheet;
+  that is packaging weight. Flite Test's own measurement of the same Adams
+  board is 115 g. Choosing between them needed knowing Maker Foam *is* coated
+  Adams.
+- **Auditability.** A number from a URL that later 404s is uncheckable.
+- **Injection.** Fetched pages are untrusted text entering a loop that writes
+  code and commits it, inside a sandbox currently hermetic by design.
+
+The better shape is **cache, don't fetch**: sources land in the repo as dated
+files. Retrieval, rasterising, stitching and measuring need network, Bash and
+Python — the coordinator has all three, the agent has none. Extraction is
+coordinator work.
+
+## Not a change, but unexplained
+
+The notebook brief's first row now reads
+`"**FT Mighty Mini Mustang MKR2**, Flite Test plan."`. What was written and
+verified on disk was `"…, from the Flite Test plan."`. Two words were removed
+from a file the design says is written by a person and never by a run.
+
+The agent cannot reach it — the filesystem root is `<notebook>/chapters/`, and
+an attempted `search_files(path="..")` in `a21b` was refused with *"Access
+denied — path outside allowed directories"*. The only `_inputs.yml` writer
+found in `nb` is `domain/inputs.py:350`, which targets `_active.yml`. No
+account of this yet. Worth settling before the brief is trusted as immutable.
+
+## What already works and needs nothing
+
+Recorded so it is not changed by accident:
+
+- **The sandbox holds.** Cross-notebook reads are impossible; the one escape
+  attempt was refused.
+- **The assumptions prompt is effective.** The single geometry-adjacent input
+  that was declared is the single one a human corrected. Items 2 and 3 exist to
+  route more traffic through it, not to replace it.
+- **Recall is better than it looks.** The run guessed a 485 mm fuselage; the
+  plan says 482 mm — 0.6 % out. The problem is not that memory is poor, it is
+  that nothing distinguishes memory from measurement. Label it, do not distrust
+  it.
+- **Lint messages are already descriptive**, quoting the offending text rather
+  than a bare rule number. The rule-hunting seen in two runs
+  (`search_files "*rule*"`, `api_search "rule 5"`) is not caused by poor
+  messages and is not addressed here.
+
+## Order
+
+1. **Item 1** — zero code, available now, and would have caught the
+   wing-loading error on its own. Do this first whatever else happens.
+2. **Item 2** — one string, and the most direct cause of the failure.
+3. **Item 3** — the habit item 2 makes room for, plus one exact report.
+4. **Item 4** — unrelated to the rest, pure bug fixes, and the only item
+   addressing a run that actually failed.
+5. **Item 5** — last, and weakest.
+
+Items 1 and 2 are independent and together address the whole of the observed
+failure. Everything after them is hardening.
+
+## Outstanding against the Mustang programme itself
+
+Separate from the system work: the three committed entries rest on undeclared
+geometry, and `023a`'s wing loading is now known to be 20 % high against the
+published figure. They want re-running once item 1 lands and the plan's
+dimensions are in the brief — not patching in place.
