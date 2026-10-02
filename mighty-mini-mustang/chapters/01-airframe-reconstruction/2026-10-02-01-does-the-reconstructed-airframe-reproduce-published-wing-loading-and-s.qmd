@@ -1,0 +1,63 @@
+---
+title: "Does the reconstructed airframe reproduce published wing loading and static margin?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 90.0
+SOLVE_BUDGET = 15.0
+PROBE_POOL = 200.0
+PROBE_SPENT = 8.9
+
+# Published reference values
+S_pub = 115 * 0.0254**2
+wl_pub = (MASS_AUW * 1e3) / (S_pub * 1e2)
+
+# Reconstructed geometry and wing loading
+S_recon = airplane.s_ref
+wl_recon = (MASS_AUW * 1e3) / (S_recon * 1e2)
+wl_delta_pct = (wl_recon - wl_pub) / wl_pub * 100
+
+# Level flight trim and stability at alpha = 2 deg
+v_trim = find_trim_speed(airplane, mass=MASS_AUW, alpha=2.0)
+trim_stab = evaluate_stability(airplane, velocity=v_trim, alpha=2.0)
+sm_trim = trim_stab["static_margin"]
+x_np_trim = trim_stab["x_np"]
+cg_pct_mac = (airplane.xyz_ref[0] - wing.xsecs[0].xyz_le[0]) / airplane.c_ref * 100
+```
+
+::: {.hero}
+[`{python} f"{sm_trim * 100:.1f}% MAC"`]{.hero-value}
+[Static margin at published 25 mm CG in cruise trim]{.hero-label}
+:::
+
+**Answer.** No. Reconstructing the airframe gives a wing area of [`{python} f"{S_recon*1e2:.2f} dm²"`]{.key}, yielding [`{python} f"{wl_recon:.1f} g/dm²"`]{.key} wing loading at [`{python} f"{MASS_AUW*1e3:.0f} g"`]{.key} all-up weight. This is [`{python} f"{wl_delta_pct:+.1f}%"`]{.key} higher than the published [`{python} f"{wl_pub:.1f} g/dm²"`]{.key}, which assumed nominal [`{python} f"{S_pub*1e2:.2f} dm²"`]{.key} area. At the published [`{python} f"{CG_X*1e3:.0f} mm"`]{.key} CG ([`{python} f"{cg_pct_mac:.1f}%"`]{.key} MAC), the neutral point at cruise trim ([`{python} f"{v_trim:.1f} m/s"`]{.key}) sits at [`{python} f"{x_np_trim*1e3:.1f} mm"`]{.key}. This yields a heavy static margin of [`{python} f"{sm_trim*100:.1f}%"`]{.key} MAC (@fig-three-view).
+
+::: {.callout-tip}
+## New user specifications
+Asked of the user, 2026-10-02:
+
+1. **tail moment arm: 265 mm** — corrected at prompt.
+:::
+
+::: {.callout-note}
+## New assumptions
+1. **wing dihedral: 2.5 deg**, plan gauge unread.
+2. **vertical stabilizer area: 6.6 in2**, plan unextracted.
+3. **fuselage cross-sections: 8 stations**, profile from photos.
+4. **wing leading edge sweep: 5 deg**, matches P-51 outline.
+5. **stand-in airfoils: NACA 2404 / 0008**, DTFB stand-in.
+:::
+
+```{python}
+#| label: fig-three-view
+#| fig-cap: "Standard three-view diagram of the reconstructed airframe."
+_ = airplane.draw_three_view(show=False)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(find_trim_speed, evaluate_stability)
+```

@@ -15,4 +15,10 @@ defines: Plan-derived geometry and mass; folded-DTFB flat-plate wing.
 # HAVE? A number one question produced belongs in that entry. Leave a block
 # empty rather than inventing an item -- an empty callout is never rendered.
 specified:
+  - tail-moment-arm: tail moment arm 265 mm c/4 to c/4
 assumed:
+  - wing-dihedral: wing dihedral 2.5 deg per panel
+  - vert-stab-area: vertical stabilizer area 6.6 in2
+  - fuse-xsecs: fuselage cross-sections 8 stations from photos
+  - wing-le-sweep: wing leading edge sweep 5 deg
+  - standin-airfoils: stand-in airfoils NACA 2404 and 0008
