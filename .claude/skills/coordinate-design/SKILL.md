@@ -33,6 +33,19 @@ The board opens in its own window (every run, its questions, its endings) and
 the site opens in a browser. Do this before your first `nb ask`; the board is
 the view a person uses to follow you, and nothing else opens it.
 
+**One tab, for the whole programme.** The site is served locally and the page
+holds a connection open, so the tab stays current and a committed entry brings
+the tab to it. Run this again whenever you like — it will not pile up tabs; if
+one is already open it says so and opens nothing. `--stop` shuts the server
+down.
+
+**It will tell you if the board cannot answer.** A notebook you hold is one
+whose run questions are yours, so the board shows them and declines to answer
+them — right while you are listening, and a trap when you are not: a hold
+outlives the session that made it, and nothing removes it. If `nb open` says
+the holder has been silent for hours, either you are that holder and all is
+well, or reopen with `--all` and the person at the board can answer again.
+
 If there is no `_site` yet it says so and names `nb view <notebook>` rather than
 building it — a project render re-executes any entry whose freeze is missing,
 which is minutes of solver time, so that stays a decision you make deliberately.
@@ -64,8 +77,8 @@ uv run --group nb python -m nb ask <notebook> \
   **Capture that run id** — you need it to answer.
 - **A watcher window opens for each run**, carrying its transcript from the
   first line and closing itself a few seconds after the run ends. You do not
-  ask for it and do not need to close it. `--no-watch` suppresses it and the
-  committed page both, for a run nobody is going to watch.
+  ask for it and do not need to close it. `--no-watch` suppresses it, and stops
+  the run sending the open tab to its entry — for a run nobody is watching.
 - **`--chapter` is required; routing is yours.** A chapter is a vehicle: pick
   the one whose `_model.py` the question is about. Omitted, nothing starts.
 - **The question is ONE quoted argument.** It must not start with `--` or end

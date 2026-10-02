@@ -39,7 +39,7 @@ from ..preflight import check as preflight
 from ..tools import guards, kernel, verifiers
 from ..tools.interact import ask_pool, ask_render_ceiling, ask_stuck
 from ..agent import briefs
-from ..process import desktop, metrics, runstate
+from ..process import desktop, metrics, runstate, serve
 from .view import site
 from ..agent.setup import setup, report, spoken_calls
 from ..build.publish import (_ceiling_problem, _commit, _refresh_active,
@@ -701,10 +701,16 @@ def _finish(notebook, session, run_metrics, first_pass, moved, accepted):
 
     # AND PUT IT IN FRONT OF SOMEONE. The same gate as the watcher window, so
     # `--no-watch` means "this run opens nothing" rather than suppressing one
-    # of the two. Last, because a browser tab is worth nothing if the commit
-    # did not happen, and `site()` is what writes the page being opened.
+    # of the two. Last, because a page is worth nothing if the commit did not
+    # happen, and `site()` is what writes the one being pointed at.
+    #
+    # A MARKER, NOT A BROWSER CALL. Opening the page would be another tab every
+    # time, and no browser dedupes a URL it already has. `nb open` serves the
+    # site with a few lines of injected JavaScript polling for this file, so
+    # writing it sends whatever tab is open to the new entry -- and writing it
+    # when no server is running is simply read by nobody.
     if (runstate.read(notebook) or {}).get("watch", True):
-        desktop.browse(page)
+        serve.record(notebook, f"chapters/{chapter}/{stem}.html")
     return 0
 
 

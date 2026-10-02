@@ -27,6 +27,22 @@ import webbrowser
 from .log import tell
 
 
+def browse_url(url):
+    """
+    Open a URL. The half of `browse` that is not about a file on disk.
+
+    Split out because `nb open` serves the site over http so that one tab can
+    refresh itself, while a fallback with no server still has only a path.
+    """
+    try:
+        if webbrowser.open(url):
+            return True
+    except Exception:                      # noqa: BLE001 -- see module docstring
+        pass
+    tell(f"  browser   could not open a browser; the page is at {url}")
+    return False
+
+
 def browse(path):
     """
     Open a local file in the default browser. Returns whether it went.
