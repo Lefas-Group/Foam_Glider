@@ -52,7 +52,7 @@ GITIGNORE = ("/.quarto/\n"
              "/_scratch/*\n")
 
 # COPIED VERBATIM, not templated -- which is the only thing separating it from
-# the seven `.tmpl` files beside it in `scaffold/`. Nothing in it is
+# the nine `.tmpl` files beside it in `scaffold/`. Nothing in it is
 # project-specific, so there is nothing to substitute; rule 11 then holds the
 # notebook's copy to it byte-for-byte.
 #
@@ -192,6 +192,24 @@ def main(path, title=None, subject=None, chapter=None,
     # and there is no longer a file in `_scratch/` to sit beside.
     for tmpl, dest in (("_quarto.yml.tmpl", "_quarto.yml"),
                        ("styles.css.tmpl", "styles.css"),
+                       # The theme: bootstrap's own variables, set before it
+                       # compiles. `styles.css` can only override what
+                       # bootstrap already decided; these decide it instead,
+                       # and the sidebar, callouts, code blocks and title
+                       # block follow without being named. Both are named in
+                       # `_quarto.yml`, so a notebook missing either renders
+                       # with no theme at all rather than with a plain one.
+                       #
+                       # Rendered rather than copied, like `styles.css` and
+                       # unlike `_notebook.py`: there is nothing to substitute
+                       # in them today, but they belong to the notebook and a
+                       # notebook is allowed to restyle itself. That is the
+                       # whole difference -- `COPIED_VERBATIM` would hold them
+                       # byte-identical forever.
+                       ("theme-light.scss.tmpl", "theme-light.scss"),
+                       # Colour only; it inherits the light file's typography.
+                       # See the note at the top of it for why that works.
+                       ("theme-dark.scss.tmpl", "theme-dark.scss"),
                        # The site's front page. Without it Quarto serves a
                        # synthesised stub -- not a 404, but nothing that says
                        # what the aircraft is or how the chapters relate.

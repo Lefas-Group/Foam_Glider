@@ -14,6 +14,12 @@ website:
   # Entries live two levels deep (chapters/<chapter>/<entry>.qmd), which is what
   # bread-crumbs needs: every entry page then names the chapter it belongs to.
   bread-crumbs: true
+  # Full-text search over every entry. The sidebar is the only navigation on
+  # the site and it lists titles only, so a reader who remembers a NUMBER
+  # rather than a question has nothing else to reach for.
+  search: true
+  page-footer:
+    center: "Rendered from the notebook sources with Quarto. Every number on a page was produced by the run on that page."
   sidebar:
     style: docked
     # Chapters closed on arrival: with the "Chapters" wrapper gone they sit at
@@ -47,8 +53,18 @@ format:
     # Quarto's default is 250px, which wrapped "Fully optimized 5 mm glider"
     # even after the "06 · " prefix came off the titles. Widened rather than
     # the titles shortened: a chapter's name is what it is.
+    # NOTE: `body-width` is deliberately absent. With `toc: false` there is no
+    # margin column, so quarto lets the body span the grid's full width and the
+    # key has no visible effect -- the measure is capped in theme-light.scss
+    # instead, where it can leave figures alone.
     grid:
       sidebar-width: 320px
+    # Typography, colour and the dark/light pair. Both lists share
+    # theme-light.scss -- quarto resolves `scss:defaults` layers in reverse
+    # order, so theme-dark.scss restates colour only and inherits the rest.
+    theme:
+      light: [cosmo, theme-light.scss]
+      dark: [cosmo, theme-light.scss, theme-dark.scss]
     # Scales matplotlib output down to the content column so pages never scroll
     # sideways.
     css: styles.css

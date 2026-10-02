@@ -21,6 +21,25 @@ output needs extracting.
 - **Matplotlib figures overflow the content column** and make the page scroll
   sideways — they carry their native pixel width. The notebook's `styles.css`
   fixes this globally; keep it wired in via `css:` in `_quarto.yml`.
+- **Colour belongs in `theme-light.scss` / `theme-dark.scss`, not in
+  `styles.css`.** The two SCSS files set bootstrap's own variables before it
+  compiles, and they declare the `--key-accent` / `--nb-*` tokens that
+  `styles.css` reads. One stylesheet serves both themes, so a hex typed into
+  `styles.css` is wrong in one of them — and a hex typed into a page is wrong
+  in both. The dark file is listed last in `_quarto.yml` and restates colour
+  only: quarto resolves `scss:defaults` layers in REVERSE order, which is what
+  lets it inherit the light file's typography.
+- **Quarto sizes a `dot` block's SVG to a fixed pixel width** — 614px from
+  `fig-width`, 672px without one — however big the graph actually is, and then
+  scales the drawing to fill it. A young notebook's lineage diagram is ~97pt
+  wide and gets magnified tenfold. The front page's dot cell emits a six-line
+  script that caps each SVG at its viewBox width (and drops the `width`/`height`
+  attributes, whose aspect ratio does not match the viewBox and so letterboxes
+  the drawing). Keep it when editing that cell.
+- **`quarto render` needs the project's venv** — `uv run quarto render
+  <notebook>`. Bare `quarto render` works for as long as every page is frozen
+  and then fails with "Install with conda install jupyter" the moment one has
+  to execute, which reads like a broken machine rather than a missing prefix.
 - Reading results back: printed output is in `_site/**/*.html` — extract
   `<pre><code>` blocks with Python rather than grepping, since syntax
   highlighting splits code across spans. Figures land in

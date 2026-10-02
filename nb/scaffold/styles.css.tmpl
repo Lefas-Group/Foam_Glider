@@ -24,10 +24,12 @@ figure img,
 
    The accent is deliberately NOT the link blue -- a coloured number that looks
    clickable is worse than a plain one.
+
+   --key-accent and --nb-muted are NOT set here any more. This stylesheet is
+   loaded by both themes, so a hard-coded hex would be one of the two wrong.
+   They are declared in theme-light.scss and theme-dark.scss, and this file
+   only ever reads them.
    --------------------------------------------------------------------------- */
-:root {
-  --key-accent: #14655c;
-}
 
 .hero,
 .hero-pair {
@@ -47,7 +49,7 @@ figure img,
 }
 
 .hero-ref {
-  color: #5c6670;
+  color: var(--nb-muted);
 }
 
 .hero-value {
@@ -64,7 +66,7 @@ figure img,
   display: block;
   margin-top: 0.2rem;
   font-size: 0.9rem;
-  color: #5c6670;
+  color: var(--nb-muted);
 }
 
 .key {
@@ -87,9 +89,9 @@ figure img,
   display: block;
   margin-top: 2rem;
   padding-top: 0.6rem;
-  border-top: 1px solid rgba(128, 128, 128, 0.25);
+  border-top: 1px solid var(--nb-rule);
   font-size: 0.8rem;
-  color: #6b747d;
+  color: var(--nb-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -118,4 +120,59 @@ figure img,
 .cell-output-display svg a,
 .cell-output-display svg a text {
   text-decoration: none;
+}
+
+/* ---------------------------------------------------------------------------
+   The lineage diagram's colours.
+
+   Graphviz runs ONCE, at render time, and writes its colours into the SVG as
+   presentation attributes. It therefore cannot know which theme a reader is
+   in -- and the diagram is the one figure on the site that is not a printed
+   artefact of a run but a drawing OF the notebook, so unlike a three-view it
+   should follow the page rather than sit on a card of its own.
+
+   Presentation attributes lose to any CSS rule at all, which is what makes
+   this work with no `!important` anywhere: the four tokens are declared per
+   theme, and the attributes graphviz wrote are simply outranked. index.qmd
+   still writes the light values, so the SVG is also correct standing alone.
+
+   Each token carries the light value as a fallback. An undefined var() does
+   not leave the attribute alone -- it makes the property invalid, and `fill`
+   then inherits, which turns the whole diagram black. That is what this page
+   looks like opened without the theme's stylesheet, and the fallback is what
+   stops it.
+
+   Scoped to `g.node`/`g.edge`, which only graphviz emits -- a matplotlib SVG
+   has neither, so nothing here can reach a plot.
+   --------------------------------------------------------------------------- */
+/* Descendant, not child: a box that is a link comes out as
+   `g.node > g#a_nodeN > a > path`, so `g.node > a` matches nothing and the
+   box silently keeps whatever graphviz baked in -- which is the LIGHT fill,
+   and so is invisible until the dark theme is looked at. */
+.cell-output-display svg g.node path {
+  fill: var(--nb-graph-box-bg, #eaf2f0);
+  stroke: var(--nb-graph-line, #14655c);
+}
+
+.cell-output-display svg g.node text {
+  fill: var(--nb-graph-line, #14655c);
+}
+
+/* A tick is an entry. Drawn as `shape=point`, so it is an ellipse rather than
+   a path, and it carries the accent's counterpart -- the same amber as C1 in
+   the plot cycle and as a tip callout. */
+.cell-output-display svg g.node ellipse {
+  fill: var(--nb-graph-tick, #b8860b);
+  stroke: var(--nb-graph-tick, #b8860b);
+}
+
+/* Lines and the fork arrowheads. `arrowhead=none` on the spine means only a
+   fork edge has a polygon, so colouring both keeps the pair consistent. */
+.cell-output-display svg g.edge path {
+  stroke: var(--nb-graph-edge, #8a939b);
+}
+
+.cell-output-display svg g.edge polygon {
+  fill: var(--nb-graph-edge, #8a939b);
+  stroke: var(--nb-graph-edge, #8a939b);
 }
