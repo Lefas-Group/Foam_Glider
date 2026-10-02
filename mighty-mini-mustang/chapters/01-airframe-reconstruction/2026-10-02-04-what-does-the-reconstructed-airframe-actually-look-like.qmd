@@ -1,0 +1,42 @@
+---
+title: "What does the reconstructed airframe actually look like?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 120.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 200.0        # s granted for the probe
+PROBE_SPENT = 4.1      # s the probe actually used
+
+import aerosandbox.tools.pretty_plots as p
+
+# Geometric properties of the reconstructed airframe
+b_w = wing.span()
+S_w = wing.area()
+c_mac = wing.mean_aerodynamic_chord()
+taper_w = c_tip_wing / c_root_wing
+l_fuse = fuse.length()
+S_wet_fuse = fuse.area_wetted()
+n_fuse_xsecs = len(fuse.xsecs)
+b_h = htail.span()
+S_h = htail.area()
+b_v = vtail.span()
+S_v = vtail.area()
+```
+
+**Answer.** The reconstructed airframe reproduces the semi-scale layout of a P-51 Mustang with a low-wing tractor configuration (@fig-reconstructed-three-view). The tapered wing spans [`{python} f"{b_w*1e3:.0f} mm"`]{.key} with [`{python} f"{S_w*1e2:.2f} dm²"`]{.key} planform area, a taper ratio of [`{python} f"{taper_w:.2f}"`]{.key}, and [`{python} f"{dihedral_deg:.1f}°"`]{.key} dihedral. The [`{python} f"{l_fuse*1e3:.0f} mm"`]{.key} fuselage features [`{python} f"{n_fuse_xsecs}"`]{.key} cross-section stations capturing the radiator belly scoop and canopy deck, totaling [`{python} f"{S_wet_fuse*1e2:.2f} dm²"`]{.key} wetted area. The conventional empennage mounts a [`{python} f"{b_h*1e3:.0f} mm"`]{.key} horizontal stabilizer and an [`{python} f"{b_v*1e3:.0f} mm"`]{.key} vertical fin.
+
+```{python}
+#| label: fig-reconstructed-three-view
+#| fig-cap: "Orthographic three-view and isometric projection of the reconstructed airframe."
+fig, axs = p.figure3d(nrows=2, ncols=2, figsize=(7.5, 7.5), computed_zorder=False)
+_ = airplane.draw_three_view(axs=axs, show=False)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```
