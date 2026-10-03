@@ -603,6 +603,22 @@ def _execute(notebook, session, contents, run_metrics, fs, handlers,
                 (None, f"chapters/{session.chapter}/{session.stem}.qmd does "
                        f"not exist. You opened the entry and never wrote it "
                        f"-- `write_file` it, then lint.")] + list(problems)
+        # THE TARGETS CHECK BELONGS HERE, beside lint, and not only at the
+        # commit. It was a commit-time gate first, and the first run it caught
+        # was KILLED by it -- `targets_unreported`, entry on disk, five
+        # targets unmentioned, nothing handed back. Lint has never behaved
+        # that way: it returns the problem to the model, which fixes it and
+        # lints again. A gate the model cannot act on is a gate that turns a
+        # fixable omission into a dead run.
+        #
+        # The commit-time check stays as the guarantee, exactly as the render
+        # ceiling does: this teaches, that one refuses.
+        if getattr(session, "kind", "run") == "reconstruct":
+            from ..contract import shared
+            note = targets_unreported(notebook, session.entry_path,
+                                      shared.notebook_targets(notebook.root))
+            if note:
+                return False, list(problems) + [(None, note)]
         return clean, problems
 
     def blocked(problems):

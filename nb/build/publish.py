@@ -622,11 +622,18 @@ def targets_unreported(notebook, entry_path, targets):
     refuses one for the value it reports. Loosening a tolerance to pass is
     then pointless, because passing was never the bar.
 
-    MATCHED ON THE HANDLE'S WORDS, not on numbers. Rule 1 means every number
-    in prose is a `{python}` expression that is not in the source at all, so
-    there is nothing numeric to grep for -- what IS in the source is the
-    prose naming the quantity. A target handled `wing-area` is reported if
-    the entry says "wing area" somewhere.
+    MATCHED ON THE QUANTITY'S NAME, never on its value. Rule 1 means every
+    number in prose is a `{python}` expression, so the digits are not in the
+    source at all -- the first version of this matched on the HANDLE's words,
+    which for `length-482-mm` meant requiring the literal "482". No
+    rule-compliant entry can satisfy that, and it refused a correct
+    reconstruction with "7 target(s) the entry never mentions". `cg-38-mm`
+    was worse: after dropping short tokens it had no words left and could
+    never match anything.
+
+    So the label is taken from the TEXT, before the colon -- `**Wing area**:
+    7.42 dm2, +/-3%` gives "wing area" -- which is what a reader writes and
+    what the prose actually contains.
     """
     if not targets:
         return ""
@@ -635,11 +642,12 @@ def targets_unreported(notebook, entry_path, targets):
     except OSError:
         return ""
     missing = []
-    for handle, text in targets:
-        words = [w for w in handle.replace("/", "-").split("-") if len(w) > 2]
+    for _handle, text in targets:
+        label = text.split(":")[0]
+        words = [w for w in re.findall(r"[a-z]+", label.lower()) if len(w) > 1]
         if words and all(w in body for w in words):
             continue
-        missing.append(text.split(":")[0].strip("* "))
+        missing.append(label.strip("* "))
     if not missing:
         return ""
     return (f"{len(missing)} target(s) the entry never mentions: "
