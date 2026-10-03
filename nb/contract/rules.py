@@ -2026,3 +2026,89 @@ def _constants_against_inputs(root, chapters, entries):
             f"got to check: {', '.join(f'`{n}`' for n in fixed[:6])}"
             f"{' …' if len(fixed) > 6 else ''}")))
     return out
+
+
+@register(44)
+def _derived_target_assigned(root, chapters, entries):
+    """
+    Rule 44. A DERIVED target is not written into `_model.py` as a literal.
+
+    The whole worth of a target is that the model had to arrive at it. The
+    FT Mini Corsair v1.0 run reported "0.54 % worst error across eight
+    published targets" having assigned seven of them, five to an exact
+    0.00 %. Nothing in the system could tell the difference, and assigning is
+    the easier path.
+
+    ONLY DERIVED TARGETS. A row marked `(given)` is calibration -- total mass
+    and CG are measured and adjusted on a bench, and a model forced to derive
+    them lands 10 % out and makes every downstream answer worse. The split is
+    the coordinator's to declare; derived is the default, because that is the
+    direction the failure is silent in.
+
+    MATCHED ON THE NUMBER, in metres as well as the written unit, because a
+    brief says 610 mm where a model writes 0.610.
+
+    EVERY CONSTANT IN THE FILE, at any depth -- not just module-level
+    assignments. The first version checked `ast.Assign` with an
+    `ast.Constant` value, which found NOTHING in the model that prompted the
+    rule: it writes `x_cg_target = 0.085 + 0.038` and
+    `0.222 * x_cg_target`, so the assigned targets live inside BinOps. The
+    narrow walk is a real weakness in rule 43 above as well.
+
+    A WARNING, not a block. The match is on a bare number, so a chord of
+    12.2 mm and a cubic loading of 12.2 collide. The cost of a false block is
+    a dead run; the cost of a false warning is a line to read.
+    """
+    from . import shared
+    out = []
+    derived = [(h, t) for h, t, given in shared.notebook_targets(root)
+               if not given]
+    if not derived:
+        return out
+    for c in chapters:
+        if not any(e.parent.name == c for e in entries):
+            continue
+        model = root / "chapters" / c / "_model.py"
+        try:
+            tree = ast.parse(model.read_text())
+        except (OSError, SyntaxError):
+            continue
+        seen = {}
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Constant):
+                continue
+            v = node.value
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                continue
+            seen.setdefault(float(v), getattr(node, "lineno", 0))
+        for handle, text in derived:
+            # THE TOLERANCE IS NOT A VALUE. `+/-2%` put a bare 2 into the
+            # match set, which collided with every `shape=2` and `n=2` in
+            # the file and reported six targets as assigned when three were.
+            bare = re.sub(r"[+±]\s*/?-?\s*[\d.]+\s*%", "", text)
+            # NOT PRECEDED BY A LETTER, which drops the exponent in `dm2`
+            # and `in2`. Those bare 2s matched every `shape=2` in the file.
+            vals = [float(n)
+                    for n in re.findall(r"(?<![A-Za-z])\d+\.?\d*", bare)
+                    if float(n) > 1]
+            # EVERY DECIMAL UNIT STEP, because a brief writes the published
+            # unit and a model writes SI. mm->m and g->kg are /1000, dm2->m2
+            # is /100, cm2->m2 is /10000. The first version did /1000 only
+            # and missed wing area -- 6.9 dm2 is 0.069 m2 -- which is the
+            # single target this rule most needs to catch, since assigning
+            # it is what destroys the check on the planform.
+            vals += [v / f for v in list(vals)
+                     for f in (10.0, 100.0, 1000.0, 10000.0)]
+            hit = sorted({(v, ln) for v, ln in seen.items()
+                          if any(abs(v - w) < max(1e-9, abs(w) * 1e-4)
+                                 for w in vals)})
+            if hit:
+                where = ", ".join(f"{v:g} (line {ln})" for v, ln in hit[:3])
+                out.append((model, (
+                    f"(warning) target `{handle}` is DERIVED, and "
+                    f"`_model.py` writes its value: {where}. A target the "
+                    f"model is built to hit is an identity, not a check -- it "
+                    f"has to fall out of the geometry. If this is a bench "
+                    f"measurement the model should be calibrated to rather "
+                    f"than predict, mark the row `(given)` in the brief")))
+    return out

@@ -205,7 +205,12 @@ def main(notebook_path, question, verbose=True,
     session.kind = kind
     # See `loop_once`: a reconstruct builds the vehicle AND converges it, and
     # the shape loop can send it round again from the prompt.
-    session.max_turns = MAX_TURNS * 2 if kind == "reconstruct" else MAX_TURNS
+    # RECONSTRUCTION IS A ONE-TIME INVESTMENT and every later chapter forks
+    # the model it produces, so quality is worth far more than turns. x2 was
+    # measured too tight: the FT Mini Corsair run took 123 model turns and
+    # two resumes to rasterise, stitch, survey parts, measure, cross-check
+    # and iterate -- and that was with the coordinator doing the stitching.
+    session.max_turns = MAX_TURNS * 5 if kind == "reconstruct" else MAX_TURNS
     run_metrics.set(chapter=chapter)
 
     # ONE WRITER PER CHAPTER, claimed before a single token is spent. Refused
@@ -272,11 +277,33 @@ def _targets_brief(notebook):
                 "three-view at the prompt is then the only check there is, so "
                 "it matters more, not less.")
     out = ["The targets, from the brief:"]
-    out += [f"  - {t}" for _h, t in rows]
-    out.append("")
-    out.append("Each is a PUBLISHED FACT about the real aircraft. Reproduce "
-               "every one inside its tolerance, or say which you could not "
-               "and by how much.")
+    out += [f"  - {t}" + ("   [GIVEN -- calibrate to it]" if g
+                          else "   [DERIVED -- it must fall out]")
+            for _h, t, g in rows]
+    out += ["", """Each is a published FACT about the real aircraft, and the
+two kinds are not interchangeable.
+
+A DERIVED target must be a CONSEQUENCE of the geometry you build. Do not
+write its value into `_model.py` anywhere. If you size a chord until
+`wing.area()` returns the published area, you have destroyed the only check
+on the planform -- and the planform drives every aerodynamic answer you will
+give afterwards. Build the geometry from what you measured, then report what
+it comes to. Rule 44 warns when a derived target's number appears in the
+model.
+
+A GIVEN target is a bench measurement you may calibrate to: total mass and
+CG are what somebody weighs and balances, almost every answer rests on them,
+and a mass model derived to 10% is worse than one set to the published
+figure. Setting those is not cheating.
+
+Derive the airframe mass from geometry and material -- areas times areal
+density -- because then DRY WEIGHT becomes a check on the geometry rather
+than on your bookkeeping. Take bought components from catalogue figures.
+Then calibrate ballast or battery position to reach the given all-up weight
+and CG, which is what you would physically do.
+
+Report EVERY target with its error, including the ones that passed. A target
+you miss is a finding worth stating; a target nobody names is a hole."""]
     return "\n".join(out)
 
 
@@ -303,37 +330,52 @@ def _reference_brief(notebook):
                 "dimension you supply.")
     return f"""# What is known about the real aircraft
 
-`_reference/` holds these, and `read_reference_image` returns one as an
-image:
+`_reference/` holds these. `read_reference_image` returns one as an image;
+`read_probe_figure` returns one YOU made.
 
 {listing}
 
-**ONE LOOK, THEN CODE.** Use `read_reference_image` once to find where each
-part sits on the sheet. Everything quantitative after that is `probe`: the
-kernel is ordinary Python with PIL and numpy, and a 1:1 sheet at a known dpi
-is a dataset, not a picture --
+**FIND IT WITH `NB_ROOT`.** A probe's cwd is its own run directory, not the
+notebook root, so a bare `_reference/...` will not open. The kernel already
+exports it:
 
-    from PIL import Image
-    import numpy as np
-    a = np.array(Image.open("_reference/<sheet>").convert("L"))
-    mm = 25.4 / <dpi>
-    ys, xs = np.nonzero(a[y0:y1, x0:x1] < 160)      # one part's outline
-    span_mm = (xs.max() - xs.min()) * mm
+    import os, pathlib
+    ref = pathlib.Path(os.environ["NB_ROOT"]) / "_reference"
 
-Measure in code. Do NOT read a dimension off the picture by eye -- that is an
-estimate wearing a measurement's clothes, and it is the one thing this sheet
-makes unnecessary.
+**DO THE IMAGE WORK YOURSELF.** The probe kernel is ordinary Python with
+PIL, numpy, scipy and `subprocess`, and `pdftoppm` is on PATH. Rasterise a
+source PDF, stitch EVERY page, crop, measure -- none of it needs anyone
+else. A sheet stitched for you by hand once dropped the tiles holding the
+wing panels, and the airframe was reconstructed from the wing's assembly
+jigs instead.
+
+**ONE LOOK, THEN CODE.** `read_reference_image` once to find where each part
+sits. After that a 1:1 sheet at a known dpi is a dataset, not a picture:
+
+    a = np.array(Image.open(sheet).convert("L"))
+    mm = 25.4 / dpi
+    from scipy import ndimage
+    lab, n = ndimage.label(a < 160)            # every part, found for you
+    for sl in ndimage.find_objects(lab):       # one slice per part
+        h = (sl[0].stop - sl[0].start) * mm
+        w = (sl[1].stop - sl[1].start) * mm
+
+**Do not hand-pick a crop rectangle.** Three separate attempts at this --
+two by a coordinator, one by a run -- each guessed a box and each produced a
+confident wrong number; one reported a 393 mm tailplane on a 610 mm
+aircraft. `ndimage.label` finds the parts so nobody has to guess.
+
+**LOOK AT WHAT YOU BUILT.** After stitching or cropping, save it and call
+`read_probe_figure`. Measuring an image you have not looked at is how a
+wrong crop becomes a confident number.
 
 **CHECK THE SCALE BEFORE YOU TRUST IT.** Measure something the brief already
-publishes -- a length, a span -- and compare. If it disagrees by more than a
-few percent the stitch or the dpi is wrong, and every other measurement is
-wrong with it: say so and stop rather than building on it.
+publishes and compare. If it disagrees by more than a few percent the stitch
+or the dpi is wrong, and every measurement after it is wrong too: say so and
+stop rather than building on it.
 
-**THE BRIEF WINS.** Where a row above already states a dimension, use that
-and do not re-measure it. The sheet is for what the brief does not say.
-
-A photograph gives PROPORTIONS and layout, never dimensions. A plan sheet
-gives both, but only where it is labelled 1:1 with a dpi.
+**THE BRIEF WINS.** Where a row above already states a dimension, use it and
+do not re-measure.
 
 """
 
@@ -367,7 +409,7 @@ def reconstruct(notebook_path, chapter=None, pool=None, ceiling=None,
     # reject at the prompt, rebuild, re-render, prompt again. Only applied
     # when the caller named nothing, so `--pool` still wins.
     return main(notebook_path, question, verbose=verbose,
-                pool=pool if pool is not None else PROBE_POOL * 2,
+                pool=pool if pool is not None else PROBE_POOL * 4,
                 ceiling=ceiling, run_id=run_id, quiet=quiet,
                 answers=answers, chapter=chapter, watch=watch,
                 kind="reconstruct")

@@ -1,6 +1,3 @@
-Stitched FT Mini Corsair v1.0 plan, tiles 1-8 in a 4x2 grid.
-Orthographic, printed 1:1, rasterised at 100 dpi -> 1 px = 0.254 mm.
-Sheet is 3000 x 2100 px = 762 x 533 mm of real cut parts.
-Parts are labelled on the sheet: FUSELAGE SIDE, HORIZONTAL STABILIZER,
-VERTICAL STABILIZER, FORMER A/B/C, CANOPY, COWL RING, TOP/BOTTOM SHEETING,
-WING TIP JIG, WING CENTER JIG, POWER POD, THROW GAUGE.
+plan 1:1 100dpi  Stitched FT Mini Corsair v1.0 plan, tiles 1-8 only.
+INCOMPLETE: tiles 9-12 were omitted and they hold the wing panels.
+Prefer the source PDF and rasterise every page yourself.

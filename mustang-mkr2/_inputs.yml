@@ -1,0 +1,31 @@
+# THE BRIEF for the aircraft. True of the whole aircraft, inherited by every
+# chapter and every entry, and never superseded: a fork that departs from one
+# of these is not a fork, it is a different aircraft and so a different
+# notebook. Written by a PERSON, never by a run.
+#
+# Rendered into index.qmd. Same format as a chapter's `_inputs.yml`:
+# `- <id>: <text>`, ten words each.
+#
+# The test for what belongs here rather than in the first chapter: IF THIS
+# CHANGED, WOULD IT STILL BE THE SAME AEROPLANE? A 300 mm span, no. Foam 5 mm
+# — yes, that is the same project at a different thickness, so it is a chapter.
+specified:
+  - ft-mighty-mini: "**FT Mighty Mini Mustang MKR2**, Flite Test plan."
+  - folded-maker-foam: "**Folded Maker Foam**, 4.7 mm, hand cut and glued."
+  - maker-foam-348: "**Maker Foam**: 348 g/m2 areal density, coated board."
+  - low-wing-tractor: "**Low wing**, tractor prop, conventional tail."
+  - power-2205-2300: "**Power**: 2205 2300 kv, 6x4.5 prop, 3S."
+  - battery-850-mah: "**Battery**: 850 mAh 3S LiPo, 25 A ESC."
+  - controls-aileron-elevator: "**Controls**: aileron, elevator, rudder; 12 deg throws."
+targets:
+  - length-482-mm: "**Length**: 482 mm (19 in), +/-2%."
+  - wing-span-622: "**Wing span**: 622 mm (24 in), +/-1%."
+  - wing-area-7: "**Wing area**: 7.4 dm2 (115 in2), +/-3%."
+  - dry-weight-156: "**Dry weight**: 156 g without battery, +/-6%."
+  - wing-loading-29: "**Wing loading**: 29.9 g/dm2 published, +/-4%."
+  - wing-cubic-loading: "**Wing cubic loading**: 10.9 published, +/-6%."
+  - cg-25-mm: "**CG**: 25 mm aft of leading edge, +/-8%. (given)"
+  - all-up-weight: "**All-up weight**: 222 g with pack, +/-5%. (given)"
+assumed:
+  - claimed-endless-vertical: "**Claimed endless vertical climb**, to verify."
+  - claimed-wide-speed: "**Claimed wide speed envelope**, to verify."

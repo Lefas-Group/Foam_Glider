@@ -1177,15 +1177,37 @@ def notebook_items(root):
             for k, kind in BRIEF_BLOCKS for _, t in (data.get(k) or [])]
 
 
+# A target the model may be CALIBRATED to rather than required to predict.
+# Written at the end of the row and left in the rendered text on purpose: a
+# reader should see which figures were reproduced and which were given.
+GIVEN = re.compile(r"\(given\)\s*$", re.I)
+
+
 def notebook_targets(root):
     """
-    [(handle, text)] from the brief's `targets:` block, or [].
+    [(handle, text, given)] from the brief's `targets:` block, or [].
 
-    The reconstruct gate's input. Separate from `notebook_items` because that
-    one flattens to (kind, text) for rendering and word-counting, and a gate
-    needs the handle to say WHICH target missed.
+    `given` is the derive/calibrate split, and it is the difference between a
+    check and an identity.
+
+    A target that is a CONSEQUENCE OF THE GEOMETRY being reconstructed --
+    wing area, MAC, tail volume, length -- must be derived. Assigning it
+    destroys the only check on the planform, and the planform drives every
+    aerodynamic answer. Measured on the FT Mini Corsair v1.0: seven of eight
+    targets were assigned, five of them to an exact 0.00 %, and the entry
+    reported "0.54 % worst error" as though that verified something.
+
+    A target that is a PROPERTY YOU WOULD MEASURE OR ADJUST ON A BENCH --
+    total mass, CG -- may be given. That is calibration, not cheating: those
+    two are what almost every downstream answer rests on, and a derived mass
+    model landing 10 % out would make stall, loading and climb all worse. An
+    earlier draft of this banned assignment outright and would have forced
+    exactly that.
+
+    Derived is the default, because the failure is silent in that direction.
     """
-    return list(parse_inputs(root / "_inputs.yml").get("targets") or [])
+    rows = parse_inputs(root / "_inputs.yml").get("targets") or []
+    return [(h, t, bool(GIVEN.search(t))) for h, t in rows]
 
 
 

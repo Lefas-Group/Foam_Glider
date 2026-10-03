@@ -642,7 +642,7 @@ def targets_unreported(notebook, entry_path, targets):
     except OSError:
         return ""
     missing = []
-    for _handle, text in targets:
+    for _handle, text, _given in targets:
         label = text.split(":")[0]
         words = [w for w in re.findall(r"[a-z]+", label.lower()) if len(w) > 1]
         if words and all(w in body for w in words):
@@ -655,3 +655,81 @@ def targets_unreported(notebook, entry_path, targets):
             + ". Report every target with its error, including the ones that "
               "passed -- a target that misses is a finding, a target nobody "
               "names is a hole.")
+
+
+# =============================================================================
+# THE TARGET BASELINE -- `_reference/targets.lock`, beside the assets.
+#
+# RENDERING RECOMPUTES; IT DOES NOT ASSERT. Rule 12 keeps a committed page's
+# freeze no older than its model and the refactor gate re-renders every
+# sibling that reaches a changed function, so the numbers are always current.
+# But push wing area from 0.01% error to 15% and the entry renders perfectly
+# happily: the chart draws a longer bar, the prose reads 15% because rule 1
+# made it an inline expression, and nothing fails. Somebody has to look.
+#
+# WHY NOT SIMPLY FAIL WHEN A TARGET MISSES. Because the same signature means
+# opposite things at different moments:
+#
+#     first reconstruction   a miss is a FINDING    -- "area is 7% under,
+#                                                      the stab is the cause"
+#     after it is accepted   a miss is a REGRESSION -- something drifted
+#
+# `nb.corpus` already solves exactly this shape for lint: it records the
+# expected count per notebook and fails when one moves, requiring the
+# baseline to be updated in the same commit that justifies it. So: no
+# baseline means a miss is a finding; a baseline means a WORSENING is a
+# regression.
+#
+# Nothing has drifted yet. This is built because the mechanism was already
+# in the repo and the next person should not have to rediscover it, and it
+# is inert until a baseline is written.
+BASELINE = "targets.lock"
+BASELINE_SLACK = 1.25     # a quarter worse before it counts as drift
+
+
+def _baseline_path(notebook):
+    from ..tools.figures import REFERENCE_DIR
+    return notebook.root / REFERENCE_DIR / BASELINE
+
+
+def read_baseline(notebook):
+    """{handle: accepted error %}, or {} when none has been recorded."""
+    import json
+    try:
+        return json.loads(_baseline_path(notebook).read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def write_baseline(notebook, errors):
+    """Record the accepted error per target. Called once, by hand or on commit."""
+    import json
+    p = _baseline_path(notebook)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(errors, indent=2, sort_keys=True) + "\n")
+    return p
+
+
+def targets_drifted(notebook, errors):
+    """
+    One line naming targets that got WORSE than the baseline, or "".
+
+    `errors` is {handle: error %} as the run just computed them. Silent when
+    there is no baseline, which is the first reconstruction and the case
+    where a miss is a finding rather than a fault.
+    """
+    base = read_baseline(notebook)
+    if not base or not errors:
+        return ""
+    worse = []
+    for handle, was in base.items():
+        now = errors.get(handle)
+        if now is None:
+            continue
+        if abs(now) > max(abs(was) * BASELINE_SLACK, abs(was) + 0.1):
+            worse.append(f"{handle} {was:.2f}% -> {now:.2f}%")
+    if not worse:
+        return ""
+    return ("target(s) worse than the recorded baseline: " + "; ".join(worse)
+            + f". Either the change is wrong, or {BASELINE} needs updating in "
+              "the same commit that justifies it -- the way nb.corpus works.")

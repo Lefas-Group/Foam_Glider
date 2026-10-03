@@ -186,6 +186,15 @@ def native_declarations():
                "name": dict(S, description="PNG filename; omit for the first")},
               ["chapter", "stem"]),
 
+        _decl("read_probe_figure",
+              "An image YOU just produced, from a probe -- a stitched sheet, "
+              "a crop, a three-view. Save it with `fig.savefig(\"x.png\")` "
+              "or `im.save(...)` in a probe, then read it back here to check "
+              "you built what you meant to. Measuring an image you have not "
+              "looked at is how a wrong crop becomes a confident number.",
+              {"name": dict(S, description="Filename; omit for the first")},
+              []),
+
         _decl("read_reference_image",
               "A reference image of the REAL aircraft -- a stitched plan "
               "sheet, a photograph -- as an image. ONE LOOK, to find where "
@@ -325,6 +334,8 @@ def build(session, fs):
         "read_figure": lambda chapter, stem, name="": figures.read_figure(
             nb, chapter, stem, name),
         "read_reference_image": lambda name="": figures.read_reference_image(
+            nb, name),
+        "read_probe_figure": lambda name="": figures.read_probe_figure(
             nb, name),
         "ask_specified": lambda name, why, kind="specified", options="",
                                 replaces="": (

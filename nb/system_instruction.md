@@ -187,7 +187,7 @@ components sum — were each one `api_search` away. It never searched.
   and `open_entry` freezes that number as the entry's render cost — measured,
   not estimated, which is why it is not something you are asked for.
 
-# The 42 rules lint checks
+# The 43 rules lint checks
 
 Know these before drafting, not after. Finding one from a lint run means the
 prose is already written.
@@ -235,6 +235,7 @@ prose is already written.
 41  the hero value derives from a solve, not from a literal
 42  a cell labelled `tbl-…` renders a table — `md_table(header, rows)`, never a trailing DataFrame
 43  (warning) counts the constants `_model.py` fixes against the inputs you declared
+44  (warning) a DERIVED target is not written into `_model.py` — it must fall out
 ```
 
 There is no rule 36: it checked the categories system, which was retired, and

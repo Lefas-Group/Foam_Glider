@@ -166,6 +166,20 @@ WHY = {
         "and starts meaning PROBABLY FINE. So this counts, and leaves the "
         "judgement with the person at the assumptions prompt, who is the one "
         "who can open the plan.",
+    44: "A reconstruction reported 0.54% worst error across eight published "
+        "targets, and seven of the eight had been ASSIGNED rather than "
+        "predicted -- five to an exact 0.00%. `_model.py` held "
+        "`x_cg_target = 0.085 + 0.038`, a component list summing to exactly "
+        "156 g, and a battery mass computed as published AUW minus dry "
+        "weight. A target the model is built to hit is not a check, it is an "
+        "identity, and the entry reads as verification. Banning assignment "
+        "outright was tried on paper and is worse: total mass and CG are "
+        "what you measure and adjust on a bench, almost every downstream "
+        "answer rests on them, and a derived mass model 10% out makes stall, "
+        "loading and climb all worse. So the rule bites only on targets that "
+        "are a CONSEQUENCE OF THE GEOMETRY being reconstructed -- those are "
+        "the ones whose assignment destroys the check. Mark the others "
+        "`(given)`.",
 }
 
 def unexplained():
@@ -244,6 +258,7 @@ RULES = {
     41: "the hero value derives from a solve, not from a literal",
     42: "a cell labelled `tbl-…` renders a table",
     43: "(warning) how many constants `_model.py` fixes, against inputs declared",
+    44: "(warning) a DERIVED target is not written into `_model.py` as a literal",
 }
 
 

@@ -1,0 +1,5 @@
+source  The complete FT Mini Corsair v1.0 tiled plan, 14 pages.
+Page 1 is the specification table, page 2 the drawing key, pages 3-14 are
+tiles 1-12 printed 1:1. Rasterise with pdftoppm at a dpi you choose and
+stitch ALL tiles; the key crosses some out and that is not a reason to
+omit them.

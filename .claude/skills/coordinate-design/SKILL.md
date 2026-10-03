@@ -320,6 +320,19 @@ with `nb answer <nb> <run-id> "1: 0.85"`. Rows that are **modelling choices**
 cost, not the value. The run marks which is which in each row's reason.
 
 **Accepting a number you could have checked is how the taper ratio got in.**
+
+**Read the declarations as a defect report on YOUR inputs.** Every `why`
+naming something absent is the run telling you what you failed to supply:
+
+```
+why: "plan tiles 9-12 omitted; inferred from jigs G1, G2"
+```
+
+That line was the wing. The tiles holding the wing panels had been left out
+of the sheet handed to the run, it said so at the prompt, and it was read
+past -- so the airframe was reconstructed from the wing's assembly jigs. The
+habit costs nothing and catches the class of error no rule can: the thing
+you did not give it.
 Enter accepts everything, and an unanswered prompt accepts everything after it
 times out — the wait scales with batch size, but it is still a clock.
 

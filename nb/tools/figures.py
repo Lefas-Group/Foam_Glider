@@ -33,6 +33,42 @@ def list_figures(notebook, chapter, stem=""):
     return "\n".join(f"{p.parts[-3]}/{p.name}" for p in paths)
 
 
+def read_probe_figure(notebook, name=""):
+    """
+    An image the RUN itself just produced, as bytes for an inline part.
+
+    THE GAP THIS CLOSES. `read_figure` globs the freeze, so a run could only
+    ever see a figure after rendering an entry -- it could MEASURE an image
+    it built in a probe and never look at one. That blocked the whole
+    arrangement where the run rasterises and stitches a plan itself: it could
+    assemble a sheet and had no way to check it had assembled it correctly.
+
+    Measured, before this existed: a coordinator stitched the tiles by hand,
+    misread the tile key, dropped the LEFT WING part, and the reconstruction
+    was built from the wing's assembly jigs. Nobody could see the sheet but
+    the coordinator, and the coordinator got it wrong.
+
+    Looks in the RUN DIRECTORY first and then `_scratch/`, which is where
+    `probing.md` tells a probe to save and where the kernel's cwd already
+    points -- so `fig.savefig("x.png")` in a probe is readable here by name
+    with no path to get right.
+    """
+    roots = [notebook.run, notebook.root / "_scratch"]
+    found = [p for r in roots if r.is_dir()
+             for p in sorted(r.iterdir())
+             if p.suffix.lower() in _SUFFIXES
+             and (not name or p.name == name)]
+    if not found:
+        where = " or ".join(str(r) for r in roots)
+        return {"error": f"no image {name or '*'} in {where}. Save one from a "
+                         f"probe first -- `fig.savefig(\"check.png\")` lands "
+                         f"in the run directory."}
+    p = found[0]
+    return {"_image": p.read_bytes(),
+            "mime_type": _MIME.get(p.suffix.lower(), "image/png"),
+            "name": p.name}
+
+
 def read_figure(notebook, chapter, stem, name=""):
     """
     One figure, as raw bytes for the loop to turn into an inline image part.
@@ -97,20 +133,57 @@ def reference_paths(notebook):
                   if p.suffix.lower() in _SUFFIXES)
 
 
+# WHAT AN ASSET IS, as a token rather than prose, so the brief can route on
+# it instead of hoping a paragraph is read correctly. First word of the
+# `.txt` beside the file; everything after it is free description.
+#
+# The distinction that matters is MEASURABLE or not. A 1:1 sheet at a stated
+# dpi is a dataset -- PIL and numpy are in the probe kernel, and a pixel
+# count times 25.4/dpi is a millimetre. A photograph is not, and a run told
+# merely "image" will read dimensions off one.
+KINDS = {
+    "plan": "orthographic and to scale. MEASURE IT IN CODE. The scale is "
+            "stated above; a pixel count times 25.4/dpi is a millimetre.",
+    "photo": "PROPORTIONS AND LAYOUT ONLY. No dimension may be taken from "
+             "it -- an estimate off a photograph is not a measurement.",
+    "scan": "topology only, scale UNVERIFIED. Calibrate against a published "
+            "figure before trusting any dimension, and say so if it "
+            "disagrees.",
+    "source": "not an image. Rasterise it yourself -- `pdftoppm` is on PATH "
+              "and `subprocess` works in a probe. Convert EVERY page; do "
+              "not trust a tile key to tell you which ones matter.",
+}
+_SOURCE_SUFFIXES = (".pdf",)
+
+
+def reference_paths(notebook, images_only=True):
+    """Every reference asset, sorted. [] when the directory is absent."""
+    root = notebook.root / REFERENCE_DIR
+    if not root.is_dir():
+        return []
+    ok = _SUFFIXES if images_only else _SUFFIXES + _SOURCE_SUFFIXES
+    return sorted(p for p in root.iterdir() if p.suffix.lower() in ok)
+
+
 def reference_listing(notebook):
     """
-    The assets and what each IS, for the brief. "" when there are none.
+    The assets, each with its KIND and what that kind permits. "" if none.
 
-    The `.txt` beside an image carries its label -- what it is and, for a
-    plan, its scale. THE SCALE IS THE POINT: a sheet with a stated dpi can be
-    measured, and one without can only be looked at. A run told merely
-    "image" will read dimensions off a photograph.
+    Includes sources `read_reference_image` cannot return -- a PDF is listed
+    so the run knows to rasterise it, which is how the coordinator stops
+    having to. Measured: a coordinator stitching tiles by hand misread the
+    tile key and dropped the LEFT WING part, and the reconstruction was built
+    from the wing's assembly jigs instead.
     """
     out = []
-    for p in reference_paths(notebook):
+    for p in reference_paths(notebook, images_only=False):
         note = p.with_suffix(".txt")
-        label = note.read_text().strip() if note.exists() else "unlabelled"
-        out.append(f"  - {p.name} — {label}")
+        raw = note.read_text().strip() if note.exists() else ""
+        kind = raw.split()[0].lower() if raw else (
+            "source" if p.suffix.lower() in _SOURCE_SUFFIXES else "")
+        rule = KINDS.get(kind, "unlabelled -- treat as topology only.")
+        detail = " ".join(raw.splitlines()).strip()
+        out.append(f"  - {p.name}\n      {detail}\n      -> {rule}")
     return "\n".join(out)
 
 
