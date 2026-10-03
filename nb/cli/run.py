@@ -43,6 +43,7 @@ from ..process import desktop, metrics, runstate, serve
 from .view import site
 from ..agent.setup import setup, report, spoken_calls
 from ..build.publish import (_ceiling_problem, _commit, _refresh_active,
+                    targets_unreported,
                     _refresh_index_freeze,
                     _refresh_root_index, _render_cost, _resolve, _why_and_diff,
                     answer_line, rendered_prose)
@@ -147,7 +148,7 @@ def _start(notebook, quiet, answers, watch=True):
 
 def main(notebook_path, question, verbose=True,
          pool=None, ceiling=None, run_id=None, quiet=False,
-         answers=None, chapter=None, watch=True):
+         answers=None, chapter=None, watch=True, kind="run"):
     bad = preflight(notebook_path)
     if bad:
         for b in bad:
@@ -200,6 +201,8 @@ def main(notebook_path, question, verbose=True,
     session = Session(notebook, question, chapter=chapter,
                       metrics=run_metrics, probe_pool=pool)
     session.render_ceiling = ceiling
+    # Read by the targets gate before the commit, and by nothing else.
+    session.kind = kind
     run_metrics.set(chapter=chapter)
 
     # ONE WRITER PER CHAPTER, claimed before a single token is spent. Refused
@@ -228,10 +231,84 @@ def main(notebook_path, question, verbose=True,
     notebook.run.mkdir(parents=True, exist_ok=True)
     notebook.transcript_path.write_text("")
 
-    contents = [{"role": "user", "parts": [{"text": briefs.BRIEF.format(
-        question=question, max_turns=MAX_TURNS, chapter=chapter)}]}]
+    # WHICH BRIEF OPENS THE CONVERSATION, and the only difference between
+    # `nb ask` and `nb reconstruct`. Everything below -- the loop, the prompt,
+    # lint, the ceiling, the commit -- is shared, which is the whole reason a
+    # third mode is cheap rather than a second system.
+    if kind == "reconstruct":
+        text = briefs.RECONSTRUCT.format(
+            chapter=chapter, question=question,
+            targets=_targets_brief(notebook))
+    else:
+        text = briefs.BRIEF.format(
+            question=question, max_turns=MAX_TURNS, chapter=chapter)
+    contents = [{"role": "user", "parts": [{"text": text}]}]
     return _execute(notebook, session, contents, run_metrics, fs, handlers,
                     make_config, verbose, accept_refactor=False)
+
+
+def _targets_brief(notebook):
+    """
+    The brief's `targets:` rows, formatted for the reconstruct brief, plus a
+    warning when there are none.
+
+    AN EMPTY `targets:` BLOCK IS VALID and is not an error. It means the run
+    is gated on the eye at the prompt alone -- build it and show me -- which
+    is exactly what shape-first work wants: an X-Wing, an aircraft shaped like
+    a pig, anything with no published spec sheet to converge on. The same
+    command covers that, geometry-only, and the full sheet, with no mode flag;
+    the block is what says which.
+    """
+    from ..contract import shared
+    rows = shared.notebook_targets(notebook.root)
+    if not rows:
+        return ("There are NO target rows in the brief, which is allowed: "
+                "nothing is published for this aircraft, or nobody chose to "
+                "pin it. Build what the brief describes and show it. The "
+                "three-view at the prompt is then the only check there is, so "
+                "it matters more, not less.")
+    out = ["The targets, from the brief:"]
+    out += [f"  - {t}" for _h, t in rows]
+    out.append("")
+    out.append("Each is a PUBLISHED FACT about the real aircraft. Reproduce "
+               "every one inside its tolerance, or say which you could not "
+               "and by how much.")
+    return "\n".join(out)
+
+
+def reconstruct(notebook_path, chapter=None, pool=None, ceiling=None,
+                run_id=None, verbose=True, quiet=False, answers=None,
+                watch=True):
+    """
+    Build a chapter's vehicle and prove it reproduces the brief's targets.
+
+    THE THIRD BRIEF into `_execute`, after `ask` and `resume`, and it shares
+    everything but its opening text and what it is gated on. Reconstruction is
+    converge-to-tolerance where the ordinary contract is built for answering a
+    question once -- rule 5 bans a `range()` loop around a solve, rule 6 caps
+    prose at 100 words -- so it gets its own brief and the targets gate, and
+    nothing else is duplicated.
+
+    It produces ONE ORDINARY ENTRY in a chapter that already exists. `nb new`
+    makes the chapter; this writes its first entry and leaves `_model.py` as
+    the vehicle. Nothing new is created, and the entry obeys the contract
+    unchanged: a question, a hero, and the two visuals rule 14 allows when one
+    of them draws the aircraft.
+
+    A BIGGER DEFAULT BUDGET than `ask`. The shape loop runs inside this run --
+    reject at the prompt, rebuild, render, prompt again -- so five rejections
+    is five rebuilds out of one pool. Once per chapter, so it can afford it.
+    """
+    question = ("Can we reconstruct this chapter's aircraft within the "
+                "tolerances the brief states?")
+    # A BIGGER DEFAULT POOL than `ask`, because the shape loop spends it:
+    # reject at the prompt, rebuild, re-render, prompt again. Only applied
+    # when the caller named nothing, so `--pool` still wins.
+    return main(notebook_path, question, verbose=verbose,
+                pool=pool if pool is not None else PROBE_POOL * 2,
+                ceiling=ceiling, run_id=run_id, quiet=quiet,
+                answers=answers, chapter=chapter, watch=watch,
+                kind="reconstruct")
 
 
 def _disk_state(notebook, chapter, stem):
@@ -693,6 +770,20 @@ def _finish(notebook, session, run_metrics, first_pass, moved, accepted):
         tell(f"  Not committed: {note}")
         run_metrics.close("ceiling_changed")
         return 1
+
+    # THE TARGETS GATE, and the only new gate in this system. It runs for a
+    # reconstruct run only -- an ordinary question is not held to the brief's
+    # targets, which belong to the chapter's vehicle rather than to every
+    # entry about it. Like the ceiling above it this is the guarantee rather
+    # than the teaching: the brief already says to report every target.
+    if getattr(session, "kind", "run") == "reconstruct":
+        from ..contract import shared
+        note = targets_unreported(notebook, session.entry_path,
+                                  shared.notebook_targets(notebook.root))
+        if note:
+            tell(f"  Not committed: {note}")
+            run_metrics.close("targets_unreported")
+            return 1
 
     extra = ()
     # WHENEVER THE GATE RAN, not only when its finding was accepted. `check`

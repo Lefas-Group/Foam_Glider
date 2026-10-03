@@ -7,9 +7,17 @@ title: "Mighty Mini Mustang"
 #| output: asis
 # GENERATED, from `_inputs.yml` at the notebook root (rule 34 keeps this cell).
 #
-# THE BRIEF. True of the whole aircraft, inherited by every chapter and entry,
-# and never superseded -- a fork that departs from one of these is not a fork,
-# it is a different aircraft and so a different notebook.
+# THE BRIEF, under its own heading. It is the OLDEST ANCESTOR of the chapter
+# chain, not a separate kind of thing: its rows hold until a chapter forks
+# one, exactly as a chapter's own items do. A fork that departs from the brief
+# shows in the lineage diagram below, and the chapter page says what it
+# changed -- which is why there is no notebook-wide ledger of overwrites here.
+# With several forks each overwriting different rows there is no notebook-wide
+# answer to "what is in force", only a per-chapter one.
+#
+# THREE BLOCKS. `targets:` is a published FACT the model must reproduce, with
+# a tolerance -- the reconstruct gate reads it. A CLAIM is not a target: it is
+# what the programme exists to judge, and stays under Assumed.
 #
 # Parsed here rather than by `notebook_inputs()` in `_notebook.py`, which does
 # exactly this for a chapter. That file is reached through `_model.qmd`, which
@@ -34,7 +42,9 @@ for _line in pathlib.Path("_inputs.yml").read_text().splitlines():
     else:
         _key = None
 
+print("# The aircraft\n")
 for _k, _style, _heading in (("specified", "tip", "Initial user specifications"),
+                             ("targets", "tip", "Published figures to reproduce"),
                              ("assumed", "note", "Initial assumptions")):
     _rows = _brief.get(_k) or []
     if not _rows:
@@ -44,6 +54,7 @@ for _k, _style, _heading in (("specified", "tip", "Initial user specifications")
     for _n, _t in enumerate(_rows, 1):
         print(f"{_n}. {_t}")
     print(":::\n")
+print("\n# Chapters\n")
 ```
 
 ```{python}

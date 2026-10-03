@@ -599,3 +599,51 @@ def _resolve(notebook_path, run_id):
             f"  Wait for it, or stop it: nb stop {notebook.root.name} "
             f"{notebook.run_id}"]
     return notebook, None
+
+
+# `+/-2%`, `+/- 2 %`, `±5%`. The tolerance is what turns a published figure
+# into something a gate can check; a target row without one is a figure
+# somebody wrote down and did not commit to.
+TOLERANCE = __import__("re").compile(r"[+±]\s*/?-?\s*([\d.]+)\s*%")
+
+
+def targets_unreported(notebook, entry_path, targets):
+    """
+    One line naming the targets the entry never mentions, or "".
+
+    THE GATE IS ON REPORTING, NOT ON PASSING, and that is deliberate. A
+    reconstruction that misses a target is a finding -- "wing area is 7.3%
+    under, and the vertical stab is the likely cause" is exactly the entry
+    worth having. A reconstruction that misses one SILENTLY is the failure:
+    the model converges on what it can hit, writes a confident entry, and the
+    target nobody mentioned is the one that was wrong.
+
+    So this refuses an entry that does not name every target, and never
+    refuses one for the value it reports. Loosening a tolerance to pass is
+    then pointless, because passing was never the bar.
+
+    MATCHED ON THE HANDLE'S WORDS, not on numbers. Rule 1 means every number
+    in prose is a `{python}` expression that is not in the source at all, so
+    there is nothing numeric to grep for -- what IS in the source is the
+    prose naming the quantity. A target handled `wing-area` is reported if
+    the entry says "wing area" somewhere.
+    """
+    if not targets:
+        return ""
+    try:
+        body = entry_path.read_text().lower()
+    except OSError:
+        return ""
+    missing = []
+    for handle, text in targets:
+        words = [w for w in handle.replace("/", "-").split("-") if len(w) > 2]
+        if words and all(w in body for w in words):
+            continue
+        missing.append(text.split(":")[0].strip("* "))
+    if not missing:
+        return ""
+    return (f"{len(missing)} target(s) the entry never mentions: "
+            + "; ".join(missing)
+            + ". Report every target with its error, including the ones that "
+              "passed -- a target that misses is a finding, a target nobody "
+              "names is a hole.")

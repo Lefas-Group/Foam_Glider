@@ -134,13 +134,18 @@ def notebook_context(notebook):
     items = shared.notebook_items(notebook.root)
     if not items:
         return ""
-    out = ["\n## The aircraft — true of EVERY chapter\n",
+    out = ["\n## The aircraft — the oldest ancestor\n",
            "Stated once, in the notebook's `_inputs.yml`, and inherited by "
-           "everything below. Nothing supersedes them: a fork that departs "
-           "from one is a different aircraft, and so a different notebook. You "
-           "do not restate these in a chapter or an entry, and you do not "
-           "change one without `ask_specified`.\n"]
-    for kind in ("Specified", "Assumed"):
+           "every chapter below. They hold until a chapter FORKS one, exactly "
+           "as a chapter's own items do -- the notebook root is the root of "
+           "the ancestry chain, not a separate kind of thing. You do not "
+           "restate them in a chapter or an entry, and you do not change one "
+           "without `ask_specified` and an approved fork.\n",
+           "TARGET rows are published facts the model must REPRODUCE, with "
+           "the tolerance it must land inside. They are not claims: a claim "
+           "is what the programme exists to judge, and lives under Assumed. "
+           "Never adjust the model to make a claim come true.\n"]
+    for _key, kind in shared.BRIEF_BLOCKS:
         rows = [t for k, t in items if k == kind]
         if rows:
             out.append(f"{kind}:")

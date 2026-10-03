@@ -84,13 +84,16 @@ def _slug(text, taken):
     return slug
 
 
-def _brief(specs, assumes):
+def _brief(specs, assumes, targets=()):
     """The root `_inputs.yml` body, or "" to leave the template placeholders."""
-    if not specs and not assumes:
+    if not specs and not assumes and not targets:
         return ""
     taken = set()
     out = []
-    for key, rows in (("specified", specs), ("assumed", assumes)):
+    # Order matches `shared.BRIEF_BLOCKS` and the front page: what it is, what
+    # it must reproduce, what we assumed.
+    for key, rows in (("specified", specs), ("targets", targets),
+                      ("assumed", assumes)):
         if not rows:
             continue
         out.append(f"{key}:")
@@ -102,7 +105,7 @@ def _brief(specs, assumes):
 
 def main(path, title=None, subject=None, chapter=None,
          chapter_title=None, defines=None, verbose=True,
-         specs=(), assumes=()):
+         specs=(), assumes=(), targets=()):
     root = pathlib.Path(path).resolve()
     if root.exists() and any(root.iterdir()):
         tell(f"  {root} exists and is not empty")
@@ -225,7 +228,7 @@ def main(path, title=None, subject=None, chapter=None,
         # 24 now watches this file, so the placeholders are a lint failure the
         # moment anything is written.
         if dest == "_inputs.yml":
-            body = _brief(specs, assumes)
+            body = _brief(specs, assumes, targets)
             if body:
                 head = text.split("specified:")[0]
                 text = head + body

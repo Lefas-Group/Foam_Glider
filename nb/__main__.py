@@ -4,6 +4,10 @@
              [--spec "…"] [--assume "…"]      …the brief, repeatable
              [--title "…"]                    …only if the directory name is
                                               …not the aircraft's name
+    nb reconstruct <notebook> --chapter NN-name
+             [--pool N] [--ceiling N]          build the vehicle, prove it
+                                               reproduces the brief's targets
+
     nb ask   <notebook> --chapter NN-name    probe, write, render, commit
              "<question>"                      …the chapter is REQUIRED
              [--pool N] [--ceiling N]         …budgets, instead of being asked
@@ -128,14 +132,36 @@ def main(argv):
         # and the prefix is built once at `nb ask` -- so forgetting meant a
         # first run with no notebook level in front of the model at all.
         specs, assumes = _repeated(rest, "--spec"), _repeated(rest, "--assume")
+        targets = _repeated(rest, "--target")
         # No positional title: it defaults to the directory name and always
         # did, so typing it again could only ever disagree with itself -- and
         # "everything that is not a flag" is what swept a trailing shell
         # comment into a site heading. A flag cannot do that.
         return new(rest[0], _opt(rest, "--title", number=False),
-                   specs=specs, assumes=assumes,
+                   specs=specs, assumes=assumes, targets=targets,
                    chapter_title=_opt(rest, "--chapter-title", number=False),
                    defines=_opt(rest, "--defines", number=False))
+
+    if cmd == "reconstruct":
+        # THE THIRD BRIEF, and it takes no question: the question is always
+        # "can we reconstruct this within tolerance?". Everything else is
+        # `ask`'s, which is the point of it being a brief rather than a
+        # system.
+        if not rest:
+            print(USAGE)
+            return 2
+        from .cli.run import reconstruct
+        chapter = _opt(rest, "--chapter", number=False)
+        if not chapter:
+            print("  --chapter is required: reconstruct builds ONE chapter's "
+                  "vehicle.")
+            return 2
+        return reconstruct(rest[0], chapter=chapter,
+                           pool=_opt(rest, "--pool"),
+                           ceiling=_opt(rest, "--ceiling"),
+                           quiet=("--quiet" in rest or "--detach" in rest),
+                           answers=_answers(rest),
+                           watch="--no-watch" not in rest)
 
     if cmd == "ask":
         if len(rest) < 2:

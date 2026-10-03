@@ -869,7 +869,7 @@ def chapter_inputs(chapter):
 
 def _render_active(chapter):
     """
-    One collapsed callout: what this chapter was forked with.
+    One collapsed callout: what this chapter was given, by whoever gave it.
 
     A chapter index renders `_inputs.yml` and the items it overwrote, and both
     are one step deep -- so a reader of 03-no-cosmetics saw one specification
@@ -886,7 +886,15 @@ def _render_active(chapter):
     held it from the start. An ANCESTOR's is different -- including the
     entry-level ones declared before the fork, which `_lineage`'s `at_entry`
     cutoff selects -- because those are premises of the vehicle this chapter
-    copied, true here from its first line.
+    copied.
+
+    THE BRIEF IS AMONG THEM, keyed `brief/<handle>`, because the notebook root
+    is the oldest ancestor rather than a separate kind of thing. A root
+    chapter used to render nothing here at all -- `_active.yml` held the
+    chapter chain only, so `01-...` showed a reader no constraints while seven
+    were in force. An earlier fix read the root `_inputs.yml` separately and
+    printed a second callout; that is gone, because once the brief is in the
+    chain `_active.yml` already contains it and one list says what two did.
 
     NOT MERGED INTO THE NEW CALLOUTS, which is the rest of the design. Roughly
     half of these are assumptions one ancestral entry made; listing them under
@@ -905,54 +913,27 @@ def _render_active(chapter):
 
     Reads `_active.yml`, which `nb` regenerates on every commit -- this file
     executes at Quarto render time with no `nb` importable, so it cannot walk
-    the chain itself.
-
-    THE BRIEF IS THE OTHER HALF, and it used to be missing. `_active.yml`
-    holds the ancestor CHAPTER chain only, so a root chapter's was empty and
-    this returned without printing -- on the reasoning, written here, that a
-    root chapter "inherits from no one". That is wrong. Every chapter
-    inherits the notebook's brief: `prefix.py` hands it to the model under
-    "The aircraft -- true of EVERY chapter", and nothing supersedes it. So
-    `01-…` showed a reader no constraints at all while seven were in force.
-    Read straight from `_inputs.yml` at the notebook root, which is where the
-    front page already reads it from and which `_blocks` parses identically.
-
-    TWO CALLOUTS, NOT ONE MERGED BLOCK. A brief row can never be superseded --
-    departing from one makes it a different notebook -- while an inherited
-    chapter item can be overwritten by a fork, so they are not one list.
-    Sub-headings inside a single callout were the first shape and are worse:
-    the brief is identical on every chapter page and the inherited set is not,
-    so merging them buries the half that varies behind the half the reader has
-    already seen everywhere else. Separate callouts also carry separate counts,
-    and each omits itself when empty -- which is how a root chapter ends up
-    with exactly one box rather than one box half full.
+    the chain itself. No file renders nothing, which is right for a chapter
+    that predates the generator.
     """
+    rows = _blocks(_pathlib.Path("chapters") / chapter / "_active.yml")
     # The handle is the KEY and is never printed -- it is there so `_blocks`
     # can parse this like every other inputs file, and so provenance survives
     # in the source for anyone who goes looking.
-    def _emit(rows, title, headings):
-        groups = [(h, [t for _handle, t in (rows.get(k) or [])])
-                  for k, h in headings]
-        total = sum(len(items) for _, items in groups)
-        if not total:
-            return
-        print('::: {.callout-note collapse="true"}')
-        print(f"## {title} ({total})\n")
-        for heading, items in groups:
-            if not items:
-                continue
-            print(f"**{heading}**\n")
-            for n, text in enumerate(items, 1):
-                print(f"{n}. {text}")
-            print()
-        print(":::\n")
-
-    # Widest scope first: the brief holds for every chapter, the ancestor
-    # chain only for this branch of them.
-    _emit(_blocks(_pathlib.Path("_inputs.yml")),
-          "From the brief — true of every chapter",
-          (("specified", "User specifications"), ("assumed", "Assumptions")))
-    _emit(_blocks(_pathlib.Path("chapters") / chapter / "_active.yml"),
-          "Maintained from earlier chapters",
-          (("specified", "Inherited user specifications"),
-           ("assumed", "Inherited assumptions")))
+    groups = [(heading, [t for _handle, t in (rows.get(key) or [])])
+              for key, heading in (("specified", "Inherited user specifications"),
+                                   ("targets", "Inherited targets"),
+                                   ("assumed", "Inherited assumptions"))]
+    total = sum(len(items) for _, items in groups)
+    if not total:
+        return
+    print('::: {.callout-note collapse="true"}')
+    print(f"## In force here, from earlier ({total})\n")
+    for heading, items in groups:
+        if not items:
+            continue
+        print(f"**{heading}**\n")
+        for n, text in enumerate(items, 1):
+            print(f"{n}. {text}")
+        print()
+    print(":::\n")

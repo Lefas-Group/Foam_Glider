@@ -190,3 +190,73 @@ good.
 
 {why}
 """
+
+
+# =============================================================================
+# `nb reconstruct` -- the third brief into `_execute`, after BRIEF and RESUME.
+#
+# Reconstruction is a DIFFERENT ACTIVITY from answering a question, and the
+# ordinary contract is built for the latter: rule 5 bans a `range()` loop
+# around a solve, rule 6 caps prose at 100 words, and the closing gate is
+# "lint clean" rather than "targets met". Converging a model onto a published
+# spec sheet is iterate-to-tolerance, so it gets its own opening brief and its
+# own gate, and shares everything else.
+#
+# The ENTRY it writes is ordinary. A question, a hero, two visuals -- which is
+# what rule 14 already allows when one of them draws the aircraft. No new
+# output format and no contract exception.
+# =============================================================================
+RECONSTRUCT = """\
+Build this chapter's vehicle, and prove it is the aircraft the brief
+describes.
+
+You are in **chapters/{chapter}**. It is claimed for this run. Write
+`_model.py` so that it reproduces every TARGET row in the brief above, each
+inside the tolerance it states.
+
+{targets}
+
+# What you are being asked for
+
+ONE ordinary entry, titled as a question -- "Can we reconstruct the <aircraft>
+within tolerance?" -- answering it with the worst error across the targets as
+the hero value. The entry carries TWO visuals, which rule 14 allows because
+one of them draws the aircraft:
+
+  * a three-view of what you built;
+  * a chart of error against tolerance, one bar per target, so a reader sees
+    at a glance which targets passed.
+
+Report EVERY target, including the ones that passed. A target you cannot hit
+is a finding, not a failure to hide: say by how much and what you think is
+wrong. Never loosen a tolerance, and never adjust the model to make a CLAIM
+come true -- a claim is under Assumed, it is what the programme exists to
+judge, and fitting the model to one is how a notebook comes to agree with
+marketing.
+
+# Before you open the entry
+
+**Render a three-view and leave it at `_scratch/_probe_fig.png`.** The
+assumptions prompt shows that file to the person who holds the plan, and it is
+the only chance they get to catch a shape error while it is still cheap --
+before `_model.py` is written into the entry. A run that skips it is asking
+them to approve an aircraft they cannot see.
+
+Targets are numbers, and numbers do not see shape: a model can hit area, mass
+and wing loading with a completely wrong fuselage. That has happened here --
+a reconstruction passed its mass checks as a smooth pod where the real
+aircraft is a slab-sided foam box. So the picture comes first, and the
+numbers after.
+
+**Declare every dimension you had to supply yourself.** The brief gives what
+was measured; everything else -- a station table you inferred, a dihedral
+nobody read off the plan, a stand-in airfoil -- is `declare_input` with
+`source='guessed'`, saying in `why` that it was not measured. Those rows are
+what the prompt puts in front of someone who can go and check them.
+
+If they reject one with `redo`, rebuild under what they said, render the
+three-view again and open the entry again. That loop is the point of the
+prompt; it is not an error.
+
+{question}
+"""

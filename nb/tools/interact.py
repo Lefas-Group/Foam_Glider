@@ -227,6 +227,25 @@ def confirm_assumptions(session):
 
     listing = "\n".join(f"{n}. {i.name}: {i.value or i.why}"
                         for n, i in enumerate(assumed, 1))
+    # THE PICTURE, if the run left one. A reconstruct brief is told to render
+    # a three-view to `_scratch/_probe_fig.png` before opening the entry, and
+    # naming it here is the whole of the wiring -- the reader opens it, holds
+    # it beside the plan, and corrects a shape guess while it is still cheap.
+    #
+    # WHY IT MATTERS MORE THAN THE NUMBERS BESIDE IT. Measured on
+    # `20261002-124225-4732`: six assumptions went to this prompt, the window
+    # was 480 s, the answer came in 61 s, and ONE was corrected. Not a missing
+    # channel and not time -- seven minutes went unused. What was missing was
+    # any basis for choosing between `wing dihedral: 2.5 deg` and `vertical
+    # stabilizer area: 6.6 in2`. A three-view is that basis.
+    #
+    # Nothing is required to produce it: a run that leaves no figure gets a
+    # prompt without one, which is the behaviour this has always had.
+    fig = session.notebook.run / "_probe_fig.png"
+    if not fig.exists():
+        fig = session.notebook.root / "_scratch" / "_probe_fig.png"
+    if fig.exists():
+        listing += f"\n\nthree-view: {fig}"
     how = ('  Enter accepts.\n'
            '  Correct a VALUE with        "1: 2.5e-4"\n'
            '  Reject the APPROACH with   "1: redo — needs 3-DOF, not point-mass"'

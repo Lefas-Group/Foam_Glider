@@ -149,6 +149,14 @@ def _lineage(notebook, chapter, parent=None):
     return out
 
 
+def _brief_pairs(notebook):
+    """[(handle, text)] for every brief row, across all three blocks."""
+    from ..contract import shared
+    data = shared.parse_inputs(notebook.root / "_inputs.yml")
+    return [(h, t) for key, _ in shared.BRIEF_BLOCKS
+            for h, t in (data.get(key) or [])]
+
+
 def _ancestral(notebook, chapter, parent=None):
     """
     (carried, dropped) from this chapter's ancestors. The one walk both
@@ -175,6 +183,32 @@ def _ancestral(notebook, chapter, parent=None):
     mine = {h for h, _ in _pairs(
         (shared.read_inputs(notebook.root, chapter) or {}).get("overwrites"))}
     carried, dropped = [], []
+    # THE BRIEF IS THE OLDEST ANCESTOR, keyed `brief/<handle>`, and goes first
+    # because it is the widest scope -- true of every chapter until one forks
+    # it. It used to sit outside the chain entirely, reachable only as
+    # `inherited`'s fallback for a root chapter, on the reasoning that nothing
+    # could ever supersede it: "a fork that departs from one of these is not a
+    # fork, it is a different aircraft and so a different notebook". That cost
+    # more than it bought. Doubling a span is the same programme, and forcing
+    # it into a new notebook throws the lineage away -- `glider-notebook` is
+    # the X-Wing at a different foam thickness, with no link back to the
+    # chapters it came from.
+    #
+    # AUTHORSHIP IS THE GUARANTEE WORTH KEEPING, not immutability. The root
+    # `_inputs.yml` is still written by a person and never by a run -- it sits
+    # above `chapters/`, which is the only directory the file tools can reach,
+    # so that is enforced by geography rather than by rule. What changes is
+    # only whether a departure has to live in a different directory.
+    for kind, text in shared.notebook_items(notebook.root):
+        handle = next((h for h, t in _brief_pairs(notebook) if t == text), "")
+        if f"brief/{handle}" in mine:
+            dropped.append((kind, text, "brief", chapter))
+            continue
+        by = gone.get(("brief", handle)) if handle else None
+        if by and by in breakers:
+            dropped.append((kind, text, "brief", by))
+            continue
+        carried.append((kind, text, "brief", handle))
     for c, at in chain:
         ids = shared.input_ids(notebook.root, c)
         for kind, text, handle in own(notebook, c, entries_before=at):
@@ -480,13 +514,13 @@ def inherited(notebook, chapter, parent=None):
     `overwrites:` records the override now, so it is mechanical and the dropped
     set is reported rather than silently missing.
     """
-    from ..contract import shared
-    if not _lineage(notebook, chapter, parent):
-        # The brief has no ancestor and no handle to point at -- it is stated
-        # once, at the notebook root, and `where` carries that name so the row
-        # shape holds even here.
-        return [(k, t, notebook.root.name)
-                for k, t in shared.notebook_items(notebook.root)], []
+    # NO SPECIAL CASE FOR A ROOT CHAPTER any more. The brief used to be
+    # reachable only here, as a fallback when `_lineage` came back empty, and
+    # it keyed rows by the notebook directory name rather than by a handle --
+    # so a root chapter saw the brief and `_active.yml` did not. `_ancestral`
+    # now walks the brief as the oldest ancestor for every chapter, keyed
+    # `brief/<handle>`, which is also what `overwrites:` can name.
+    #
     # THE SAME ROWS THE PAGE WILL SHOW, from `carried` -- this is the review
     # of exactly what the new chapter is about to be given, so computing it a
     # second way here is how the two come to disagree. `dropped` still needs

@@ -1152,11 +1152,40 @@ def input_ids(root, chapter):
 
 
 
+# The brief's three blocks, in the order they are read and rendered. `targets:`
+# is the newest: a published FACT the model must reproduce -- area, all-up
+# weight, wing loading -- with the tolerance it must land inside.
+#
+# WHY ITS OWN BLOCK rather than a tolerance sniffed out of a `specified:` row.
+# A real brief already carried `"**Horizontal stab**: span 213 mm, area 16
+# in2, +/-10%."`, which is a tolerance on a MEASUREMENT and not a target at
+# all. Matching on `+/-` would have read it as one.
+#
+# WHY NOT A CLAIM. `top speed 87 km/h` is what a programme exists to judge,
+# and it stays an `assumed:` row. A claim in here is a claim the reconstruct
+# gate will drive the model towards -- fitting it to the thing it was built to
+# test, and reporting success.
+BRIEF_BLOCKS = (("specified", "Specified"),
+                ("targets", "Target"),
+                ("assumed", "Assumed"))
+
+
 def notebook_items(root):
     """[(kind, text)] from the notebook's brief -- `_inputs.yml` at its root."""
     data = parse_inputs(root / "_inputs.yml")
-    return [("Specified" if k == "specified" else "Assumed", t)
-            for k in ("specified", "assumed") for _, t in (data.get(k) or [])]
+    return [(kind, t)
+            for k, kind in BRIEF_BLOCKS for _, t in (data.get(k) or [])]
+
+
+def notebook_targets(root):
+    """
+    [(handle, text)] from the brief's `targets:` block, or [].
+
+    The reconstruct gate's input. Separate from `notebook_items` because that
+    one flattens to (kind, text) for rendering and word-counting, and a gate
+    needs the handle to say WHICH target missed.
+    """
+    return list(parse_inputs(root / "_inputs.yml").get("targets") or [])
 
 
 

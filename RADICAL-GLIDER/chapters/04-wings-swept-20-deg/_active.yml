@@ -9,6 +9,8 @@
 # forked with. What its own entries assume stays on those entries.
 
 specified:
+  - brief/construction: **Flat plate foam**, cut and slotted by hand.
+  - brief/subject: **Star Wars X-Wing**, from the FliteTest plan.
   - 01-first-chapter/dihedral: 20 degrees determines the cross-angle of the X-wing.
   - 01-first-chapter/static-margin: 10% of the mean aerodynamic chord, which fixes the CG.
   - 01-first-chapter/2026-09-25-01-does-it-meet-the-2-s-flight-time-target: **flight-time target: 2 s** — Determines if requirements are met
