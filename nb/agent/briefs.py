@@ -214,7 +214,17 @@ You are in **chapters/{chapter}**. It is claimed for this run. Write
 `_model.py` so that it reproduces every TARGET row in the brief above, each
 inside the tolerance it states.
 
+**Everything about this notebook is already in front of you.** The brief, its
+targets, this chapter's `_inputs.yml`, `_active.yml` and `_model.py` are all
+quoted above as data. Do not go looking for what you have already been given
+-- the first live reconstruct run spent seven of its eighty turns on
+`list_directory`, three `search_files` globs and three reads of files that
+were already in its context, and then hit the turn cap with the entry
+unwritten.
+
 {targets}
+
+{reference}
 
 # What you are being asked for
 

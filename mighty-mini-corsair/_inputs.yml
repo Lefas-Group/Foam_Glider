@@ -1,0 +1,25 @@
+# THE BRIEF for the aircraft. True of the whole aircraft, inherited by every
+# chapter and every entry, and never superseded: a fork that departs from one
+# of these is not a fork, it is a different aircraft and so a different
+# notebook. Written by a PERSON, never by a run.
+#
+# Rendered into index.qmd. Same format as a chapter's `_inputs.yml`:
+# `- <id>: <text>`, ten words each.
+#
+# The test for what belongs here rather than in the first chapter: IF THIS
+# CHANGED, WOULD IT STILL BE THE SAME AEROPLANE? A 300 mm span, no. Foam 5 mm
+# — yes, that is the same project at a different thickness, so it is a chapter.
+specified:
+  - ft-mighty-mini: "**FT Mighty Mini Corsair MKR2**, Flite Test kit."
+  - folded-maker-foam: "**Folded Maker Foam**, hand cut and hot glued."
+  - inverted-gull-wing: "**Inverted gull wing**, tractor prop, conventional tail."
+  - power-2204-2200: "**Power**: 2204 2200 kv, 6x4.5 prop, 3S."
+  - battery-850-mah: "**Battery**: 850 mAh 3S LiPo, 12 A ESC."
+  - controls-aileron-elevator: "**Controls**: aileron, elevator, rudder; 12 deg throws."
+targets:
+  - wing-span-737: "**Wing span**: 737 mm (29 in), +/-1%."
+  - dry-weight-270: "**Dry weight**: 270 g without battery, +/-5%."
+  - cg-44-mm: "**CG**: 44 mm aft of wing leading edge, +/-10%."
+assumed:
+  - claimed-forgiving-handling: "**Claimed forgiving handling** with Aura 5, to verify."
+  - claimed-smooth-performance: "**Claimed smooth performance** in a compact package."

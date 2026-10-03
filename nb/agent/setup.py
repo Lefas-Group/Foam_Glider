@@ -56,6 +56,7 @@ CALL_ARG = {
     "probe": "question",
     "api_search": "query", "api_signature": "path", "api_list": "area",
     "read_reference": "name", "read_figure": "stem",
+    "read_reference_image": "name",
     "ask_specified": "name",
     "declare_refactor": "function",
     "fork_chapter": "name", "declare_input": "name", "open_entry": "title",

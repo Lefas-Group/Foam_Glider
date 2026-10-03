@@ -203,6 +203,9 @@ def main(notebook_path, question, verbose=True,
     session.render_ceiling = ceiling
     # Read by the targets gate before the commit, and by nothing else.
     session.kind = kind
+    # See `loop_once`: a reconstruct builds the vehicle AND converges it, and
+    # the shape loop can send it round again from the prompt.
+    session.max_turns = MAX_TURNS * 2 if kind == "reconstruct" else MAX_TURNS
     run_metrics.set(chapter=chapter)
 
     # ONE WRITER PER CHAPTER, claimed before a single token is spent. Refused
@@ -238,10 +241,11 @@ def main(notebook_path, question, verbose=True,
     if kind == "reconstruct":
         text = briefs.RECONSTRUCT.format(
             chapter=chapter, question=question,
-            targets=_targets_brief(notebook))
+            targets=_targets_brief(notebook),
+            reference=_reference_brief(notebook))
     else:
         text = briefs.BRIEF.format(
-            question=question, max_turns=MAX_TURNS, chapter=chapter)
+            question=question, max_turns=session.max_turns, chapter=chapter)
     contents = [{"role": "user", "parts": [{"text": text}]}]
     return _execute(notebook, session, contents, run_metrics, fs, handlers,
                     make_config, verbose, accept_refactor=False)
@@ -274,6 +278,64 @@ def _targets_brief(notebook):
                "every one inside its tolerance, or say which you could not "
                "and by how much.")
     return "\n".join(out)
+
+
+def _reference_brief(notebook):
+    """
+    What is in `_reference/`, and how to use it. "" when there is nothing.
+
+    THE SCALE IS WHY THIS IS WORTH A PARAGRAPH. A 1:1 plan sheet rasterised
+    at a stated dpi can be MEASURED -- `probe` is not sandboxed, PIL and
+    numpy are in the kernel, and a pixel count times 25.4/dpi is a
+    millimetre. A run told only "there is an image" reads dimensions off a
+    photograph instead, which is the failure this wording exists to prevent.
+
+    THE SELF-CHECK IS MANDATORY and cheap. If the stitch is wrong or the dpi
+    is misstated, every measurement downstream is confidently wrong -- so the
+    run measures something whose value is published first, and stops if it
+    disagrees.
+    """
+    from ..tools import figures
+    listing = figures.reference_listing(notebook)
+    if not listing:
+        return ("There is nothing in `_reference/`. Build from the brief and "
+                "your own knowledge of the aircraft, and declare every "
+                "dimension you supply.")
+    return f"""# What is known about the real aircraft
+
+`_reference/` holds these, and `read_reference_image` returns one as an
+image:
+
+{listing}
+
+**ONE LOOK, THEN CODE.** Use `read_reference_image` once to find where each
+part sits on the sheet. Everything quantitative after that is `probe`: the
+kernel is ordinary Python with PIL and numpy, and a 1:1 sheet at a known dpi
+is a dataset, not a picture --
+
+    from PIL import Image
+    import numpy as np
+    a = np.array(Image.open("_reference/<sheet>").convert("L"))
+    mm = 25.4 / <dpi>
+    ys, xs = np.nonzero(a[y0:y1, x0:x1] < 160)      # one part's outline
+    span_mm = (xs.max() - xs.min()) * mm
+
+Measure in code. Do NOT read a dimension off the picture by eye -- that is an
+estimate wearing a measurement's clothes, and it is the one thing this sheet
+makes unnecessary.
+
+**CHECK THE SCALE BEFORE YOU TRUST IT.** Measure something the brief already
+publishes -- a length, a span -- and compare. If it disagrees by more than a
+few percent the stitch or the dpi is wrong, and every other measurement is
+wrong with it: say so and stop rather than building on it.
+
+**THE BRIEF WINS.** Where a row above already states a dimension, use that
+and do not re-measure it. The sheet is for what the brief does not say.
+
+A photograph gives PROPORTIONS and layout, never dimensions. A plan sheet
+gives both, but only where it is labelled 1:1 with a dpi.
+
+"""
 
 
 def reconstruct(notebook_path, chapter=None, pool=None, ceiling=None,
@@ -508,9 +570,16 @@ def _execute(notebook, session, contents, run_metrics, fs, handlers,
     spent = [0]
 
     def loop_once():
-        left = MAX_TURNS - spent[0]
+        # PER SESSION, not per system. A reconstruct run raises it: building a
+        # whole airframe and then iterating it onto the targets is more work
+        # than answering one question, and the first live `nb reconstruct`
+        # spent all 80 turns and hit the cap with the entry already written.
+        # It scaled its probe POOL and inherited `ask`'s turn cap, which is
+        # half a budget.
+        cap = getattr(session, "max_turns", MAX_TURNS)
+        left = cap - spent[0]
         if left <= 0:
-            raise RuntimeError(f"max turns ({MAX_TURNS}) exceeded")
+            raise RuntimeError(f"max turns ({cap}) exceeded")
         before = len(contents)
         try:
             drive(contents, make_config(), handlers,
