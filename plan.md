@@ -1,487 +1,325 @@
-# Sourcing geometry, and the clause that skipped it
+# Reconstruct: one brief, one entry
 
-Written 2026-10-02. Replaces the kernel plan, which is implemented — every run
-below carries a `kernel.log` and spent 17–67 probes without exhausting its
-pool. Nothing here is implemented yet.
+Written 2026-10-03, after `2c38a74 skillupgrade` shipped and a second Mustang
+programme ran against it. Nothing here is implemented yet.
 
-Evidence throughout is one programme, `mighty-mini-mustang`, three committed
-entries reconstructing the FT Mighty Mini Mustang MKR2 from its published
-specification:
+## Where the last plan got to
 
-| run | question | tool calls | outcome |
-|---|---|---:|---|
-| `20261002-100435-b81e` | does it hit the claimed 156 g dry? | 103 | `max_turns`, resumed, stalled once, committed |
-| `20261002-101821-023a` | level-flight stall speed? | 35 | committed |
-| `20261002-102433-a21b` | what does it look like? | 44 | committed |
+Two programmes, same aircraft, same published specification — one before the
+changes, one after.
 
-## The problem
-
-All three entries are wrong in the same way, and the notebook cannot tell.
-
-The brief carried seven scalar rows — span, area, aspect ratio, CG, power,
-controls, construction. Nothing about form. Every other dimension in
-`_model.py` was supplied by the model from its own memory of what a Mustang
-looks like:
-
-```python
-c_root_w = 0.140      c_tip_w = 0.0986     dihedral_w = 3.0
-x_le_w   = 0.120      b_h = 0.240          b_v = 0.120
-fuse: 6 superellipse stations, shape=4.0, 485 mm long
-S_fuse_shell = 0.0873   S_turtle_canopy = 0.0220   S_belly_scoop = 0.0150
-S_formers_doublers = 0.0100   S_power_pod = 0.0200
-```
-
-Only `b_w` and `S_w_spec` came from the brief. Three consequences, in
-increasing order of seriousness:
-
-- **The mass answer may be an artefact.** Those five foam areas total
-  0.134 m² — nearly twice the wing — and are ~47 g of the 87.2 g foam total.
-  The headline finding was 195.2 g against a claimed 156 g. The 39 g overshoot
-  is within the span of the invented areas.
-- **The stall answer rests on a substitution.** The wing uses
-  `asb.Airfoil("naca0006")` while the brief Specifies flat plate. Commented,
-  never declared.
-- **The notebook claims a provenance it does not have.** `_model.py` carries
-  `# Reference surface areas of cut foam parts from FT plan sheet`. An invented
-  number is wearing a citation.
-
-Across 182 tool calls there were **four** `declare_input` calls — foam density,
-electronics, hardware, glue. All mass, none geometry. The one that was declared
-is the one that got corrected: the coordinator checked 348.7 g/m² against Flite
-Test's own measurement at the assumptions prompt. The mechanism works. It was
-never reached.
-
-And the entry whose job was to show the shape certified itself — *"faithfully
-matches the Flite Test planform … within 0.006 %"* — by comparing the model
-against the two numbers the brief supplied. Circular, and it reads as external
-validation.
-
-**And the plan was one search away.** Nobody looked.
-
-### The clause that caused it
-
-`nb/agent/schema.py:44-51`, the `source` field description, ends:
-
-> *"guessed: nobody knows, a different answer changes HOW ACCURATELY it is
-> modelled, so you assumed it and said what it costs. **If the model or the
-> plans already contain it, it is none of these: compute it.**"*
-
-That last sentence assumes the plans are **present**. The run classified taper
-ratio as a plan-derived quantity — correctly, it is on the plan — and the
-instruction says plan-derived quantities are "none of these", so it did not
-declare, it just wrote the number. Then it wrote `# from FT plan sheet`,
-because that is the category it had been told to assign.
-
-The agent followed the instruction. The instruction has a hole for the case
-where the quantity is on a plan nobody has.
-
-### The prompt fires at exactly the right moment
-
-Call ordering in `b81e`, which decides the shape of item 1:
-
-| call | what |
-|---:|---|
-| 50 | first probe touching geometry |
-| 52–55 | the four `declare_input` calls |
-| — | **assumptions prompt fires here** |
-| 56 | more geometry probing |
-| 60 | `_model.py` written |
-
-So the prompt lands as geometry work begins and **before the model file
-exists**. A correction there costs roughly one probe of rework — not a
-rebuild, not a re-render. This is the cheapest point in the run at which a
-wrong dimension can be caught, and it is already built.
-
-## What the plan actually contains
-
-Retrieved 2026-10-02, 462 KB, 18 pages, http 200, now committed to the notebook
-root as `FT-Mini-Mustang-v1.0-Tiled.pdf`:
-
-```
-s3.amazonaws.com/plans.flitetest.com/stonekap/FT Mini Mustang v1.0 Tiled.pdf
-```
-
-Page 1 is a specification table:
-
-| | imperial | metric |
+| | first | second |
 |---|---|---|
-| Length | 19 in | 482 mm |
-| CG | 1.00 in | 25 mm |
-| Wing span | 24 in | 622 mm |
-| Wing area | 115 in² | 7.4 dm² |
-| Dry weight | 5.5 oz | 156 g |
-| **All-up weight** | 7.8 oz | **222 g** |
-| **Wing loading** | 9.8 oz/ft² | **29.9 g/dm²** |
-| Wing cubic loading | — | 10.9 |
+| `declare_input` calls, of which geometry | 4, **none** | 10, **all** |
+| stalls, turn-cap hits, human unsticks | 1, 1, 2 | 0, 0, 0 |
+| wing loading vs published 29.9 g/dm² | 36.0, **+20 %**, unnoticed | 32.4, **+8.3 %**, stated as the answer |
 
-Page 2 is a drawing key, and every entry in it is a fold type — A (above),
-B (beside), C (cover). **The plan folds the wing.** The flat-plate row in the
-brief is wrong at the source, not merely approximate.
+The loop works. What remains is an 8.3 % reconstruction error and a three-view
+that is recognisably a Mustang but not this Mustang.
 
-**Measurement off the tiles is feasible and self-calibrating.** FT tiles print
-at 100 %, and each carries an inch/cm scale bar, so `pdftoppm -r 150` yields
-real millimetres directly from pixel counts — no span-scaling, no perspective
-correction. Verified on tile 5 (`REAR TURTLE DECK`): page renders 7.5 × 10.5 in
-at 150 dpi, outline recovered by thresholding at 128. One real cost: tiled
-plans split parts across page boundaries, so an exact planform needs the tiles
-stitched first. Scriptable, not free — and the reason item 1b has a time
-problem.
+## The problem, attributed
 
-**Identity caveat.** This is the FT Mini Mustang **v1.0**; the programme's
-subject is the **Mighty Mini MKR2**. Same 115 in² area, 156 g dry weight and
-25 mm CG, but 24 in span against the store page's 24.5 in. Same lineage, not
-provably the same airframe. Do not transplant its numbers without checking.
+Four items reached the model as guesses:
 
-### A quantified defect in a committed entry
+| missing | why |
+|---|---|
+| tail moment arm | one number on the full-size page — **not measured** |
+| vertical stab area | one number — **not measured** |
+| dihedral | *"gauge on plan, angle unread"* — **not read** |
+| fuselage cross-sections | 8 × 4 numbers — **no good home** |
 
-`023a` computed 36.0 g/dm² wing loading from the invented 195.2 g dry mass and
-derived an 8.80 m/s stall. The plan publishes **29.9 g/dm²**. That is 20 % high,
-and the stall speed is overstated with it — nearer 8.0 m/s at the published
-loading.
+All six reached the assumptions prompt. The coordinator answered in **61 s of
+a 480 s window** and corrected **one**. So this was never a missing channel
+and never time pressure — seven minutes went unused. What was missing was any
+basis for choosing between them.
 
-No longer a suspected weakness: a measurable error in committed work, and the
-strongest argument for item 1. The number that would have caught it was on page
-one of a free PDF, before any modelling began.
+And every fuselage station used `shape=4`, AeroSandbox's superellipse exponent
+where 2 is a circle and high values approach a rectangle. That is why the
+render is a smooth pod where the real aircraft is a slab-sided foam box with a
+step behind the canopy. Nobody specified it, and nobody could have known to —
+**the coordinator wrote nineteen rows of description without ever seeing what
+they produced**, until an entry rendered five minutes later and committed.
 
-## A principle for the lint items
+## The split that decides the design
 
-**A rule that misses is worse than no rule**, because "lint clean" stops
-meaning *checked* and starts meaning *probably fine*. That false assurance is
-the same disease as the false citation.
+- **Numeric convergence** — does the model hit the published scalars? This is
+  arithmetic, and it is the iterate-to-tolerance shape the ordinary entry
+  contract discourages. The agent is good at it.
+- **Visual resemblance** — does it look like the aircraft? Measured evidence
+  says the agent is poor at this: *"Ah, finally, a clean one! … no cropping,
+  no awkward edges"*, written while looking at an airframe that did not
+  resemble a Mustang.
 
-So: lint reports facts it can compute exactly — counts, diffs, presence. Where
-only a fuzzy match is available, the rule belongs in the system instruction
-instead, where it reads as guidance rather than a guarantee.
+The difference is not eyesight, it is the **reference**. The agent was asked
+"is this figure OK?" with nothing to compare against, so it answered about
+composition. The coordinator holds the plan and the photograph, because the
+coordinator fetched them.
 
-## The changes
+**The agent converges on numbers; the coordinator judges resemblance.**
 
-### 1. The coordinator holds the source — skill only, no code
+## 1. It all goes in the brief
 
-Two halves. Neither needs a mechanism built; both are skill text.
+No new file. `_inputs.yml` gains a third block beside `specified:` and
+`assumed:`.
 
-**1a — fetch before the first ask.** Minimal, not exhaustive:
+```yaml
+specified:
+  - subject:      "**FT Mighty Mini Mustang MKR2**, from the Flite Test plan."
+  - construction: "**Folded Maker Foam**, hand cut and hot glued."
+  - span:         "**Span**: 622 mm (24.5 in) tip to tip."
+  - layout:       "**Low wing**, tractor prop, conventional tail."
+  - fuselage:     "**Fuselage**: slab-sided box, stepped behind the canopy."
+  - power:        "**Power**: 2205 2300 kv, 6x4.5 prop, 3S."
+  - controls:     "**Controls**: aileron, elevator, rudder; 12 deg throws."
 
-> **If the aircraft already exists, find its plan before the first ask.** The
-> agent cannot research — no network, sandboxed to `chapters/`. Every
-> dimension you do not supply, it supplies from memory.
->
-> FT plans are free, print 1:1 and carry a scale bar, so `pdftoppm -r 150`
-> measures them in millimetres. **Page one is usually a specification table —
-> read it before modelling anything.** Commit the file at the notebook root,
-> as `RADICAL-GLIDER` already does with its X-Wing plan: a dated local copy
-> outlives any URL.
->
-> Put the headline specs in as `--spec` rows. `MAX_CALLOUT_ITEM = 10`
-> (`contract/shared.py:204`) caps words **per row** and nothing caps the number
-> of rows, so a dimension table fits — but do not transcribe one
-> speculatively. 1b is better targeted.
+targets:
+  - wing-area:    "**Wing area**: 7.42 dm2 (115 in2), +/-2%."
+  - auw:          "**All-up weight**: 222 g with 850 mAh pack, +/-5%."
+  - wing-loading: "**Wing loading**: 29.9 g/dm2 published, +/-3%."
 
-**1b — check the assumptions prompt against the plan.** This is the half that
-closes the loop, and it needs *nothing built at all*:
-
-> When the assumptions prompt lists a dimension of the real aircraft and you
-> hold the plan, check it before accepting. Correct with `N: <value>`, or send
-> it back with `N: redo — why`. **Accepting a number you could have checked is
-> how the taper ratio got in.**
-
-The prompt is already a list of every number the run invented, shown to the
-only party holding the plan, at the cheapest moment to change one (see the call
-ordering above). It already accepts corrections. The capability has been there
-the whole time; the instruction to use it has not.
-
-**Why 1b beats transcribing up front.** Transcription is speculative — twenty
-rows written, six used. At the prompt the run has named precisely which
-dimensions it needs. Demand-driven beats guessing, and 1a exists mainly to make
-1b fast: answering means reading a PDF already on disk rather than searching
-the web inside a five-minute window.
-
-**1c — the five-minute default is the one real constraint.** `interact.py:207`
-builds the confirmation list, and the prompt takes a safe default after five
-minutes. That is enough to correct a number already known; it is not enough to
-rasterise and stitch tiles to measure one. The only code change item 1 needs:
-a longer default when the batch is large, or a reply that buys time. Without
-it, 1b silently degrades to accepting whatever was guessed.
-
-### 2. Fix the clause
-
-One string in `nb/agent/schema.py:50-51`:
-
-```
-  ...If the model or the plans already contain it, it is none of these:
-  compute it.
-
-→ ...If the MODEL already contains it, compute it. If a document would
-  contain it but you do not have that document, it is guessed — declare it
-  and say it was not measured.
+assumed:
+  - landing-gear: "**Landing gear**: not modelled, retracted in cruise."
+  - claimed-speed: "**Claimed top speed** 87 km/h on 3S, to verify."
 ```
 
-No enum change, no `Literal` widening, and **none of the three `interact.py`
-dispatch sites need touching** (`:207` building the confirmation list, `:886`
-and `:1067` rendering Specified-vs-Assumed). Those three were the bulk of the
-cut `recalled` proposal and the part most likely to silently no-op if one were
-missed. Deleting that proposal removes the risk with it.
+**Why the brief and not a `chapters/_reference.md`.** Three costs vanish:
 
-### 3. Make geometry reach the declaration, and sort it for the reviewer
+- **The guard is free.** `_inputs.yml` is at the notebook root, *outside the
+  sandbox* — run `a21b` tried `search_files(path="..")` and got *"Access
+  denied"*. A file under `chapters/` is writable by a run and would have
+  needed a new guard.
+- **No prefix line, no read instruction.** The brief is already quoted in full
+  in the prefix on every call.
+- **It renders on the overview**, so a reader sees what the reconstruction is
+  held to, on the front page.
 
-The reworded clause removes the excuse; this makes the habit explicit and makes
-1b fast to act on.
+**Targets are their own block, not inferred.** The second programme already
+wrote `"**Horizontal stab**: span 213 mm, area 16 in2, +/-10%."` — a tolerance
+on a *measurement*, not a target. Sniffing for `+/-` would misread it. A
+`targets:` block is unambiguous and costs a small parser change.
 
-- **`system_instruction.md`** — a dimension of a real object not supplied in
-  the brief is `guessed`, declared when written, not at the end. One input per
-  *decision*, not per number: "fuselage cross-sections, assumed from
-  photographs" is one row, not eighteen. That granularity rule already exists
-  for inputs generally and only needs applying.
-- **Mark object properties apart from modelling choices.** *Is this a property
-  of the physical aircraft, or a choice about how to model it?* Taper ratio and
-  glue mass are properties; `naca0006` is a modelling choice. Unlike "is this
-  on the plan", this **is** decidable from inside the sandbox — it is about the
-  nature of the quantity, not about what documents exist. Marking it in `why`
-  tells the coordinator at a glance which rows 1b should check against the plan
-  and which are the run's own decisions. A convention, not an enum value.
-- **Never attribute a number to a document unless it was read in this run** —
-  system instruction, not lint. An earlier draft made this a regex over *from
-  the plan* / *per the drawing*; cut, because it catches one phrasing and
-  misses the next, and a missed false citation is precisely the failure being
-  guarded. Close to redundant once item 2 lands anyway.
-- **An exact lint report, not a judgement.** Parse `_model.py` with `ast`,
-  count module-level numeric constant assignments, print it beside the number
-  of declared inputs: *"`_model.py` assigns 23 numeric constants; this chapter
-  declares 4 inputs."* A computed fact with no semantics and no false
-  negatives. It does not claim to find geometry — it reports a ratio and leaves
-  the judgement to the human at the prompt.
+**Targets are facts, never claims.** Area, mass and CG are things the model
+must reproduce or it is not this aircraft; `top speed 87 km/h` is what the
+programme exists to judge and stays an `assumed:` row. Put a claim in
+`targets:` and the run will adjust drag until it hits, fitting the model to
+the thing it was built to test.
 
-### 4. Plumbing — the Q1 stall
+**Most targets cost no measuring.** Length, CG, span, area, dry weight, AUW,
+wing loading and cubic loading are *printed on page one* of the plan. Reading
+them is cheap and always worth it — that is the number that caught the 8.3 %.
+Pixel-measuring tiles is the expensive part, and it is **demand-driven**: do
+it when a target misses or the three-view looks wrong. The second programme
+measured root and tip chord speculatively and left unmeasured the four things
+that mattered.
 
-Three independent causes, all cheap, all measured in `b81e`:
+**Shape goes in as prose, not coordinates.** *"slab-sided box, stepped behind
+the canopy"* is two rows and would have prevented the pod. The failure was
+nobody saying it, not nobody supplying a station table. If a stitched,
+measured station table ever does materialise and reads badly as brief rows,
+add a file then — with evidence rather than in anticipation.
 
-- **`search_files` returns absolute paths; `list_directory` returns bare
-  names.** The first call returned
-  `/Users/…/mighty-mini-mustang/chapters/01-mustang-as-drawn`, from which the
-  run concluded paths look like `chapters/01-…`. Return root-relative paths.
-- **`mcp_fs.py:156` strips both `chapters/` and the notebook name**, so
-  `chapters/01-x/f` and `01-x/f` both resolve. Forgiving, but the run was never
-  corrected and oscillated between the two forms for 103 calls. Keep accepting
-  both; echo the canonical form back.
-- **Resume is blind.** `nb resume` restored a run whose `stem` was set without
-  telling it an entry was already open. It read for a file that did not exist,
-  then ran `list_directory .`, `list_directory 01-…`, `search_files *`,
-  `search_files **/*` back to back and hit `NO PROGRESS`. That episode is most
-  of why Q1 needed two human interventions. Inject a state summary on resume:
-  entry open, stem, what is written.
+**The brief shrinks.** The second programme ran to nineteen rows because there
+was nowhere else to put things, including four "not extracted" apologies.
+Those disappear: their absence from `targets:` is the signal, and the run
+declares what it had to assume.
 
-### 5. Figure read-back: ask whether the shape is right
+## 2. `nb reconstruct` writes one ordinary entry
 
-The run looked at its own three-view twice. Its reasoning, verbatim:
+**It produces an entry, in a chapter that already exists.** `nb new` makes the
+chapter; `nb reconstruct <nb> --chapter 01-…` writes its first entry and
+leaves `_model.py` as the chapter's vehicle. Nothing new is created.
 
-> *"Ah, finally, a clean one! … That top-down and front view are perfect; I can
-> see those wingtips with plenty of breathing room, no cropping, no awkward
-> edges."*
+And the entry is **conventional** — a question, a hero value, two visuals:
 
-It inspected a drawing that does not resemble a Mustang and passed it, because
-the read-back instruction is about rendering quality — clipping, centring,
-legibility — and never about fidelity. Add the fidelity question for any entry
-drawing a reconstructed airframe. An instruction, not a rule; weak without a
-reference in front of it, which is why it is last.
+```
+Can we reconstruct the FT Mighty Mini Mustang within tolerance?
 
-### 6. Show the brief on every chapter page
+1.8% — worst error across published targets
 
-**For the reader, not the agent.** The agent already has the brief in full:
-`prefix.py:137` emits it under *"## The aircraft — true of EVERY chapter"*, and
-`prefix.py:282` says it is "reproduced in full further down this prompt" so no
-turn is wasted trying to read a file above `chapters/`. The delivery channel
-works — which is also why item 1a will land.
+[three-view]  [bar chart: error vs tolerance, per target]
+```
 
-The chapter *pages* do not show it. `_notebook.py:912` reads `_active.yml`,
-which `nb` builds from the ancestor **chapter** chain only. For a root chapter
-that file is empty, so `if not total: return` prints nothing — and the
-docstring justifies it: *"right … for a root chapter, which inherits from no
-one."*
+That is what the second programme's first entry already was, reached through
+`nb ask`. Which means **no new output format and no contract exception**:
+rule 14 already allows two visuals when one draws the aircraft, which is
+exactly `three-view + error chart`.
 
-That is wrong. A root chapter inherits the brief; the prefix says so in as many
-words. A reader opening `01-mustang-as-drawn` sees no constraints at all when
-seven are in force.
+```
+nb reconstruct <nb> --chapter X
+    probe, build from the brief, render a three-view, declare
+ -> PROMPT: assumptions + three-view + target table
+ -> "2: 8.2 in2"                              correct a number
+    "4: redo — fuselage is a slab-sided box"  reject the shape
+ -> re-probe, rebuild, re-render, prompt again
+ -> ... until Enter
+ -> iterate to targets, write the entry, commit.
+```
 
-**Two callouts, not one merged block.** A brief row can never be superseded —
-departing from one makes it a different notebook — while an inherited chapter
-item can be overwritten by a fork, so they are not one list. Render them as
-separate collapsed callouts, *From the brief (N)* above *Inherited from earlier
-chapters (N)*, each omitting itself when empty exactly as `_render_active`
-already does.
+**No new agent tool.** An earlier draft proposed `preview_model()`; the run
+can already build in a `probe`, and `probing.md` already tells it to
+`fig.savefig("_scratch/_probe_fig.png")` and `read_figure` the result. All
+that is structurally required is that **the prompt names a figure** — one line
+of wiring, plus a line in the brief saying to render one before opening the
+entry. If the run skips it the prompt has no figure: degraded, not broken.
 
-Sub-headings inside one callout were considered and are worse:
+**The iteration loop already exists.** `interact.py:1023` — a rejected
+assumption does not end the run; it hands the rejection back and tells the run
+to re-probe, revise with `declare_input`, and call `open_entry` again, which
+re-fires the prompt. The coordinator can reject a shape, see it rebuilt and
+reject again, inside one run, with no new machinery.
 
-- **The brief is identical on every chapter page; the inherited set is not.**
-  Merged, the page-specific half hides behind the half the reader has already
-  seen on every other page. Separate callouts let the invariant one stay shut
-  and the varying one open.
-- **Separate counts carry information.** *(7)* and *(3)* says more than
-  *(10)*, which merges two populations under different rules.
-- **One callout per concept is already this file's pattern** —
-  `chapter_inputs` renders *overwrote* and *newly declares* as separate
-  callouts, not as sub-headings of one.
+**Cheap, because `ask` and `resume` are already two briefs into one shared
+`_execute`** (`run.py:233` and `:400`). A third is idiomatic. **The targets
+gate is the only genuinely new machinery in this plan**: parse `targets:`,
+compute, compare, iterate.
 
-Chapter 01 then shows exactly one box, which is the honest answer. The cost is
-that a deep chapter reaches about five collapsed callouts — measured:
-`RADICAL-GLIDER` chapter 04 already renders four. Order them widest scope to
-narrowest — brief, inherited, overwritten, newly declared — so the stack reads
-as a sequence rather than a pile.
+**Why the loop is needed despite the gate.** Targets are numeric, and a model
+can hit area, mass and wing loading with a completely wrong fuselage — which
+is what happened: 8.3 % out on area *and* a smooth pod. A numeric gate would
+never flag the pod. Left to run on a bad brief, the targets loop would
+converge around the wrong shape and commit it looking like a success.
 
-**Cheaper than it looks.** `_render_active` runs with cwd at the notebook root,
-and the notebook's own `index.qmd` already parses `_inputs.yml` with a plain
-regex at render time. The chapter page can read that same file directly: **no
-change to `nb/domain/inputs.py` and none to the `_active.yml` generator.** The
-real cost is that `_notebook.py` is scaffolded per notebook, so existing
-notebooks need the scaffold re-applied.
+**The targets block defines what "reconstructed" means**, and it scales:
 
-Compounds with item 1a: once the brief carries a dimension table, it appears on
-every chapter page, which is where anyone auditing a reconstruction will look
-for it.
+| `targets:` | what the run is gated on |
+|---|---|
+| empty | build it and show me — the eye at the prompt is the only gate. Shape-first work: the X-Wing, a pig |
+| geometry only | span, area, MAC, tail volume. No mass model needed |
+| geometry and mass | the full published spec sheet |
 
-## Cut from an earlier draft
+Same command throughout, no mode flag, and the shape-first case needs no
+separate machinery.
 
-Recorded so they are not re-proposed:
+**Why a separate brief** rather than asking through `nb ask`: reconstruction
+is converge-to-tolerance, and the ordinary contract is built for answering a
+question once. Rule 5 bans `for … in range()` around a solve; rule 6 caps
+prose at 100 words. The closing gate differs too — targets met, not question
+answered.
 
-- **A fourth `source` value, `recalled`** — "knowable from a document we do not
-  have". Two independent reasons, either sufficient.
+**Budget.** Iterating inside a live run holds the chapter lock and spends the
+run's turns: five rejections means five rebuilds. A reconstruct run wants a
+larger probe pool and turn cap than an ordinary question — reasonable for a
+once-per-chapter activity.
 
-  First, **it is not decidable by the party that would apply it.** To mark
-  something `recalled` you must know the document exists and contains it. The
-  agent cannot know that: from inside a sandbox with no network, *on the plan*
-  and *nobody knows* are indistinguishable — both are things it cannot check,
-  so it would have had to guess which category its guess belonged to. And for
-  an agent that can never fetch anything, the category covers every fact about
-  a real aircraft not supplied in the brief; a label that applies to everything
-  in its class discriminates nothing. The coordinator *can* tell, because the
-  coordinator can fetch — but discovering a source exists means having it, so
-  the knowledge and the need for the label are mutually exclusive. **A
-  taxonomy value only works if whoever must apply it can tell when it
-  applies.**
+### Controlling it without new rules
 
-  Second, it is unnecessary: item 2 shows the schema clause, not a missing
-  category, is what skipped the declaration. `guessed` was always sufficient.
+**No new lint rules.** The existing contract already does the work:
 
-  The one residual case is a source confirmed to exist but unreachable — the
-  Mustang plans are also on Scribd behind a paywall, and only the S3 copy made
-  this session's retrieval possible. Rare, and free text covers it:
-  `why = "taper: on v1.0 plan, paywalled, estimated"`.
+- **Rule 1** — no hand-typed number in prose. Any error the entry quotes must
+  be a `{python}` expression, so the comparison is computed, not asserted.
+- **Rule 41** — the hero derives from a solve, not a literal. The hero is the
+  worst target error, so it cannot be typed in.
+- **Rule 14** — two visuals when one draws the aircraft. Exactly the pair this
+  entry wants.
+- **Rule 3, 6, 26** — answer before the last cell, 100 words, one question.
+  All apply unchanged.
 
-- **The agent asking the coordinator "is this number on the plan?"** Same
-  decidability failure. To ask, the run must know which of its numbers might be
-  on a document it has never seen — so it would either ask about all of them,
-  which is noise, or guess which to ask about, which is the thing it cannot do.
-  Item 1b inverts it so **neither party does something it cannot**: the run
-  declares what it assumed, which it knows; the coordinator checks what the
-  plan settles, which it holds. Item 3's object-property marking gives the run
-  the one useful contribution it *can* make, without needing to know what any
-  document contains.
+Everything else is **brief text**, which is free: render a three-view before
+opening the entry; report every target with its error; say which targets
+failed rather than quietly loosening them. A rule that could only be written
+fuzzily belongs in the brief, by the same test that kept rule 43 a count
+rather than a judgement.
 
-- **A per-chapter shape-provenance mode** (`plan:` / `recalled` / `designed`).
-  Duplicates the assumptions system rather than extending it, and forces every
-  from-scratch notebook to opt out of machinery built for reconstruction.
-  `RADICAL-GLIDER` needs none of it.
+The one thing that is *not* instruction is the gate itself — compute the
+targets, compare, and refuse to finish while one is out of tolerance without
+saying so. That is code, and it is the only code this item adds.
 
-- **A `_refs/` directory and a `read_plan` tool.** The auditability half is
-  free today: the plan sits at the notebook root, which is what
-  `RADICAL-GLIDER` already does. The only thing left would be the agent reading
-  the plan itself — and once the coordinator is checking the assumptions list
-  against it (1b), there is nothing for the agent to read it *for*.
-  Infrastructure for a need that could not be demonstrated. Revisit only if
-  coordinator checking proves to be the bottleneck in practice.
+## 3. Fold the brief into the inheritance system
 
-- **A lint regex for claimed provenance.** Fails the principle above; moved
-  into the system instruction.
+`prefix.py:138` and `_inputs.root.yml.tmpl` say the brief is *"never
+superseded"*. Too strong: doubling the span is the same programme, and forcing
+it into a new notebook throws away the lineage — which this repo already pays
+for, since `glider-notebook` is the X-Wing at a different foam thickness with
+no link back.
 
-- **A new "geometry question" kind.** `ask_specified` already exists and was
-  not used, and the reason looks structural: *specified*, *chapter* and
-  *refactor* questions wait an hour, then exit `no_answer`. Asking is a bet
-  that a human is at the board, and losing it kills the run; facing a dozen
-  unknowns, an agent would take that bet twelve times, so it guesses instead.
-  The five-minute assumptions prompt is already the cheap non-blocking ask —
-  see 1b and 1c.
+**Keep authorship, drop immutability.** `_inputs.yml` stays written by a
+person, never a run; but a run changing a row already needs `ask_specified`
+and a fork approval, both of which put a person in the loop. So the notebook
+root becomes the root of the ancestry chain: `domain/inputs.py` walks the
+brief as the oldest ancestor, `_active.yml` carries its rows keyed
+`brief/<handle>`, and `_fork.yml`'s `overwrites:` can name one.
 
-## Rejected: web research tools for the agent
+This deletes the second chapter-page callout from the previous plan — once the
+brief is an ancestor, `_active.yml` already contains it. Visibility comes from
+the lineage diagram, not a ledger: with several forks each overwriting
+different rows there is no notebook-wide answer to "what is in force", only a
+per-chapter one, which the chapter page already gives.
 
-Not on principle — for reasons specific to this system.
+## 4. Two sections on the overview
 
-- **It does not fix the failure.** A run that invents and writes
-  `# from FT plan sheet` will also skim a page and cite it. Web access without
-  items 1–3 makes false provenance more convincing, not less.
-- **Turn budget.** `b81e` hit `max_turns` at 103 calls with no network at all.
-  A search–fetch–disambiguate loop is a turn sink dropped into a budget that is
-  already failing.
-- **Source quality.** Retailer listings quote 200 g for a Maker Foam sheet;
-  that is packaging weight. Flite Test's own measurement of the same Adams
-  board is 115 g. Choosing between them needed knowing Maker Foam *is* coated
-  Adams.
-- **Auditability.** A number from a URL that later 404s is uncheckable.
-- **Injection.** Fetched pages are untrusted text entering a loop that writes
-  code and commits it, inside a sandbox currently hermetic by design.
+**The aircraft** — the brief as declared, now including the targets.
+**Chapters** — the lineage diagram, alone. Rule 34 checks the front page's
+generated block is intact, so this goes through the scaffold and rule 34's
+checker moves with it.
 
-The better shape is **cache, don't fetch**: sources land in the repo as dated
-files. Retrieval, rasterising, stitching and measuring need network, Bash and
-Python — the coordinator has all three, the agent has none. Extraction is
-coordinator work.
+## Deferred, with triggers
 
-## Not a change, but unexplained
+- **An autonomous builder loop.** Every rejection costs a coordinator turn,
+  and the run starts each rebuild without the reasoning behind the last one. A
+  builder keeping its own conversation would be cheaper in coordinator turns,
+  the cost that matters. **Trigger:** dialling in one aircraft takes many
+  rejections rather than two or three.
+- **Plan access for the reconstruct brief.** Reproduction is its whole job, so
+  the honesty argument that bars it from ordinary runs is weaker here.
+  **Trigger:** the reject-at-prompt loop proves insufficient. Costs unchanged:
+  ~1,300 tokens per page, rasterising, and a listing saying whether an asset
+  is a photograph (proportions) or an orthographic plan (dimensions).
+- **A file for tabular geometry.** **Trigger:** a stitched, measured station
+  table actually materialises and reads badly as brief rows.
 
-The notebook brief's first row now reads
-`"**FT Mighty Mini Mustang MKR2**, Flite Test plan."`. What was written and
-verified on disk was `"…, from the Flite Test plan."`. Two words were removed
-from a file the design says is written by a person and never by a run.
+## Rejected
 
-The agent cannot reach it — the filesystem root is `<notebook>/chapters/`, and
-an attempted `search_files(path="..")` in `a21b` was refused with *"Access
-denied — path outside allowed directories"*. The only `_inputs.yml` writer
-found in `nb` is `domain/inputs.py:350`, which targets `_active.yml`. No
-account of this yet. Worth settling before the brief is trusted as immutable.
-
-## What already works and needs nothing
-
-Recorded so it is not changed by accident:
-
-- **The sandbox holds.** Cross-notebook reads are impossible; the one escape
-  attempt was refused.
-- **The brief reaches the agent in full.** `prefix.py:137` emits it under
-  *"The aircraft — true of EVERY chapter"*, and `:282` tells the run it is
-  reproduced in the prompt so no turn is spent trying to read above
-  `chapters/`. The Mustang failure was never a delivery problem — all seven
-  rows arrived, and they said nothing about shape. Item 1a adds rows to a
-  channel already proven to work.
-- **The assumptions prompt is effective, and well timed.** The single
-  geometry-adjacent input that was declared is the single one a human
-  corrected, and it fires before `_model.py` exists. Items 2 and 3 exist to
-  route more traffic through it; item 1b exists to make the coordinator use it
-  properly. None of them replace it.
-- **Recall is better than it looks.** The run guessed a 485 mm fuselage; the
-  plan says 482 mm — 0.6 % out. The problem is not that memory is poor, it is
-  that nothing distinguishes memory from measurement. Label it, do not distrust
-  it.
-- **Lint messages are already descriptive**, quoting the offending text rather
-  than a bare rule number. The rule-hunting seen in two runs
-  (`search_files "*rule*"`, `api_search "rule 5"`) is not caused by poor
-  messages and is not addressed here.
+- **`chapters/_reference.md`.** Everything it held fits in the brief, which is
+  outside the sandbox (so the guard is free), already in the prefix (so no
+  read instruction), and rendered on the overview (so the targets are
+  visible).
+- **A `preview_model()` tool.** Everything it would do is already available
+  through `probe` and `read_figure`; only the prompt wiring was ever needed.
+- **A separate `nb preview` command.** A second code path that writes
+  geometry, and so one that can diverge from what ships.
+- **New lint rules for reconstruct entries.** Rules 1, 41 and 14 already force
+  the comparison to be computed and the visuals to be right; the rest is brief
+  text.
+- **A three-view on the overview.** That page executes nothing by design:
+  `index.qmd` deliberately omits `_model.qmd` because `_notebook.py` imports
+  aerosandbox and matplotlib — *"the whole point of this page is that it reads
+  source and executes none of it. It re-renders on every commit; it costs 10 s
+  because nothing here imports a model."* A three-view needs the model built,
+  so it would break that and slow every commit. Unnecessary anyway: the
+  reconstruction is entry 01, so the aircraft is the first thing a reader
+  meets, and that figure re-renders from the model where a pasted copy would
+  go stale.
+- **Plan access for ordinary runs.** The six declarations exist *because* the
+  run could not verify them; `why: "Plan unextracted"` is the most useful
+  thing it produced. A measurement it cannot make is one it must declare; one
+  it can *almost* make is one it will claim.
+- **A structured `_geometry.yml`.** AeroSandbox schema in the coordinator's
+  hands, and it presupposes topology.
+- **Handing a description to a separate consumer to rebuild from.**
+  Descriptions are not fully determining, so expecting a different agent to
+  reproduce one is incoherent. Resolved by the run writing the model.
+- **A provenance-marking convention.** The second programme already wrote
+  *"Plan unextracted; physical geometry"* in `why` unprompted.
 
 ## Order
 
-1. **Items 1a and 1b** — zero code, available now, and together they would have
-   caught the wing-loading error. Do these first whatever else happens.
-2. **Item 2** — one string, and the most direct cause of the failure.
-3. **Item 3** — the habit item 2 makes room for, plus the marking that makes 1b
-   quick and one exact report.
-4. **Item 1c** — the five-minute default. Needed before 1b can handle anything
-   requiring measurement rather than lookup.
-5. **Item 4** — unrelated to the rest, pure bug fixes, and the only item
-   addressing a run that actually failed.
-6. **Item 6** — reader-facing only, and worth most once 1a has filled the
-   brief out. Independent of everything else; can land at any point.
-7. **Item 5** — last, and weakest.
+1. **Item 1** — the `targets:` block and a shorter brief. Small parser change;
+   item 2 reads it.
+2. **Item 2** — the brief and prompt wiring first, then the targets gate.
+3. **Item 3**, then **item 4**.
 
-Items 1a, 1b and 2 are independent of each other and together address the whole
-of the observed failure. Everything after them is hardening.
+## Outstanding
 
-## Outstanding against the Mustang programme itself
-
-Separate from the system work: the three committed entries rest on undeclared
-geometry, and `023a`'s wing loading is now known to be 20 % high against the
-published figure. They want re-running once item 1 lands and the plan is to
-hand — not patching in place.
+- Reconstructed wing area 6.85 dm² against a published 7.42 — wing loading
+  +8.3 %. Items 1 and 2 are the fix; re-run the first entry afterwards.
+- Top speed is 150.4 km/h against a claimed 87 km/h, **+74 %**, and the gap
+  survived grounding the propeller polar in APC manufacturer data — an
+  independent source, which is what makes the finding strong. The model says
+  the aircraft is pitch-speed limited with a 9.1× thrust excess at the claimed
+  speed. Either the claim is not a top-speed figure or the drag model is badly
+  low. That is the obvious next question.
+- The first programme's brief lost two words from `_inputs.yml`, a file a run
+  never writes, and nothing in `nb` accounts for it. That notebook has been
+  deleted, so the evidence is gone. Watch for a recurrence — item 3 raises the
+  stakes, since a brief that *can* be overwritten should be overwritten only
+  through the fork gate.
