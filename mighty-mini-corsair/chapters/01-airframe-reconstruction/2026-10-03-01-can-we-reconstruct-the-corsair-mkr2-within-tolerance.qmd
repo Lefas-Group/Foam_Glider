@@ -1,0 +1,92 @@
+---
+title: "Can we reconstruct the Corsair MKR2 within tolerance?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 150.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 400.0        # s granted for the probe
+PROBE_SPENT = 8.2      # s the probe actually used
+
+# Evaluate model metrics against published targets
+eval_res = evaluate_targets(
+    wing=wing,
+    mass_props=mass_properties,
+    target_span=TARGET_SPAN,
+    target_mass=TARGET_DRY_WEIGHT,
+    target_cg_x=TARGET_CG_X,
+    tol_span=TOL_SPAN,
+    tol_mass=TOL_DRY_WEIGHT,
+    tol_cg_x=TOL_CG_X,
+)
+
+span = eval_res["span"]
+mass = eval_res["mass"]
+cg_x = eval_res["cg_x"]
+span_err = eval_res["span_err"]
+mass_err = eval_res["mass_err"]
+cg_err = eval_res["cg_err"]
+max_err = eval_res["max_err"]
+```
+
+::: {.hero}
+[`{python} f"{max_err * 100:.1f} %"`]{.hero-value}
+[worst target error across span, dry weight, and CG]{.hero-label}
+:::
+
+**Answer.** Reconstructing the Flite Test Mighty Mini Corsair MKR2 reproduces all three published targets inside specification (@fig-corsair-three-view, @fig-target-errors). Wing span lands at [`{python} f"{span*1e3:.1f}"` mm]{.key} (target `{python} f"{TARGET_SPAN*1e3:.0f}"` mm, `{python} f"{abs(span_err)*100:.2f}"` % error against [`{python} f"{TOL_SPAN*100:.0f}"` %]{.key} tolerance). Dry airframe weight with flight electronics totals [`{python} f"{mass*1e3:.1f}"` g]{.key} (target `{python} f"{TARGET_DRY_WEIGHT*1e3:.0f}"` g, `{python} f"{abs(mass_err)*100:.2f}"` % error against [`{python} f"{TOL_DRY_WEIGHT*100:.0f}"` %]{.key}). Longitudinal center of gravity sits [`{python} f"{cg_x*1e3:.1f}"` mm]{.key} aft of the root leading edge (target `{python} f"{TARGET_CG_X*1e3:.0f}"` mm, [`{python} f"{abs(cg_err)*100:.1f}"` %]{.key} error against [`{python} f"{TOL_CG_X*100:.0f}"` %]{.key}). The worst discrepancy is `{python} f"{max_err*100:.1f}"` %.
+
+::: {.callout-tip}
+## New user specifications
+Asked of the user, 2026-10-03:
+
+1. **Airfoil: flat-bottom folded-foam, t/c 5%**, prompt correction.
+:::
+
+::: {.callout-note}
+## New assumptions
+1. **Planform: root 150mm, elbow 155mm, tip 95mm**, unmeasured chords.
+2. **Gull angles: -15 deg inner, +8.5 deg outer**, inferred.
+3. **Fuselage: 580mm length, six lofted stations**, inferred scale.
+4. **Empennage: hstab span 250mm, vstab height 110mm**, unmeasured.
+5. **Mass: 183g structure, 87g electronics**, estimated RC gear.
+:::
+
+```{python}
+#| label: fig-corsair-three-view
+#| fig-cap: "Three-view drawing of reconstructed FT Mighty Mini Corsair MKR2 with inverted gull wing and fuselage loft."
+axs = airplane.draw_three_view(show=False)
+```
+
+```{python}
+#| label: fig-target-errors
+#| fig-cap: "Reconstructed aircraft metric errors compared to target specification tolerances."
+import matplotlib.pyplot as plt
+
+names = ["Wing span\n(737 mm)", "Dry weight\n(270 g)", "CG position\n(44 mm)"]
+errors = [abs(span_err) * 100, abs(mass_err) * 100, abs(cg_err) * 100]
+tolerances = [TOL_SPAN * 100, TOL_DRY_WEIGHT * 100, TOL_CG_X * 100]
+
+fig, ax = plt.subplots(figsize=(6.5, 2.5))
+y_pos = range(len(names))
+
+ax.barh([y + 0.18 for y in y_pos], tolerances, height=0.32, color="#5c6670", alpha=0.35, label="Tolerance (±%)")
+ax.barh([y - 0.18 for y in y_pos], errors, height=0.32, color="#14655c", label="Model error (%)")
+
+ax.set_yticks(y_pos)
+ax.set_yticklabels(names)
+ax.set_xlabel("Discrepancy / Allowance (%)")
+ax.set_xlim(0, 12)
+ax.grid(axis="x", alpha=0.3)
+ax.legend(loc="lower right")
+fig.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(evaluate_targets)
+```

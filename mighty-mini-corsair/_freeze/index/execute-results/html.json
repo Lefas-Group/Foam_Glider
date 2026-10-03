@@ -1,0 +1,12 @@
+{
+  "hash": "249170820cfaa3431ea967e74c480b18",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: \"Mighty Mini Corsair\"\n---\n\n# The aircraft\n\n::: {.callout-tip}\n## Initial user specifications\n\n1. **FT Mighty Mini Corsair MKR2**, Flite Test kit.\n2. **Folded Maker Foam**, hand cut and hot glued.\n3. **Inverted gull wing**, tractor prop, conventional tail.\n4. **Power**: 2204 2200 kv, 6x4.5 prop, 3S.\n5. **Battery**: 850 mAh 3S LiPo, 12 A ESC.\n6. **Controls**: aileron, elevator, rudder; 12 deg throws.\n:::\n\n::: {.callout-tip}\n## Published figures to reproduce\n\n1. **Wing span**: 737 mm (29 in), +/-1%.\n2. **Dry weight**: 270 g without battery, +/-5%.\n3. **CG**: 44 mm aft of wing leading edge, +/-10%.\n:::\n\n::: {.callout-note}\n## Initial assumptions\n\n1. **Claimed forgiving handling** with Aura 5, to verify.\n2. **Claimed smooth performance** in a compact package.\n:::\n\n\n# Chapters\n\n\n\n```{dot}\n//| fig-width: 6.4\ndigraph lineage {\n  bgcolor=\"transparent\"; rankdir=TB; nodesep=0.22;\n  ranksep=\"0.05 equally\"; splines=spline;\n  node [shape=box style=\"rounded,filled\" fontname=\"Helvetica\" fontsize=11 height=0.22 margin=\"0.2,0.03\" penwidth=1.2 fillcolor=\"#eaf2f0\" color=\"#14655c\" fontcolor=\"#14655c\"];\n  edge [color=\"#8a939b\" arrowsize=0.55 penwidth=1.2 arrowhead=none];\n  \"01-airframe-reconstruction\" [label=\"Airframe reconstruction\" URL=\"chapters/01-airframe-reconstruction/index.html\"];\n  \"01-airframe-reconstruction__e1\" [shape=point width=0.055 color=\"#b8860b\" fillcolor=\"#b8860b\"];\n  \"01-airframe-reconstruction\" -> \"01-airframe-reconstruction__e1\";\n}\n```\n\n<script>\ndocument.querySelectorAll(\".cell-output-display svg\").forEach(function (svg) {\n  var box = svg.viewBox && svg.viewBox.baseVal;\n  if (!box || !box.width) return;\n  svg.removeAttribute(\"width\");\n  svg.removeAttribute(\"height\");\n  svg.style.maxWidth = (box.width * 96 / 72) + \"px\";\n});\n</script>\n\n\n\n",
+    "supporting": [
+      "index_files"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}
