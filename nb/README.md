@@ -1,6 +1,6 @@
 # `nb` — the design-notebook agent
 
-Turns a design question into a Quarto lab-notebook entry that passes a 40-rule
+Turns a design question into a Quarto lab-notebook entry that passes a 43-rule
 lint contract, renders, and is checked against its own output before it commits.
 
 ---
@@ -45,7 +45,13 @@ uv run --group nb python -m nb ask glider-notebook \
 uv run --group nb python -m nb new paper-dart \
   --chapter-title "Folded wing" \
   --defines "AVL at fixed alpha, flat plate, fuselage drag neglected." \
-  --spec "**A4 80 gsm paper**, folded, no glue."
+  --spec "**A4 80 gsm paper**, folded, no glue." \
+  --target "**Span**: 210 mm, +/-2%."
+
+# an aircraft that already exists: converge the vehicle onto its published
+# numbers, once, before any question is asked of it.
+uv run --group nb python -m nb reconstruct mustang-mkr2 \
+  --chapter 01-airframe-reconstruction
 ```
 
 That is the whole system. It probes the aircraft model, opens an entry, writes
@@ -59,11 +65,19 @@ decision on, then to confirm the assumptions it made. Ctrl-C leaves the board;
 the run carries on without it.
 
 ```
+uv run --group nb python -m nb open   glider-notebook   # board in a window, site in a tab
 uv run --group nb python -m nb board  glider-notebook   # re-attach, any terminal
 uv run --group nb python -m nb watch  glider-notebook   # the detail, live
 uv run --group nb python -m nb answer glider-notebook "0.12"
 uv run --group nb python -m nb stop   glider-notebook
 ```
+
+`nb ask` also opens a **watcher window per run** — the transcript from its
+first line, closing itself a few seconds after the run ends. `--no-watch`
+suppresses it. `nb/process/desktop.py` is the only module that knows a desktop
+exists; everything else writes to a file or to stdout, which is what makes a
+run detachable and lets the board, `tail` and a coordinator read the same
+`status.log`.
 
 **Skip the questions** when you already know the answers:
 
@@ -82,18 +96,28 @@ open glider-notebook/_site/index.html
 ### Every command
 
 ```bash
-uv run --group nb python -m nb new    <notebook> [title]     # once per aircraft
+uv run --group nb python -m nb new    <notebook> …           # once per aircraft
+uv run --group nb python -m nb reconstruct <notebook> --chapter NN-name
+                                                             # …a real aircraft, to tolerance
 uv run --group nb python -m nb ask    <notebook> "<q>"       # the main one
 uv run --group nb python -m nb ask    <notebook> "<q>" --quiet  # …no board
+uv run --group nb python -m nb ask    <notebook> "<q>" --no-watch  # …no window either
 uv run --group nb python -m nb resume <notebook> [run]       # resume a stop
-uv run --group nb python -m nb board  <notebook>             # N agents, one terminal
-uv run --group nb python -m nb answer <notebook> [run] "…"   # reply to a waiting run
+uv run --group nb python -m nb open   <notebook>             # board in a window, site in a tab
+uv run --group nb python -m nb board  <notebook> [--all]     # N agents, one terminal
+uv run --group nb python -m nb answer <notebook> [run] "…" [--by coordinator]
 uv run --group nb python -m nb listen <notebook>             # block until a run needs you
 uv run --group nb python -m nb watch  <notebook> [run]       # follow the detail
 uv run --group nb python -m nb stop   <notebook> [run]       # ask a run to stop
 uv run --group nb python -m nb clean  <notebook> [run] [--keep N] [--yes]
 uv run --group nb python -m nb view   <notebook> [--force]   # build the site
 uv run --group nb python -m nb eval   <notebook>             # runs, by model
+
+# the programme's own record, written by a coordinator rather than a run
+uv run --group nb python -m nb direction <notebook> "<what was asked for>"
+uv run --group nb python -m nb note      <notebook> "<one line>"
+uv run --group nb python -m nb escalate  <notebook> "<name>" --prompt "…" --why "…"
+uv run --group nb python -m nb await     <notebook> [--timeout N]
 ```
 
 ### When something goes wrong
@@ -176,6 +200,65 @@ later chapter already superseded resolved out of the list. A chapter with no
 ancestor is shown the notebook's brief as CONTEXT and asked nothing: the brief
 is never overwritten, because a design that departs from it is a different
 aircraft and so a different notebook.
+
+## `nb reconstruct` — an aircraft that already exists
+
+A notebook can start from a real aeroplane rather than from a blank sheet, and
+reconstructing one is a DIFFERENT ACTIVITY from answering a question. Answering
+a question is done once; converging a model onto a published spec sheet is
+iterate-to-tolerance — which the ordinary contract is built to refuse (rule 5
+bans a `range()` loop around a solve, rule 6 caps prose at 100 words) and whose
+closing gate is "targets met" rather than "lint clean".
+
+So it is a third BRIEF into the same machinery, not a second system:
+
+```bash
+uv run --group nb python -m nb reconstruct mustang-mkr2 \
+  --chapter 01-airframe-reconstruction
+```
+
+It takes no question, because the question is always *can we reconstruct this
+within the tolerances the brief states?* The chapter must already exist — `nb
+new` makes it; this writes its first entry and leaves `_model.py` as the
+vehicle. Everything else is `ask`'s: one conversation, the same tools, the same
+lint, the same commit, and ONE ordinary entry at the end. The default pool is
+four times `ask`'s, because the shape loop runs inside the run — reject at the
+prompt, rebuild, re-render, prompt again — and this happens once per chapter.
+
+**The entry reports every target, including the ones that passed**, with the
+worst error as its hero and two visuals: a three-view of what was built, and
+error against tolerance, one bar per target. Rule 14 already allows two when
+one of them draws the aircraft. A target that cannot be hit is a finding, said
+by how much; a tolerance is never loosened, and the model is never fitted to a
+claim.
+
+**The picture comes before the numbers.** The run renders a three-view to
+`_scratch/_probe_fig.png` before it opens the entry, and the assumptions prompt
+shows that file to the person holding the plan. Targets are numbers and numbers
+do not see shape: a reconstruction here passed its mass checks as a smooth pod
+where the real aircraft is a slab-sided foam box.
+
+**`_reference/` is how the real aircraft gets in.** The agent cannot research
+— no network, sandboxed to `chapters/` — so every dimension nobody supplies is
+supplied from memory, and in the entry it will not look any different from one
+that was measured. Two things go in, and the split is deliberate. The figures
+the plan PRINTS are transcribed by the coordinator into the brief, because
+measuring a drawing is the step neither party does well. PHOTOGRAPHS go into
+`<notebook>/_reference/`, each with a coordinator-cut `.mask.png` beside it,
+and the run draws the model over one with `compare_to_photo` — it fits the
+camera by chamfer distance and returns no score, because a score here is a
+number that would be optimised against the thing it was meant to check. Measured on
+an early Mustang reconstruction, since deleted: a brief of seven scalar
+rows said nothing about form, so
+a run invented chord, taper, dihedral, six fuselage stations and five cut areas,
+captioned them `# from the plan sheet`, and published a wing loading 20% above
+the figure printed on page one of a free plan.
+
+Two rules exist for this path. **43** (warning) counts the numeric constants
+`_model.py` fixes against the inputs the chapter declares. **44** (warning)
+catches a DERIVED target written back into `_model.py` as a literal — a
+reconstruction that reported 0.54% worst error across eight published targets
+had assigned seven of them, five to an exact 0.00%.
 
 ## Budgets
 
@@ -269,7 +352,7 @@ file tools without path confinement, and `uv run quarto render` is `render`
 without the render lock or the deadline. It was never a security boundary and
 never claimed to be — `probe` runs arbitrary Python by design — so removing it
 changes nothing about what a run *can* do, only about what it can do
-uninstrumented. `check` is refused for the same reason: re-proving a chapter is
+uninstrumented. A `check` tool is refused for the same reason: re-proving a chapter is
 minutes, and the run does it once, automatically, when a shared function
 actually moved.
 
@@ -291,6 +374,26 @@ the quantity and for a new chapter is the directory name, so a coordinator can
 approve one up front with `{"05-thinner-boom": "yes"}` or turn it down with
 `{"05-thinner-boom": "no — that belongs in 04"}`.
 
+## The programme's record
+
+Four commands write to the board without being a run. They exist because the
+`coordinate-design` skill's `allowed-tools` grants it `nb`, `git log` and the
+read-only file tools and nothing else — it cannot run `open` or `osascript` —
+so anything a coordinator must put in front of a person has to be an `nb`
+subcommand. `nb open` is there for the same reason.
+
+| | what it is |
+|---|---|
+| `nb direction` | what the user asked for. Pinned above the table, and it starts the history |
+| `nb note` | one line of reasoning. The runs publish themselves; a coordinator does not |
+| `nb escalate` | a question for the human, on the board, returning at once |
+| `nb await` | block for that answer and print it |
+
+`escalate` and `await` are two commands rather than one because posting must
+not be able to fail: the question is safely on disk whether or not anybody is
+still waiting. `nb await` and `nb listen` are both meant to be backgrounded,
+since a foreground shell call is capped at ten minutes and a person is not.
+
 ## When a run wedges
 
 Eight turns without writing or measuring anything and the run asks you whether
@@ -308,17 +411,31 @@ detector missed something — worth opening, not shrugging at.
 ## The shape of a notebook
 
 ```
-glider-notebook/
+mustang-mkr2/
   index.qmd               the front page: the aircraft's brief, and the lineage diagram
+  _inputs.yml             THE BRIEF. specified / targets / assumed. Written by a PERSON
   _notebook.py            the shared runtime — footer(), cite(), chapter_inputs()
+  theme-light.scss        the theme, both halves; styles.css is what is left over
+  theme-dark.scss
+  _reference/             photographs of the real aircraft, each with its .mask.png
   chapters/NN-name/
     _model.py             THE VEHICLE. Guarded once the chapter has entries
     _analysis.py          how this chapter measures it. Yours to grow
     _inputs.yml           what the chapter specified and assumed, as data
-    _fork.yml             parent, commit, differences, and what it supersedes
-    index.qmd             renders the four above; carries `order:` and the listing
+    _active.yml           what is in force here, by ancestor. `nb` rewrites it on commit
+    _fork.yml             parent, commit, differences, and what it supersedes (forks only)
+    _model.qmd            the include every entry pulls in: execs the two modules above
+    index.qmd             renders the chapter's inputs; carries `order:` and the listing
     YYYY-MM-DD-NN-slug.qmd  one entry, one question
 ```
+
+**The brief is the notebook's own `_inputs.yml`**, and it has three blocks, not
+two. `specified:` and `assumed:` are the whole-aircraft commitments, inherited
+by every chapter and never superseded — a fork that departs from one is a
+different aircraft and so a different notebook. `targets:` is the third: a
+PUBLISHED FACT with a tolerance, which is what `nb reconstruct` is gated on. A
+CLAIM is not a target — "endless vertical climb" is what the programme exists
+to judge, and it stays under `assumed:`.
 
 A chapter's Specified and Assumed items are **data, not markdown**. `_inputs.yml`
 holds them as `- <id>: <text>`; `index.qmd` renders them with
@@ -379,7 +496,8 @@ not the call.
 
 Two sweeps, and they answer different questions.
 
-`python -m nb.corpus` lints the three stable notebooks against recorded COUNTS,
+`python -m nb.corpus` lints the three stable notebooks — `glider-notebook`,
+`aircraft-notebook`, `optimised-glider-notebook` — against recorded COUNTS,
 and imports every module to prove it imports. Every rule here was calibrated with
 that sweep; by hand it got the wrong answer twice. A change that moves the counts
 updates them in the same commit, with the reason.
@@ -392,9 +510,11 @@ finding names its own rule; that fails today by design, and the day it passes is
 the day the attribution work is done. `tests/baseline/CHANGELOG.md` records every
 deliberate move.
 
-Neither covers `RADICAL-GLIDER`: it gains an entry whenever a run commits one, so
-its findings move for reasons that have nothing to do with a code change. It is
-covered by actually running `nb ask` against it, which tests more than lint.
+Neither covers the LIVE notebooks — `RADICAL-GLIDER`, `mustang-mkr2`,
+`glider-notebook`. Each gains an entry whenever a run
+commits one, so their findings move for reasons that have nothing to do with a
+code change. They are covered by actually running `nb ask` and `nb reconstruct`
+against them, which tests more than lint does.
 
 ## The version before this one
 
@@ -406,11 +526,11 @@ repo root; the file was never committed, so the link went nowhere.)
 ## Four things that will bite
 
 - **Freeze tracks the page, not its includes.** Editing `_model.py` leaves its
-  entries serving stale values; that is what `check` and rule 12 are for.
+  entries serving stale values; that is what `verify` and rule 12 are for.
 - **Chapters are exec'd, never imported.** `from _analysis import …` raises
   `ModuleNotFoundError` at render (rule 29) — the names are already in scope.
 - **Quote another chapter with `cite()`, never by retyping.** It returns that
-  entry's hero value from its freeze, and `check` re-renders every page citing a
+  entry's hero value from its freeze, and `verify` re-renders every page citing a
   chapter it rebuilds — the one cross-chapter edge in the graph. An entry with
   two hero blocks needs `label=` to say which.
 - **A detached run survives the terminal, but not the lid.** Closing the window

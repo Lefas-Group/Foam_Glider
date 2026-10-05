@@ -233,7 +233,7 @@ within tolerance?" -- answering it with the worst error across the targets as
 the hero value. The entry carries TWO visuals, which rule 14 allows because
 one of them draws the aircraft:
 
-  * a three-view of what you built;
+{aircraft_visual}
   * a chart of error against tolerance, one bar per target, so a reader sees
     at a glance which targets passed.
 

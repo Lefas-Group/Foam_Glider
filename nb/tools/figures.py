@@ -124,15 +124,6 @@ _MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
          ".webp": "image/webp"}
 
 
-def reference_paths(notebook):
-    """Every reference image for this notebook, sorted. [] when there are none."""
-    root = notebook.root / REFERENCE_DIR
-    if not root.is_dir():
-        return []
-    return sorted(p for p in root.iterdir()
-                  if p.suffix.lower() in _SUFFIXES)
-
-
 # WHAT AN ASSET IS, as a token rather than prose, so the brief can route on
 # it instead of hoping a paragraph is read correctly. First word of the
 # `.txt` beside the file; everything after it is free description.
@@ -156,48 +147,92 @@ KINDS = {
 _SOURCE_SUFFIXES = (".pdf",)
 
 
+# A SUBJECT MASK, beside its photograph: `studio.jpg` -> `studio.mask.png`.
+#
+# Cut by the coordinator, never by a run. Segmentation is the one step that
+# cannot be automated across photographs -- a threshold is exact on a white
+# ground and returns a house, some sky and half an aeroplane on grass -- so
+# it is done by the party that can look at the result. A bad mask poisons
+# every pose fitted against it and nothing downstream catches that.
+MASK_SUFFIX = ".mask.png"
+
+
+def mask_for(path):
+    """The mask beside an image, or None. `studio.jpg` -> `studio.mask.png`."""
+    m = path.with_name(path.stem + MASK_SUFFIX)
+    return m if m.exists() else None
+
+
 def reference_paths(notebook, images_only=True):
-    """Every reference asset, sorted. [] when the directory is absent."""
+    """
+    Every reference asset, sorted. [] when the directory is absent.
+
+    Masks are excluded: they are an input to the pose fit, not an asset to
+    be looked at, and listing them would offer the run a picture of a blob.
+    """
     root = notebook.root / REFERENCE_DIR
     if not root.is_dir():
         return []
     ok = _SUFFIXES if images_only else _SUFFIXES + _SOURCE_SUFFIXES
-    return sorted(p for p in root.iterdir() if p.suffix.lower() in ok)
+    return sorted(p for p in root.iterdir()
+                  if p.suffix.lower() in ok and not p.name.endswith(MASK_SUFFIX))
+
+
+def reference_kind(path):
+    """The first word of the `.txt` beside an asset, or "" if unlabelled."""
+    note = path.with_suffix(".txt")
+    try:
+        raw = note.read_text().strip()
+    except OSError:
+        return "source" if path.suffix.lower() in _SOURCE_SUFFIXES else ""
+    return raw.split()[0].lower() if raw else ""
+
+
+def reference_photos(notebook):
+    """
+    [(name, image_path, mask_path)] the overlay can actually use.
+
+    A photograph qualifies only with a mask beside it. One without is still
+    listed in the brief -- as unusable, so the coordinator sees what it has
+    to cut rather than wondering why nothing compared.
+    """
+    out = []
+    for p in reference_paths(notebook):
+        if reference_kind(p) != "photo":
+            continue
+        m = mask_for(p)
+        if m is not None:
+            out.append((p.stem, p, m))
+    return out
 
 
 def reference_listing(notebook):
     """
-    The assets, each with its KIND and what that kind permits. "" if none.
+    The assets a RUN may use, each with its kind and what that kind permits.
+    "" if none.
 
-    Includes sources `read_reference_image` cannot return -- a PDF is listed
-    so the run knows to rasterise it, which is how the coordinator stops
-    having to. Measured: a coordinator stitching tiles by hand misread the
-    tile key and dropped the LEFT WING part, and the reconstruction was built
-    from the wing's assembly jigs instead.
+    A SOURCE PLAN IS NOT LISTED. It is the coordinator's to read: they
+    transcribe the figures the plan prints into the brief, and the run works
+    from those. Measuring a drawing is the step neither party does well --
+    a coordinator hand-stitching tiles misread the tile key and dropped the
+    LEFT WING part, and a run given the tiles instead spent most of its turns
+    rasterising, stitching and cross-checking a document whose own
+    specification table already stated the answer. The overlay diagnoses
+    shape; the printed figures fix scale; the drawing itself is needed for
+    neither.
     """
     out = []
-    for p in reference_paths(notebook, images_only=False):
+    for p in reference_paths(notebook, images_only=True):
         note = p.with_suffix(".txt")
         raw = note.read_text().strip() if note.exists() else ""
-        kind = raw.split()[0].lower() if raw else (
-            "source" if p.suffix.lower() in _SOURCE_SUFFIXES else "")
+        kind = reference_kind(p)
         rule = KINDS.get(kind, "unlabelled -- treat as topology only.")
         detail = " ".join(raw.splitlines()).strip()
+        if kind == "photo":
+            rule = ("usable: `compare_to_photo(airplane, \"%s\")`" % p.stem
+                    if mask_for(p) is not None else
+                    "NO MASK beside it, so nothing can be fitted against it.")
         out.append(f"  - {p.name}\n      {detail}\n      -> {rule}")
     return "\n".join(out)
 
 
-def read_reference_image(notebook, name=""):
-    """One reference image, as bytes for the loop to make an inline part."""
-    paths = reference_paths(notebook)
-    if not paths:
-        return {"error": f"no {REFERENCE_DIR}/ images in {notebook.root.name}"}
-    if name:
-        paths = [p for p in paths if p.name == name]
-    if not paths:
-        return {"error": f"no reference image {name!r}. Available:\n"
-                         + reference_listing(notebook)}
-    p = paths[0]
-    return {"_image": p.read_bytes(),
-            "mime_type": _MIME.get(p.suffix.lower(), "image/png"),
-            "name": p.name}

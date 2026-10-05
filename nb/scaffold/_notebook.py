@@ -937,3 +937,322 @@ def _render_active(chapter):
             print(f"{n}. {text}")
         print()
     print(":::\n")
+
+
+# =============================================================================
+# COMPARING THE MODEL WITH A PHOTOGRAPH OF THE REAL AIRCRAFT.
+#
+# The targets gate checks a reconstruction against published NUMBERS. It says
+# nothing about shape, and the gap is wide: one airframe reproduced all eight
+# published figures to 0.40% while missing its power pod entirely and lofting
+# a smooth pod where the real aircraft is a slab-sided box. Both faults were
+# obvious the moment the model was drawn over a photograph.
+#
+# Furniture, not aircraft. `probe_init` execs this file into every probe and
+# `_model.qmd` execs it at render time, so one copy serves the agent while it
+# works and the entry once it commits -- and the entry's overlay recomputes
+# on every render, so it cannot go stale against an edited `_model.py`.
+#
+# WHAT WAS TRIED AND DISCARDED, so none of it is rebuilt:
+#
+#   * LANDMARK CORRESPONDENCE (name five points in both, solve). Five
+#     correspondences against seven pose parameters is barely determined; the
+#     fit spent the slack on perspective and put the camera 0.25 m from a
+#     622 mm aircraft. It scored a flattering 21 px residual and looked worse
+#     than a pose guessed by eye.
+#   * SILHOUETTE OVERLAP (maximise IoU). Overlap is flat before the shapes
+#     meet, so there is no gradient to follow, and saturates after, so the
+#     last millimetres barely score. It also answers a different question
+#     from the eye: on one photograph it tilted the aircraft 21 degrees to
+#     cover a thumb that was inside the mask.
+#   * INTERIOR EDGE MATCHING (pull model panel lines onto photo edges).
+#     Measured: only 22% of a photograph's strong edges are interior at all,
+#     and most of those are shading or paint -- invasion stripes and roundels
+#     the model has no way to explain. Weighting them wrecked the fit.
+#
+# What survives is chamfer distance on the outline, which descends smoothly
+# from anywhere and asks only that edges meet edges.
+# =============================================================================
+
+# Per-component colours, from the plot cycle above so a reader sees one
+# palette across the whole notebook. Violet is the fifth and has no plot
+# counterpart; five components is as many as these aircraft have.
+_PART_COLOURS = [(20, 101, 92), (184, 134, 11), (92, 102, 112),
+                 (179, 65, 44), (120, 70, 150)]
+
+
+def _rotation(elev, azim, roll=0.0):
+    """
+    World -> camera basis, matching matplotlib's `view_init(elev, azim, roll)`.
+
+    Verified against `proj3d.proj_transform` at 0.00 px, so a pose fitted
+    here can be handed straight to `view_init` and the render agrees.
+    """
+    import numpy as _np
+    e, a, r = _np.radians([elev, azim, roll])
+    eye = _np.array([_np.cos(e)*_np.cos(a), _np.cos(e)*_np.sin(a), _np.sin(e)])
+    fwd = -eye
+    up0 = _np.array([0.0, 0.0, 1.0])
+    if abs(_np.dot(fwd, up0)) > 0.999:          # looking down the pole
+        up0 = _np.array([0.0, 1.0, 0.0])
+    right = _np.cross(fwd, up0); right /= _np.linalg.norm(right)
+    up = _np.cross(right, fwd)
+    R = _np.stack([right, up, -fwd])
+    if r:
+        c, s = _np.cos(r), _np.sin(r)
+        R = _np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]]) @ R
+    return R
+
+
+def _project(points, params, centre=None):
+    """
+    Model points -> image pixels. `params` is (elev, azim, roll, scale, tx,
+    ty, distance); `distance` None is orthographic.
+
+    PERSPECTIVE IS NOT OPTIONAL for a close photograph. Fitting a hand-held
+    product shot of a 622 mm aircraft orthographically left 65 px of residual
+    on a 480 px span -- the near wingtip genuinely is larger than the far
+    one, and no rigid orthographic pose can place both.
+    """
+    import numpy as _np
+    elev, azim, roll, scale, tx, ty, dist = params
+    p = _np.asarray(points, float)
+    c = _np.asarray(centre if centre is not None else p.mean(axis=0), float)
+    cam = (p - c) @ _rotation(elev, azim, roll).T
+    x, y = cam[:, 0], cam[:, 1]
+    if dist is not None:
+        depth = _np.clip(1.0 - cam[:, 2] / dist, 1e-3, None)
+        x, y = x / depth, y / depth
+    return _np.stack([scale*x + tx, -scale*y + ty], axis=1)
+
+
+def _raster(pts, faces, params, size, centre=None):
+    """
+    Projected faces as a boolean mask of `size` = (w, h).
+
+    NO MATPLOTLIB IN THE LOOP. An earlier version rendered a figure per trial
+    and thresholded the PNG: slow, and twice it thresholded the axes
+    background pane instead of the aircraft, so every pose scored identically
+    and the search looked broken when it was blind.
+    """
+    import numpy as _np
+    from PIL import Image as _Image, ImageDraw as _ImageDraw
+    q = _project(pts, params, centre)
+    im = _Image.new("L", size, 0)
+    dr = _ImageDraw.Draw(im)
+    for f in faces:
+        dr.polygon([tuple(q[i]) for i in f], fill=255)
+    return _np.asarray(im) > 127
+
+
+def _parts_of(airplane):
+    """[(pts, faces)] per wing and fuselage, in declaration order."""
+    import numpy as _np
+    out = []
+    for comp in list(airplane.wings) + list(airplane.fuselages):
+        pts, faces = comp.mesh_body(method="quad")
+        out.append((_np.asarray(pts, float), faces))
+    return out
+
+
+def _depth_order(parts, params, centre):
+    """Component indices, nearest the camera first."""
+    import numpy as _np
+    R = _rotation(params[0], params[1], params[2])
+    return sorted(range(len(parts)),
+                  key=lambda i: -float(((parts[i][0] - centre) @ R.T)[:, 2].mean()))
+
+
+def _fit_pose(parts, mask, hint=None, work=220):
+    """
+    Camera pose by symmetric chamfer distance between outlines.
+
+    SYMMETRIC: model-to-photo alone shrinks the model onto a corner of the
+    subject, photo-to-model alone inflates it to cover everything.
+
+    SCREENED MULTI-START: 36 seeds are scored, and only the best four are
+    descended on. Running a full Nelder-Mead from every seed spent its time
+    polishing basins that could not win -- 156 s against 13 s for the same
+    optimum.
+    """
+    import numpy as _np
+    from scipy.optimize import minimize as _minimize
+    from scipy import ndimage as _nd
+    from PIL import Image as _Image
+
+    h, w = mask.shape
+    sc = work / max(h, w)
+    tw, th = max(1, int(w*sc)), max(1, int(h*sc))
+    tgt = _np.asarray(_Image.fromarray(mask.astype(_np.uint8)*255)
+                      .resize((tw, th), _Image.NEAREST)) > 127
+    tgt_edge = tgt & ~_nd.binary_erosion(tgt)
+    dt = _nd.distance_transform_edt(~tgt_edge)
+    allp = _np.vstack([p for p, _ in parts])
+    centre = allp.mean(axis=0)
+    diag = float(_np.hypot(tw, th))
+
+    def unpack(v):
+        # Scale and translation are carried in FULL-RESOLUTION pixels and
+        # converted here. Omitting that conversion once put the model
+        # hundreds of pixels off a 220 px canvas, so every silhouette came
+        # back empty and the cost sat at the diagonal for every input.
+        d = 0.4 + 19.6/(1.0 + _np.exp(-v[6]))
+        return (v[0], v[1], v[2], abs(v[3])*sc, v[4]*sc, v[5]*sc, d)
+
+    def cost(v):
+        p = unpack(v)
+        m = None
+        for pts, faces in parts:
+            mi = _raster(pts, faces, p, (tw, th), centre)
+            m = mi if m is None else (m | mi)
+        if m is None or not m.any():
+            return diag
+        me = m & ~_nd.binary_erosion(m)
+        if not me.any():
+            return diag
+        return 0.5*(dt[me].mean()
+                    + _nd.distance_transform_edt(~me)[tgt_edge].mean())
+
+    ys, xs = _np.nonzero(mask)
+    s0 = max(_np.ptp(xs), _np.ptp(ys)) / _np.ptp(allp, axis=0).max()
+    cx, cy = xs.mean(), ys.mean()
+
+    if hint is not None:
+        roll0 = float(hint[2]) if len(hint) > 2 else 0.0
+        starts = [[float(hint[0]), float(hint[1]), roll0, s0, cx, cy, 0.0]]
+    else:
+        starts = [[e0, float(a0), 0.0, s0, cx, cy, 0.0]
+                  for a0 in range(0, 360, 30) for e0 in (15.0, 40.0, 65.0)]
+    scored = sorted(((cost(_np.array(v)), v) for v in starts),
+                    key=lambda t: t[0])
+
+    # AN EXPLICIT SIMPLEX, because the default one silently freezes any
+    # parameter seeded at zero. Nelder-Mead builds its first simplex by
+    # scaling each coordinate 5%, and a coordinate that is exactly 0.0 gets
+    # an ABSOLUTE step of 0.00025 instead. Roll and the distance logit are
+    # both seeded at 0.0, so both were nominally free and numerically
+    # pinned: every fit on every photograph returned roll 0.000 and a
+    # distance stuck at the sigmoid midpoint. Measured on the Mustang -- a
+    # roll sweep at the fitted angles moved the cost from 56.9 to 54.1,
+    # improvement the optimiser could not reach.
+    steps = _np.array([5.0, 10.0, 5.0, 0.05*max(s0, 1e-9),
+                       0.05*max(abs(cx), 1.0), 0.05*max(abs(cy), 1.0), 0.75])
+
+    def _descend(x0, **opts):
+        x0 = _np.asarray(x0, dtype=float)
+        sim = _np.vstack([x0] + [x0 + st*_np.eye(7)[i]
+                                 for i, st in enumerate(steps)])
+        return _minimize(cost, x0, method="Nelder-Mead",
+                         options=dict(initial_simplex=sim, **opts))
+
+    best, bestv = None, 1e9
+    for _, v in scored[:4]:
+        r = _descend(v, maxiter=900, xatol=.5, fatol=1e-3)
+        if r.fun < bestv:
+            best, bestv = r, r.fun
+    r = _descend(best.x, maxiter=4000, xatol=1e-2, fatol=1e-5)
+    v, val = (r.x, r.fun) if r.fun < bestv else (best.x, bestv)
+    e, a, ro, s, tx, ty, d = unpack(v)
+    return (e, a % 360, ro, s/sc, tx/sc, ty/sc, d), val/sc, centre
+
+
+# How far the chamfer residual may run, as a fraction of the subject's
+# longest dimension, before the overlay is declared untrustworthy. 2.5% is
+# roughly 12 px on these photographs; a good fit sits near 1%.
+_POSE_DOUBTFUL = 0.025
+
+
+def compare_to_photo(airplane, name, hint=None, fill=0.22):
+    """
+    Draw the model over a photograph of the real aircraft. -> (rgb, note)
+
+    Each component gets its own colour: filled where it faces the camera,
+    solid on its visible outline, faint where it sits behind something else.
+    That is the drawing-office convention and it is the one that reads --
+    dropping hidden lines fragments each component into pieces, while drawing
+    them at full weight puts the power pod up beside the canopy and invents a
+    fault that is not there.
+
+    NO SCORE IS RETURNED, deliberately. A higher overlap does not mean a
+    better model: the fit that maximised it scored 0.792 and ran the outline
+    through the fuselage. A number on the result is a number that gets
+    chased, and chasing this one makes the model worse. The note reports the
+    POSE, and flags when the pose is too poor to read anything from.
+
+    `hint=(elev, azim)` or `(elev, azim, roll)` RESEEDS the search; the
+    chamfer still does the fitting from there. Reach for it whenever the
+    outline is displaced as a whole -- every component out in the same
+    direction is a pose error, one component wrong while the others sit
+    right is a shape error -- and not only when the note says DOUBTFUL, a
+    fit can be the best one available and still be worth a second seed from
+    somewhere else.
+
+    There is still no way to SET a pose outright. Judging a camera angle by
+    eye is the one part of this a reader does badly: an eyeball estimate was
+    21 degrees out in elevation on a photograph that then fitted cleanly. A
+    hint says where to look, and the photograph decides.
+    """
+    import numpy as _np
+    from PIL import Image as _Image
+    from scipy import ndimage as _nd
+
+    root = _pathlib.Path(_os.environ.get("NB_ROOT", "."))
+    ref = root / "_reference"
+    img_path = next((p for p in sorted(ref.glob(f"{name}.*"))
+                     if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp")
+                     and not p.name.endswith(".mask.png")), None)
+    mask_path = ref / f"{name}.mask.png"
+    if img_path is None or not mask_path.exists():
+        have = ", ".join(sorted(p.stem for p in ref.glob("*.mask.png"))) or "none"
+        raise FileNotFoundError(
+            f"no photograph and mask for {name!r} in _reference/. "
+            f"Masks present: {have}. A photograph without a mask cannot be "
+            f"compared against -- that is the coordinator's to cut.")
+
+    photo = _np.asarray(_Image.open(img_path).convert("RGB")).astype(float)
+    mask = _np.asarray(_Image.open(mask_path).convert("L")) > 127
+    H, W = mask.shape
+
+    parts = _parts_of(airplane)
+    params, resid, centre = _fit_pose(parts, mask, hint=hint)
+
+    out = photo.copy()
+    covered = _np.zeros((H, W), bool)
+    for i in _depth_order(parts, params, centre):
+        m = _raster(parts[i][0], parts[i][1], params, (W, H), centre)
+        col = _np.array(_PART_COLOURS[i % len(_PART_COLOURS)], float)
+        vis, hid = m & ~covered, m & covered
+        if vis.any():
+            out[vis] = (1 - fill)*out[vis] + fill*col
+        edge = _nd.binary_dilation(m & ~_nd.binary_erosion(m), _np.ones((2, 2)))
+        ve, he = edge & ~covered, edge & covered
+        if he.any():
+            out[he] = 0.70*out[he] + 0.30*col
+        if ve.any():
+            out[ve] = 0.05*out[ve] + 0.95*col
+        covered |= m
+
+    ys, xs = _np.nonzero(mask)
+    extent = max(_np.ptp(xs), _np.ptp(ys))
+    ok = resid <= _POSE_DOUBTFUL * extent
+    # ROLL IS IN THE NOTE because it is what a hint usually needs to carry:
+    # an overlay that is displaced as a whole is most often rotated in the
+    # image plane, and the reader cannot reseed a number it was never shown.
+    note = (f"{name} — camera elev {params[0]:.1f}° azim {params[1]:.1f}° "
+            f"roll {params[2]:.1f}°, {params[3]:.0f} px/m. ")
+    note += ("Pose: good." if ok else
+             "Pose: DOUBTFUL — the outline does not track the aircraft. "
+             "Read nothing from this overlay; reseed with "
+             "hint=(elev, azim, roll), or ask for a better photograph.")
+    return out.astype(_np.uint8), note
+
+
+def show_comparison(airplane, name, hint=None, fill=0.22, ax=None):
+    """`compare_to_photo` onto matplotlib axes, for an entry. -> the note."""
+    import matplotlib.pyplot as _plt
+    rgb, note = compare_to_photo(airplane, name, hint=hint, fill=fill)
+    if ax is None:
+        _, ax = _plt.subplots(figsize=(7.0, 7.0*rgb.shape[0]/rgb.shape[1]))
+    ax.imshow(rgb)
+    ax.set_axis_off()
+    return note

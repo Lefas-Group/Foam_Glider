@@ -270,7 +270,7 @@ overwrites. It returns 0 only when the scaffold lints, preflights *and* renders.
 dimension you do not supply, it supplies from memory — and it will not look
 any different in the entry from one you measured.
 
-Measured, on the three entries of `mighty-mini-mustang`: a brief of seven
+Measured, on the three entries of an early Mustang reconstruction: a brief of seven
 scalar rows said nothing about form, so the run invented chord, taper,
 dihedral, six fuselage stations and five cut-part areas, and captioned them
 `# from the plan sheet`. Flite Test publish the plan free. Page one is a
@@ -299,6 +299,53 @@ fits:
 **Record what you could not find, too** — `--spec "**Fuselage**: not
 published; assume and declare it."` An unknown you name is one the run
 declares; an unknown you leave silent is one it invents and attributes.
+
+### Give it photographs to check the shape against
+
+The targets check the model against published NUMBERS. Nothing checks its
+SHAPE, and the gap is wide: one reconstruction reproduced all eight published
+figures to 0.40% while missing its power pod entirely and lofting a smooth
+pod where the real aircraft is a slab-sided box. Both were obvious the moment
+the model was drawn over a photograph.
+
+So find two or three photographs of the real thing and put them in
+`_reference/`:
+
+```
+_reference/studio.png          the photograph
+_reference/studio.mask.png     the subject, white on black
+_reference/studio.txt          first word `photo`, then a description
+```
+
+**Hunt for plain backgrounds.** On white the mask is one threshold; on grass
+it is a judgement call, and a product shot with a hand in it puts the hand
+inside the mask. Retailer listings and the plan's own page one are the usual
+sources.
+
+**Cut the mask yourself, and LOOK AT IT.** This is the step that cannot be
+automated — a border-seeded rule recovered about half an aircraft on a good
+photograph and essentially nothing on a cluttered one. A bad mask poisons
+every pose fitted against it and nothing downstream catches that. The run
+never sees the mask: if it is wrong, that is yours to fix before the run
+starts.
+
+The run then calls `compare_to_photo` itself, fits the camera by chamfer
+distance, and draws each component in its own colour over the photograph. It
+reports whether the pose is trustworthy and refuses to be read when it is
+not. It gets **no score** — a number there would be optimised, and a model
+tuned to a photograph has been fitted to the thing it was meant to be
+checked against.
+
+### Transcribe what the plan PRINTS, do not measure it
+
+Page one of an FT plan is a specification table. Read it and put those
+figures in as `--spec` and `--target` rows.
+
+Do **not** measure dimensions off the drawing yourself at this stage. The
+overlay diagnoses shape; published figures fix scale; and measuring a tiled
+plan by hand is where a coordinator misread the tile key, dropped the two
+tiles holding the wing panels, and had the airframe reconstructed from its
+assembly jigs.
 
 ### Check the assumptions prompt against the plan
 

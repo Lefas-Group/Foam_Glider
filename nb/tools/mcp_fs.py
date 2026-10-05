@@ -192,7 +192,7 @@ class FileSystem:
         answers with bare names, and the model reads its next path off
         whichever it saw last. Measured on run `20261002-100435-b81e`: the
         first call returned
-        `/Users/.../mighty-mini-mustang/chapters/01-mustang-as-drawn`, from
+        `/Users/.../mustang-mkr2/chapters/01-airframe-reconstruction`, from
         which the run concluded that paths look like `chapters/01-…`. `_abs`
         accepts that spelling AND the bare one, so neither was ever refused and
         nothing corrected the confusion -- it alternated between the two forms

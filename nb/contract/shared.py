@@ -704,7 +704,13 @@ def tables_in(md):
 # What makes a figure a DRAWING of the aircraft rather than a plot of its
 # behaviour. Named functions, not a guess: these are what aerosandbox offers and
 # what every three-view in these notebooks is made with.
-DRAWING = re.compile(r"\b(draw_three_view|draw_wireframe|\.draw\s*\()")
+#
+# `compare_to_photo` and `show_comparison` draw it too, and draw it better --
+# the aircraft plus the photograph it was checked against, in one figure. They
+# live in `_notebook.py` rather than aerosandbox, which is why they have to be
+# named here as well.
+DRAWING = re.compile(r"\b(draw_three_view|draw_wireframe|\.draw\s*\(|"
+                     r"compare_to_photo|show_comparison)")
 
 
 # Rules 14 and 15 were one function because they share the hard part: working

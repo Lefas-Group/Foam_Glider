@@ -195,16 +195,6 @@ def native_declarations():
               {"name": dict(S, description="Filename; omit for the first")},
               []),
 
-        _decl("read_reference_image",
-              "A reference image of the REAL aircraft -- a stitched plan "
-              "sheet, a photograph -- as an image. ONE LOOK, to find where "
-              "each part is on the sheet. Everything quantitative after that "
-              "is `probe`: a 1:1 sheet at a known dpi is a dataset, and PIL "
-              "and numpy are in the kernel, so measure it in code and never "
-              "by eye.",
-              {"name": dict(S, description="Filename; omit for the first")},
-              []),
-
         _decl("ask_specified",
               "Ask the user for a Specified input -- one where a different answer "
               "changes WHAT WE ARE BUILDING, not how accurately we modelled it. "
@@ -333,8 +323,6 @@ def build(session, fs):
         "read_reference": lambda name: refs.read_reference(name),
         "read_figure": lambda chapter, stem, name="": figures.read_figure(
             nb, chapter, stem, name),
-        "read_reference_image": lambda name="": figures.read_reference_image(
-            nb, name),
         "read_probe_figure": lambda name="": figures.read_probe_figure(
             nb, name),
         "ask_specified": lambda name, why, kind="specified", options="",

@@ -50,6 +50,12 @@ from ..build.publish import (_ceiling_problem, _commit, _refresh_active,
 from ..process.log import detach_output, detached, open_log, say, tell
 
 
+# Seconds a `compare_to_photo` camera fit adds to one render. Measured
+# 11-14 s across three photographs of the FT Mini Mustang; 25 covers the
+# spread without granting slack nobody chose.
+OVERLAY_SECONDS = 25.0
+
+
 # The rendered entry, capped, for `run.json`. Measured at 616 characters on a
 # real entry; the cap is for the pathological one, not the normal one. `run.json`
 # is polled twice a second by the board, so it stays a document you can read in
@@ -193,10 +199,24 @@ def main(notebook_path, question, verbose=True,
     if ceiling is None:
         from ..contract import shared
         _, default_ceiling = shared._defaults(notebook.root)
-        ceiling = ask_render_ceiling(
-            default_ceiling or 200.0,
-            "declared by this notebook's _notebook.py" if default_ceiling
-            else "no notebook default; nb's fallback")
+        base = default_ceiling or 200.0
+        why = ("declared by this notebook's _notebook.py" if default_ceiling
+               else "no notebook default; nb's fallback")
+        # AN OVERLAY ENTRY COSTS A CAMERA FIT, every render, before a single
+        # aero solve. Measured at 11-14 s on this hardware against a 20 s
+        # notebook default, so a reconstruction with a photograph would
+        # overrun a ceiling nobody realised it was asking for. The default is
+        # raised rather than the fit hidden: the comment at
+        # DEFAULT_ENTRY_CEILING is right that an expensive entry should be a
+        # decision, and a decision needs the reason attached to it.
+        if kind == "reconstruct":
+            from ..tools import figures
+            if figures.reference_photos(notebook):
+                base += OVERLAY_SECONDS
+                why += ("; +%g s because the entry draws the model over a "
+                        "photograph and the camera is fitted at render time"
+                        % OVERLAY_SECONDS)
+        ceiling = ask_render_ceiling(base, why)
 
     session = Session(notebook, question, chapter=chapter,
                       metrics=run_metrics, probe_pool=pool)
@@ -247,13 +267,40 @@ def main(notebook_path, question, verbose=True,
         text = briefs.RECONSTRUCT.format(
             chapter=chapter, question=question,
             targets=_targets_brief(notebook),
-            reference=_reference_brief(notebook))
+            reference=_reference_brief(notebook),
+            aircraft_visual=_aircraft_visual_brief(notebook))
     else:
         text = briefs.BRIEF.format(
             question=question, max_turns=session.max_turns, chapter=chapter)
     contents = [{"role": "user", "parts": [{"text": text}]}]
     return _execute(notebook, session, contents, run_metrics, fs, handlers,
                     make_config, verbose, accept_refactor=False)
+
+
+def _aircraft_visual_brief(notebook):
+    """
+    Which drawing the entry leads with.
+
+    THE OVERLAY IS THE BETTER DRAWING when there is a photograph to draw
+    over: a three-view shows what was built, the overlay shows what was built
+    AND the evidence that it matches. A reader cannot judge a three-view
+    against anything.
+
+    It recomputes at render time -- about 13 s against a 180 s ceiling -- so
+    unlike a figure saved during the run it can never go stale against a
+    `_model.py` that changed afterwards, which is the property rule 12 exists
+    to protect.
+    """
+    from ..tools import figures
+    photos = figures.reference_photos(notebook)
+    if not photos:
+        return "  * a three-view of what you built;"
+    return """  * the model drawn over a photograph, with
+    `show_comparison(airplane, "%s")` -- it returns the pose note, which
+    belongs in the caption so a reader knows the camera was fitted and not
+    chosen. If the pose comes back DOUBTFUL, try another photograph
+    (%s) and fall back to a three-view if none fits;""" % (
+        photos[0][0], ", ".join('"%s"' % n for n, _, _ in photos))
 
 
 def _targets_brief(notebook):
@@ -309,75 +356,110 @@ you miss is a finding worth stating; a target nobody names is a hole."""]
 
 def _reference_brief(notebook):
     """
-    What is in `_reference/`, and how to use it. "" when there is nothing.
+    What is in `_reference/`, and how to use it.
 
-    THE SCALE IS WHY THIS IS WORTH A PARAGRAPH. A 1:1 plan sheet rasterised
-    at a stated dpi can be MEASURED -- `probe` is not sandboxed, PIL and
-    numpy are in the kernel, and a pixel count times 25.4/dpi is a
-    millimetre. A run told only "there is an image" reads dimensions off a
-    photograph instead, which is the failure this wording exists to prevent.
+    ONE KIND OF ASSET: a photograph, with a mask beside it. It is never
+    measured -- it is compared against, by drawing the model over it. The
+    source plan is deliberately absent, because reading it is the
+    coordinator's job: the figures it PRINTS arrive in the brief above, and
+    measuring the drawing is a step neither party does well.
 
-    THE SELF-CHECK IS MANDATORY and cheap. If the stitch is wrong or the dpi
-    is misstated, every measurement downstream is confidently wrong -- so the
-    run measures something whose value is published first, and stops if it
-    disagrees.
+    THE COMPARISON IS THE POINT of this section. A reconstruction can
+    reproduce every published figure to a fraction of a percent and still be
+    the wrong shape: one did, to 0.40%, while missing its power pod entirely
+    and lofting a smooth pod where the real aircraft is a slab-sided box.
+    Both faults were obvious the instant the model was drawn over a
+    photograph, and invisible to every number in the entry.
     """
     from ..tools import figures
     listing = figures.reference_listing(notebook)
     if not listing:
-        return ("There is nothing in `_reference/`. Build from the brief and "
-                "your own knowledge of the aircraft, and declare every "
-                "dimension you supply.")
-    return f"""# What is known about the real aircraft
+        return ("There is nothing in `_reference/`, so there is no "
+                "photograph to check the shape against. Build from the "
+                "brief and your own knowledge of the aircraft, declare "
+                "every dimension you supply, and say in the entry that the "
+                "SHAPE IS UNVERIFIED -- only the published targets were "
+                "checked. That is an honest reconstruction, not a failed "
+                "one.")
 
-`_reference/` holds these. `read_reference_image` returns one as an image;
-`read_probe_figure` returns one YOU made.
+    photos = figures.reference_photos(notebook)
+    if photos:
+        usable = ", ".join('"%s"' % n for n, _, _ in photos)
+        compare = """
+# Check the shape against a photograph
 
-{listing}
+`compare_to_photo` is already in scope -- it lives in `_notebook.py`, which
+every probe loads. Build the model, then:
 
-**FIND IT WITH `NB_ROOT`.** A probe's cwd is its own run directory, not the
-notebook root, so a bare `_reference/...` will not open. The kernel already
-exports it:
+    rgb, note = compare_to_photo(airplane, "%s")
+    Image.fromarray(rgb).save("check.png")
+    print(note)
 
-    import os, pathlib
-    ref = pathlib.Path(os.environ["NB_ROOT"]) / "_reference"
+then `read_probe_figure("check.png")` AND LOOK AT IT. Usable photographs:
+%s.
 
-**DO THE IMAGE WORK YOURSELF.** The probe kernel is ordinary Python with
-PIL, numpy, scipy and `subprocess`, and `pdftoppm` is on PATH. Rasterise a
-source PDF, stitch EVERY page, crop, measure -- none of it needs anyone
-else. A sheet stitched for you by hand once dropped the tiles holding the
-wing panels, and the airframe was reconstructed from the wing's assembly
-jigs instead.
+It fits the camera itself, by chamfer distance, and draws each component in
+its own colour: filled where it faces you, solid on its outline, faint where
+it sits behind something else. There is no score, on purpose -- a number
+here is a number you would optimise, and what it measures is not fidelity.
 
-**ONE LOOK, THEN CODE.** `read_reference_image` once to find where each part
-sits. After that a 1:1 sheet at a known dpi is a dataset, not a picture:
+**READ `note` FIRST.** DOUBTFUL means the outline is not tracking the
+aircraft and the picture means nothing -- reseed, or report the photograph
+as unusable.
 
-    a = np.array(Image.open(sheet).convert("L"))
-    mm = 25.4 / dpi
-    from scipy import ndimage
-    lab, n = ndimage.label(a < 160)            # every part, found for you
-    for sl in ndimage.find_objects(lab):       # one slice per part
-        h = (sl[0].stop - sl[0].start) * mm
-        w = (sl[1].stop - sl[1].start) * mm
+**TELL A POSE ERROR FROM A SHAPE ERROR,** because they look alike and only
+one of them is yours to fix. Every component displaced the same way -- the
+whole outline rotated, or sitting high, or slid left -- is the CAMERA, and
+you reseed it. One component wrong while the others sit on the aircraft is
+the MODEL, and you edit it. Do not start moving geometry until the outline
+as a whole lands on the subject.
 
-**Do not hand-pick a crop rectangle.** Three separate attempts at this --
-two by a coordinator, one by a run -- each guessed a box and each produced a
-confident wrong number; one reported a 393 mm tailplane on a 610 mm
-aircraft. `ndimage.label` finds the parts so nobody has to guess.
+To reseed, pass `hint=(elev, azim)` or `hint=(elev, azim, roll)` -- the
+note gives you all three to adjust from. Do it whenever the overlay looks
+displaced, not only when the note says DOUBTFUL: a fit can be the best one
+available and still be worth a second seed. The hint only says where to
+look; the photograph still decides, and a hint that does not fit comes back
+DOUBTFUL rather than being accepted.
 
-**LOOK AT WHAT YOU BUILT.** After stitching or cropping, save it and call
-`read_probe_figure`. Measuring an image you have not looked at is how a
-wrong crop becomes a confident number.
+**FIX WHAT YOU SEE, IN `_model.py`.** The errors worth finding are
+structural and obvious once drawn: a part missing altogether, a fuselage
+section that should be a box and is an ellipse, a canopy smoothed into the
+loft. Write those directly and `declare_input` each one.
 
-**CHECK THE SCALE BEFORE YOU TRUST IT.** Measure something the brief already
-publishes and compare. If it disagrees by more than a few percent the stitch
-or the dpi is wrong, and every measurement after it is wrong too: say so and
-stop rather than building on it.
+**PROPORTIONS, NEVER ABSOLUTES.** A two-degree pose error moves points by
+6 mm on average and 11 mm at worst, which is the size of the discrepancies
+you are looking for. So "the tailplane chord is 1.4x what it should be
+relative to the wing" is sound, and "the tailplane is 12.7 mm too long" is
+not. Absolute dimensions come from the brief or from a plan, never from an
+overlay.
 
-**THE BRIEF WINS.** Where a row above already states a dimension, use it and
-do not re-measure.
+**A PHOTOGRAPH IS NOT A TARGET.** Do not adjust geometry until the overlay
+looks right. Fix what is structurally wrong, declare what you inferred, and
+leave the rest -- a model tuned to a picture has been fitted to the thing it
+was meant to be checked against.
+""" % (photos[0][0], usable)
+    else:
+        compare = """
+# No photograph can be compared against
 
+`_reference/` holds no photograph with a mask beside it, so there is nothing
+to draw the model over. Say in the entry that the shape is unverified and
+only the published targets were checked.
 """
+
+    return """# What is known about the real aircraft
+
+%s
+%s
+**THE BRIEF IS THE ONLY SOURCE OF ABSOLUTE DIMENSIONS.** Every figure the
+plan prints has already been transcribed into the rows above. There is no
+drawing here to measure and you are not expected to find one: a photograph
+tells you what is the wrong SHAPE, and the brief tells you what SIZE the
+right one is. Anything neither supplies, you supply yourself -- and every
+one of those is a `declare_input` with `source='guessed'`, which is what
+puts it in front of someone who can go and check it.
+
+""" % (listing, compare)
 
 
 def reconstruct(notebook_path, chapter=None, pool=None, ceiling=None,
