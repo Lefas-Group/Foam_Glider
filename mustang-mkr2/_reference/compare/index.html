@@ -1,0 +1,740 @@
+<title>Mustang Overlay Trial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+  :root {
+    --ground:   #f7f8f6;
+    --surface:  #ffffff;
+    --ink:      #161e1c;
+    --ink-soft: #4a5553;
+    --rule:     #d9ded9;
+    --accent:   #14655c;
+    --amber:    #8a6508;
+    --alarm:    #b3412c;
+    --shadow:   0 1px 2px rgba(22,30,28,.06), 0 8px 24px rgba(22,30,28,.07);
+
+    --display: "Archivo", system-ui, sans-serif;
+    --body:    "Source Serif 4", Georgia, serif;
+    --mono:    "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
+      --ground:   #101413;
+      --surface:  #171d1c;
+      --ink:      #e6ebe8;
+      --ink-soft: #9aa6a2;
+      --rule:     #2a3331;
+      --accent:   #5fb3a6;
+      --amber:    #d8a22a;
+      --alarm:    #e07257;
+      --shadow:   0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:   #101413;
+    --surface:  #171d1c;
+    --ink:      #e6ebe8;
+    --ink-soft: #9aa6a2;
+    --rule:     #2a3331;
+    --accent:   #5fb3a6;
+    --amber:    #d8a22a;
+    --alarm:    #e07257;
+    --shadow:   0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 1.0625rem;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: clamp(2rem, 5vw, 4.5rem) clamp(1.1rem, 4vw, 2.5rem) 5rem;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(2.5rem, 5vw, 4rem);
+  }
+
+  .prose { max-width: 66ch; display: flex; flex-direction: column; gap: 1rem; }
+
+  header { display: flex; flex-direction: column; gap: 1.1rem; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: .75rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0;
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(2rem, 5.5vw, 3.1rem);
+    line-height: 1.04;
+    letter-spacing: -.022em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    max-width: 62ch;
+    margin: 0;
+    font-size: 1.2rem;
+    line-height: 1.55;
+    color: var(--ink-soft);
+  }
+
+  h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: clamp(1.3rem, 2.6vw, 1.7rem);
+    letter-spacing: -.012em;
+    line-height: 1.2;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  h3 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1.02rem;
+    letter-spacing: -.004em;
+    margin: 0;
+  }
+
+  p { margin: 0; }
+  strong { font-weight: 600; }
+  em { color: var(--ink-soft); }
+
+  section { display: flex; flex-direction: column; gap: 1.4rem; }
+
+  /* ---------- figures ---------- */
+
+  figure {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+  }
+
+  .frame {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    line-height: 0;
+  }
+  .frame img { width: 100%; height: auto; display: block; }
+
+  figcaption {
+    font-family: var(--mono);
+    font-size: .78rem;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    max-width: 78ch;
+    display: flex;
+    gap: .7rem;
+  }
+  figcaption .n {
+    color: var(--accent);
+    font-weight: 500;
+    flex: none;
+  }
+
+  .pair { display: grid; gap: 1.6rem; grid-template-columns: 1fr; }
+  @media (min-width: 760px) { .pair { grid-template-columns: 1fr 1fr; } }
+
+  /* ---------- findings table ---------- */
+
+  .tablewrap { overflow-x: auto; border: 1px solid var(--rule);
+               border-radius: 3px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 520px; }
+  th, td {
+    text-align: left;
+    padding: .72rem .95rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  th {
+    font-family: var(--mono);
+    font-size: .7rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    font-weight: 500;
+    color: var(--ink-soft);
+  }
+  td { font-size: .95rem; }
+  td.what { font-weight: 600; font-family: var(--display); font-size: .93rem; }
+
+  .sev {
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    padding: .18rem .5rem;
+    border-radius: 2px;
+    white-space: nowrap;
+    border: 1px solid currentColor;
+  }
+  .sev.aero  { color: var(--alarm); }
+  .sev.shape { color: var(--amber); }
+  .sev.cos   { color: var(--ink-soft); }
+
+  /* ---------- verdict / aside ---------- */
+
+  .verdict {
+    display: grid;
+    gap: 1.1rem;
+    grid-template-columns: 1fr;
+    border-top: 2px solid var(--accent);
+    background: var(--surface);
+    padding: 1.4rem 1.5rem;
+    border-radius: 0 0 3px 3px;
+    box-shadow: var(--shadow);
+  }
+  @media (min-width: 700px) { .verdict { grid-template-columns: 1fr 1fr; } }
+  .verdict h3 { color: var(--accent); }
+  .verdict p { font-size: .97rem; }
+
+  .aside {
+    border-left: 2px solid var(--rule);
+    padding-left: 1.3rem;
+    display: flex;
+    flex-direction: column;
+    gap: .85rem;
+  }
+  .aside h2 { font-size: 1.15rem; }
+  .aside li { margin-bottom: .55rem; }
+  ul { margin: 0; padding-left: 1.15rem; }
+  li::marker { color: var(--accent); }
+
+  code {
+    font-family: var(--mono);
+    font-size: .88em;
+    background: color-mix(in srgb, var(--accent) 9%, transparent);
+    padding: .1em .35em;
+    border-radius: 2px;
+  }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 1.3rem;
+    font-family: var(--mono);
+    font-size: .74rem;
+    color: var(--ink-soft);
+    line-height: 1.8;
+  }
+
+  a { color: var(--accent); }
+  a:focus-visible, .frame:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+</style>
+
+<div class="page">
+
+  <header>
+    <p class="eyebrow">FT Mighty Mini Mustang MKR2 &nbsp;·&nbsp; reconstruction check</p>
+    <h1>Does the model look like the aeroplane?</h1>
+    <p class="standfirst">
+      The reconstruction reproduces all eight published figures to within
+      0.40&nbsp;%. That says the numbers agree. It says nothing about whether the
+      shape is right &mdash; so here it is, rendered at the camera angle of a
+      product photograph and laid over it.
+    </p>
+  </header>
+
+  <section>
+    <h2>Side by side</h2>
+    <div class="prose">
+      <p>
+        Both views are the same aircraft from above, forward and to the right,
+        nose low and starboard. The render is AeroSandbox at
+        <code>elev=40, azim=140</code>, scaled so its silhouette covers the same
+        area as the one in the photograph.
+      </p>
+    </div>
+    <figure>
+      <div class="frame">
+        <img src="side-by-side.png"
+             alt="Photograph of the foam Mustang beside the AeroSandbox model rendered at a matching angle.">
+      </div>
+      <figcaption><span class="n">01</span><span>Photograph left, model right. Look at fuselage depth behind the canopy, and at the size of the horizontal stabiliser relative to the wing.</span></figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Superimposed</h2>
+    <div class="prose">
+      <p>
+        The model&rsquo;s silhouette in red over the photograph, aligned by
+        centroid and scaled by mask area rather than bounding box &mdash; the
+        photo&rsquo;s mask carries the hand&rsquo;s fingers, which stretch its
+        box without being aircraft.
+      </p>
+    </div>
+    <figure>
+      <div class="frame">
+        <img src="overlay.png"
+             alt="The model silhouette drawn in red over the photograph of the real aircraft.">
+      </div>
+      <figcaption><span class="n">02</span><span>Red is the model. Where red extends past the aeroplane, the model is too big there; where the aeroplane shows through, too small. The tailplane overhang at upper left is the clearest discrepancy.</span></figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Three ways to superimpose</h2>
+    <div class="prose">
+      <p>
+        The filled silhouette occludes the thing it is being compared against,
+        so it can only be judged where red spills outside the aeroplane. An
+        outline &mdash; the silhouette minus its own erosion &mdash; leaves the
+        photograph visible and lets every edge be read against its counterpart.
+        A wireframe carries interior structure too, but at this line density it
+        buries the subject.
+      </p>
+    </div>
+    <div class="pair">
+      <figure>
+        <div class="frame">
+          <img src="overlay-outline.png"
+               alt="The model drawn as a red outline over the photograph, with the aircraft fully visible beneath.">
+        </div>
+        <figcaption><span class="n">03</span><span><strong>Outline &mdash; the one to use.</strong> Both aircraft legible at once. Span reads wide and the tailplane sits forward; some of that width is the scaling artefact below.</span></figcaption>
+      </figure>
+      <figure>
+        <div class="frame">
+          <img src="overlay-wireframe.png"
+               alt="The model drawn as a dense red wireframe over the photograph, obscuring it.">
+        </div>
+        <figcaption><span class="n">04</span><span><strong>Wireframe &mdash; too dense.</strong> Fuselage longerons hatch over the subject. Worth revisiting with section boundaries only and the longerons suppressed.</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>Pose by landmark correspondence</h2>
+    <div class="prose">
+      <p>
+        Guessing the angle works but cannot be checked. The principled version
+        names a handful of landmarks in both the model and the photograph and
+        solves for the camera that puts one on the other &mdash; and then each
+        landmark&rsquo;s leftover error is a <em>measurement</em>, in pixels and
+        in millimetres, rather than an impression.
+      </p>
+      <p>
+        The landmarks come out of the geometry generically. Nothing in
+        <code>pose_fit.py</code> knows what a Mustang is: it walks whatever
+        wings and fuselages the aircraft has and names extreme points
+        structurally, so twelve came back here without being asked for.
+      </p>
+    </div>
+    <div class="pair">
+      <figure>
+        <div class="frame">
+          <img src="fitted-outline.png"
+               alt="The model outline projected onto the photograph through the fitted camera, landmarks ringed in gold.">
+        </div>
+        <figcaption><span class="n">05</span><span><strong>Fitted, <code>elev 43.6&deg; azim 150.8&deg;</code>.</strong> Gold rings are the five named landmarks. The wing lands true; the tail assembly sits well forward of the real one.</span></figcaption>
+      </figure>
+      <figure>
+        <div class="frame">
+          <img src="fitted-mesh.png"
+               alt="The model mesh projected onto the photograph as red quadrilateral edges.">
+        </div>
+        <figcaption><span class="n">06</span><span>The same pose with the mesh drawn rather than its outline. Projected straight into photograph pixels &mdash; no render, no rescaling, no alignment step to get wrong.</span></figcaption>
+      </figure>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Landmark</th><th>Residual</th><th>At 1.85 mm/px</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="what">main-wing : tip</td><td>0.4 px</td><td>0.7 mm</td></tr>
+          <tr><td class="what">fuselage : nose</td><td>12.2 px</td><td>22.6 mm</td></tr>
+          <tr><td class="what">horizontal-stabilizer : tip</td><td>28.7 px</td><td>53.0 mm</td></tr>
+          <tr><td class="what">main-wing : tip-mirror</td><td>30.4 px</td><td>56.3 mm</td></tr>
+          <tr><td class="what">vertical-stabilizer : tip</td><td>34.9 px</td><td>64.6 mm</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose">
+      <p>
+        <strong>And the numbers lied.</strong> Look at the overlay rather than
+        the table: the tail floats free of the aeroplane and the wing does not
+        track its edges. This pose is visibly <em>worse</em> than one guessed
+        by eye, despite a flattering 21&nbsp;px mean.
+      </p>
+      <p>
+        The tell is in the fitted parameters. Camera distance came back at
+        <strong>0.25&nbsp;m</strong> for a 622&nbsp;mm aircraft &mdash; closer
+        than the photograph can possibly have been taken. Five correspondences
+        against seven free parameters leaves almost no redundancy, so the
+        optimiser spent it: extreme perspective places those five points
+        beautifully and distorts everything between them. A residual table is
+        not a check when the thing being checked is what the residual was fitted
+        to.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Silhouette matching, and no landmarks at all</h2>
+    <div class="prose">
+      <p>
+        The fix is to stop asking about points. Rasterise the projected mesh
+        into a mask, compare it with the photograph&rsquo;s subject mask, and
+        maximise the overlap &mdash; thousands of boundary pixels constraining
+        the pose instead of ten numbers. A degenerate perspective that balloons
+        the near half of the aircraft now <em>costs</em> overlap rather than
+        buying precision.
+      </p>
+      <p>
+        Nothing is rendered inside the loop: the projected faces are drawn
+        straight into a PIL image, which is exact and fast enough to optimise
+        against. Eighty-two seconds, multi-start over twelve azimuths and three
+        elevations.
+      </p>
+    </div>
+    <figure>
+      <div class="frame">
+        <img src="silhouette-fit.png"
+             alt="The model outline from a silhouette-fitted camera, tracking the real aircraft closely.">
+      </div>
+      <figcaption><span class="n">07</span><span><strong>Silhouette fit &mdash; IoU 0.694, <code>elev 68.7&deg; azim 144.5&deg;</code>, camera at 10.2&nbsp;m.</strong> The distance is physical this time, because distorting the whole outline is penalised. Wing, fin and stab all track; the loose box low centre is the power pod, which this viewpoint hides on the real aircraft.</span></figcaption>
+    </figure>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Method</th><th>Fitted distance</th><th>Overlay</th><th>Needs</th></tr></thead>
+        <tbody>
+          <tr><td class="what">Guessed by eye</td><td>n/a</td><td>good</td><td>someone to look</td></tr>
+          <tr><td class="what">Landmark correspondence</td><td>0.25 m &mdash; degenerate</td><td>poor</td><td>5 points identified</td></tr>
+          <tr><td class="what">Silhouette overlap</td><td>10.2 m &mdash; physical</td><td>best</td><td>a separable background</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Chamfer, and why overlap was the wrong thing to maximise</h2>
+    <div class="prose">
+      <p>
+        Overlap is a poor objective. It is <strong>flat</strong> where the two
+        shapes do not yet intersect, so an optimiser started wrong gets no
+        gradient and wanders; and it <strong>saturates</strong> once they
+        mostly agree, so the last and most interesting millimetres barely move
+        the score. A thin wing makes both worse.
+      </p>
+      <p>
+        Chamfer distance has neither failure: every outline pixel contributes
+        its distance to the nearest outline pixel of the other shape, so the
+        cost falls away smoothly in the right direction from anywhere. It is
+        the classical shape-matching objective for exactly this reason, and it
+        is two distance transforms and a lookup. Symmetric, both directions
+        &mdash; one way alone will happily shrink the model onto a corner.
+      </p>
+    </div>
+    <figure>
+      <div class="frame">
+        <img src="three-poses.png"
+             alt="Three overlays compared: guessed by eye, fitted by overlap, and fitted by chamfer distance.">
+      </div>
+      <figcaption><span class="n">09</span><span>Left to right: guessed, overlap-fitted, chamfer-fitted. The chamfer pose tracks both wings and the fin; the overlap pose looks down too steeply; the guess is simply too large.</span></figcaption>
+    </figure>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Pose</th><th>elev / azim</th><th>IoU</th><th>Mean outline error</th></tr></thead>
+        <tbody>
+          <tr><td class="what">Guessed by eye</td><td>40.0 / 140.0</td><td>&mdash;</td><td>&mdash;</td></tr>
+          <tr><td class="what">Overlap (IoU) fitted</td><td>68.7 / 144.5</td><td><strong>0.694</strong></td><td>&mdash;</td></tr>
+          <tr><td class="what">Chamfer fitted</td><td>47.6 / 137.6</td><td>0.667</td><td><strong>11.9 px</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose">
+      <p>
+        <strong>The chamfer pose scores WORSE on IoU and looks better.</strong>
+        That is the finding, not a contradiction: overlap rewards covering
+        area, and the mask it is covering has a hand in it, so the optimiser
+        tilted the aircraft to 68.7&deg; to blanket a thumb. Chamfer cares only
+        that edges meet edges, which is what the eye is judging too. It also
+        lands at 47.6&deg; / 137.6&deg; &mdash; within a few degrees of the
+        guess, which is reassurance for both.
+      </p>
+      <p>
+        And 11.9&nbsp;px is an interpretable number in a way IoU is not: it is
+        the average distance between the two outlines, so it converts directly
+        to millimetres once the scale is trusted.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>The same two fits on a clean photograph</h2>
+    <div class="prose">
+      <p>
+        Page one of the plan carries a photograph of the built aircraft on
+        pure white &mdash; the same airframe, no hand, no grass. Segmenting it
+        needed <strong>a threshold and nothing else</strong>: no colour rule,
+        no looking at the image first. That is the whole non-agentic pipeline
+        running end to end.
+      </p>
+    </div>
+    <div class="pair">
+      <figure>
+        <div class="frame"><img src="studio-photo.png"
+             alt="The built Mustang photographed on a white background, rear three-quarter view."></div>
+        <figcaption><span class="n">11</span><span>Plan page one, cropped. Rear three-quarter: tail toward the camera, nose hidden behind the wing.</span></figcaption>
+      </figure>
+      <figure>
+        <div class="frame"><img src="studio-mask.png"
+             alt="The subject mask from the white-background photograph, clean and complete."></div>
+        <figcaption><span class="n">12</span><span>Subject mask, 76,200&nbsp;px, from one threshold. Complete, no holes, nothing but aircraft.</span></figcaption>
+      </figure>
+    </div>
+
+    <figure>
+      <div class="frame"><img src="studio-both.png"
+           alt="The overlap-fitted and chamfer-fitted outlines on the studio photograph, nearly identical."></div>
+      <figcaption><span class="n">13</span><span>Both automatic fits. They land <strong>0.5&deg; apart in elevation and 0.1&deg; in azimuth</strong> &mdash; on the grass photograph they disagreed by 21&deg;.</span></figcaption>
+    </figure>
+
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Photograph</th><th>Overlap fit</th><th>Chamfer fit</th><th>Disagreement</th></tr></thead>
+        <tbody>
+          <tr><td class="what">On grass, with a hand</td><td>68.7&deg; / 144.5&deg;</td><td>47.6&deg; / 137.6&deg;</td><td>21.1&deg; elevation</td></tr>
+          <tr><td class="what">On white, clean mask</td><td>21.6&deg; / 344.8&deg;</td><td>21.1&deg; / 344.7&deg;</td><td><strong>0.5&deg;</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="prose">
+      <p>
+        <strong>Which revises the earlier conclusion.</strong> Chamfer is not
+        better because it is a better objective &mdash; it is better because
+        it tolerates a bad mask. Overlap rewarded covering area, and the area
+        it was covering included a thumb, so it tilted the aircraft to blanket
+        one. Remove the contamination and the two agree to half a degree.
+        Given a good mask, either works; given a poor one, prefer chamfer.
+      </p>
+      <p>
+        And the fit is now good enough that the remaining red <em>is</em> model
+        error. Four things show in both this view and the grass one, which is
+        what makes them worth believing:
+      </p>
+      <ul>
+        <li><strong>The tailplane is too large and sits too low</strong>, hanging below the real one. Seen from two unrelated angles &mdash; and it sets tail volume, so it moves the static margin.</li>
+        <li><strong>Both wingtips overshoot.</strong> Span is verified at 624 against 622&nbsp;mm, so this is more likely the plan&rsquo;s dihedral being flat in the model than a span error.</li>
+        <li><strong>The fin is too tall</strong>, rising past the real tip.</li>
+        <li><strong>The aft fuselage is too deep</strong>, carrying section further back than the real taper.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2>Can it run without an agent?</h2>
+    <div class="prose">
+      <p>
+        <strong>The fitting, entirely.</strong>
+        <code>fit_silhouette(pts, faces, target)</code> takes no human input:
+        no landmarks, no angle to guess, no starting pose. That half is a
+        library function.
+      </p>
+      <p>
+        <strong>The segmentation, not reliably.</strong> The mask that made the
+        fit above work came from a colour rule written after looking at the
+        photograph &mdash; which is the agentic step. Replacing it with a
+        generic rule that seeds the background from the frame border recovered
+        about half the aircraft on this photograph and essentially nothing on a
+        second one with a house and sky in the frame.
+      </p>
+    </div>
+    <figure>
+      <div class="frame">
+        <img src="auto-segment.png"
+             alt="Automatic border-seeded segmentation, missing the port wing and full of holes.">
+      </div>
+      <figcaption><span class="n">14</span><span>Border-seeded segmentation with no hand-written rule: 33,600&nbsp;px against the 61,300 a tuned rule found. The port wing is missing outright. Good enough to centre an overlay, not to fit a pose against.</span></figcaption>
+    </figure>
+    <div class="prose">
+      <p>
+        So the condition is on the <em>input</em>, not the method &mdash; and
+        the section above demonstrates it: on a white ground the threshold was
+        enough, both fits agreed to half a degree, and nothing in the pipeline
+        needed a human. On grass with a hand in frame, the hand ends up inside
+        the mask being fitted to, and some of that 0.694 is the model
+        dutifully trying to cover a thumb.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>What it found</h2>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Difference</th><th>Consequence</th><th>Matters</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="what">Horizontal stab larger, further forward</td>
+            <td>Changes tail volume, and therefore static margin</td>
+            <td><span class="sev aero">aerodynamic</span></td>
+          </tr>
+          <tr>
+            <td class="what">Fuselage too slender and tubular</td>
+            <td>Under-predicts body drag and side area</td>
+            <td><span class="sev aero">aerodynamic</span></td>
+          </tr>
+          <tr>
+            <td class="what">Canopy smoothed into the loft</td>
+            <td>Plan has separate turtle decks and a canopy part</td>
+            <td><span class="sev shape">shape</span></td>
+          </tr>
+          <tr>
+            <td class="what">Wing root chord looks deep</td>
+            <td>May be real, may be perspective &mdash; needs the plan</td>
+            <td><span class="sev shape">shape</span></td>
+          </tr>
+          <tr>
+            <td class="what">No spinner or propeller</td>
+            <td>None &mdash; not modelled, and correctly so</td>
+            <td><span class="sev cos">cosmetic</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="prose">
+      <p>
+        The stabiliser is the one worth chasing. Everything else is either a
+        refinement or a question the plan can answer directly.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>How the angle was matched</h2>
+    <div class="prose">
+      <p>
+        Rendering at an arbitrary viewpoint is three lines &mdash;
+        <code>ax.view_init(elev, azim)</code> after passing your own axes to
+        <code>airplane.draw(ax=&hellip;)</code>. Four candidates were enough to
+        find the photograph&rsquo;s viewpoint by eye.
+      </p>
+    </div>
+    <div class="pair">
+      <figure>
+        <div class="frame">
+          <img src="angle-candidates.png"
+               alt="Four renders of the model at different elevation and azimuth angles.">
+        </div>
+        <figcaption><span class="n">15</span><span>Four candidates. <code>elev=40, azim=140</code>, lower left, matches the photograph.</span></figcaption>
+      </figure>
+      <figure>
+        <div class="frame">
+          <img src="silhouette.png"
+               alt="Binary silhouette of the aircraft extracted from the photograph.">
+        </div>
+        <figcaption><span class="n">16</span><span>The photograph&rsquo;s silhouette, from a not-green mask. Clean because the grass is uniform; the hand&rsquo;s fingers survive as contamination at centre right.</span></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>The model as it stands</h2>
+    <figure>
+      <div class="frame">
+        <img src="three-view.png"
+             alt="Four-panel three-view of the reconstructed airframe.">
+      </div>
+      <figcaption><span class="n">17</span><span>After boxing the fuselage section (<code>shape</code> 2.5&nbsp;&rarr;&nbsp;4.0) and adding the power pod, plan part 00, which existed only as a 6&nbsp;g mass entry.</span></figcaption>
+    </figure>
+  </section>
+
+  <div class="verdict">
+    <div>
+      <h3>Worth keeping</h3>
+      <p>
+        The side-by-side, for a quick look; and <code>fit_chamfer</code> when
+        a number is wanted. Together they need no landmarks and no guessed
+        angle &mdash; only a photograph whose subject separates from its
+        background.
+      </p>
+    </div>
+    <div>
+      <h3>Worth care</h3>
+      <p>
+        Any residual produced by a pose that was fitted to it. Check the
+        overlay before the table &mdash; the landmark fit scored 21&nbsp;px and
+        was visibly wrong, and nothing in the number said so.
+      </p>
+    </div>
+  </div>
+
+  <div class="aside">
+    <h2>What did not work</h2>
+    <ul>
+      <li>
+        <strong>Automatic angle matching by silhouette IoU.</strong> Normalising
+        each mask to a square destroyed aspect ratio, so a long thin planform
+        and a compact one scored identically &mdash; IoU came back flat across
+        the whole grid. Fixed, and it still returned identical pixel counts for
+        different angles. Four candidates judged by eye took one attempt.
+      </li>
+      <li>
+        <strong>Two thresholding bugs, both from assuming white.</strong>
+        AeroSandbox&rsquo;s background pane is lavender, about 698 on a 765
+        scale, so &ldquo;not white&rdquo; caught the entire axes rectangle. The
+        robust version takes the modal colour as the background.
+      </li>
+      <li>
+        <strong>Orthographic fitting failed on a close photograph.</strong>
+        Residuals sat at 65&nbsp;px on a 480&nbsp;px span &mdash; 13% &mdash;
+        because the near wingtip genuinely is larger than the far one and no
+        rigid orthographic pose can place both. Adding one perspective
+        parameter took the mean to 21&nbsp;px. The camera model was never at
+        fault: it reproduces matplotlib to 0.00&nbsp;px.
+      </li>
+      <li>
+        <strong>Rendering then rescaling kept going wrong.</strong> Two
+        attempts put the outline up, left and half-size &mdash;
+        <code>bbox_inches="tight"</code> crops the canvas, so matplotlib&rsquo;s
+        reported pixel coordinates stop matching the saved file. Projecting the
+        mesh straight into photograph pixels removed the whole class of bug.
+      </li>
+      <li>
+        <strong>Segmentation depends entirely on the photograph.</strong>
+        Uniform grass segmented cleanly. A second photograph with a house, sky
+        and driveway in it returned the background instead of the aeroplane.
+      </li>
+    </ul>
+  </div>
+
+  <footer>
+    Model: <code>mustang-mkr2/chapters/01-airframe-reconstruction/_model.py</code><br>
+    Photograph: Flite Test product listing, FT Mighty Mini Mustang MKR2<br>
+    Published figures reproduced to 0.40&nbsp;% &mdash; geometry measured off the
+    1:1 tiled plan, mass still fitted rather than derived
+  </footer>
+
+</div>

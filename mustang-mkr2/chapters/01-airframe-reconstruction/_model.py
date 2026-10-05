@@ -62,19 +62,58 @@ v_stab = asb.Wing(
 
 ##### Fuselage
 
+# SUPERELLIPSE EXPONENT. 2.0 is a true ellipse and 2.5 is barely off one, which
+# is what the first reconstruction used -- so the model lofted a smooth pod
+# where the real aircraft is a FOLDED BOX. Plan part 01 is a flat fold-out:
+# two mirrored sides joined by a belly band, which becomes a flat-bottomed
+# rectangular section once folded. Formers A, B and C are domed on top with a
+# narrow stem, so only the turtle deck is curved.
+#
+# A superellipse cannot be flat-bottomed and round-topped at once, so 4.0 is
+# the compromise -- a rounded rectangle, which is what the assembled section
+# actually is once the turtle deck is on.
+SHAPE_BOX = 4.0
+
 fuselage = asb.Fuselage(
     name="Fuselage",
     xsecs=[
-        asb.FuselageXSec(xyz_c=[0.000, 0.0, 0.000], width=0.038, height=0.032, shape=2.5),
-        asb.FuselageXSec(xyz_c=[0.030, 0.0, 0.002], width=0.040, height=0.045, shape=2.5),
-        asb.FuselageXSec(xyz_c=[0.060, 0.0, 0.005], width=0.041, height=0.052, shape=2.5),
-        asb.FuselageXSec(xyz_c=[0.117, 0.0, 0.005], width=0.041, height=0.058, shape=2.5),
-        asb.FuselageXSec(xyz_c=[0.180, 0.0, 0.010], width=0.041, height=0.068, shape=2.5),
-        asb.FuselageXSec(xyz_c=[0.242, 0.0, 0.012], width=0.041, height=0.075, shape=2.5),
-        asb.FuselageXSec(xyz_c=[0.300, 0.0, 0.010], width=0.038, height=0.064, shape=2.5),
-        asb.FuselageXSec(xyz_c=[0.360, 0.0, 0.008], width=0.028, height=0.045, shape=2.5),
-        asb.FuselageXSec(xyz_c=[0.420, 0.0, 0.005], width=0.018, height=0.032, shape=2.5),
-        asb.FuselageXSec(xyz_c=[0.468, 0.0, 0.002], width=0.012, height=0.026, shape=2.5),
+        asb.FuselageXSec(xyz_c=[0.000, 0.0, 0.000], width=0.038, height=0.032, shape=SHAPE_BOX),
+        asb.FuselageXSec(xyz_c=[0.030, 0.0, 0.002], width=0.040, height=0.045, shape=SHAPE_BOX),
+        asb.FuselageXSec(xyz_c=[0.060, 0.0, 0.005], width=0.041, height=0.052, shape=SHAPE_BOX),
+        asb.FuselageXSec(xyz_c=[0.117, 0.0, 0.005], width=0.041, height=0.058, shape=SHAPE_BOX),
+        asb.FuselageXSec(xyz_c=[0.180, 0.0, 0.010], width=0.041, height=0.068, shape=SHAPE_BOX),
+        asb.FuselageXSec(xyz_c=[0.242, 0.0, 0.012], width=0.041, height=0.075, shape=SHAPE_BOX),
+        asb.FuselageXSec(xyz_c=[0.300, 0.0, 0.010], width=0.038, height=0.064, shape=SHAPE_BOX),
+        asb.FuselageXSec(xyz_c=[0.360, 0.0, 0.008], width=0.028, height=0.045, shape=SHAPE_BOX),
+        asb.FuselageXSec(xyz_c=[0.420, 0.0, 0.005], width=0.018, height=0.032, shape=SHAPE_BOX),
+        asb.FuselageXSec(xyz_c=[0.468, 0.0, 0.002], width=0.012, height=0.026, shape=SHAPE_BOX),
+    ],
+)
+
+
+# THE POWER POD -- plan part 00, and it was missing entirely. It appeared in
+# the mass breakdown as 6 g and nowhere in the geometry, yet it is the box
+# protruding below the nose in every photograph of this aircraft: the motor
+# mounts on its firewall and the battery slides into it.
+#
+# MEASURED off tile 1 at 100 dpi with ndimage: the flat pattern is 83.3 x
+# 65.3 mm with two fold bands, so the folded box is about 28 mm square in
+# section and 65 mm long -- the standard FT Mini pod, 1.1 in square.
+#
+# A SECOND `Fuselage`, because `Airplane` takes a list of them and a single
+# loft cannot carry a protrusion. It is slung under the nose, its top inside
+# the fuselage and its bottom standing proud, which is what the photograph
+# shows and what gives the nose its squared-off underside.
+POD_W, POD_H, POD_L = 0.028, 0.028, 0.065
+POD_Z = -0.026        # section centre, below the fuselage line
+
+power_pod = asb.Fuselage(
+    name="Power Pod",
+    xsecs=[
+        asb.FuselageXSec(xyz_c=[0.006, 0.0, POD_Z],
+                         width=POD_W, height=POD_H, shape=6.0),
+        asb.FuselageXSec(xyz_c=[0.006 + POD_L, 0.0, POD_Z],
+                         width=POD_W, height=POD_H, shape=6.0),
     ],
 )
 
@@ -110,5 +149,5 @@ airplane = asb.Airplane(
     name="FT Mighty Mini Mustang MKR2",
     xyz_ref=[mass_props.x_cg, mass_props.y_cg, mass_props.z_cg],
     wings=[main_wing, h_stab, v_stab],
-    fuselages=[fuselage],
+    fuselages=[fuselage, power_pod],
 )
