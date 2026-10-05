@@ -1,3 +1,0 @@
-plan 1:1 100dpi  Stitched FT Mini Corsair v1.0 plan, tiles 1-8 only.
-INCOMPLETE: tiles 9-12 were omitted and they hold the wing panels.
-Prefer the source PDF and rasterise every page yourself.
