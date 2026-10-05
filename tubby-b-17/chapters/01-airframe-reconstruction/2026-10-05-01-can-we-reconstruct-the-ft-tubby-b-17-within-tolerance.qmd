@@ -1,0 +1,98 @@
+---
+title: "Can we reconstruct the FT Tubby B-17 within tolerance?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 120.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 300.0      # s granted for the probe
+PROBE_SPENT = 187.4     # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# Published target figures
+b_target = 1.473
+l_target = 1.168
+m_target = 1.973
+cg_target_rel = 0.108
+
+# Model values
+b_val = float(wing.span(type="y"))
+l_val = float(fuse.length())
+m_val = float(mass_props_dry.mass)
+cg_val = float(mass_props_dry.x_cg - wing.xsecs[0].xyz_le[0])
+
+# Target errors and tolerances
+err_b = (b_val - b_target) / b_target * 100.0
+err_l = (l_val - l_target) / l_target * 100.0
+err_m = (m_val - m_target) / m_target * 100.0
+err_cg = (cg_val - cg_target_rel) / cg_target_rel * 100.0
+
+target_names = ["Wing span", "Fuselage length", "Dry weight", "Center of gravity"]
+errors = [err_b, err_l, err_m, err_cg]
+tolerances = [1.0, 2.0, 6.0, 8.0]
+
+worst_idx = int(np.argmax(np.abs(errors)))
+worst_abs_err = abs(errors[worst_idx])
+worst_target = target_names[worst_idx]
+worst_tol = tolerances[worst_idx]
+```
+
+::: {.hero}
+[`{python} f"{worst_abs_err:.2f}%"`]{.hero-value}
+[`{python} f"worst target error ({worst_target.lower()}, tolerance ±{worst_tol:.1f}%)"`]{.hero-label}
+:::
+
+**Answer.** Yes. Reconstructed geometry reproduces every published target well within tolerance, with a worst error of [`{python} f"{worst_abs_err:.2f}%"`]{.key} on `{python} worst_target.lower()` against its [`{python} f"±{worst_tol:.1f}%"`]{.key} limit. Wing span matches at [`{python} f"{b_val*1e3:.0f} mm"`]{.key} ([`{python} f"{err_b:+.2f}%"`]{.key}), and fuselage length at [`{python} f"{l_val*1e3:.0f} mm"`]{.key} ([`{python} f"{err_l:+.2f}%"`]{.key}). Dry weight reaches [`{python} f"{m_val*1e3:.0f} g"`]{.key} ([`{python} f"{err_m:+.2f}%"`]{.key}), with dry CG [`{python} f"{cg_val*1e3:.1f} mm"`]{.key} aft of root leading edge ([`{python} f"{err_cg:+.2f}%"`]{.key}). Overlaid on the store photograph (@fig-photo-overlay), the four tractor nacelles, dihedral, and wide fuselage align closely with the airframe. Target errors are summarized in (@fig-target-errors).
+
+::: {.callout-tip}
+## Specified
+Asked of the user, 2026-10-05:
+
+1. **Fuselage max width**: 255 mm, measured off headon mask.
+:::
+
+::: {.callout-note}
+## Assumed
+1. **Wing planform**: chords 330–145 mm, dihedral 2 deg.
+2. **Nacelles**: inboard y=270 mm, outboard y=490 mm.
+3. **Airfoil**: NACA 0008 symmetric section stand-in.
+4. **Wing area**: [`{python} f"{wing.area():.3f} m²"`]{.key}, derived from planform.
+5. **Wing loading**: [`{python} f"{m_val/wing.area():.2f} kg/m²"`]{.key}, from dry mass.
+:::
+
+```{python}
+#| label: fig-photo-overlay
+#| fig-cap: "Store head-on photograph overlay (camera elev 5.8°, azim 181.8°, roll 0.3°, 806 px/m; fit 16.1 px, 1.4% of 1185 px; pose good)."
+fig_photo, ax_photo = plt.subplots(figsize=(6.5, 6.5))
+pose_note = show_comparison(airplane, "headon", hint=(6.0, 182.0, 0.5), ax=ax_photo)
+plt.show()
+```
+
+```{python}
+#| label: fig-target-errors
+#| fig-cap: "Reconstruction error against published tolerance band for each target."
+fig_err, ax_err = plt.subplots(figsize=(6.5, 3.2))
+y_pos = np.arange(len(target_names))
+tol_bands = np.array(tolerances)
+
+ax_err.barh(y_pos, 2 * tol_bands, left=-tol_bands, color="lightgray", alpha=0.5, height=0.55, label="Tolerance band")
+ax_err.barh(y_pos, errors, color="steelblue", height=0.35, label="Model error")
+ax_err.axvline(0, color="black", linewidth=0.8, linestyle="--")
+ax_err.set_yticks(y_pos)
+ax_err.set_yticklabels(target_names)
+ax_err.set_xlabel("Error [%]")
+ax_err.set_xlim(-10, 10)
+ax_err.legend(loc="lower right")
+ax_err.grid(True, axis="x", alpha=0.3)
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```
