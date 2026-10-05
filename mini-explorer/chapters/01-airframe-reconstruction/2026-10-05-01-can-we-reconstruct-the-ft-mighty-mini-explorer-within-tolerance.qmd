@@ -1,0 +1,66 @@
+---
+title: "Can we reconstruct the FT Mighty Mini Explorer within tolerance?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 120.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 240.0        # s granted for the probe
+PROBE_SPENT = 7.8      # s the probe actually used
+
+targets = evaluate_targets(airplane, dry_mass_props, total_mass_props)
+worst_target = max(targets, key=lambda t: abs(t["err_pct"]))
+worst_err = abs(worst_target["err_pct"])
+
+span_tgt = next(t for t in targets if t["name"] == "Wing span")
+span_mm = span_tgt["measured"] * 1e3
+span_tgt_mm = span_tgt["target"] * 1e3
+
+len_tgt = next(t for t in targets if t["name"] == "Length")
+len_mm = len_tgt["measured"] * 1e3
+len_tgt_mm = len_tgt["target"] * 1e3
+
+dry_tgt = next(t for t in targets if t["name"] == "Dry weight")
+dry_g = dry_tgt["measured"] * 1e3
+dry_tgt_g = dry_tgt["target"] * 1e3
+
+cg_tgt = next(t for t in targets if t["name"] == "CG aft LE")
+cg_mm = cg_tgt["measured"] * 1e3
+```
+
+::: {.hero}
+[`{python} f"{worst_err:.2f}%"`]{.hero-value}
+[worst reconstruction error across published targets]{.hero-label}
+:::
+
+**Answer.** Yes. All published targets are reproduced within tolerance, with a maximum error of [`{python} f"{worst_err:.2f}%"`]{.key} on dry weight (@fig-target-errors). Wing span derives to [`{python} f"{span_mm:.1f}"`]{.key} mm against a [`{python} f"{span_tgt_mm:.1f}"`]{.key} mm target, and length falls out at [`{python} f"{len_mm:.1f}"`]{.key} mm against [`{python} f"{len_tgt_mm:.1f}"`]{.key} mm. Dry airframe mass totals [`{python} f"{dry_g:.1f}"`]{.key} g against the [`{python} f"{dry_tgt_g:.0f}"`]{.key} g target. Positioning the flight battery in the nose balances the aircraft at [`{python} f"{cg_mm:.1f}"`]{.key} mm aft of the leading edge (@fig-three-view). The airframe shape is unverified against photographic plans.
+
+::: {.callout-note}
+## New assumptions
+1. **Fuselage stations**: slab box with 195 mm nose.
+2. **Wing planform**: 190 mm chord and polyhedral tips.
+3. **Wing airfoil**: Clark-Y for folded foam camber.
+4. **Tail surfaces**: flat plate horizontal and vertical stabilizers.
+5. **Component masses**: catalogue electronics plus 38 g glue.
+6. **Wing area**: [`{python} f"{airplane.s_ref:.3f}"`]{.key} m^2 derived from planform.
+:::
+
+```{python}
+#| label: fig-three-view
+#| fig-cap: "Three-view diagram of the reconstructed FT Mighty Mini Explorer geometry with pusher propulsor and polyhedral trainer wing."
+axs = airplane.draw_three_view(show=False)
+```
+
+```{python}
+#| label: fig-target-errors
+#| fig-cap: "Reconstruction error against published specification tolerance band for all derived and given targets."
+fig_err, _ = plot_target_errors(targets)
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(evaluate_targets, plot_target_errors)
+```
