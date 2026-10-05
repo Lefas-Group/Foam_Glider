@@ -1,0 +1,126 @@
+---
+title: "Does a usable flight envelope survive at 3721 g with 3 lb payload?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 120.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 300.0        # s granted for the probe
+PROBE_SPENT = 105.6      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+m_dry = float(mass_props_dry.mass)
+x_dry = float(mass_props_dry.x_cg)
+m_batt = 0.370
+x_batt = 0.446
+m_pay = 1.361
+m_auw = m_dry + m_batt + m_pay
+w_auw = m_auw * 9.80665
+x_cg_base = float(x_le_root + 0.108)
+
+# Stall speed at heavy AUW vs clean baseline
+v_s_clean = find_stall_speed(2.360, x_cg_base)
+v_s_heavy = find_stall_speed(m_auw, x_cg_base, v_bracket=(12.0, 16.0))
+dv_stall = v_s_heavy - v_s_clean
+
+# Heavy envelope sweep
+v_sweep = np.linspace(13.8, 24.0, 11)
+env_heavy = sweep_trimmed_envelope(v_sweep, mass_total=m_auw, x_cg=x_cg_base)
+
+idx_cr = int(np.argmin(env_heavy['D']))
+v_cr = float(env_heavy['velocity'][idx_cr])
+d_cr = float(env_heavy['D'][idx_cr])
+p_cr = float(env_heavy['P_aero'][idx_cr])
+ld_cr = float(env_heavy['LD'][idx_cr])
+
+# Four-motor thrust and climb rate
+t_stat = 4.0 * float(motor_prop_performance(0.0)['thrust'])
+tw_stat = t_stat / w_auw
+t_heavy = np.array([4.0 * motor_prop_performance(v)['thrust'] for v in v_sweep])
+roc_heavy = (t_heavy - env_heavy['D']) * v_sweep / w_auw
+idx_roc = int(np.argmax(roc_heavy))
+roc_peak = float(roc_heavy[idx_roc])
+
+# Bomb bay payload CG shift and static margin
+x_bay_fwd = 0.440
+x_bay_mid = 0.600
+cg_fwd = (m_dry * x_dry + m_batt * x_batt + m_pay * x_bay_fwd) / m_auw
+cg_mid = (m_dry * x_dry + m_batt * x_batt + m_pay * x_bay_mid) / m_auw
+shift_fwd_mm = (cg_fwd - x_cg_base) * 1e3
+shift_mid_mm = (cg_mid - x_cg_base) * 1e3
+
+c_mac = float(wing.mean_aerodynamic_chord())
+plane_cr = _make_airplane_with_elevator(float(env_heavy['delta_e'][idx_cr]))
+stab_cr = asb.AeroBuildup(airplane=plane_cr, op_point=asb.OperatingPoint(velocity=v_cr, alpha=float(env_heavy['alpha'][idx_cr])), xyz_ref=[x_cg_base, 0, 0]).run_with_stability_derivatives()
+x_np = float(stab_cr['x_np'][0])
+
+sm_fwd = (x_np - cg_fwd) / c_mac * 100
+sm_mid = (x_np - cg_mid) / c_mac * 100
+```
+
+::: {.hero}
+[`{python} f"{v_s_heavy:.1f} m/s"`]{.hero-value}
+[`{python} f"trimmed stall speed at 3721 g AUW (+{dv_stall:.1f} m/s over clean; peak climb {roc_peak:.1f} m/s)"`]{.hero-label}
+:::
+
+**Answer.** A viable flight envelope survives at [`{python} f"{m_auw*1e3:.0f} g"`]{.key}, though operational margins compress markedly against the [clean envelope](2026-10-05-03-what-is-the-trimmed-level-flight-envelope-at-2360-g.qmd). Stall speed rises by [`{python} f"{dv_stall:.1f} m/s"`]{.key} to [`{python} f"{v_s_heavy:.1f} m/s"`]{.key} ([`{python} f"{v_s_heavy*3.6:.1f} km/h"`]{.key}), and minimum-drag cruise shifts to [`{python} f"{v_cr:.1f} m/s"`]{.key}. As shown in @fig-heavy-envelope, excess thrust drops relative to the [four-motor baseline](2026-10-05-04-what-thrust-margin-exists-at-2360-g-and-can-three-motors-fly-level.qmd), cutting static thrust-to-weight to [`{python} f"{tw_stat:.2f}:1"`]{.key} and peak climb to [`{python} f"{roc_peak:.1f} m/s"`]{.key}. Stability requires forward loading: centering [`{python} f"{m_pay*1e3:.0f} g"`]{.key} at the front bulkhead shifts CG aft by [`{python} f"{shift_fwd_mm:.1f} mm"`]{.key} ([`{python} f"{sm_fwd:.1f}%"`]{.key} static margin). Uncompensated mid-bay loading shifts CG by [`{python} f"{shift_mid_mm:.1f} mm"`]{.key}, causing severe pitch instability ([`{python} f"{sm_mid:.1f}%"`]{.key} margin).
+
+::: {.callout-note}
+## New assumptions
+1. **Payload station**: 1361 g placed at x=440 mm.
+:::
+
+```{python}
+#| label: fig-heavy-envelope
+#| fig-cap: "Trimmed level-flight envelope and climb rate at 3721 g AUW, with static margin sensitivity across bomb bay payload stations."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.5, 4.0))
+
+# Panel 1: Forces and climb rate
+ax1_twin = ax1.twinx()
+ax1.plot(v_sweep, env_heavy['D'], 'b-', lw=1.8, label='Drag (3721 g)')
+ax1.plot(v_sweep, t_heavy, 'g--', lw=1.8, label='Thrust (4 motors)')
+ax1_twin.plot(v_sweep, roc_heavy, 'r-.', lw=1.8, label='Rate of climb')
+ax1.axvline(v_s_heavy, color='k', linestyle=':', label='Stall limit')
+ax1.scatter([v_cr], [d_cr], color='blue', zorder=5)
+
+ax1.set_xlabel('Airspeed (m/s)')
+ax1.set_ylabel('Force (N)', color='b')
+ax1_twin.set_ylabel('Climb rate (m/s)', color='r')
+ax1.set_title('Envelope and Climb at 3721 g AUW')
+ax1.grid(True, alpha=0.3)
+ax1.set_ylim(0, 28)
+ax1_twin.set_ylim(0, 10)
+lines1, labels1 = ax1.get_legend_handles_labels()
+lines2, labels2 = ax1_twin.get_legend_handles_labels()
+ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right', fontsize=7.5)
+
+# Panel 2: Static margin vs payload bay station
+x_pay_sweep = np.linspace(0.40, 0.62, 25)
+cg_sweep = (m_dry * x_dry + m_batt * x_batt + m_pay * x_pay_sweep) / m_auw
+sm_sweep = (x_np - cg_sweep) / c_mac * 100
+
+ax2.plot(x_pay_sweep * 1e3, sm_sweep, 'b-', lw=1.8, label='Static margin')
+ax2.axhline(0, color='r', linestyle='--', label='Neutral (0% SM)')
+ax2.axhline(5, color='orange', linestyle=':', label='Target min (5% SM)')
+ax2.axvline(x_bay_fwd * 1e3, color='k', linestyle='--', label='Bay front (440 mm)')
+ax2.axvline(x_bay_mid * 1e3, color='gray', linestyle=':', label='Mid-bay (600 mm)')
+ax2.scatter([x_bay_fwd * 1e3], [sm_fwd], color='black', zorder=5)
+
+ax2.set_xlabel('Payload center of mass x-station (mm)')
+ax2.set_ylabel('Static margin (% MAC)')
+ax2.set_title('Stability vs Payload Station')
+ax2.grid(True, alpha=0.3)
+ax2.legend(loc='upper right', fontsize=7.5)
+
+fig.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(sweep_trimmed_envelope, find_stall_speed, motor_prop_performance)
+```

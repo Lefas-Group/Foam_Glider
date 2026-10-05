@@ -97,12 +97,16 @@ def sweep_trimmed_envelope(
 def find_stall_speed(
     mass_total: float = 2.360,
     x_cg: float = 0.412,
-    tol_v: float = 0.05
+    tol_v: float = 0.05,
+    v_bracket: tuple[float, float] | None = None
 ) -> float:
     """Find the trimmed stall speed via bisection on level-flight lift equilibrium."""
     W = mass_total * 9.80665
-    v_low = 10.5
-    v_high = 11.5
+    if v_bracket is not None:
+        v_low, v_high = v_bracket
+    else:
+        v_low = 10.5
+        v_high = 11.5
     max_steps = 15
     for _ in range(max_steps):
         if (v_high - v_low) < tol_v:
