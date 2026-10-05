@@ -1240,10 +1240,26 @@ def compare_to_photo(airplane, name, hint=None, fill=0.22):
     # image plane, and the reader cannot reseed a number it was never shown.
     note = (f"{name} — camera elev {params[0]:.1f}° azim {params[1]:.1f}° "
             f"roll {params[2]:.1f}°, {params[3]:.0f} px/m. ")
+    # THE RESIDUAL IS IN THE NOTE, as a number and not only as a verdict.
+    # `ok` is one bit against a 2.5% gate, and a bit cannot say that a fit is
+    # three times worse than one already found. Measured on the Mini
+    # Explorer: the overlay an entry committed sat at 2.1% while a 0.9% pose
+    # existed, had been FOUND by that same run minutes earlier, and was
+    # discarded -- and both printed "Pose: good", so nothing in the record
+    # distinguished them. The entry then read shape faults off the worse one.
+    #
+    # A good fit is near 1%. Anything above that is worth one more search
+    # from a different seed before any shape is read off the picture, which
+    # is what the number -- and not the verdict -- tells a reader to do.
+    note += f"Fit: {resid:.1f} px, {100*resid/extent:.1f}% of {extent:.0f} px. "
     note += ("Pose: good." if ok else
              "Pose: DOUBTFUL — the outline does not track the aircraft. "
              "Read nothing from this overlay; reseed with "
              "hint=(elev, azim, roll), or ask for a better photograph.")
+    if ok and resid > 0.012 * extent:
+        note += (" Not the best basin this photograph has: a fit this far "
+                 "above 1% usually means another seed does better. Try "
+                 "hint=(elev±5, azim±10, roll) before reading shape from it.")
     return out.astype(_np.uint8), note
 
 
