@@ -1,0 +1,106 @@
+---
+title: "What thrust margin exists at 2360 g, and can three motors fly level?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 120.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 300.0        # s granted for the probe
+PROBE_SPENT = 52.8      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+motor_name = "2212 Basix B"
+auw = 2.360
+w_total = auw * 9.80665
+cg_x = float(x_le_root + 0.108)
+i_esc_limit = 30.0
+delta_r_limit = 16.0
+
+# Static motor-propeller operating point
+p0 = motor_prop_performance(0.0)
+t_stat_1 = p0['thrust']
+t_stat_4 = 4.0 * t_stat_1
+t_stat_3 = 3.0 * t_stat_1
+tw_4 = t_stat_4 / w_total
+tw_3 = t_stat_3 / w_total
+
+# Flight envelope evaluation
+speeds = np.linspace(11.0, 24.0, 14)
+env = sweep_trimmed_envelope(speeds, mass_total=auw, x_cg=cg_x)
+
+t4_arr = np.array([4.0 * motor_prop_performance(v)['thrust'] for v in speeds])
+t3_arr = np.array([3.0 * motor_prop_performance(v)['thrust'] for v in speeds])
+rudder_max_arr = np.array([rudder_yaw_authority(v, delta_r_deg=delta_r_limit, x_cg=cg_x) for v in speeds])
+
+i_cr = int(np.argmin(env['D']))
+v_cr = float(env['velocity'][i_cr])
+d_cr = float(env['D'][i_cr])
+t4_cr = float(t4_arr[i_cr])
+t3_cr = float(t3_arr[i_cr])
+
+t_req_3_cr = d_cr / 3.0
+n_asym_cr = t_req_3_cr * y_outb
+delta_r_cr = delta_r_limit * (n_asym_cr / float(rudder_max_arr[i_cr]))
+```
+
+::: {.hero}
+[`{python} f"{tw_4:.2f} : 1"`]{.hero-value}
+[`{python} f"static thrust-to-weight ratio (+{(tw_4 - 1.0)*100:.0f}% margin; 3 motors hold {tw_3:.2f} : 1)"`]{.hero-label}
+:::
+
+**Answer.** Four motors produce [`{python} f"{t_stat_4:.1f} N"`]{.key} static thrust, giving a [`{python} f"{tw_4:.2f} : 1"`]{.key} thrust-to-weight ratio at [`{python} f"{auw*1e3:.0f} g"`]{.key}. Full static throttle draws [`{python} f"{p0['current']:.1f} A"`]{.key} per motor, safely within the [`{python} f"{i_esc_limit:.0f} A"`]{.key} ESC limit. With one motor failed, three motors provide [`{python} f"{t_stat_3:.1f} N"`]{.key} static ([`{python} f"{tw_3:.2f} : 1"`]{.key}) and [`{python} f"{t3_cr:.1f} N"`]{.key} at [cruise](2026-10-05-03-what-is-the-trimmed-level-flight-envelope-at-2360-g.qmd). Cruise drag is only [`{python} f"{d_cr:.2f} N"`]{.key}, requiring [`{python} f"{t_req_3_cr:.2f} N"`]{.key} per motor (@fig-thrust-envelope). Critical outboard failure produces a [`{python} f"{n_asym_cr:.3f} N m"`]{.key} yaw moment, cleanly trimmed by [`{python} f"{delta_r_cr:.1f}°"`]{.key} rudder.
+
+::: {.callout-tip}
+## New user specifications
+Asked of the user, 2026-10-05:
+
+1. **Motor Kv: 1250 rpm/V** — FT Basix B catalogue specification.
+:::
+
+::: {.callout-note}
+## New assumptions
+1. **Propeller polar**: APC 9x4.5 UIUC wind-tunnel fit.
+:::
+
+```{python}
+#| label: fig-thrust-envelope
+#| fig-cap: "Thrust available with four and three engines compared to level-flight drag, and rudder trim required for outboard engine failure at 2360 g."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.5, 4.0))
+
+# Subplot 1: Thrust vs Drag
+ax1.plot(speeds, t4_arr, 'b-', label='Thrust avail (4 engines)')
+ax1.plot(speeds, t3_arr, 'b--', label='Thrust avail (3 engines OEI)')
+ax1.plot(speeds, env['D'], 'r-', label='Trimmed drag (level flight)')
+ax1.axvline(v_cr, color='gray', linestyle=':', label=f'Cruise ({v_cr:.1f} m/s)')
+ax1.scatter([v_cr], [t3_cr], color='blue', zorder=5)
+ax1.scatter([v_cr], [d_cr], color='red', zorder=5)
+ax1.set_xlabel('Airspeed (m/s)')
+ax1.set_ylabel('Force (N)')
+ax1.set_title('Thrust Available vs Drag')
+ax1.legend(loc='upper right', fontsize=8)
+ax1.grid(True, alpha=0.3)
+
+# Subplot 2: Rudder trim for OEI
+rudder_req_cr = delta_r_limit * ((env['D'] / 3.0) * y_outb) / rudder_max_arr
+ax2.plot(speeds, rudder_req_cr, 'g-', label='Rudder for level flight OEI')
+ax2.axhline(delta_r_limit, color='k', linestyle='--', label=f'Max rudder throw ({delta_r_limit:.0f}°)')
+ax2.scatter([v_cr], [delta_r_cr], color='green', zorder=5)
+ax2.set_xlabel('Airspeed (m/s)')
+ax2.set_ylabel('Rudder deflection δr (°)')
+ax2.set_title('OEI Yaw Trim (Outboard Motor Failed)')
+ax2.set_ylim(0, 20)
+ax2.legend(loc='upper right', fontsize=8)
+ax2.grid(True, alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(sweep_trimmed_envelope, motor_prop_performance, rudder_yaw_authority)
+```
