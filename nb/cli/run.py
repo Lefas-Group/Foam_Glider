@@ -152,6 +152,69 @@ def _start(notebook, quiet, answers, watch=True):
     detach_output()
 
 
+# THE INPUTS, CHECKED WHERE THEY CAN STILL BE FIXED -- at the terminal, before
+# the run forks into the background.
+#
+# `_reference/` is the one input a person types a path for, and typing it wrong
+# has no error: `reference_photos` returns [], the brief takes its honest
+# "there is nothing to check the shape against" branch, and the run builds
+# blind and says so. That branch is correct, which is precisely why a mistake
+# hides in it. Measured: two photographs copied from inside the notebook
+# directory landed at `<nb>/<nb>/_reference/`, the run launched with an empty
+# reference set, and an entry was spent reconstructing an airframe whose shape
+# nothing checked. The silence was the whole failure.
+#
+# A MISPLACED DIRECTORY REFUSES; everything else warns. The difference is
+# whether the intent is in doubt. A `_reference` sitting somewhere else under
+# the notebook is unambiguous -- somebody meant to supply photographs and the
+# run will not see them -- and a detached run is the worst place to learn
+# that. No photographs at all, or two of the same photograph, are judgements
+# the coordinator may have made deliberately, so they are said loudly and the
+# run starts.
+def _reference_problems(notebook):
+    """Lines to print and refuse on, or [] to go. Warnings print here."""
+    from ..tools import figures
+
+    photos = figures.reference_photos(notebook)
+    stray = figures.misplaced_references(notebook)
+    # ONLY WHEN IT IS ACTUALLY STARVING THE RUN. A stray directory beside a
+    # working one is a leftover, and refusing on it would stop runs that have
+    # everything they need. A stray directory beside an EMPTY one is the
+    # mistake this check exists for, and there the intent is not in doubt.
+    if stray and not photos:
+        out = ["  _reference/ IS IN THE WRONG PLACE, so this run would see no "
+               "photographs."]
+        for p in stray:
+            out.append(f"    found    {p}")
+        out.append(f"    expected {notebook.root / figures.REFERENCE_DIR}")
+        out.append("    Move it, then launch again:")
+        out.append(f"      mv {stray[0]} {notebook.root / figures.REFERENCE_DIR}")
+        return out
+
+    if not photos:
+        assets = figures.reference_paths(notebook)
+        tell("  no photograph in _reference/, so NOTHING WILL CHECK THE SHAPE "
+             "of this aircraft.")
+        if assets:
+            tell("    there are images there, but none is labelled `photo` "
+                 "with a .mask.png beside it:")
+            for p in assets:
+                tell(f"      {p.name}  ({figures.reference_kind(p) or 'unlabelled'}"
+                     f"{'' if figures.mask_for(p) else ', no mask'})")
+        tell("    the entry will reproduce the published figures and declare "
+             "the shape UNVERIFIED.")
+        return []
+
+    for p in stray:
+        tell(f"  a stray _reference/ sits at {p} and is read by nothing.")
+    for a, b, iou in figures.duplicate_photos(notebook):
+        tell(f"  {a} and {b} are the SAME VIEWPOINT (mask IoU {iou:.2f}).")
+        tell("    Two frames from one shoot fit one pose and hide the same "
+             "faults, so the second overlay is a turn spent, not a second "
+             "check. Supply a genuinely different angle.")
+    return []
+
+
 def main(notebook_path, question, verbose=True,
          pool=None, ceiling=None, run_id=None, quiet=False,
          answers=None, chapter=None, watch=True, kind="run"):
@@ -173,6 +236,11 @@ def main(notebook_path, question, verbose=True,
     if chapter not in known:
         tell(f"  no chapter {chapter!r} in {notebook.root.name}.")
         tell(f"  It has: {', '.join(known) if known else '(none)'}")
+        return 2
+    refuse = _reference_problems(notebook)
+    if refuse:
+        for line in refuse:
+            tell(line)
         return 2
     _start(notebook, quiet, answers, watch)   # forks; takes the lock first
     # `watch` RIDES IN run.json rather than down four signatures. `_finish`

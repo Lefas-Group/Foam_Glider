@@ -317,6 +317,26 @@ _reference/studio.mask.png     the subject, white on black
 _reference/studio.txt          first word `photo`, then a description
 ```
 
+**Write the path from the repo root, and check it resolves.** The shell's
+cwd persists between calls, so a `cp` issued after a `cd` into the notebook
+puts the files at `<nb>/<nb>/_reference/`. Nothing used to complain: the run
+simply launched with no photographs and honestly declared the shape
+unverified. Launch now refuses on that, but confirm it yourself before asking:
+
+```bash
+uv run --group nb python -c "
+from nb.config import Notebook; from nb.tools import figures
+print(figures.reference_listing(Notebook('<notebook>')))"
+```
+
+**Two frames from one shoot are ONE photograph.** The second ANGLE is the
+whole value of a second file — a frame from the same session fits the same
+pose, hides the same faults, and costs the run a turn to confirm what the
+first already told it. Retailers shoot a product once and recolour it, so
+"two store photos" is usually one viewpoint twice. Launch warns above mask
+IoU 0.80; the Mini Explorer's pair measured 0.88. Spend the effort finding a
+genuinely different azimuth instead of a second copy of the easy one.
+
 **Hunt for plain backgrounds.** On white the mask is one threshold; on grass
 it is a judgement call, and a product shot with a hand in it puts the hand
 inside the mask. Retailer listings and the plan's own page one are the usual

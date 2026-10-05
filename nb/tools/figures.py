@@ -236,3 +236,95 @@ def reference_listing(notebook):
     return "\n".join(out)
 
 
+
+
+# =============================================================================
+# WHAT THE COORDINATOR GOT WRONG, said at launch rather than discovered later.
+#
+# `_reference/` is a path a person types, and there is no error when they type
+# it wrong: `reference_photos` returns [], the brief takes its "there is
+# nothing to check the shape against" branch, and the run builds blind. That
+# branch is correct -- a notebook may legitimately have no photograph -- which
+# is exactly why a mistake hides in it. Measured, on this notebook: two
+# photographs were copied to `mini-explorer/mini-explorer/_reference/` because
+# the shell was still inside the notebook directory, the run launched with an
+# empty reference set, and an entry's worth of turns was spent reconstructing
+# an airframe that nothing checked the shape of. Nothing anywhere said so.
+#
+# So these two functions are the launch's half: one names a directory that
+# exists in the wrong place, the other names photographs that are the same
+# photograph. Neither is a lint rule, because neither is about the notebook
+# being wrong -- they are about the INPUTS being wrong, and the only party who
+# can fix an input is the one standing at the terminal when the run starts.
+_SKIP_DIRS = {"_site", "_freeze", "_scratch", ".quarto", ".git"}
+
+
+def misplaced_references(notebook):
+    """
+    `_reference` directories under the notebook that are NOT the one read.
+
+    [] when there is nothing to report. The usual cause is a copy made from
+    inside the notebook directory, which lands at `<nb>/<nb>/_reference`.
+    """
+    root = notebook.root
+    real = root / REFERENCE_DIR
+    out = []
+    for p in root.rglob(REFERENCE_DIR):
+        if not p.is_dir() or p == real:
+            continue
+        if any(part in _SKIP_DIRS for part in p.relative_to(root).parts):
+            continue
+        out.append(p)
+    return sorted(out)
+
+
+def duplicate_photos(notebook, threshold=0.80):
+    """
+    [(a, b, iou)] for photograph pairs whose MASKS are near-identical.
+
+    A SECOND VIEWPOINT IS THE POINT of a second photograph. Two frames from
+    one shoot -- the same aircraft, the same camera, a decal set added
+    between them -- fit the same pose and hide the same faults, so the run
+    spends a turn on the second overlay and learns nothing it did not already
+    know. Measured here at IoU 0.88 on a pair that looked like two checks.
+
+    Masks are compared after centring on their own centroid, so this reports
+    a repeated VIEWPOINT rather than a repeated framing. Returns [] if numpy
+    or PIL is unavailable: a warning is not worth an import error.
+    """
+    try:
+        import numpy as np
+        from PIL import Image
+    except ImportError:
+        return []
+
+    def centred(mask_path):
+        a = np.array(Image.open(mask_path).convert("L")) > 128
+        if not a.any():
+            return None
+        ys, xs = np.nonzero(a)
+        return np.roll(a, (int(a.shape[0] // 2 - ys.mean()),
+                           int(a.shape[1] // 2 - xs.mean())), (0, 1))
+
+    photos = reference_photos(notebook)
+    loaded = []
+    for name, _, mask in photos:
+        try:
+            m = centred(mask)
+        except OSError:
+            m = None
+        if m is not None:
+            loaded.append((name, m))
+
+    out = []
+    for i, (na, ma) in enumerate(loaded):
+        for nb_, mb in loaded[i + 1:]:
+            if ma.shape != mb.shape:
+                continue
+            union = (ma | mb).sum()
+            if not union:
+                continue
+            iou = float((ma & mb).sum() / union)
+            if iou >= threshold:
+                out.append((na, nb_, iou))
+    return out

@@ -254,6 +254,24 @@ a run invented chord, taper, dihedral, six fuselage stations and five cut areas,
 captioned them `# from the plan sheet`, and published a wing loading 20% above
 the figure printed on page one of a free plan.
 
+**The path is checked at launch, because getting it wrong is silent.**
+`_reference/` is the one input a person types a path for, and a typo has no
+error: no photographs are found, the brief takes its honest "nothing checks
+the shape" branch, and the run builds blind and says so. That branch is
+correct, which is exactly why a mistake hides in it. Measured, on the Mini
+Explorer: two photographs were copied from inside the notebook directory, so
+they landed at `<nb>/<nb>/_reference/`; the run launched with an empty
+reference set and an entry was spent on an airframe nothing checked the shape
+of. `nb ask` and `nb reconstruct` now refuse to launch when a `_reference`
+directory exists somewhere under the notebook but the one they read is empty,
+and say loudly — without refusing — when there is no photograph at all.
+
+**Two photographs of the same shot are one photograph.** The second angle is
+the entire value of a second file: a frame from the same shoot fits the same
+pose, hides the same faults, and costs a turn to confirm what the first
+already said. Launch compares the masks and warns above IoU 0.80. Measured on
+the Mini Explorer at 0.88 — the same studio shot with a decal set added.
+
 Two rules exist for this path. **43** (warning) counts the numeric constants
 `_model.py` fixes against the inputs the chapter declares. **44** (warning)
 catches a DERIVED target written back into `_model.py` as a literal — a
