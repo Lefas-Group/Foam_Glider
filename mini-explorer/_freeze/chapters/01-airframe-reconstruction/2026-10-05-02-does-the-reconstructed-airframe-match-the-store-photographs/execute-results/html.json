@@ -1,0 +1,12 @@
+{
+  "hash": "58c1c4e2faf805cda5cc9c153e6437f4",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: \"Does the reconstructed airframe match the store photographs?\"\n---\n\n\n::: {#ffede38a .cell execution_count=2}\n``` {.python .cell-code}\nENTRY_CEILING = 120.0   # s for this render, granted by the user\nSOLVE_BUDGET = 15.0     # s for any one solve\nPROBE_POOL = 240.0        # s granted for the probe\nPROBE_SPENT = 204.3      # s the probe actually used\n```\n:::\n\n\n**Answer.** No. Overlaid on both store photographs (@fig-photo-match), the [target-compliant reconstruction](2026-10-05-01-can-we-reconstruct-the-ft-mighty-mini-explorer-within-tolerance.qmd) reveals clear visual shape mismatches. The real aircraft features rounded, raked wingtips rather than square cuts, an extended curved nose and lower chin rather than a flat slab ending under the canopy, a noticeably shorter and more swept vertical stabilizer, and an empennage boom with less rearward taper. While scalar dimensions and mass properties land within published tolerances, the underlying aerodynamic and structural contours diverge materially from the photographic build.\n\n::: {#cell-fig-photo-match .cell execution_count=3}\n``` {.python .cell-code}\nfig_match, notes = plot_photo_comparisons(airplane)\n```\n\n::: {.cell-output .cell-output-display}\n![Reconstructed airframe geometry projected over the trainer and decal store photographs.](2026-10-05-02-does-the-reconstructed-airframe-match-the-store-photographs_files/figure-html/fig-photo-match-output-1.png){#fig-photo-match width=1628 height=842}\n:::\n:::\n\n\n::: {.callout-note collapse=\"true\"}\n## The method, as called\n\n```python\ndef plot_photo_comparisons(\n    airplane,\n    hint_trainer=(40.1, 221.4, 1.7),\n    hint_decal=(39.0, 218.2, -0.5),\n):\n    \"\"\"\n    Draw reconstructed airframe over store photographs to inspect shape match.\n    \"\"\"\n    fig, axs = plt.subplots(1, 2, figsize=(11, 5.5))\n    note_tr = show_comparison(airplane, \"trainer\", hint=hint_trainer, ax=axs[0])\n    note_dec = show_comparison(airplane, \"decal\", hint=hint_decal, ax=axs[1])\n    axs[0].set_title(\"Trainer wing (stock)\")\n    axs[1].set_title(\"Decal scheme\")\n    fig.tight_layout()\n    return fig, (note_tr, note_dec)\n\n```\n:::\n[Rendered in 20.6 s (limit 120 s) · explored in 204 s (limit 240 s)]{.runtime}\n\n\n",
+    "supporting": [
+      "2026-10-05-02-does-the-reconstructed-airframe-match-the-store-photographs_files"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}

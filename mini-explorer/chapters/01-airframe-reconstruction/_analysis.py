@@ -97,3 +97,21 @@ def plot_target_errors(targets):
     ax.legend(loc="upper right")
     fig.tight_layout()
     return fig, ax
+
+
+def plot_photo_comparisons(
+    airplane,
+    hint_trainer=(40.1, 221.4, 1.7),
+    hint_decal=(39.0, 218.2, -0.5),
+):
+    """
+    Draw reconstructed airframe over store photographs to inspect shape match.
+    """
+    fig, axs = plt.subplots(1, 2, figsize=(11, 5.5))
+    note_tr = show_comparison(airplane, "trainer", hint=hint_trainer, ax=axs[0])
+    note_dec = show_comparison(airplane, "decal", hint=hint_decal, ax=axs[1])
+    axs[0].set_title("Trainer wing (stock)")
+    axs[1].set_title("Decal scheme")
+    fig.tight_layout()
+    return fig, (note_tr, note_dec)
+
