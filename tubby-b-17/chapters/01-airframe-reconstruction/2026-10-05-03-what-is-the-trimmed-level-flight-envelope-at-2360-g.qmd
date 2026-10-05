@@ -1,0 +1,85 @@
+---
+title: "What is the trimmed level-flight envelope at 2360 g?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 120.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 300.0        # s granted for the probe
+PROBE_SPENT = 132.9      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+m_total = 2.360
+target_x_cg = float(x_le_root + 0.108)
+
+# Derived flight envelope metrics
+v_stall = find_stall_speed(mass_total=m_total, x_cg=target_x_cg)
+v_grid = np.linspace(11.2, 22.0, 15)
+env = sweep_trimmed_envelope(v_grid, mass_total=m_total, x_cg=target_x_cg)
+
+i_cruise = int(np.argmin(env['D']))
+v_cruise = float(env['velocity'][i_cruise])
+p_cruise_aero = float(env['P_aero'][i_cruise])
+d_cruise = float(env['D'][i_cruise])
+ld_cruise = float(env['LD'][i_cruise])
+
+eta_powertrain = 0.49
+p_cruise_elec = p_cruise_aero / eta_powertrain
+```
+
+::: {.hero}
+[`{python} f"{v_cruise:.1f} m/s"`]{.hero-value}
+[`{python} f"trimmed minimum-drag cruise speed (stall {v_stall:.1f} m/s, power {p_cruise_aero:.1f} W)"`]{.hero-label}
+:::
+
+**Answer.** Level flight trims cleanly across the speed range. At an all-up weight of [`{python} f"{m_total*1e3:.0f} g"`]{.key}, the trimmed envelope spans from stall at [`{python} f"{v_stall:.1f} m/s"`]{.key} ([`{python} f"{v_stall*3.6:.1f} km/h"`]{.key}) to over [`{python} f"{env['velocity'][-1]:.0f} m/s"`]{.key}, shown in @fig-flight-envelope. Minimum drag cruise occurs at [`{python} f"{v_cruise:.1f} m/s"`]{.key} ([`{python} f"{v_cruise*3.6:.1f} km/h"`]{.key}), achieving a lift-to-drag ratio of [`{python} f"{ld_cruise:.2f}"`]{.key}. Holding this cruise requires [`{python} f"{p_cruise_aero:.1f} W"`]{.key} aerodynamic power ([`{python} f"{p_cruise_elec:.0f} W"`]{.key} electrical draw). Because the [three-quarter photograph match](2026-10-05-02-does-the-reconstruction-match-the-three-quarter-store-photograph.qmd) showed narrower outer chords than the physical wing, this modelled area is a conservative floor.
+
+::: {.callout-note}
+## New assumptions
+1. **Battery placement**: 370 g pack at x=446 mm.
+2. **Powertrain efficiency**: 49% overall prop and motor/ESC conversion.
+:::
+
+```{python}
+#| label: fig-flight-envelope
+#| fig-cap: "Trimmed level-flight drag, aerodynamic power, lift coefficient, and elevator deflection against airspeed at 2360 g AUW."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.5, 4.0))
+
+# Subplot 1: Power and Drag
+ax1_twin = ax1.twinx()
+ax1.plot(env['velocity'], env['D'], 'b-', label='Drag')
+ax1_twin.plot(env['velocity'], env['P_aero'], 'r--', label='Aero power')
+ax1.axvline(v_stall, color='k', linestyle=':', label='Stall limit')
+ax1.scatter([v_cruise], [d_cruise], color='blue', zorder=5)
+ax1_twin.scatter([v_cruise], [p_cruise_aero], color='red', zorder=5)
+
+ax1.set_xlabel('Airspeed (m/s)')
+ax1.set_ylabel('Drag / Thrust required (N)', color='b')
+ax1_twin.set_ylabel('Aerodynamic power required (W)', color='r')
+ax1.set_title('Power and Drag in Trimmed Flight')
+ax1.grid(True, alpha=0.3)
+
+# Subplot 2: CL and Elevator Deflection
+ax2_twin = ax2.twinx()
+ax2.plot(env['velocity'], env['CL'], 'g-', label='Trimmed CL')
+ax2_twin.plot(env['velocity'], env['delta_e'], 'm--', label='Elevator trim δe')
+ax2.axvline(v_stall, color='k', linestyle=':', label='Stall limit')
+
+ax2.set_xlabel('Airspeed (m/s)')
+ax2.set_ylabel('Lift coefficient CL', color='g')
+ax2_twin.set_ylabel('Elevator deflection δe (°)', color='m')
+ax2.set_title('Trim Angles and Lift Coefficient')
+ax2.grid(True, alpha=0.3)
+
+fig.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(sweep_trimmed_envelope, find_stall_speed)
+```
