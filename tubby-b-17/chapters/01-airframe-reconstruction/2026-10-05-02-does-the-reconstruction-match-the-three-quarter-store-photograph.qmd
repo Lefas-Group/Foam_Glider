@@ -1,0 +1,53 @@
+---
+title: "Does the reconstruction match the three-quarter store photograph?"
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 120.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 250.0        # s granted for the probe
+PROBE_SPENT = 179.4      # s the probe actually used
+
+import re
+import matplotlib.pyplot as plt
+
+# Camera seed for the front-port three-quarter perspective
+hint_threequarter = (24.2, 227.0, 2.1)
+rgb_overlay, pose_note = compare_to_photo(airplane, "threequarter", hint=hint_threequarter)
+
+# Parse fitted camera pose and outline residual
+m_pose = re.search(
+    r"elev ([0-9.]+)° azim ([0-9.]+)° roll ([-0-9.]+)°, ([0-9.]+) px/m\. Fit: ([0-9.]+) px, ([0-9.]+)%",
+    pose_note,
+)
+elev_fit = float(m_pose.group(1))
+azim_fit = float(m_pose.group(2))
+roll_fit = float(m_pose.group(3))
+scale_fit = float(m_pose.group(4))
+fit_px = float(m_pose.group(5))
+fit_pct = float(m_pose.group(6))
+```
+
+::: {.hero}
+[`{python} f"{fit_pct:.1f}%"`]{.hero-value}
+[`{python} f"silhouette fit error ({fit_px:.1f} px of 1056 px extent; pose good)"`]{.hero-label}
+:::
+
+**Answer.** Partially. As confirmed in the [tolerance check](2026-10-05-01-can-we-reconstruct-the-ft-tubby-b-17-within-tolerance.qmd), fuselage length ([`{python} f"{fuse.length()*1e3:.0f} mm"`]{.key}) and tractor nacelle stations match the photograph closely (@fig-threequarter-overlay), with the inboard nacelles placed forward of the outboards. The silhouette fit reaches [`{python} f"{fit_pct:.1f}%"`]{.key} ([`{python} f"{fit_px:.1f} px"`]{.key}) at camera elevation [`{python} f"{elev_fit:.1f}°"`]{.key} and azimuth [`{python} f"{azim_fit:.1f}°"`]{.key}. However, wing chord and taper show a distinct mismatch: the physical wing trailing edge extends well aft of the reconstructed outline along the entire outer panel, indicating the true wing has a broader chord and rounded tip than the modeled taper.
+
+```{python}
+#| label: fig-threequarter-overlay
+#| fig-cap: "Store three-quarter photograph overlay showing airframe reconstruction alignment."
+fig, ax = plt.subplots(figsize=(6.5, 6.5))
+ax.imshow(rgb_overlay)
+ax.set_axis_off()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer()
+```
