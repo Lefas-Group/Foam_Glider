@@ -66,3 +66,17 @@ def plot_target_errors(records):
     ax.legend(loc="lower right")
     fig.tight_layout()
     return fig, ax
+
+
+def worst_target_error(records=None):
+    """Return worst target record and summary error percentages."""
+    if records is None:
+        records = evaluate_targets()
+    worst = max(records, key=lambda r: r["rel_err"])
+    return {
+        "record": worst,
+        "name": worst["name"].lower(),
+        "error_pct": worst["error"] * 100,
+        "tol_pct": worst["tol"] * 100,
+    }
+
