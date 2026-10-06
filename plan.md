@@ -1,343 +1,617 @@
-# Reconstruct: derive it, do not assign it
+# Fit the silhouette, check it without measuring it
 
-Written 2026-10-03, after `nb reconstruct` shipped and ran twice -- once on
-the Corsair MKR2 with no plan, once on the Mini Corsair v1.0 with a stitched
-plan sheet in `_reference/`. Nothing here is implemented yet.
+Written 2026-10-06, from the two `tubby-b-17` reconstruction transcripts read
+turn by turn, and from about thirty camera-fitting experiments run against the
+same two photographs. Supersedes both earlier drafts of this file; their
+unfinished items are carried forward at the end.
 
-## What the last plan bought, and what it did not
+Two constraints are fixed by the user and everything here is built inside them:
 
-| | MKR2, no sheet | v1.0, with sheet |
+- **Never measure dimensions off an image by hand.** Not to set a constant, not
+  to check one. Measured over this session, 2 of 8 hand measurements survived
+  scrutiny — a propeller blade taken for a wingtip, a tailplane point placed on
+  the fuselage, a landmark that was occluded and invisible, a dihedral figure
+  that sampled only outboard columns.
+- **No plan sheets.** The reconstruction must work from photographs and
+  published scalars alone.
+
+Together these settle the architecture: **geometry comes from optimising the
+whole silhouette** — thousands of boundary pixels, no human feature
+identification anywhere — and correctness is established by checks that need no
+measurement at all.
+
+## What the transcripts showed
+
+`20261005-212756-0e08` (reconstruct) and `20261005-214940-20e5` (photo match):
+
+| | run 1 | run 2 |
 |---|---|---|
-| declared assumptions | 6 | 4 |
-| orientation calls (`search_files`, `list_directory`) | 7 | **0** |
-| published targets | 3 | 8 |
-| worst reported error | 1.1 % | **0.54 %** |
-| targets actually *predicted* | 1 of 3 | **1 of 8** |
+| model turns / probes | 125 / 72 | 39 / 23 |
+| pose fits returned | 12 | 10 |
+| …that re-derived a camera already known | 7 of 8 head-on | 9 of 10 |
+| cold start on the oblique view | 65.2° elev, DOUBTFUL | 42.6°, DOUBTFUL |
+| `_model.py` changed | written once | **not at all** |
 
-The machinery works. `read_reference_image` was called twice to orient, then
-92 probes measured in code; the reject-at-prompt loop caught a bad
-measurement before it reached the model; the targets gate caught an entry
-that reported three of eight.
+Four defects, each verifiable:
 
-**And the headline number is close to meaningless.** From the run's own final
-table:
+**A constant contradicted the run's own measurement.** At t33 run 1 measured
+the mask scale correctly; at t37 it measured the nose cone at 282 mm; at t43 it
+wrote `width=0.185`, matching neither. That number survived four rebuilds and
+was declared at t83 as "fuselage loft stations: width 185 mm".
+
+**The model that was validated is not the model that was committed.** At t79 the
+run reported "span 0.00%, length 0.00%, dry mass −0.41%, CG +0.06% … the worst
+error across the board is a measly 0.41%". The committed entry reports **5.86%**.
+Between them, `_model.py` was rewritten whole, from the agent's memory, rather
+than from the probe objects it had just verified. Nothing compared the two.
+
+**The assumptions gate fires too late.** The skill says it fires *"before
+`_model.py` is written, so a correction costs about one probe, not a
+re-render"*. It fired at t82-87, after the t76 write — which is precisely why a
+correction at that gate forced the t94 rewrite that lost the 0.41% configuration.
+
+**A finding has nowhere to go.** Run 2 found the outer wing chord too narrow,
+committed a `.qmd`, and `_model.py` is byte-identical from `3069cef` through
+Q5. Three performance entries computed on geometry already known to be wrong.
+
+## What the experiments showed
+
+### 1. The optimiser was the problem, not the model
+
+Minimising mean chamfer across both photographs, with CMA-ES replacing the
+hand-rolled search:
 
 ```
-Length        | 482.00 | 482.00 | +0.00%
-Wing span     | 610.46 | 610.00 | +0.08%
-Wing area     |   6.90 |   6.90 | +0.01%
-CG aft of LE  |  38.00 |  38.00 | -0.00%
-Dry weight    | 156.00 | 156.00 | +0.00%
-All-up weight | 222.00 | 222.00 | +0.00%
+baseline  (committed geometry, hand-seeded poses)   19.94 px
+A         geometry UNTOUCHED, poses by CMA-ES       13.77     <- 85% of the gain
+C         6 wing dimensions free                    12.60
 ```
 
-Five exact zeroes. `_model.py` contains `x_cg_target = 0.085 + 0.038`, a
-component list summing to exactly 156 g, and the comment
-`# Battery: mass computed from published AUW minus dry weight`. Seven of
-eight targets were **assigned**, not predicted. Only span, at 0.08 %, carries
-independent error.
+**Five sixths of the apparent gain needs no model change at all.** Run A's
+head-on fit is the best that view has had — 13.30 → 9.64 px, IoU 0.550 → 0.682
+— with `_model.py` exactly as committed.
 
-The run said so itself -- `why: "component masses estimated to match
-published AUW"` -- which is the declaration discipline working. But an entry
-headed "0.54 % worst error across eight published targets" reads as
-verification when almost nothing was verified.
+### 2. Seed density was never the issue
 
-## The problem in one line
+```
+36 seeds, ranked by raw cost   (what nb does today)   FAILS   44°
+1485 seeds, ranked by raw cost                        FAILS   44°
+36 seeds, ranked by SHORT DESCENT                     works   24.5°
+dual annealing                                        unreliable — failed 3 of 4 subsets
+CMA-ES                                                works, fastest, no seed grid
+```
 
-**A target is only a check if the quantity is computed from something more
-primitive than itself.** Nothing in the system distinguishes a derived number
-from an assigned one, and assigning is the easier path.
+Forty times more seeds changed nothing; re-ranking the *original* 36 fixed it.
+A raw seed's score says nothing because its scale and translation come from the
+mask bounding box. **Delete the seed grid and call CMA-ES.**
 
-## 1. Targets are OUTPUTS. Requirements are inputs.
+### 3. The objective was measured in the wrong units
 
-Two different things were sharing one block.
+The single most consequential finding, and it came from the user.
 
-| | lives in | the model |
+```
+                      RAW PIXELS          AREA-NORMALISED %
+                    mean      max        mean      max
+A (model fixed)    13.77    17.90       2.806    2.917
+C (6 wing free)    12.59    13.93       2.865    3.894
+
+raw  : C wins on BOTH aggregators  -> accepts distorted geometry
+norm : A wins on BOTH aggregators  -> rejects it
+```
+
+The head-on silhouette is a third the area of the three-quarter, so in raw
+pixels **damage to it was cheap**. Normalising each view's residual by
+`sqrt(mask area)` — the units `_POSE_DOUBTFUL` already uses — flips the verdict
+under *both* mean and minimax. The normalisation matters more than the
+aggregator; minimax alone does not fix it.
+
+### 4. Things that look like success and are not
+
+Every failure this session had this shape. The list is the specification for
+what the system must catch:
+
+- **A railed parameter.** The three-quarter pose quoted as "best" all session
+  had perspective distance pinned at its bound of 20.0 — effectively
+  orthographic, which `_project`'s own docstring warns against — and nobody
+  noticed. A parameter on a bound is not converged.
+- **A frozen optimiser.** Nelder-Mead's default simplex gives a coordinate
+  seeded at exactly 0.0 an absolute step of 0.00025. A nacelle-shift test
+  reported "+0 mm" three times running. This is documented in `_fit_pose`'s own
+  source; it was read earlier the same session and walked into anyway.
+- **Mislabelled correspondences scoring better than correct ones.** Three of
+  seven wireframe edges were labelled wrong; the fit converged at 11.8 px RMS
+  against the correct labelling's 17.4, on a pose with IoU 0.230.
+- **A post-fit residual standing in for agreement.** Four symmetric-pair lines
+  that should meet at one vanishing point gave six pairwise intersections
+  scattered over 900 px. The least-squares fit averaged that away and reported
+  a reassuring 4.1 px.
+- **A false "good" pose.** A head-on fit at azimuth 1.6° — the view from
+  directly behind — scored "Pose: good" at 16.9 px.
+
+### 5. Things tested and rejected
+
+Scale pinned to the mask caliper; dense seed grids; component subsets (wing
+only — degenerate one-sided objective; wing+fuselage; wing+fuselage+tail — all
+lose orientation accuracy); `dual_annealing` at low budget; annealing directly
+at the fine raster. Also: the coarse raster is **not** a speed trade — it is
+13% cheaper per evaluation and annealing at 220 px was *worse* (28.5 vs 18.7
+px). It works by smoothing the landscape. Document it as graduated
+non-convexity, not as an optimisation.
+
+## The changes
+
+### Tier 1 — the metric and the search
+
+1. **Normalise every chamfer by `sqrt(mask area)` of its view.** Report it that
+   way, flag DOUBTFUL that way, and use it in any objective. This is one
+   function and it is the highest-value change in the document.
+2. **Replace `_fit_pose`'s seeding with CMA-ES.** Deletes the 36-seed grid, the
+   ranking logic, the explicit-simplex workaround, and the implicit "camera is
+   above the aircraft" assumption baked into the elevation range. Net deletion
+   of code.
+3. **Refuse to return a pose with any parameter on a bound.** Report which one.
+4. **Multi-view by default.** Fit shared geometry against every available
+   photograph at once, each view normalised. **Aggregate with the mean until
+   minimax is shown to be worth it** — see "Is minimax worth anything?" below.
+   An earlier draft of this file said "max, not mean"; that was unsupported.
+
+### Tier 2 — provenance
+
+Every dimensional constant in `_model.py` is one of four kinds, machine-checkable:
+
+| kind | means | check |
 |---|---|---|
-| **verification target** -- a published fact about a real object | `targets:` | must **predict** it |
-| **design requirement** -- a goal for something not yet built | `specified:` | honours it as an input |
+| `fitted(views, objective)` | produced by the silhouette fit | re-runnable; carries its residual and its bound-status |
+| `published(source)` | from the brief | must match a `specified:` row verbatim |
+| `calibrated(target)` | solved to hit a published target | mass, CG — the bench-measurable things |
+| `invented(why)` | a declared guess | **this is what the assumptions gate shows** |
 
-`RADICAL-GLIDER` already has one, and it landed on the right side without
-anyone designing for it: `flight-time target: 2 s -- Determines if
-requirements are met` was declared by a RUN, at entry level in
-`01-first-chapter`, and renders as **Specified** rather than as a target. The
-distinction is natural rather than imposed, which is the best evidence it is
-the correct one. This codifies the repo rather than changing it, and leaves
-`targets:` meaning exactly one thing: numbers that must fall out.
+This kills the 185 mm defect (a fitted constant cannot disagree with the fit)
+and the 0.41%→5.86% defect (there is no rewrite-from-memory step; the model is
+one artifact). It also **moves the assumptions gate to first geometry build**,
+where the skill already claims it is.
 
-**But "never assign" is too crude**, and the first draft of this would have
-made the model worse. The v1.0 run assigned the mass split to reach the
-published 222 g and set the CG to the published 38 mm -- and that is not
-cheating, it is calibration. Total mass and balance are what you measure and
-adjust on a bench, they are what almost every downstream answer depends on,
-and a derived mass model landing 10 % out would have made stall, loading and
-climb all worse. A blanket rule would have forced exactly that.
+Belt and braces, independently: `reconstruct` records the best target table seen
+in any probe and refuses to silently commit a strictly dominated result.
 
-So the split is on what KIND of quantity it is:
+### Tier 3 — checks that need no measurement
 
-| | example | treatment |
+The system cannot verify geometry by measuring the photograph. These four can
+all be computed without reading a pixel as a dimension:
+
+- **Physical plausibility.** A camera below an aircraft resting on a surface is
+  refuted by configuration, not measurement. Run C put the head-on camera at
+  elev −6.4°. Encode the reference `.txt`'s stated hemisphere as a hard bound.
+- **Start-point invariance.** A real geometric error is pose-invariant. A
+  nacelle shift that wants −40 mm, −20 mm and 0 mm from three different
+  starting poses is absorbing pose error. Run the fit from several starts and
+  report the spread, not the best.
+- **Cross-view consistency**, in normalised units. A change that improves one
+  view and degrades another is a trade, not a finding.
+- **Independent-estimate scatter, never post-fit residual.** Where a quantity
+  can be estimated more than one way, report the disagreement between the
+  estimates. The 900 px vanishing-point scatter was invisible in the 4.1 px
+  residual.
+
+### Tier 4 — a finding must be able to change something
+
+An entry can emit a structured model defect naming the constant and the
+evidence. It appears in the chapter manifest every later run is shown, and the
+chapter carries a visible `known defects: n` until an entry supersedes it.
+**Not auto-fix** — append-only is worth more than the turns it costs — but
+visible and cheap to act on.
+
+### Tier 5 — small, unambiguous
+
+- Return the figure inline from `probe`. Every look costs two turns today, and
+  the turn in between is spent speculating about an image that has not arrived
+  ("likely the torque of wheels… strain data, deformation, or even temperature
+  distributions" — run 1, t53, on an overlay it had just written).
+- Report mask pixels far from every model component, so an unmodelled
+  appendage announces itself instead of becoming an unexplained fit floor.
+- Normalise a leading `chapters/` in `search_files`. Both runs' first call
+  failed identically.
+- **Run long fits unbuffered** (`python -u` or an explicit flush). Redirected
+  stdout is block-buffered, so a fit that is working looks identical to a fit
+  that has hung -- four minutes of progress sat invisible in a buffer during
+  this session while its process ran at 85% CPU.
+
+## Is minimax worth anything?  (answered: barely)
+
+Both aggregators run to convergence on the same six parameters:
+
+```
+                         mean      worst view
+Cnm  normalised MEAN     1.875%     2.007%
+Cmn  normalised MINIMAX  1.899%     1.902%
+A    committed model     2.806%     2.916%
+```
+
+Each wins its own objective. Minimax buys **0.105%** on the worst view, a 5%
+relative improvement, against a gap from the baseline of nearly 1%.
+**Normalisation was the fix; minimax is a marginal refinement.** Default to the
+normalised mean -- it is smooth, easier to search, and within a tenth of a
+percent. Offer minimax where worst-case matters.
+
+The two objectives do land on measurably different geometry (root chord 0.346
+vs 0.416, dihedral 5.3 vs 4.3 deg), which is itself useful: that disagreement
+is part of the cross-run spread that tells you which parameters are supported.
+
+The original observation still stands -- normalisation flips the A-vs-C verdict
+under **both** aggregators:
+
+```
+raw   mean:  C 12.59  <  A 13.77   -> accepts distorted geometry
+raw   max :  C 13.93  <  A 17.90   -> accepts distorted geometry
+norm  mean:  A 2.806  <  C 2.865   -> rejects it
+norm  max :  A 2.917  <  C 3.894   -> rejects it
+```
+
+Minimax contributed nothing here, and it carries two costs: it **equalises**,
+dragging the better view down toward the worse one rather than protecting it;
+and `max` is non-smooth at the crossover, which makes the search harder than a
+mean. A direct comparison (six wing parameters under normalised mean vs
+normalised minimax) is running; until it says otherwise, **use the normalised
+mean**.
+
+## What optimisation costs, and which kinds to allow
+
+`_fit_pose` is already an optimisation — 36 seeds and a Nelder-Mead descent per
+`compare_to_photo` call, which both transcripts complained costs 8-10 s. The
+question is not whether to allow optimisation but which.
+
+| | parameters | measured cost | verdict |
+|---|---|---|---|
+| pose fitting | 7 per view | 16-60 s | already present; switch to CMA-ES in normalised units |
+| geometry fitting | 20-36, shared | **880 s** | three times an entire entry's probe pool |
+
+**The cost lever is the mesh, not the raster.** Measured on the 12-component
+model (2285 vertices, 1956 faces):
+
+```
+raster at 110 px:  30.5 ms
+raster at 200 px:  34.7 ms      <- four times the pixels, 14% more time
+```
+
+Cost is dominated by drawing ~2000 polygons, so shrinking the working raster --
+what `_fit_pose` does today, and what every experiment in this session did --
+buys almost nothing. Decimating the mesh does, up to a point. AeroSandbox
+meshes at resolution 36 by default; sweeping it down, at the same pose:
+
+```
+res   faces  raster ms  speedup  silhouette IoU vs res 36
+ 36    1956     27.0      1.0x       1.0000
+ 16     876     16.2      1.7x       0.9966
+ 12     660     12.7      2.1x       0.9932
+  8     444     11.8      2.3x       0.9899
+  6     336     11.0      2.4x       0.9836
+  5     282     15.0      1.8x       0.9796
+  4     228      8.8      3.1x       0.8770   <- cliff
+```
+
+### Tolerances buy nothing; popsize buys reliability
+
+Tested on the 7-parameter pose problem, three seeds each, every result scored
+at full mesh resolution:
+
+```
+config                     evals   time   full px   3-seed spread
+defaults                    1564   15.7s   18.20    0.24 px, 1.1 deg
+tolfun 1e-2                 1528   15.1s   18.20    0.24 px, 1.1 deg   (98%)
+tolfun 1e-2 + tolx 1e-4     1516   15.1s   18.20    0.24 px, 1.1 deg   (97%)
+popsize 8                   1336    9.7s   18.15    0.49 px, 1.2 deg   (85%)
+popsize 20                  2160   17.0s   18.17    0.13 px, 0.3 deg  (138%)
+```
+
+CMA-ES defaults to `tolfun` 1e-11. **Set it in the objective's own units, at
+the precision you would report.** The objective here is a percentage of
+`sqrt(mask area)` with a value near 1.9, reported to three decimals, so
+report-precision is 1e-3 and 1e-2 is ten times looser -- which on the
+three-quarter view (`sqrt(area)` = 614) works out at 0.06 px. If the normaliser
+changes, the right `tolfun` changes with it. On this 7-parameter problem nothing
+changes, because it terminates on `tolflatfitness` first -- but **that result
+does not generalise**. Repeated on the 20-parameter geometry problem, where the
+real cost lies:
+
+```
+config         evals  best found at  wasted   result    termination
+default         5508       4244       23%     1.876%    tolflatfitness
+tolfun 1e-3     5508       4244       23%     1.876%    never fired
+tolfun 1e-2     4842       4244       12%     1.876%    tolfun
+                        fitted geometry identical to 4 decimal places
+```
+
+**Set `tolfun` to about 0.5% of the expected objective value** -- here 1e-2
+against a final near 1.9. That gives 12% fewer evaluations and a bit-identical
+answer, and it stops 598 evaluations *after* the best solution was found, so it
+is not cutting anything short.
+
+State it as a fraction, not an absolute. Swap the normaliser from
+`sqrt(mask area)` to perimeter and the objective drops from ~1.9 to ~0.4,
+making the same absolute `tolfun` five times looser with nothing to warn you.
+
+Tightening is pointless: `tolfun=1e-3` never fires at all, reverting to the
+default `tolflatfitness` at 5508 evaluations. The dimension decides which
+criterion fires, so tolerance tuning matters on the expensive problem and not
+on the cheap one.
+
+The remaining 12% is unreachable by any tolerance value. CMA-ES requires the
+objective range to hold below tolerance across `10 + ceil(30n/lambda)`
+generations -- 44 of them at n=20, lambda=18 -- so nothing can fire until long
+after progress stops. **The history window is the binding constraint, not the
+tolerance.** A custom callback ("stop if no improvement over 15 generations")
+is a few lines and would recover most of the rest.
+
+`popsize` is the real knob, and it trades evaluations for **reliability**, not
+speed for accuracy: popsize 8 saves 15% and doubles the cross-seed spread;
+popsize 20 costs 38% and halves it. Given how many single-run artefacts this
+session produced, pay the 38%.
+
+(Measured on a 7-parameter problem seeded near the answer; the 20-parameter
+cold start may behave differently, and popsize is exactly the knob that should
+matter more there.)
+
+**Use resolution 6-8 for POSE fitting**: about 2.3x faster, silhouette within
+1% of the full mesh, and a 7-parameter pose fit lands within 1 degree and
+0.5 px of the resolution-36 answer.
+
+**Never for geometry fitting.** The same 20-parameter fit, same objective,
+same seed, run at the two resolutions and then both scored at FULL mesh:
+
+```
+                  three-quarter      head-on        mean
+fitted at res 36   10.70 px 1.743%   7.18 px 2.007%  1.875%
+fitted at res  8   12.41 px 2.022%   7.85 px 2.193%  2.108%   <- 12% worse
+```
+
+**This single comparison does not establish that the mesh caused it.** The
+cross-run spread already measured on `c_outb` is 11% across five fits; the
+resolution-36-vs-8 difference is 7.5%, which is inside that scatter. Two runs
+with different search trajectories differ by about this much for reasons that
+have nothing to do with the mesh. Three seeds at each resolution are running to
+separate the two.
+
+In absolute terms the difference is also small -- 1.7 px on a 1056 px subject
+-- and invisible in the overlays. Put another way, the decimated search
+captures 75% of the available improvement over the committed model for 43% of
+the cost, which may well be a good trade.
+
+PENDING: until the seed study lands, treat "decimate for pose, full mesh for
+geometry" as a precaution rather than a finding. The speedup plateaus there because fixed costs (distance
+transform, array work) take over; resolution 4 is where the shape genuinely
+breaks, the fuselage becoming a square tube.
+
+That puts a joint geometry fit near **380 s** -- too much for an entry's probe
+pool, workable for a dedicated command.
+
+An earlier draft of this section claimed 3.4x and a cliff at resolution 5. Both
+were wrong: 3.4x was fit *wall-time*, which measures convergence luck as much as
+speed, and the resolution-5 "collapse" was contamination -- a `cma_signals.in`
+stop file written to halt other runs was read by the still-running sweep, which
+quit after one generation. Re-run clean, resolution 5 works.
+
+**So: geometry fitting belongs in its own command with its own budget**, the way
+`nb reconstruct` already is -- never inside `ask`, and every constant it
+produces labelled `fitted(...)`.
+
+The case for allowing it at all is only this, and the plan should not overstate
+it: with no plan sheet and no hand measurement, the alternative is **invention**.
+The run currently makes up chord, taper, dihedral and nacelle stations from
+nothing and declares them. A number constrained by two photographs beats a
+number constrained by none. That is a weaker claim than "it measures the
+aircraft", and nothing in this session supports the stronger one.
+
+## Model/mask symmetry
+
+The masks contain four propellers and the landing gear; the committed model has
+neither. Gear was added during this session from published figures (4.3 in
+wheels) and is worth **1.2% of the silhouette** — it did not rescue the cold
+start. The propellers are the remaining asymmetry and they are large.
+
+**Add the propellers to the model; do not edit the mask.** Diameter is
+published (9×4.5 → 228.6 mm) and the hub is the nacelle front, already modelled.
+The only unknown is each propeller's rotational angle, which is a nuisance
+parameter — four props × one angle per view — fitted alongside the camera. No
+image measurement, no mask surgery.
+
+## What the fits actually produced
+
+Five runs, all scored in normalised units so the rows are comparable:
+
+```
+run                      geometry free   dihedral   3/4      head-on   norm worst
+A   committed model      none              2.00°    2.92%     2.70%      2.916%
+C   mean, raw px         6 wing            6.67°    1.84%     3.89%      3.894%   head-on BROKEN
+D   mean, raw px         6 wing + 5 nac    4.47°    1.78%     1.75%      1.780%   best
+Cmn minimax, normalised  6 wing            4.26°    1.90%     1.90%      1.902%
+FREE mean, raw px        22 params         4.75°    1.49%     2.31%      2.309%   tail distorted
+```
+
+**D and Cmn improve BOTH views at once.** That is the distinction that matters:
+C bought the three-quarter by wrecking the head-on (visible in the overlay — the
+model splayed flat, camera below the aircraft), while D and Cmn beat the
+committed model on both photographs simultaneously. D is the best result of the
+session: **1.78% worst-view against 2.92%**, with no part visibly deformed.
+
+**FREE shows the ceiling.** Twenty-two free parameters give the best
+three-quarter of any run (IoU 0.878) while visibly splaying the tailplane in
+the head-on view. More freedom keeps improving the objective and degrading the
+model. Keep the parameter set small.
+
+### Cross-run agreement is the usable check
+
+Five fits with different parameter sets, objectives and units. A parameter they
+agree on is supported; one that scatters is not. **This needs no measurement**
+and is the practical form of the Tier 3 invariance check.
+
+```
+param     committed |      C      D     Cmn     Cnm    FREE | spread
+c_outb       0.200  | 0.2858 0.2964  0.3062  0.2751  0.2960 |  11%  CONSISTENT
+c_inb        0.265  | 0.2891 0.2806  0.3557  0.3114  0.3380 |  24%  moderate
+x_le         0.304  | 0.2838 0.2912  0.2835  0.2894  0.2340 |  21%  moderate
+c_tip        0.145  | 0.2154 0.2288  0.2767  0.2490  0.2178 |  26%  scattered
+c_root       0.330  | 0.2880 0.3315  0.4156  0.3259  0.3955 |  36%  scattered
+dihed        2.00   | 6.669  4.470   4.256   5.158   4.746  |  48%  scattered
+```
+
+**`c_outb` is the one well-supported finding**: every run puts the outer chord
+at 275-306 mm against the committed 200 mm, a +43% increase, at 11% spread.
+It corroborates entry 02's independent visual finding by a completely different
+route. That is two methods agreeing, which is the strongest evidence this
+session produced about the aircraft.
+
+**Dihedral is more than 2°** — all five runs say so — but the magnitude scatters
+4.3-6.7° and is therefore a direction, not a value. Report it as such.
+
+The central question, honestly: **it is no longer established that optimising
+against the silhouette corrupts geometry.** That claim rested on a dihedral
+figure measured by hand — the evidence this plan forbids, and probably wrong.
+What survives are the measurement-free checks: under those, C is refuted
+(camera below an aircraft resting on a surface) and FREE is suspect (tail
+deformation), while D and Cmn are not refuted by anything.
+
+Still open: the minimax-vs-mean control was stopped early (1746 evaluations
+against Cmn's 6390) and is being rerun.
+
+## A geometry-fitting tool the agent can use in one call
+
+Everything above is useless if fitting geometry means the agent writing a
+CMA-ES driver. It wrote its own pose seeder twice in the original transcripts
+and both attempts were killed by the probe budget; it must not now be asked to
+write an optimiser as well. The whole capability has to be **one function with
+guard rails baked in**, because every protection in this plan is one the agent
+would otherwise have to remember.
+
+### The call
+
+```python
+fit = fit_geometry(
+    free = {
+        # name          lower   upper   why it is a candidate
+        "chord_outb":  (0.12,   0.34,  "entry 02: real outer TE lies aft of the model's"),
+        "dihedral_deg":(-3.0,   9.0,   "head-on overlay shows more V than modelled"),
+    },
+    reliability = "normal",     # -> popsize and seed count
+)
+```
+
+`views` is not a parameter: it always uses every reference with a mask, always
+normalised by `sqrt(mask area)`, always aggregated as the mean. Those are the
+three things that took a full session to get right and they are not the agent's
+to re-decide.
+
+### What comes back
+
+A result that **prints as evidence, not as a number**:
+
+```
+fit_geometry — 2 free parameters, 2 views, 5 seeds, 412 s
+
+parameter      committed    fitted   cross-seed    verdict
+chord_outb        0.2000    0.2951   +/- 0.009    CONSISTENT
+dihedral_deg      2.0000    4.83     +/- 1.21     SCATTERED  (direction only)
+
+view            before    after
+threequarter    2.92%     1.78%
+headon          2.70%     1.75%
+                                    both views improved
+
+no parameter on a bound · no camera outside its stated hemisphere
+```
+
+Four things that are not optional:
+
+- **Multi-seed always.** The cross-seed spread is the evidence; a single run is
+  not a result. Five artefacts this session were single runs that looked like
+  findings.
+- **A verdict per parameter**, from that spread. `CONSISTENT` is reportable;
+  `SCATTERED` is a direction, not a value, and must be declared as such.
+- **Both-views-improved is stated explicitly.** A fit that improves one view and
+  degrades another is a trade; the agent should see that without computing it.
+- **Railed parameters and out-of-hemisphere cameras block the read**, the way
+  `compare_to_photo` already refuses an untrustworthy pose.
+
+### Guard rails the function enforces
+
+| rail | why |
+|---|---|
+| at most ~8 free parameters | 22 free parameters gave the best three-quarter score of any run while visibly splaying the tailplane |
+| every free parameter needs a written reason | forces the candidate to come from a finding, not from scanning for whatever moves the number |
+| refuse if mask/model asymmetry exceeds a threshold | the four unmodelled propellers are the asymmetry the camera currently absorbs; fitting geometry against them fits the geometry to propellers |
+| mesh resolution 6-8, popsize from `reliability` | the agent should not be choosing these |
+| hard wall-clock budget, reported up front | ~400 s for a handful of parameters at resolution 6-8 |
+
+### How the result enters the model
+
+Each accepted parameter becomes a `fitted(...)` constant carrying its views,
+its residual and its cross-seed spread — so the provenance scheme in Tier 2
+does the rest, and the entry's declaration reads "fitted to 2 photographs,
++/- 0.009" rather than a bare number. A `SCATTERED` parameter cannot be written
+as a value at all; it is declared as a direction, or left `invented`.
+
+### Where it lives: inside `reconstruct`, not beside it
+
+An earlier draft proposed a separate `nb refine`. That was wrong. The
+reconstruction is what every later chapter forks, so the best model has to
+exist from the start -- and a separate command recreates the exact failure the
+transcripts showed, where run 2's wing finding sat in a `.qmd` while three
+entries computed on geometry known to be wrong.
+
+It is also what the 2026-10-03 plan already argued for: *"reconstruction is a
+once-per-programme investment and every later chapter forks the model it
+produces, so quality is worth far more than turns."* Fitting is that
+investment.
+
+**Which parameters should be free?** In `reconstruct` there are no prior
+findings to justify a candidate -- but the system already knows the answer:
+**the constants the run would otherwise invent.** The assumptions gate exists
+to show the coordinator exactly those. Fit them instead of guessing them, and
+the gate changes from a request to rubber-stamp a guess into a report of
+evidence:
+
+```
+BEFORE   wing taper ratio: 0.704                   (invented -- accept?)
+
+AFTER    chord_outb   0.200 -> 0.295  +/- 0.009    CONSISTENT  (5 seeds, 2 views)
+         dihedral     2.0   -> 4.8    +/- 1.2      SCATTERED   (direction only)
+```
+
+A `CONSISTENT` parameter is committed as `fitted(...)`. A `SCATTERED` one
+stays `invented`, with its direction recorded -- which is strictly more than
+the coordinator gets today.
+
+### So `reconstruct` runs several optimisations, of two kinds
+
+| | cost | when |
 |---|---|---|
-| a **consequence of the geometry being reconstructed** | wing area, MAC, tail volume, length | must be **derived**. Assigning it destroys the only check on the planform, and the planform drives every aerodynamic answer |
-| a **property you would measure or adjust on the bench** | total mass, CG | may be **given**. That is calibration |
+| pose fit, 7 params per view | seconds | every overlay, throughout |
+| joint geometry + pose fit | ~400 s | once, after the first model builds |
+| a second joint round | ~400 s | only if the first moved geometry enough to open a different pose basin |
 
-And one case looks like mass but is really geometry: **dry weight derived
-from area times areal density is a check on the GEOMETRY**, because the areas
-come from the reconstruction. That is the version worth having -- derive dry
-weight to test the airframe, then calibrate battery position to reach the
-published all-up weight and CG, which is what you would physically do.
+This is the main argument for the larger `reconstruct` budget the previous plan
+asked for, and it is now a concrete number rather than a principle: roughly
+15 minutes of fitting on top of the existing probe work, bought once per
+aircraft, inherited by every chapter that forks it.
 
-**The mechanical check, narrowed accordingly.** A target's value may not
-appear as a literal in `_model.py` *for targets of the first kind*. Rule 43
-already walks that file's module-level numeric constants with `ast`, so this
-is an exact comparison, not a fuzzy match, and it ignores comments for free.
-`x_cg_target = 0.085 + 0.038` would be allowed under the split above; a
-chord tuned until `wing.area()` returns 6.90 would not.
+## Carried forward
 
-Which kind a target is belongs in the brief, not inferred: a `targets:` row
-is derived unless marked `given`.
+- **Derive rather than assign** (2026-10-03, items 1–2). A target is only a
+  check if computed from something more primitive than itself; the v1.0
+  reconstruction assigned seven of eight. More important now, not less, since
+  fitted geometry makes assignment easier to hide.
+- **Target baseline** (item 7). Has its first real drift to justify it:
+  0.41% → 5.86% within one run, uncaught.
+- **Uncertainty bands** (alternative B). Still the strongest unexplored idea in
+  the repo, and this session sharpens it: every performance number in
+  `tubby-b-17` rests on a wing the notebook records as wrong in a known
+  direction, and a band would say so in the entry rather than in a coordinator's
+  note.
 
-## 2. A target derives from something more primitive
+## Outstanding defects in the committed notebook
 
-The companion instruction, phrased as a principle because the materials
-change and the principle does not:
-
-- **airframe mass** from geometry and material -- areas times areal density;
-- **bought components** from catalogue figures, which are facts;
-- **areas, loadings, tail volumes** from the geometry.
-
-If the primitive is not available -- no published density, nothing to derive
-from -- then that quantity is not a derived target. Mark it `given`, or move
-it to `specified:`. The coordinator decides per aircraft, which is where that
-judgement belongs.
-
-**"Later entries can refine it" is true, and not a reason to defer.** Forking
-is exactly how a mass model improves. But every later chapter forks THIS
-model, so a structural flaw -- mass that can never be a geometry check
-because it was never derived from geometry -- propagates to all of them.
-Precision can come later; the structure cannot.
-
-## 3. The run does the raster, the stitch and the measuring
-
-Every piece of code the coordinator wrote this session was a liability, and
-the worst was the stitch: tiles 1-8 were assembled from a misread tile key,
-and **tile 10 holds the LEFT WING part**. The most important aerodynamic
-surface was reconstructed from its assembly jigs because of that.
-
-The run can do all of it, and the environment already allows it:
-
-- `probe` is **not sandboxed** -- `kernel.py:156` starts it with
-  `cwd=run_dir` and no path guard. Only the MCP file tools are confined.
-- The kernel inherits the full environment: `env = dict(os.environ, ...)`, so
-  `pdftoppm` is on PATH and PIL, numpy and scipy are in the venv.
-- `NB_ROOT` is **already exported**, so `_reference/` is locatable without
-  being told a path. That also retires the absolute-path bug in the current
-  brief, which cost the v1.0 run three probes and a `FileNotFoundError`.
-
-So: put the RAW source in `_reference/` -- the PDF, the photographs -- and
-write nothing. The run rasterises every page, stitches them all, and measures
-with `scipy.ndimage.label`. It cannot misread a tile key nobody read to it.
-
-## 4. Let the run read back an image it produced
-
-The one addition that makes item 3 possible. `read_figure` globs only the
-freeze directory, so an intermediate the run creates in a probe -- a stitched
-sheet, a crop, an overlay -- is invisible to it. It can measure an image it
-built and cannot look at one.
-
-Closing that is a small extension of an existing tool, and it generalises
-beyond reconstruction to any figure a run wants to inspect mid-probe.
-
-## 5. Structured labels, so the brief can route
-
-Each asset gets a kind token on the first line of its `.txt`, not prose:
-
-```
-plan 1:1 100dpi      -> measurable; measure in code, never by eye
-photo                -> proportions and layout only; no dimensions
-scan uncalibrated    -> topology only; calibrate against a published figure first
-(no _reference/)     -> build from the brief; declare every dimension
-```
-
-`_reference_brief` then emits deterministic instructions per kind instead of
-hoping a paragraph is read correctly. Degrades cleanly to the empty case,
-which already works.
-
-## 6. A much larger budget for reconstruct
-
-Reconstruction is a once-per-programme investment and **every later chapter
-forks the model it produces**, so quality is worth far more than turns. The
-current `MAX_TURNS * 2` is too tight -- the v1.0 run took 123 model turns and
-two resumes to rasterise, stitch, survey, measure, cross-check and iterate.
-
-Raise it well beyond that, and spend the turns on verification: measure a
-part twice by different routes, cross-check against a published figure before
-trusting the scale, re-render and look again after a correction.
-
-This also retires the main argument for an autonomous builder loop, which was
-coordinator-turn cost. With cost acceptable, coordinator-in-the-loop is
-simply better -- the coordinator holds the reference and the judgement.
-
-## 7. A target baseline, so drift fails loudly
-
-**Rendering recomputes; it does not assert.** Rule 12 keeps a committed
-page's freeze no older than its model and the refactor gate re-renders every
-sibling reaching a changed function, so the numbers are always current. But
-if a change pushes wing area from 0.01 % to 15 %, the entry renders happily:
-the chart draws a longer bar and the prose reads 15 %, because rule 1 made it
-an inline expression. **Nothing fails. Someone has to look.**
-
-So today no target VALUE is checked by anything. The gate added last time
-checks only that each target is mentioned, and deliberately so -- a missed
-target is a finding worth reporting, not an error to suppress.
-
-Which hides a tension worth separating:
-
-| | a missed target is | should it fail? |
-|---|---|---|
-| the first reconstruction | a **finding** -- "area is 7 % under, the stab is the likely cause" | no |
-| after the model is accepted | a **regression** -- something drifted | yes |
-
-Same signature, opposite meanings. That is why "fail when out of tolerance"
-would be wrong as a blanket rule, and why rendering cannot be the mechanism.
-
-**`nb.corpus` already solves this exact shape** for lint: it records the
-expected finding count per notebook and fails when one moves, requiring the
-baseline to be updated in the same commit that justifies the change. It
-printed `corpus unchanged` after every change made today, and caught two that
-would otherwise have gone unnoticed.
-
-The same for targets. Record the accepted error per target when a
-reconstruction commits; a later render that worsens one beyond a threshold
-fails until the baseline is updated with a reason. A first reconstruction has
-no baseline, so a miss stays a finding; once accepted, a worsening is a
-regression.
-
-It also closes the fork-drift gap: a fork that changes the geometry either
-re-verifies against the baseline or overwrites the target, and has to say
-which.
-
-**Worth waiting for one real drift before building it.** Nothing has drifted
-yet -- this is reasoning about a failure that has not happened, which is the
-standard everything else here was held to. Recorded now because the mechanism
-is already in the repo and the next person should not have to rediscover it.
-
-## 8. Read the declarations as a defect report
-
-Skill text, no code. Every `why` naming something absent is the run telling
-the coordinator what they failed to supply:
-
-```
-why: "plan tiles 9-12 omitted; inferred from jigs G1, G2"
-```
-
-That is the wing error, reported by the run, at the prompt, and read past.
-The habit costs nothing, works with no plan and no aircraft, and would have
-caught the single worst defect in this reconstruction.
-
-## Rejected
-
-- **Web search for the run.** Cost is no longer the objection and the honesty
-  discipline held up -- but a fetched fact is **neither Specified nor
-  declared**. It looks sourced, so it is not declared; nobody chose it, so it
-  is not Specified; and it enters the model unexamined. With every later
-  chapter forking that model the blast radius is the whole programme. The
-  cases this session were not subtle: retailers quote 200 g for a Maker Foam
-  sheet where Flite Test measure 115 g, and two different aircraft share the
-  name "Mighty Mini Corsair" at 610 mm and 737 mm. Mid-run discovery is
-  already covered by `ask_specified` and escalation, at a cost now acceptable.
-  If escalation round trips ever become the bottleneck, the narrow version is
-  a search whose results are `declare_input(source='guessed')` with the URL --
-  never treated as fact.
-- **Part-finding furniture in `_notebook.py`.** I was about to build it. Told
-  to use `ndimage.label`, the run found 4,171 components and picked correctly.
-  A line of brief text was enough.
-- **Coordinator stitching and measuring.** See item 3. It produced the wing
-  error.
-- **A reference image rendered into the entry.** Ruled out: it would be a
-  third visual against rule 14, and the reference belongs to how the model was
-  built rather than to what the entry concluded.
-
-## Two radically different alternatives
-
-Both reject the premise that a model should be built by judgement and checked
-against targets. They are the two poles this plan sits between, and naming
-them says what it is trading.
-
-### A. Mechanical extraction -- the plan IS the model
-
-The plan is vector: 380 `<path>` elements on a single tile, exact
-coordinates. Rather than looking at a raster and measuring it, parse the paths
-and generate `_model.py` directly -- wing outline to `WingXSec` chords, the
-fuselage side profile to station heights, formers A/B/C to station widths.
-A CAD importer, not a modelling exercise.
-
-*Pros.* Exact, with no estimation, no assignment and therefore no tautology --
-the problem this whole plan exists to solve would not arise. Deterministic and
-re-runnable. The formers are literally the cross-sections `FuselageXSec`
-wants. Removes the coordinator and most of the agent's judgement at once.
-
-*Cons.* **It only works when a vector plan exists**, which fails the
-generality requirement outright -- no plan, a photograph, a scan or a
-from-scratch design all get nothing. Part identification is still unsolved:
-knowing which of 4,171 paths is the wing is the hard half, and it is the half
-that needs judgement. The transform and coordinate-space traps are real -- two
-naive attempts this session produced 1156 mm parts on a 190 mm tile. And it is
-a large build for a narrow case.
-
-*Verdict.* Worth keeping as a possible accelerator **inside** item 3 -- if the
-source is a vector PDF, prefer paths over pixels -- but not as the
-architecture.
-
-### B. Stop pursuing fidelity -- declare the approximation and propagate it
-
-The opposite move. Accept that the model is approximate, stop trying to match
-the aircraft, and make the **uncertainty** the product. Build a plausible
-airframe, declare the uncertain inputs with ranges rather than values, and
-report every answer as a band: *"stall 8.8 +/- 0.9 m/s, given +/-10 % on wing
-area and +/-15 % on the airfoil."*
-
-*Pros.* Fully general -- needs no plan, no photograph, no published spec, and
-works identically for a foam warbird, a pig and a from-scratch glider. Honest
-in a way a point estimate never is: the first Mustang programme's 8.80 m/s was
-precise and wrong, and a band would have said so. Turns the unmeasured items
-from defects into quantified uncertainty, which is what they actually are.
-Cheap -- no stitching, no measuring, no reference material. And it composes
-with the claims under test: a claim is refuted only when it falls outside the
-band.
-
-*Cons.* Bands may be too wide to settle anything -- *"somewhere between 8 and
-11 m/s"* does not decide whether it flies slow, which was the whole question.
-Sensitivity costs solves, and the entry contract allows one hero value, not a
-distribution. It characterises the model rather than improving it, so a
-programme could run for ten entries without the airframe getting any closer to
-the real aircraft. And a wide band is easy to hide behind.
-
-*Verdict.* The strongest idea in this document that is not in the plan.
-**It is not an alternative so much as a missing complement**: this plan makes
-the model better, and B says how much to trust it. Worth running as an
-experiment on one entry -- report a band beside the point value and see
-whether it still settles the claim.
-
-## Order
-
-1. **Items 1 and 2** -- derive rather than assign. Without these the targets
-   measure nothing, and everything else is polish.
-2. **Items 3 and 4** -- the run does the image work; it can see what it made.
-3. **Items 5, 6, 8** -- routing, budget, and the reading habit.
-4. **Item 7** -- the baseline, once something has actually drifted.
-5. **Try B on one entry** before deciding whether uncertainty bands belong in
-   the contract.
-
-## Outstanding
-
-- The v1.0 reconstruction was built **without the wing panels**, which are on
-  tiles 9-12 and were omitted from the stitch. Items 3 and 8 both address the
-  cause. The entry is worth re-running once they land, with every tile
-  included.
-- Seven of its eight targets were assigned rather than predicted, so the
-  0.54 % headline does not mean what it says. Items 1 and 2 are the fix; the
-  entry should be re-run and will almost certainly report a larger and more
-  honest number.
-- The FT Mighty Mini Mustang programme still has its +74 % top-speed gap
-  unexplained, surviving a propeller-polar calibration against APC data.
-  Either the claim is not a top-speed figure or the drag model is badly low.
+- `_model.py` carries a wing the notebook itself records as too narrow at the
+  outer panel, and three performance entries computed on it.
+- Entry 01 reports 5.86% when the run had 0.41% in hand.
+- The 255 mm fuselage width in `_model.py` came from a hand measurement at the
+  Q1 assumptions gate and has never been independently checked. Under this
+  plan's rules it should be re-derived by fitting, or declared `invented`.

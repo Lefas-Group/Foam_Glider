@@ -1,0 +1,39 @@
+# THE BRIEF for the aircraft. True of the whole aircraft, inherited by every
+# chapter and every entry, and never superseded: a fork that departs from one
+# of these is not a fork, it is a different aircraft and so a different
+# notebook. Written by a PERSON, never by a run.
+#
+# Rendered into index.qmd. Same format as a chapter's `_inputs.yml`:
+# `- <id>: <text>`, ten words each.
+#
+# The test for what belongs here rather than in the first chapter: IF THIS
+# CHANGED, WOULD IT STILL BE THE SAME AEROPLANE? A 300 mm span, no. Foam 5 mm
+# — yes, that is the same project at a different thickness, so it is a chapter.
+specified:
+  - ft-tubby-b: "**FT Tubby B-17**, Flite Test, four-motor foam-board bomber."
+  - maker-foam-laser: "**Maker Foam**, laser-cut speed-build kit, folded and glued."
+  - low-wing-removable: "**Low wing**, removable, mounted under a slab-sided fuselage."
+  - four-tractor-nacelles: "**Four tractor nacelles** slung on the wing leading edge."
+  - motors-four-2212: "**Motors**: four 2212 Basix B, 9x4.5 props."
+  - props-two-cw: "**Props**: two CW, two CCW; four 30 A ESCs."
+  - battery-two-2200: "**Battery**: two 2200-3300 mAh 3S, or 2300 mAh 4S."
+  - controls-aileron-elevator: "**Controls**: aileron, elevator, rudder; 16 deg, 30% expo."
+  - four-9-g: "**Four 9 g servos**, four channels minimum."
+  - taildragger-two-4: "**Taildragger**: two 4.3 in mains, one small tailwheel."
+  - bomb-bay-in: "**Bomb bay** in the fuselage, large hidden hatch."
+  - conventional-tail-single: "**Conventional tail**, single fin, vacuum-formed nose cone."
+assumed:
+  - no-plan-sheet: "**No plan sheet**: Flite Test sell these plans."
+  - wing-area-not: "**Wing area not published**; derive it and declare it."
+  - wing-loading-not: "**Wing loading not published**; no independent scale check exists."
+  - chord-taper-dihedral: "**Chord, taper, dihedral from photographs**; declare each invented."
+  - fuselage-stations-from: "**Fuselage stations from photographs**; declare every one invented."
+  - nacelle-size-and: "**Nacelle size and station from photographs**; declare them invented."
+  - airfoil-flat-foam: "**Airfoil**: flat foam-board plate, a declared stand-in."
+  - claimed-3-lb: "**Claimed 3 lb (1361 g) payload** capacity, to verify."
+  - claimed-incredible-aerobatic: "**Claimed incredible aerobatics** and medium flying speed, to verify."
+targets:
+  - wing-span-1473: "**Wing span**: 1473 mm (58 in), +/-1%."
+  - length-1168-mm: "**Length**: 1168 mm (46 in), +/-2%."
+  - dry-weight-1973: "**Dry weight**: 1973 g without battery, +/-6%."
+  - cg-108-mm: "**CG**: 108 mm aft of leading edge, +/-8%. (given)"

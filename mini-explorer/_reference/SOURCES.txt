@@ -1,0 +1,15 @@
+Published specifications: https://store.flitetest.com/ft-mighty-mini-explorer/
+  Wingspan 38.5 in (978 mm); Length 27.25 in (692.15 mm);
+  Weight without battery 14.1 oz (400 g); CG 2 in (50.8 mm) from leading edge;
+  Throws 12 deg aileron/rudder/elevator, 30% expo;
+  Motor FT 1806 2280 kV, prop 6x4.5 CCW, ESC 25 A, four 5 g servos,
+  battery 800 mAh 2S or 850 mAh 3S.
+  Wing area and wing loading are NOT published.
+
+Plan sheet: NOT freely available. Flite Test sell the Mighty Mini Explorer
+plans for $24 (https://ftca.flitetest.com/product/ft-mighty-mini-explorer/).
+The free S3 plans bucket (plans.flitetest.com) carries only the full-size
+FT Explorer, a different and much larger aeroplane (1447 mm span). Nothing
+in this notebook is measured off a plan.
+
+Photographs: store product images, product id 3218.

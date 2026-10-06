@@ -1,0 +1,77 @@
+/*-- scss:defaults --*/
+/* ---------------------------------------------------------------------------
+   The dark theme.
+
+   Listed AFTER theme-light.scss in _quarto.yml, which is what makes this file
+   small: quarto adds `scss:defaults` layers in reverse order, so every `!default`
+   here is resolved before the light file is reached and the light file supplies
+   whatever this one does not name. Typography, spacing and every rule in the
+   light file are therefore shared -- only colour is restated.
+
+   The accent lightens. #14655c is a 7:1 contrast against white and a 2.4:1
+   against a dark page, which is unreadable; the hue is held and the lightness
+   raised until it passes the other way round.
+   --------------------------------------------------------------------------- */
+
+$accent:        #4fb3a4 !default;
+$accent-strong: #6ecbbc !default;
+
+$body-bg:    #16191d !default;
+$body-color: #d3d8dc !default;
+$link-color: $accent-strong !default;
+
+$border-color: #2b3137 !default;
+
+$sidebar-bg: #1b1f24 !default;
+$sidebar-fg: #aab2b9 !default;
+$sidebar-hl: $accent !default;
+
+$code-bg:       #1e2329 !default;
+$code-color:    $accent-strong !default;
+$code-block-bg: #1b1f24 !default;
+
+/*-- scss:rules --*/
+
+:root {
+  --key-accent: #{$accent};
+  --nb-muted:   #959da4;
+  --nb-rule:    #{$border-color};
+  --nb-card-bg: #1b1f24;
+
+  /* The lineage diagram, which follows the page rather than taking a white
+     card -- it is a drawing of the notebook, not a printed artefact of a run.
+     The amber lightens for the same reason the accent does: #b8860b is a
+     3.0:1 against this ground and the ticks are 4px wide. */
+  --nb-graph-box-bg: #1d3b37;
+  --nb-graph-line:   #{$accent};
+  --nb-graph-tick:   #d9a93f;
+  --nb-graph-edge:   #6e777e;
+}
+
+/* ---------------------------------------------------------------------------
+   Figures keep their white ground.
+
+   Every figure on this site is drawn by matplotlib or graphviz against white,
+   with black axes and black labels. Nothing here can repaint them -- they are
+   raster PNGs and frozen SVGs -- so on a dark page a PNG glares and an SVG's
+   text disappears against the body background entirely.
+
+   So the figure is given its own white card rather than being asked to join
+   the page. Standard practice for technical sites, and it is also the honest
+   option: the figure is a printed artefact of the run, and it looks the same
+   here as it does in the PNG on disk.
+
+   NOT the SVGs. The only SVG on the site is the lineage diagram, which is a
+   drawing OF the notebook rather than a result from a run, and whose four
+   colours styles.css restates per theme. A card would single out the one
+   figure that does not need one.
+   --------------------------------------------------------------------------- */
+.cell-output-display img {
+  background: #ffffff;
+  border-radius: 6px;
+  padding: 0.5rem;
+}
+
+/* The hero's left rule and the callouts both read heavy at full strength on a
+   dark ground. */
+.hero, .hero-pair { border-left-color: rgba(79, 179, 164, 0.75); }

@@ -1,0 +1,22 @@
+Published specifications: https://store.flitetest.com/ft-tubby-b-17/
+  Wingspan 58 in (1473.2 mm); Length 46 in (1168.4 mm);
+  Weight without battery 4.35 lb (1973 g); CG 4.25 in (108 mm) from
+  leading edge; Throws 16 deg aileron/rudder/elevator, 30% expo;
+  Four 2212 Basix B motors, four 9x4.5 props (2 CW, 2 CCW),
+  four Basix 30 A ESCs, four 9 g servos, 4 channels minimum;
+  Battery two 2200-3300 mAh 3S or two 2300 mAh 4S.
+  Build 6 hours, medium build and flying level, large field.
+  Claimed payload "up to 3 lb" in the bomb bay.
+  Wing area and wing loading are NOT published.
+
+Plan sheet: NOT freely available. Flite Test sell the Tubby B-17 plans
+for $24 (https://ftca.flitetest.com/product/ft-tubby-b-17/). The free S3
+plans bucket carries no B-17. Nothing in this notebook is measured off a
+plan; every dimension not listed above is reconstructed and declared.
+
+Photographs: store product images, product id 3198, cdn11.bigcommerce.com
+s-x9hwh7on. `threequarter` is White_B-17_-_2, `headon` is White_B-17_-_4.
+A third frame (BomBoogie_3, the olive-drab decal build) was downloaded and
+discarded: same azimuth as `threequarter` from the same shoot, so it would
+have cost a turn to confirm what `threequarter` already shows.
+Both masks are the images' own alpha channel thresholded at 128.

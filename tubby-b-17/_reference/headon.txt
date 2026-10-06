@@ -1,0 +1,7 @@
+photo  Flite Test store photo, product 3198, undecorated white build.
+Direct head-on, camera at about wing height, nose toward the camera. This
+is the view that fixes span, dihedral and the spanwise station of each of
+the four nacelles; the two inboard nacelles carry the main wheels. The fin,
+tailplane and antenna stand above and behind the fuselage. The black nose
+cone reads as a broad flat-fronted box, not a smooth ogive. Mask cut from
+the image alpha channel.

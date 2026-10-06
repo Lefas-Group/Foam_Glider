@@ -1,0 +1,9 @@
+photo  Flite Test store photo, product 3198, undecorated white build.
+Front three-quarter from above and to port. Nose at lower left, tail at
+upper right; the whole airframe is in frame. Four tractor nacelles are
+slung under and ahead of the wing leading edge, two per side, each with a
+black two-blade prop. Two main wheels hang below the inboard nacelles --
+this is a taildragger. The wing is low-mounted on a slab-sided fuselage,
+with rounded tips and visible dihedral. Black vacuum-formed nose cone,
+raised faceted cockpit box, single tall fin with a long dorsal fairing,
+one-piece elevator. Mask cut from the image alpha channel.

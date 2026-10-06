@@ -1,0 +1,6 @@
+photo  Flite Test store photo, stock build: trainer wing, white canopy,
+no decals, no landing gear. Rear three-quarter from above and to port.
+Nose at lower left, tail at upper right. The whole airframe is in frame.
+The black three-blade prop sits ON TOP of the fuselage BEHIND the wing
+trailing edge, disc vertical -- this is a pusher, not a tractor. Two
+rubber bands hold the wing on. Mask cut from the image alpha channel.
