@@ -501,9 +501,19 @@ brief states. Everything you would otherwise invent can be fitted instead:
 
     fit = fit_geometry(free={
         "chord_outb": (0.12, 0.34, "the outer trailing edge sits aft of the model's"),
-    })
+    }, poses={"VIEW": (elev, azim, roll)})
     print(fit)        # values, cross-seed spread, a verdict per parameter
     fit.apply()       # writes the CONSISTENT ones into _model.py
+
+**PASS THE POSES YOU ALREADY FOUND.** `poses` takes the three camera numbers
+from each `compare_to_photo` note, per view. The geometry about to be fitted
+moves millimetres and the camera does not move at all, so a fresh cold search
+is work you have already paid for -- and it can land in a different basin from
+the overlay you read the free set off, which leaves the fit and the picture
+talking about two different cameras. The seed is only a seed: elevation and
+azimuth are searched +/-25 deg around it and the mask still sets everything
+else. The seed residual for every view is printed, so a hint that was wrong
+shows up as a worse number instead of being believed.
 
 Every free parameter needs a written reason, because a parameter freed
 because a finding pointed at it is evidence and one freed because it moved

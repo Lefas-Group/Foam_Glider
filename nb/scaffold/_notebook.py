@@ -1045,14 +1045,38 @@ def _raster(pts, faces, params, size, centre=None):
     return _np.asarray(im) > 127
 
 
-def _parts_of(airplane):
-    """[(pts, faces)] per wing and fuselage, in declaration order."""
+def _parts_of(airplane, resolution=None):
+    """[(pts, faces)] per wing and fuselage, in declaration order.
+
+    `resolution` decimates the mesh. AeroSandbox defaults to 36, which on a
+    twin-boom model is 1774 faces at 26.4 ms per raster; resolution 8 is 402
+    faces at 6.8 ms -- **3.9x faster**. Measured on another aircraft, three
+    seeds at each resolution put the fitted geometry well inside seed noise
+    (objective 1.896% +/- 0.017 against 1.877% +/- 0.022), so the cheap mesh
+    costs nothing that can be detected.
+
+    The cost is faces, not pixels: four times the raster area is 14% more
+    time, while four times the faces is four times the time.
+    """
     import numpy as _np
     out = []
     for comp in list(airplane.wings) + list(airplane.fuselages):
-        pts, faces = comp.mesh_body(method="quad")
+        if resolution is None:
+            pts, faces = comp.mesh_body(method="quad")
+        elif comp in airplane.wings:
+            pts, faces = comp.mesh_body(method="quad",
+                                        chordwise_resolution=int(resolution))
+        else:
+            pts, faces = comp.mesh_body(method="quad",
+                                        tangential_resolution=max(4, int(resolution)))
         out.append((_np.asarray(pts, float), faces))
     return out
+
+
+#: Mesh resolution inside a geometry fit. Not used for an overlay a person
+#: will look at -- that is drawn at full resolution, where the cost is paid
+#: once rather than thousands of times.
+_FIT_RESOLUTION = 8
 
 
 def _depth_order(parts, params, centre):
@@ -1141,6 +1165,12 @@ def _fit_pose(parts, mask, hint=None, work=220):
     if hint is not None:
         lo[0], hi[0] = float(hint[0])-25, float(hint[0])+25
         lo[1], hi[1] = float(hint[1])-25, float(hint[1])+25
+        # A ROLL HINT MOVES ITS BAND TOO. Roll is bounded +/-30 deg cold, so a
+        # hinted roll outside that was clipped back to +/-30 and the number the
+        # caller passed never reached the search -- a hint silently ignored,
+        # which is worse than one refused.
+        if len(hint) > 2:
+            lo[2], hi[2] = float(hint[2])-25, float(hint[2])+25
     x0 = _np.clip(_np.array(scored[0][1], float),
                   lo + 1e-6*(hi-lo), hi - 1e-6*(hi-lo))
     def _u(x):   return (x - lo)/(hi - lo)
@@ -1159,7 +1189,7 @@ def _fit_pose(parts, mask, hint=None, work=220):
     railed = [n for n, x_, l_, h_ in zip(
                   ("elev", "azim", "roll", "scale", "tx", "ty", "distance"),
                   v, lo, hi)
-              if abs(x_ - l_) < 1e-6*(h_ - l_) or abs(x_ - h_) < 1e-6*(h_ - l_)]
+              if min(abs(x_ - l_), abs(x_ - h_)) < 0.02*(h_ - l_)]
     return (e, a % 360, ro, s/sc, tx/sc, ty/sc, d), val/sc, centre, railed
 
 
@@ -1376,43 +1406,128 @@ def completeness(airplane, name, hint=None):
               "reseed with hint=(elev, azim, roll) — then ask again.")
 
     H, W = mask.shape
+    cn = [c.name for c in list(airplane.wings) + list(airplane.fuselages)]
+    per = []
     covered = _np.zeros((H, W), bool)
     for pts, faces in parts:
-        covered |= _raster(pts, faces, params, (W, H), centre)
-    slack = max(3, int(0.01*scale_px))
-    missing = mask & ~_nd.binary_dilation(covered, _np.ones((slack, slack)))
+        m = _raster(pts, faces, params, (W, H), centre)
+        per.append(m)
+        covered |= m
+
+    # SLACK IS THE POSE RESIDUAL, not a fixed fraction. The residual is the
+    # measured scale at which model and photograph disagree for reasons that
+    # are not missing components, so anything inside it is noise. Measured on
+    # the P-38: a 3 px slack against a 10.4 px residual reported 20.6%
+    # uncovered in 45 regions; at slack = residual it is 15.3% in 21, and the
+    # output becomes readable.
+    slack = max(3, int(round(resid)))
+    near = _nd.binary_dilation(covered, _np.ones((slack, slack)))
+    missing = mask & ~near
+
+    # AND THE OTHER DIRECTION. Mask-not-covered finds a component you did not
+    # build; model-outside-mask finds one you built that is not there, or is
+    # far too big. They are different errors and only one of them was checked.
+    mask_near = _nd.binary_dilation(mask, _np.ones((slack, slack)))
+    excess = covered & ~mask_near
+
     lab, n = _nd.label(missing)
     frac = float(missing.sum())/float(mask.sum())
+    xfrac = float(excess.sum())/float(mask.sum())
+    # THE CHANGE IS INTERPRETABLE WHERE THE LEVEL IS NOT. A sound model at a
+    # correct pose still showed 17.5% uncovered, so the absolute number says
+    # little -- but "20.6% -> 14.1% after you enlarged the nacelle" is a fact
+    # about the edit you just made. The build loop is a sequence; report
+    # against the previous call on the same view.
+    _hist = globals().setdefault("_COMPLETENESS_LAST", {})
+    prev = _hist.get(name)
+    _hist[name] = (frac, xfrac)
+    delta = ""
+    if prev is not None:
+        d_in, d_out = 100*(frac-prev[0]), 100*(xfrac-prev[1])
+        delta = (f"Since the last check: uncovered {d_in:+.1f} pts, "
+                 f"outside {d_out:+.1f} pts"
+                 + ("  — both better." if d_in < 0 and d_out < 0 else
+                    "  — WORSE on both." if d_in > 0 and d_out > 0 else
+                    "  — one improved, one did not.") + " ")
+    head = (f"{name} — pose {pose_pct:.2f}% (good), slack {slack} px. "
+            f"{100*frac:.1f}% of the mask uncovered; "
+            f"{100*xfrac:.1f}% of the model falls outside it. " + delta)
     if n == 0:
-        return frac, f"{name} — nothing uncovered. Pose {pose_pct:.2f}%."
+        return frac, head + "Nothing uncovered."
+
     sizes = _nd.sum(missing, lab, range(1, n+1))
     order = _np.argsort(sizes)[::-1][:4]
     cen = _nd.center_of_mass(missing, lab, [int(i)+1 for i in order])
-    big = ", ".join(
-        f"(x={c[1]:.0f}, y={c[0]:.0f}) {100*sizes[i]/mask.sum():.1f}%"
-        for i, c in zip(order, cen))
-    return frac, (
-        f"{name} — pose {pose_pct:.2f}% (good). {100*frac:.1f}% of the mask "
-        f"is uncovered, in {n} region(s). Largest: {big}. "
-        "Draw the overlay and LOOK at these: a compact blob is a component "
-        "you have not built, a thin sliver along an edge is one you have. "
-        "A propeller belongs behind a build flag — in the silhouette, never "
-        "in the aerodynamics.")
+
+    # WHICH COMPONENT IS NEAREST tells you WHAT, not just where. A gap touching
+    # a component is that component being too small; a gap far from everything
+    # is a component you have not built at all.
+    dists = [_nd.distance_transform_edt(~m) for m in per]
+    bits = []
+    for i, c in zip(order, cen):
+        blob = (lab == int(i)+1)
+        near_names = sorted(((float(d[blob].min()), nm)
+                             for d, nm in zip(dists, cn)))
+        d0, nm0 = near_names[0]
+        how = (f"touching {nm0}" if d0 <= slack else
+               f"{d0:.0f} px from the nearest component ({nm0})")
+        bits.append(f"(x={c[1]:.0f}, y={c[0]:.0f}) "
+                    f"{100*sizes[i]/mask.sum():.1f}%, {how}")
+    return frac, head + "Largest gaps: " + "; ".join(bits) + ". " + (
+        "A gap TOUCHING a component means that component is too small or "
+        "misplaced; a gap FAR from every component means one is missing "
+        "entirely. A propeller belongs behind a build flag — in the "
+        "silhouette, never in the aerodynamics.")
 
 
 class _FitResult:
     """What `fit_geometry` returns: values the agent reads, evidence it acts on."""
     def __init__(self, free, values, spread, verdict, before, after,
-                 per_component, railed, seconds, seeds, model_path):
+                 per_component, railed, seconds, seeds, model_path, start=None):
         self.free, self.values, self.spread = free, values, spread
+        self.start = start or {}
         self.verdict, self.before, self.after = verdict, before, after
         self.per_component, self.railed = per_component, railed
         self.seconds, self.seeds, self._model_path = seconds, seeds, model_path
 
+    #: How far seeds may disagree and still be written, as a fraction of span.
+    #: RELAXED ON PURPOSE. Measured across three fits, the spreads form a
+    #: continuous cloud from 0.15% to 8.7% of span with no natural break, so
+    #: any cut is a judgement rather than a discovery. 0.5% kept 2 of 31 --
+    #: strict enough to make the tool useless. 2% is 29 mm on a 1460 mm
+    #: aeroplane, keeps about half, and falls at the widest gap in the
+    #: distribution (1.82 -> 2.03). It is deliberately generous: the spread
+    #: is printed beside every value in millimetres, so a reader who cares
+    #: about a particular dimension can see exactly how well it is pinned and
+    #: overrule this. The filter exists to stop the agent HAND-TYPING values,
+    #: not to be the last word on which are true.
+    SPREAD_LIMIT = 0.02
+
+    #: The same generosity for angles, in degrees. 5 deg is about what a
+    #: reader would shrug at on a dihedral or an incidence; a blade angle
+    #: that came back +/- 73 deg is excluded by this rather than by a
+    #: unit-conversion accident.
+    ANGLE_LIMIT_DEG = 5.0
+
     @property
     def consistent(self):
-        return {k: v for k, v in self.values.items()
-                if self.verdict[k] == "CONSISTENT"}
+        """Values pinned to within SPREAD_LIMIT of span across seeds.
+
+        Spread is measured against the AIRCRAFT, never against the parameter:
+        fin_z = 0.0042 +/- 0.0077 reads as 185% scatter but is 7.7 mm, the
+        same quality of answer as hstab_x at 0.52% -- the ratio only explodes
+        because the value sits near zero.
+        """
+        ref = getattr(self, "span_ref", None)
+        if not ref:
+            return dict(self.values)
+        out = {}
+        for k, v in self.values.items():
+            lim = (self.ANGLE_LIMIT_DEG if (k.endswith("_deg") or "angle" in k)
+                   else self.SPREAD_LIMIT*ref)
+            if self.spread[k] <= lim:
+                out[k] = v
+        return out
 
     def __str__(self):
         w = max(len(k) for k in self.free)
@@ -1420,26 +1535,64 @@ class _FitResult:
              f"{len(self.before)} view(s), {self.seeds} seeds, "
              f"{self.seconds:.0f} s", ""]
         L.append(f"{'parameter'.ljust(w)}  {'start':>10} {'fitted':>10} "
-                 f"{'cross-seed':>12}   verdict")
+                 f"{'per-seed range':>16}   spread")
         for k in self.free:
-            L.append(f"{k.ljust(w)}  {self.free[k][0]:10.4f} "
-                     f"{self.values[k]:10.4f} "
-                     f"{'+/- %.4f' % self.spread[k]:>12}   {self.verdict[k]}")
+            rng = ""
+            if getattr(self, "per_seed", None):
+                vs = [d[k] for d in self.per_seed]
+                rng = f"{min(vs):.4f}..{max(vs):.4f}"
+            L.append(f"{k.ljust(w)}  {self.start.get(k, float('nan')):10.4f} "
+                     f"{self.values[k]:10.4f} {rng:>16}   {self.verdict[k]}")
         L.append("")
         L.append(f"{'view'.ljust(w)}  {'before':>10} {'after':>10}")
         for v in self.before:
             L.append(f"{v.ljust(w)}  {self.before[v]:9.3f}% {self.after[v]:9.3f}%")
-        worse = [c for c, d in self.per_component.items() if d > 0]
         L.append("")
         L.append("every view improved" if all(self.after[v] < self.before[v]
                                               for v in self.before)
                  else "A VIEW GOT WORSE — this is a trade, not a finding")
-        L.append("no component degraded" if not worse
-                 else "COMPONENTS DEGRADED: " + ", ".join(worse) +
-                      " — the total improved while a part got worse; look at it")
-        L.append("no parameter on a bound" if not self.railed
-                 else "ON A BOUND: " + ", ".join(self.railed) +
-                      " — widen it and refit; this is not converged")
+        # WHERE THE CAMERA STARTED, and how well it tracked the aircraft
+        # there. Every number above is measured against these poses, so a
+        # seed that never found the aircraft makes the whole table a
+        # comparison between two wrong things that happen to differ.
+        sf = getattr(self, "seed_fit", None)
+        if sf:
+            L.append("")
+            L.append(f"{'seed pose'.ljust(w)}  {'residual':>10}   from")
+            for v, (pct, bound, hinted) in sf.items():
+                L.append(f"{v.ljust(w)}  {pct:9.3f}%   "
+                         + ("the pose you passed" if hinted else "a cold fit")
+                         + ("  — ON A BOUND" if bound else ""))
+            bad = [v for v, (pct, bound, _h) in sf.items()
+                   if bound or pct > 100*_POSE_DOUBTFUL]
+            if bad:
+                # NOT A REFUSAL. A seed residual this high is EITHER a camera
+                # that missed the aircraft OR a shape wrong enough that no
+                # camera can track it -- and the second case is the one a
+                # geometry fit exists to repair, so refusing here would block
+                # exactly the run that fixes it. The two are told apart by
+                # trying a pose: if a pose you have looked at scores no better,
+                # the shape is the cause.
+                L.append(">>> SEED POSE DOUBTFUL: " + ", ".join(bad) +
+                         ". The seed outline does not track the silhouette, "
+                         "so every number above is measured against a pose "
+                         "no one has seen work. Find a pose with "
+                         "compare_to_photo and pass it as "
+                         "poses={view: (elev, azim, roll)}; if the seed "
+                         "residual stays this high with a pose that looked "
+                         "right, the shape is what is wrong, not the camera.")
+        # The per-component "degraded" flag was removed. It scored each
+        # component by the mean distance from its OUTLINE to the nearest mask
+        # EDGE -- which penalises a component that is correctly buried inside
+        # the silhouette, since none of its outline is near an edge. Measured
+        # on the P-38: the crew nacelle, 78% interior, scored worst of all
+        # nine components while being roughly where it belongs. It also fired
+        # on any increase at all, with no noise floor. Use the overlay.
+        L.append("no parameter near a bound" if not self.railed
+                 else ">>> HELD BY A BOUND: " + ", ".join(self.railed) +
+                      "\n>>> The fit wanted to go further and could not. Widen "
+                      "the bound and refit; the value is yours, not the "
+                      "photograph's.")
         return "\n".join(L)
 
     def apply(self):
@@ -1458,13 +1611,19 @@ class _FitResult:
                               src)
             n += c
         self._model_path.write_text(src)
-        skipped = [k for k in self.free if self.verdict[k] != "CONSISTENT"]
-        return (f"wrote {n} fitted constant(s) to {self._model_path.name}" +
-                (f"; left {len(skipped)} SCATTERED alone: " + ", ".join(skipped)
-                 if skipped else ""))
+        kept = set(self.consistent)
+        skipped = [k for k in self.free if k not in kept]
+        ref = getattr(self, "span_ref", None)
+        lim = (f"{1000*self.SPREAD_LIMIT*ref:.0f} mm" if ref
+               else f"{100*self.SPREAD_LIMIT:.0f}% of span")
+        return (f"wrote {n} fitted constant(s) to {self._model_path.name} "
+                f"(seeds agreed to within {lim})" +
+                (f"; left {len(skipped)} alone, seeds too far apart: "
+                 + ", ".join(skipped) if skipped else ""))
 
 
-def fit_geometry(free, reliability="normal", views=None, _chapter=None):
+def fit_geometry(free, reliability="normal", views=None, poses=None,
+                 _chapter=None):
     """
     Fit named `_model.py` constants to every photograph at once. -> _FitResult
 
@@ -1475,9 +1634,23 @@ def fit_geometry(free, reliability="normal", views=None, _chapter=None):
 
         fit = fit_geometry(free={
             "chord_outb": (0.12, 0.34, "entry 02: real outer TE lies aft"),
-        })
+        }, poses={"threequarter": (24.0, 143.0, -2.0)})
         print(fit)
         fit.apply()
+
+    `poses` SEEDS THE CAMERA, one entry per view, `(elev, azim)` or
+    `(elev, azim, roll)` -- the three numbers `compare_to_photo` prints in its
+    note. Pass the pose of the overlay you actually looked at. The geometry
+    here moves millimetres and the camera does not move at all, so a cold
+    search per view is work already done, and it can settle in a DIFFERENT
+    basin from the picture the free set was chosen off -- at which point the
+    fit and the overlay are answering about two different cameras.
+
+    A seed is not a setting. Elevation and azimuth are still searched +/-25
+    deg around it, scale, translation and perspective distance are fitted
+    from the mask as always, and the search then carries all seven per view
+    alongside the geometry. A hint that is wrong comes back with a worse seed
+    residual -- which is printed -- rather than being believed.
 
     WHAT IS NOT YOURS TO CHOOSE, and why:
       * every reference with a mask is used, always;
@@ -1497,6 +1670,7 @@ def fit_geometry(free, reliability="normal", views=None, _chapter=None):
     """
     import time as _time, numpy as _np, cma as _cma
     from scipy import ndimage as _nd
+    from PIL import Image as _Image
     t0 = _time.time()
     seeds = {"quick": 2, "normal": 3, "careful": 5}[reliability]
 
@@ -1506,88 +1680,282 @@ def fit_geometry(free, reliability="normal", views=None, _chapter=None):
                  next(root.glob("chapters/*/_model.py"))
     src0 = model_path.read_text()
 
+    # BOUNDS ARE OPTIONAL, and usually a mistake. Give either a bare reason
+    #     {"pod_nose": "the nacelle cannot reach the nose"}
+    # or, if you genuinely know a limit, (low, high, why). Invented bounds
+    # silently hold the answer: measured, two parameters in one fit came to
+    # rest against limits their author had guessed, and the fit reported those
+    # guesses as if the photograph had chosen them. A bound you did not derive
+    # from something real is a value you are asserting, not fitting.
+    norm = {}
     for k, spec in free.items():
-        if len(spec) != 3 or not str(spec[2]).strip():
-            raise ValueError(f"{k}: give (low, high, why) — the reason is required")
+        if isinstance(spec, str):
+            why, lohi = spec, None
+        elif len(spec) == 3:
+            lohi, why = (float(spec[0]), float(spec[1])), str(spec[2])
+        else:
+            raise ValueError(f"{k}: give a reason string, or (low, high, why)")
+        if not why.strip():
+            raise ValueError(f"{k}: the reason is required")
         if not re.search(rf"(?m)^{re.escape(k)}\s*=\s*[-\d.eE+]+", src0):
             raise KeyError(f"{k} is not a module-level constant in {model_path.name}")
+        norm[k] = (lohi, why)
+    free = {k: ((v[0][0], v[0][1], v[1]) if v[0] else (None, None, v[1]))
+            for k, v in norm.items()}
 
     names = list(free)
-    lo = _np.array([free[k][0] for k in names], float)
-    hi = _np.array([free[k][1] for k in names], float)
+    _start_tmp = _np.array([float(re.search(rf"(?m)^{re.escape(k)}\s*=\s*([-\d.eE+]+)",
+                                            src0).group(1)) for k in names])
+    # A PHYSICAL FLOOR, NOT A GUESS. Leaving a parameter truly unbounded was
+    # tested and failed badly: three fits returned pod_width = -0.065 m,
+    # fin_height = -0.161 m and hstab_x = 1.798 m -- an aeroplane with
+    # negative-width components and a tailplane 800 mm behind its own tail --
+    # and scored BETTER than the sane model (2.44% against 5.98%). The
+    # assumption that absurd geometry would fail to build or project to
+    # nothing is wrong: AeroSandbox builds it, and a degenerate shape covers
+    # mask pixels cheaply.
+    #
+    # So anything that is a width, height, chord, span or diameter is forced
+    # positive, and a longitudinal station is kept inside a generous envelope.
+    # This is a floor the aircraft imposes, not a guess at where the answer
+    # sits -- which was the other failure mode, where two parameters came to
+    # rest against limits their author had invented.
+    _span = _np.maximum(_np.abs(_start_tmp)*4.0, 0.25)
+    _POSITIVE = ("width", "height", "chord", "semi", "diameter", "radius",
+                 "thick", "span")
+    def _auto_lo(i, k):
+        v = _start_tmp[i]
+        if any(w in k for w in _POSITIVE):
+            return max(0.05*abs(v), 1e-4)        # a positive quantity stays positive
+        if k.endswith("_deg") or "angle" in k:
+            return v - 60.0
+        return v - _span[i]
+
+    def _auto_hi(i, k):
+        v = _start_tmp[i]
+        if k.endswith("_deg") or "angle" in k:
+            return v + 60.0
+        return v + _span[i]
+
+    glo = _np.array([free[k][0] if free[k][0] is not None else _auto_lo(i, k)
+                     for i, k in enumerate(names)], float)
+    ghi = _np.array([free[k][1] if free[k][1] is not None else _auto_hi(i, k)
+                     for i, k in enumerate(names)], float)
     start = _np.array([float(re.search(rf"(?m)^{re.escape(k)}\s*=\s*([-\d.eE+]+)",
-                                        src0).group(1)) for k in names])
+                                       src0).group(1)) for k in names])
+    NG = len(names)
 
     if views is None:
         views = sorted(p.name[:-len(".mask.png")]
                        for p in (root / "_reference").glob("*.mask.png"))
+
+    # GEOMETRY AND POSE ARE SOLVED TOGETHER, IN ONE SEARCH. Fitting the pose
+    # inside each geometry evaluation is the obvious shape and it is
+    # unaffordable: one pose fit is seconds, a geometry search is thousands of
+    # evaluations, and the product is days per seed. Carrying 7 pose
+    # parameters per view alongside the geometry costs one search instead.
     V = {}
     for v in views:
         photo, mask = _reference_image(v)
-        V[v] = dict(mask=mask, nrm=float(_np.sqrt(mask.sum())))
+        H, W = mask.shape
+        work = 200.0
+        sc = work/max(H, W)
+        tw, th = max(1, int(W*sc)), max(1, int(H*sc))
+        tgt = _np.asarray(_Image.fromarray(mask.astype(_np.uint8)*255)
+                          .resize((tw, th), _Image.NEAREST)) > 127
+        te = tgt & ~_nd.binary_erosion(tgt)
+        ys, xs = _np.nonzero(mask)
+        V[v] = dict(mask=mask, nrm=float(_np.sqrt(mask.sum())), sc=sc,
+                    tw=tw, th=th, te=te,
+                    dt=_nd.distance_transform_edt(~te),
+                    cx=xs.mean(), cy=ys.mean(),
+                    ptp=max(_np.ptp(xs), _np.ptp(ys)))
 
-    def build(x):
+    def _build(x):
         src = src0
         for k, val in zip(names, x):
             src = re.sub(rf"(?m)^({re.escape(k)}\s*=\s*)[-\d.eE+]+",
-                          lambda m: m.group(1) + repr(float(val)), src)
+                         lambda m: m.group(1) + repr(float(val)), src)
         g = {}
         exec(compile(src, str(model_path), "exec"), g)
-        return g["airplane"]
+        return g.get("airplane_for_fit", g["airplane"])
 
-    def score(ap, per_part=False):
-        parts = _parts_of(ap)
-        tot, comp = [], {}
-        for v, d in V.items():
-            params, resid, centre, _r = _fit_pose(parts, d["mask"])
-            tot.append(100.0*resid/d["nrm"])
+    # SEED EACH VIEW'S POSE ONCE, cold or from `poses`. THE SEED RESIDUAL IS
+    # REPORTED EITHER WAY. It was discarded here before, which meant a
+    # geometry fit could spend six minutes descending from a camera that never
+    # tracked the aircraft, and nothing in the output said so -- the before
+    # and after columns are both measured against that same bad pose, so they
+    # still improve and the fit still looks like it worked.
+    hints = {}
+    for v, h in dict(poses or {}).items():
+        if v not in V:
+            raise KeyError(f"poses: no view {v!r}; have: {', '.join(V)}")
+        t = tuple(float(x) for x in h)
+        if len(t) not in (2, 3):
+            raise ValueError(f"poses[{v!r}]: give (elev, azim) or "
+                             f"(elev, azim, roll), not {len(t)} numbers")
+        hints[v] = t
+    parts0 = _parts_of(_build(start), resolution=_FIT_RESOLUTION)
+    seed_pose, plo, phi, seed_fit = {}, {}, {}, {}
+    for v, d in V.items():
+        pr, _r0, _c0, _rl = _fit_pose(parts0, d["mask"], hint=hints.get(v))
+        seed_fit[v] = (100.0*_r0/d["nrm"], bool(_rl), v in hints)
+        logit = float(_np.clip(-_np.log(max(19.6/max(pr[6]-0.4, 1e-6) - 1, 1e-9)),
+                               -6.5, 6.5))
+        seed_pose[v] = _np.array([pr[0], pr[1], pr[2], pr[3], pr[4], pr[5], logit])
+        plo[v] = _np.array([pr[0]-20, pr[1]-20, pr[2]-20, pr[3]*0.7,
+                            pr[4]-200, pr[5]-200, -7.0])
+        phi[v] = _np.array([pr[0]+20, pr[1]+20, pr[2]+20, pr[3]*1.3,
+                            pr[4]+200, pr[5]+200,  7.0])
+
+    LO = _np.concatenate([glo] + [plo[v] for v in V])
+    HI = _np.concatenate([ghi] + [phi[v] for v in V])
+    X0 = _np.clip(_np.concatenate([start] + [seed_pose[v] for v in V]),
+                  LO + 1e-6*(HI-LO), HI - 1e-6*(HI-LO))
+
+    def _real(u):
+        return LO + _np.clip(_np.asarray(u), 0, 1)*(HI - LO)
+
+    def _view_cost(parts, centre, v, p7):
+        d = V[v]; sc = d["sc"]
+        pp = (p7[0], p7[1], p7[2], abs(p7[3])*sc, p7[4]*sc, p7[5]*sc,
+              0.4 + 19.6/(1.0 + _np.exp(-p7[6])))
+        m = None
+        for pts, faces in parts:
+            mi = _raster(pts, faces, pp, (d["tw"], d["th"]), centre)
+            m = mi if m is None else (m | mi)
+        if m is None or not m.any():
+            return 500.0
+        me = m & ~_nd.binary_erosion(m)
+        if not me.any():
+            return 500.0
+        return 0.5*(d["dt"][me].mean()
+                    + _nd.distance_transform_edt(~me)[d["te"]].mean())/sc
+
+    def _score(x, per_part=False):
+        """-> (mean normalised %, {view: %}, {component: %})"""
+        try:
+            ap = _build(x[:NG])
+        except Exception:
+            return 1e3, {}, {}
+        parts = _parts_of(ap, resolution=_FIT_RESOLUTION)
+        centre = _np.vstack([p for p, _ in parts]).mean(axis=0)
+        cn = [c.name for c in list(ap.wings) + list(ap.fuselages)]
+        per_view, comp = {}, {}
+        for i, v in enumerate(V):
+            p7 = x[NG + 7*i: NG + 7*i + 7]
+            r = _view_cost(parts, centre, v, p7)
+            per_view[v] = 100.0*r/V[v]["nrm"]
             if per_part:
-                names_c = [c.name for c in list(ap.wings) + list(ap.fuselages)]
-                H, W = d["mask"].shape
-                edge = d["mask"] & ~_nd.binary_erosion(d["mask"])
-                dt = _nd.distance_transform_edt(~edge)
-                for i, (pts, faces) in enumerate(parts):
-                    m = _raster(pts, faces, params, (W, H), centre)
+                d = V[v]; sc = d["sc"]
+                pp = (p7[0], p7[1], p7[2], abs(p7[3])*sc, p7[4]*sc, p7[5]*sc,
+                      0.4 + 19.6/(1.0 + _np.exp(-p7[6])))
+                for j, (pts, faces) in enumerate(parts):
+                    m = _raster(pts, faces, pp, (d["tw"], d["th"]), centre)
                     e = m & ~_nd.binary_erosion(m)
                     if e.any():
-                        comp[names_c[i]] = comp.get(names_c[i], 0.0) + \
-                            float(dt[e].mean())/d["nrm"]*100.0
-        return float(_np.mean(tot)), tot, comp
+                        comp[cn[j]] = comp.get(cn[j], 0.0) + \
+                            100.0*float(d["dt"][e].mean())/sc/d["nrm"]
+        return float(_np.mean(list(per_view.values()))), per_view, comp
 
     def obj(u):
-        x = lo + _np.clip(_np.asarray(u), 0, 1)*(hi - lo)
-        try:
-            m, _t, _c = score(build(x))
-        except Exception:
-            return 1e3
-        return m
+        return _score(_real(u))[0]
 
-    base_m, base_t, base_comp = score(build(start), per_part=True)
-    u0 = _np.clip((start - lo)/(hi - lo), 1e-6, 1-1e-6)
+    # THE BASELINE OPTIMISES THE POSE AT THE STARTING GEOMETRY. Scoring the
+    # start at a cold pose and the finish at a fitted one credits the geometry
+    # with work the camera search did: measured on another aircraft, 85% of an
+    # apparent "improvement" was the optimiser alone, with the model untouched.
+    u0 = (X0 - LO)/(HI - LO)
+    _gfix = X0[:NG].copy()
+    def _obj_pose_only(up):
+        x = X0.copy()
+        x[NG:] = _real(_np.concatenate([u0[:NG], up]))[NG:]
+        return _score(x)[0]
+    _es0 = _cma.CMAEvolutionStrategy(
+        u0[NG:], 0.15, {"bounds": [0, 1], "popsize": 14, "maxiter": 200,
+                        "tolfun": 2e-2, "tolfunhist": 2e-3,
+                        "verbose": -9, "seed": 1})
+    _es0.optimize(_obj_pose_only)
+    X0b = X0.copy()
+    X0b[NG:] = _real(_np.concatenate([u0[:NG], _es0.result.xbest]))[NG:]
+    base_m, base_view, base_comp = _score(X0b, per_part=True)
     results = []
-    for sd in range(1, seeds+1):
+    for sd in range(1, seeds + 1):
         es = _cma.CMAEvolutionStrategy(
-            u0, 0.20, {"bounds": [0, 1], "popsize": 18, "maxiter": 400,
+            u0, 0.18, {"bounds": [0, 1], "popsize": 18, "maxiter": 350,
                        "tolfun": 2e-2, "tolfunhist": 2e-3,
                        "verbose": -9, "seed": sd})
         es.optimize(obj)
-        results.append(lo + _np.clip(es.result.xbest, 0, 1)*(hi - lo))
+        results.append(_real(es.result.xbest))
     R = _np.array(results)
 
-    values = {k: float(R[:, i].mean()) for i, k in enumerate(names)}
+    # THE VALUE IS THE BEST SEED'S COORDINATE, NOT THE MEAN ACROSS SEEDS.
+    # Averaging a coupled geometry produces a configuration no seed ever
+    # visited and no one checked: measured, applying the per-parameter means
+    # of eleven fitted values gave a WORSE overlay (3.42%) than keeping only
+    # the two reproducible ones (3.10%). The mean of three valid aeroplanes
+    # is not necessarily an aeroplane. The spread is still reported — it is
+    # the evidence — but the number you apply is one the optimiser actually
+    # stood on.
+    _scores = [_score(r)[0] for r in R]
+    _best_i = int(_np.argmin(_scores))
+    values = {k: float(R[_best_i, i]) for i, k in enumerate(names)}
     spread = {k: float(R[:, i].std()) for i, k in enumerate(names)}
-    verdict = {k: ("CONSISTENT" if spread[k] <= 0.05*abs(values[k]) + 1e-12
-                   else "SCATTERED") for k in names}
-    railed = [k for i, k in enumerate(names)
-              if abs(values[k]-lo[i]) < 1e-3*(hi[i]-lo[i])
-              or abs(values[k]-hi[i]) < 1e-3*(hi[i]-lo[i])]
+    # NO THRESHOLD, AND NO VERDICT. Two attempts at one failed on the data:
+    #
+    #   * the spread is a CONTINUOUS cloud -- 0.6, 0.9, 1.5, 2.7, 4.5, 4.7,
+    #     5.9, 6.5, 7.0, 7.5 % across three fits -- so any line through it
+    #     separates neighbours that are not different. A 5% line called
+    #     pod_height (4.7%) reproducible and fin_x (5.9%) not.
+    #   * dividing by the value is wrong near zero. fin_z = 0.0042 +/- 0.0077
+    #     reads as 185% scatter; it is 7.7 mm on a 1460 mm aircraft, which is
+    #     tight. The ratio explodes because the value is small.
+    #
+    # So report the spread in the units a reader can judge -- millimetres,
+    # degrees, as a fraction of the SPAN -- and let them decide. The reader
+    # knows what 8 mm means on this aeroplane; the tool does not.
+    _ref = None
+    try:
+        _ap0 = _build(start)
+        _w = [w for w in _ap0.wings if "wing" in w.name.lower()]
+        if _w:
+            _ref = 2*max(abs(float(_np.asarray(x.xyz_le)[1])) for x in _w[0].xsecs)
+    except Exception:
+        pass
+    # UNITS MATTER. A constant named *_deg is an angle, not a length; scaling
+    # its spread by 1000 and calling it millimetres produced "+/- 73150.5 mm"
+    # for a propeller blade angle, which was excluded by accident rather than
+    # by any rule.
+    def _is_angle(k):
+        return k.endswith("_deg") or "angle" in k
+    verdict = {k: (f"+/- {spread[k]:.1f} deg" if _is_angle(k) else
+                   (f"+/- {1000*spread[k]:.1f} mm"
+                    + (f"  ({100*spread[k]/_ref:.2f}% of span)" if _ref else "")))
+               for k in names}
+    # 5% OF THE RANGE, not 0.1%. A parameter resting 1.7% from its bound is
+    # being held there by the bound, and a 0.1% test never fires: measured,
+    # a crew nacelle nose sat 1.7% off its lower bound -- visibly too far aft
+    # in the overlay -- and nothing flagged it.
+    railed = [f"{k} (at its {'lower' if abs(values[k]-glo[i]) < abs(values[k]-ghi[i]) else 'upper'} bound)"
+              for i, k in enumerate(names)
+              if min(abs(values[k]-glo[i]), abs(values[k]-ghi[i]))
+                 < 0.05*(ghi[i]-glo[i])]
 
-    best = R[int(_np.argmin([obj((r - lo)/(hi - lo)) for r in R]))]
-    fin_m, fin_t, fin_comp = score(build(best), per_part=True)
-    before = {v: base_t[i] for i, v in enumerate(V)}
-    after = {v: fin_t[i] for i, v in enumerate(V)}
+    best = R[_best_i]
+    fin_m, fin_view, fin_comp = _score(best, per_part=True)
     per_component = {c: fin_comp.get(c, 0.0) - base_comp.get(c, 0.0)
                      for c in base_comp}
 
-    return _FitResult(free, values, spread, verdict, before, after,
-                      per_component, railed, _time.time()-t0, seeds, model_path)
+    res = _FitResult(free, values, spread, verdict, base_view, fin_view,
+                     per_component, railed, _time.time()-t0, seeds, model_path,
+                     start={k: float(v) for k, v in zip(names, start)})
+    # EVERY SEED'S ANSWER, kept. Reporting only a summary makes a later
+    # comparison impossible: this was discovered the hard way, after three
+    # fits had already discarded theirs.
+    res.span_ref = _ref
+    res.per_seed = [{k: float(R[j, i]) for i, k in enumerate(names)}
+                    for j in range(len(R))]
+    res.per_seed_score = [float(x) for x in _scores]
+    res.best_seed = _best_i
+    res.seed_fit = seed_fit
+    return res
