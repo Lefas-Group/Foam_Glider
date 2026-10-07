@@ -53,7 +53,12 @@ def read_probe_figure(notebook, name=""):
     points -- so `fig.savefig("x.png")` in a probe is readable here by name
     with no path to get right.
     """
-    roots = [notebook.run, notebook.root / "_scratch"]
+    # `<run>/_scratch` too: a probe's cwd is the run directory, so
+    # `savefig("_scratch/x.png")` -- which an older brief asked for -- lands
+    # in a subdirectory of it. A run spent two turns discovering that the file
+    # it had just written could not be read back by name.
+    roots = [notebook.run, notebook.run / "_scratch",
+             notebook.root / "_scratch"]
     found = [p for r in roots if r.is_dir()
              for p in sorted(r.iterdir())
              if p.suffix.lower() in _SUFFIXES

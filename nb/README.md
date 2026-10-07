@@ -232,11 +232,19 @@ one of them draws the aircraft. A target that cannot be hit is a finding, said
 by how much; a tolerance is never loosened, and the model is never fitted to a
 claim.
 
-**The picture comes before the numbers.** The run renders a three-view to
-`_scratch/_probe_fig.png` before it opens the entry, and the assumptions prompt
-shows that file to the person holding the plan. Targets are numbers and numbers
-do not see shape: a reconstruction here passed its mass checks as a smooth pod
-where the real aircraft is a slab-sided foam box.
+**The picture comes before the numbers.** The assumptions prompt lists every
+image the run has drawn, newest first, to the person holding the plan, and says
+`NO PICTURE` when there is none. Targets are numbers and numbers do not see
+shape: a reconstruction here passed its mass checks as a smooth pod where the
+real aircraft is a slab-sided foam box.
+
+It used to name one file, `_probe_fig.png`, and the brief told the run to
+leave a three-view there. A probe's cwd is the run directory, so the brief's
+own `savefig("_scratch/_probe_fig.png")` landed somewhere the prompt did not
+look — and on the F-16 Viper the prompt showed nothing while the run directory
+held a three-view and a photograph overlay, both drawn minutes earlier. Naming
+no file removes the fault and lets the run choose the picture that answers the
+question, which is usually the overlay rather than the three-view.
 
 **`_reference/` is how the real aircraft gets in.** The agent cannot research
 — no network, sandboxed to `chapters/` — so every dimension nobody supplies is

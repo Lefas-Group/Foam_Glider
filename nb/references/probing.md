@@ -61,10 +61,14 @@ tooling by hand; nothing reads one now.
 When a probe needs to LOOK at something, save the figure and read it back:
 
 ```python
-fig.savefig("_scratch/_probe_fig.png", dpi=110, bbox_inches="tight")
+fig.savefig("check.png", dpi=110, bbox_inches="tight")
 ```
 
-then `read_figure` it. Rehearsing cells that are about to become an entry is
+then `read_probe_figure("check.png")` it. The kernel's cwd is the run
+directory, so a bare filename lands where that tool looks and there is no path
+to get right. Name it for what it shows — the assumptions prompt lists these
+files by path, newest first, and a reader picking between them has only the
+name to go on. Rehearsing cells that are about to become an entry is
 better done by writing the entry and rendering it — `render` reports what broke,
 and the freeze is the thing you actually need.
 

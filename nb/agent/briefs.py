@@ -270,11 +270,19 @@ marketing.
 
 # Before you open the entry
 
-**Render a three-view and leave it at `_scratch/_probe_fig.png`.** The
-assumptions prompt shows that file to the person who holds the plan, and it is
-the only chance they get to catch a shape error while it is still cheap --
-before `_model.py` is written into the entry. A run that skips it is asking
-them to approve an aircraft they cannot see.
+**DRAW THE AIRCRAFT.** The assumptions prompt lists every picture this run
+has made -- newest first, by path -- to the person who holds the plan, and it
+is the only chance they get to catch a shape error while it is still cheap,
+before `_model.py` is written into the entry. A run that has drawn nothing
+puts `NO PICTURE` in front of them and asks them to approve a shape they
+cannot see.
+
+There is no filename to get right: `fig.savefig("overlay.png")` in a probe
+lands in the run directory, which is where this reads from. Save the picture
+that ANSWERS THE QUESTION. An overlay on a photograph beats a three-view,
+because it compares the model against the aircraft rather than against the
+reader's memory of it -- unless the note says DOUBTFUL or there is no
+photograph at all, and then the three-view is the only honest thing to show.
 
 Targets are numbers, and numbers do not see shape: a model can hit area, mass
 and wing loading with a completely wrong fuselage. That has happened here --

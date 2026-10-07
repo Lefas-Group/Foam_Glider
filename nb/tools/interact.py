@@ -183,6 +183,34 @@ def _confirm_wait(n):
     return min(_CONFIRM_MAX, stuck.ASK_WAIT + extra)
 
 
+# Image suffixes a probe plausibly writes. Not a general media list: the
+# point is to list what the run DREW, and a `.pdf` or a `.svg` is not
+# something the person at the prompt can glance at in a terminal.
+_FIG_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
+
+
+def _recent_figures(notebook, limit=4):
+    """Images this run has written, newest first. Paths, for a human to open.
+
+    The RUN directory and the notebook's `_scratch/` -- the two places
+    `read_probe_figure` looks, for the same reason: a probe's cwd is the run
+    directory, so `fig.savefig("check.png")` lands there with no path to get
+    right, and `_scratch/` is where the older convention put things.
+    """
+    seen = []
+    # `<run>/_scratch` is in the list because a probe's cwd is the run
+    # directory and the old convention said to save under `_scratch/`, so that
+    # is exactly where a run following the old brief put its figures.
+    for d in (notebook.run, notebook.run / "_scratch",
+              notebook.root / "_scratch"):
+        if not d.is_dir():
+            continue
+        seen += [p for p in d.iterdir()
+                 if p.suffix.lower() in _FIG_SUFFIXES and p.is_file()]
+    seen.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return seen[:limit]
+
+
 def confirm_assumptions(session):
     """
     Show every assumption the probe made, and take corrections.
@@ -227,25 +255,43 @@ def confirm_assumptions(session):
 
     listing = "\n".join(f"{n}. {i.name}: {i.value or i.why}"
                         for n, i in enumerate(assumed, 1))
-    # THE PICTURE, if the run left one. A reconstruct brief is told to render
-    # a three-view to `_scratch/_probe_fig.png` before opening the entry, and
-    # naming it here is the whole of the wiring -- the reader opens it, holds
-    # it beside the plan, and corrects a shape guess while it is still cheap.
+    # THE PICTURES THE RUN HAS MADE, newest first.
     #
-    # WHY IT MATTERS MORE THAN THE NUMBERS BESIDE IT. Measured on
+    # WHY A PICTURE MATTERS MORE THAN THE NUMBERS BESIDE IT. Measured on
     # `20261002-124225-4732`: six assumptions went to this prompt, the window
     # was 480 s, the answer came in 61 s, and ONE was corrected. Not a missing
     # channel and not time -- seven minutes went unused. What was missing was
     # any basis for choosing between `wing dihedral: 2.5 deg` and `vertical
-    # stabilizer area: 6.6 in2`. A three-view is that basis.
+    # stabilizer area: 6.6 in2`. A picture is that basis.
     #
-    # Nothing is required to produce it: a run that leaves no figure gets a
-    # prompt without one, which is the behaviour this has always had.
-    fig = session.notebook.run / "_probe_fig.png"
-    if not fig.exists():
-        fig = session.notebook.root / "_scratch" / "_probe_fig.png"
-    if fig.exists():
-        listing += f"\n\nthree-view: {fig}"
+    # IT USED TO NAME ONE FILE, `_probe_fig.png`, and the brief told the run
+    # to leave a three-view there. Three paths were in play and two were
+    # checked: a probe's cwd is the RUN directory, so the brief's own
+    # `savefig("_scratch/_probe_fig.png")` landed at `<run>/_scratch/`, which
+    # was neither. Measured on the F-16 Viper: when this prompt fired the run
+    # directory already held `probe_three_view.png` and
+    # `overlay_threequarter.png`, both made minutes earlier, and the reader
+    # was shown NEITHER -- five shape guesses were approved against no picture
+    # at all. The run had done the work; the filename was the whole fault.
+    #
+    # So nothing is named and nothing is required. Whatever the run drew is
+    # listed, which also lets it choose the right picture -- the overlay
+    # against the photograph beats a three-view, until the pose is DOUBTFUL
+    # and the orthographic views are the only honest thing to show.
+    #
+    # NEWEST FIRST, capped at four: a run that drew eleven diagnostic plots
+    # should not bury the prompt, and the ones it made last are the ones that
+    # describe the model it is about to declare.
+    figs = _recent_figures(session.notebook)
+    if figs:
+        listing += "\n\npictures this run has made, newest first:\n"
+        listing += "\n".join(f"  {p}" for p in figs)
+    else:
+        # SAID OUT LOUD. Silence here reads as "no picture was wanted"; it
+        # means a run declared a shape nobody can see, and that is a thing to
+        # answer differently -- ask for one before accepting.
+        listing += ("\n\nNO PICTURE: this run has drawn nothing. You are "
+                    "being asked to approve a shape you cannot see.")
     how = ('  Enter accepts.\n'
            '  Correct a VALUE with        "1: 2.5e-4"\n'
            '  Reject the APPROACH with   "1: redo — needs 3-DOF, not point-mass"'
