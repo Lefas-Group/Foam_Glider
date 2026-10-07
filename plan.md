@@ -143,10 +143,33 @@ already enumerates. Fit those instead of guessing them.
 A pose fit is ~20 s; a geometry fit is ~375 s. Iterate structure against the
 cheap one.
 
-Loop: edit `_model.py` -> pose fit on every view -> look at the overlay. Repeat
-until the **completeness check** passes: no region of the mask is far from every
-model component. That check is what catches the missing power pod and the
+Loop: edit `_model.py` -> pose fit on every view -> look at the overlay, and
+run the **completeness check**, which names the regions of the photograph no
+component covers. That is what catches the missing power pod and the
 unmodelled propellers, and it needs no feature identification.
+
+**It has no pass mark, and should not.** Measured on a sound model at a
+correct pose -- IoU 0.77 -- 17.5% of the mask was still uncovered, mostly thin
+slivers along edges. Any fixed gate rejects good work. The output is *where*,
+not *whether*: a compact blob is a component you have not built, a sliver along
+an edge is one you have.
+
+**The pose decides whether the number means anything**, so the check refuses to
+report when the pose is DOUBTFUL:
+
+```
+pose                       resid    uncovered
+correct                    3.07%       17.5%
+30 deg out in azimuth      7.21%       33.4%
+mirrored, from below       6.89%       44.0%
+```
+
+An earlier draft proposed telling a missing component from a bad pose by how
+*concentrated* the gaps are. Measured, that is backwards -- the bad poses were
+more concentrated (88% of the missing area in three regions, against 67% for
+the correct pose), because an ill-posed model leaves one huge contiguous slab
+uncovered. The pose residual already separates the cases cleanly and costs
+nothing; use it.
 
 ### 3. Parameterise broadly, fit broadly, keep selectively
 

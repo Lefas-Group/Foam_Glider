@@ -1330,74 +1330,52 @@ def with_control_surface(airplane, wing_name, name, deflection_deg):
     return out
 
 
-def completeness(airplane, name, hint=None):
+def completeness(airplane, name, tol_frac=0.02):
     """
-    What is in the photograph that no component covers? -> (frac, note)
+    Is anything in the photograph missing from the model? -> (frac, note)
 
-    NO PASS MARK, deliberately, for the same reason `compare_to_photo`
-    returns no score: a threshold here is a number that gets satisfied
-    rather than understood. Measured on a reasonable model at a correct
-    pose -- IoU 0.77 -- 17.5% of the mask was still uncovered, most of it
-    thin slivers along edges plus the propellers the model genuinely
-    lacked. Any fixed gate would have rejected a sound reconstruction.
+    Returns the fraction of mask pixels that no component covers or comes
+    near, with the pose fitted first. This is the check that catches a
+    missing component, which NO target table can: one reconstruction
+    reproduced eight published figures to 0.40% while omitting the power pod
+    entirely, and another ran a whole session against masks containing four
+    propellers the model did not have -- the camera absorbed the difference
+    by shrinking the aeroplane ~10%.
 
-    What this gives you is WHERE. Look at the regions it names, and decide
-    whether each is a component you have not built or a sliver along an
-    edge you have.
-
-    THE POSE DECIDES WHETHER THE NUMBER MEANS ANYTHING. An ill-posed model
-    leaves most of the aircraft uncovered and every region looks missing.
-    Measured on the same model and photograph:
-
-        pose                       resid    uncovered
-        correct                    3.07%       17.5%
-        30 deg out in azimuth      7.21%       33.4%
-        mirrored, from below       6.89%       44.0%
-
-    So this refuses to report when the pose is DOUBTFUL. Pass `hint=` to
-    reuse a pose you have already found with `compare_to_photo`, which is
-    cheaper than fitting again and cannot land somewhere different.
+    It needs no feature identification and no measurement. Run it before
+    fitting geometry: fitting against a mask that contains something the
+    model lacks fits the geometry to that thing.
     """
     import numpy as _np
     from scipy import ndimage as _nd
     photo, mask = _reference_image(name)
     parts = _parts_of(airplane)
-    params, resid, centre, railed = _fit_pose(parts, mask, hint=hint)
-    scale_px = float(_np.sqrt(mask.sum()))
-    pose_pct = 100.0*resid/scale_px
-
-    if railed or pose_pct > 100*_POSE_DOUBTFUL:
-        return None, (
-            f"{name} — CANNOT JUDGE COMPLETENESS: the pose is "
-            f"{pose_pct:.2f}% of sqrt(mask area)"
-            + (f" and {', '.join(railed)} sat on a bound" if railed else "")
-            + ". An ill-posed model leaves most of the aircraft uncovered, "
-              "so every region would look missing. Fix the pose first — "
-              "reseed with hint=(elev, azim, roll) — then ask again.")
-
+    params, resid, centre, railed = _fit_pose(parts, mask)
     H, W = mask.shape
     covered = _np.zeros((H, W), bool)
     for pts, faces in parts:
         covered |= _raster(pts, faces, params, (W, H), centre)
-    slack = max(3, int(0.01*scale_px))
-    missing = mask & ~_nd.binary_dilation(covered, _np.ones((slack, slack)))
+    slack = max(3, int(0.01*_np.sqrt(mask.sum())))
+    near = _nd.binary_dilation(covered, _np.ones((slack, slack)))
+    missing = mask & ~near
     lab, n = _nd.label(missing)
     frac = float(missing.sum())/float(mask.sum())
-    if n == 0:
-        return frac, f"{name} — nothing uncovered. Pose {pose_pct:.2f}%."
-    sizes = _nd.sum(missing, lab, range(1, n+1))
-    order = _np.argsort(sizes)[::-1][:4]
-    cen = _nd.center_of_mass(missing, lab, [int(i)+1 for i in order])
-    big = ", ".join(
-        f"(x={c[1]:.0f}, y={c[0]:.0f}) {100*sizes[i]/mask.sum():.1f}%"
-        for i, c in zip(order, cen))
-    return frac, (
-        f"{name} — pose {pose_pct:.2f}% (good). {100*frac:.1f}% of the mask "
-        f"is uncovered, in {n} region(s). Largest: {big}. "
-        "Draw the overlay and LOOK at these: a compact blob is a component "
-        "you have not built, a thin sliver along an edge is one you have. "
-        "A propeller belongs behind a build flag — in the silhouette, never "
-        "in the aerodynamics.")
+    note = (f"{name} — {100*frac:.1f}% of the mask is not covered by any "
+            f"component, in {n} region(s). ")
+    if frac <= tol_frac:
+        note += "Complete enough to fit against."
+    else:
+        sizes = _nd.sum(missing, lab, range(1, n+1))
+        big = sorted(sizes)[::-1][:3]
+        cen = _nd.center_of_mass(missing, lab,
+                                 [int(_np.argsort(sizes)[::-1][i])+1
+                                  for i in range(min(3, n))])
+        note += ("INCOMPLETE — the model is missing something the photograph "
+                 "has. Largest gaps at " +
+                 ", ".join(f"(x={c[1]:.0f}, y={c[0]:.0f}, {s:.0f} px)"
+                           for c, s in zip(cen, big)) +
+                 ". Add the component; do not fit geometry against this.")
+    return frac, note
 
 
 class _FitResult:

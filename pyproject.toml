@@ -30,6 +30,11 @@ nb = [
     # correct and macOS Terminal.app ignores it, so the dimming never appeared.
     # rich asks the terminal what it supports, and strips styling when piped.
     "rich>=13",
+    # CMA-ES. Replaces a hand-rolled 36-seed grid + Nelder-Mead in _fit_pose:
+    # the grid failed every cold start on an oblique view (42-65 deg elevation
+    # against a true 24), and 40x more seeds did not fix it -- the ranking was
+    # wrong, not the density. CMA-ES also has no zero-seeded-simplex trap.
+    "cma>=4",
 ]
 # Pinned to 1.x: the vendored server uses mcp.server.fastmcp.FastMCP,
 # which 2.x renamed to MCPServer.

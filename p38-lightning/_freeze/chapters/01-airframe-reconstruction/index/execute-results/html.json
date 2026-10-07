@@ -1,0 +1,12 @@
+{
+  "hash": "0b4563f0386aade90721da6f8a54b8b0",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: \"Airframe reconstruction\"\n# The sidebar's `auto:` does not sort without this -- it falls back to readdir\n# order, which is a hash of the directory names (rule 33).\norder: 1\nlisting:\n  id: entries\n  contents: \"20*.qmd\"\n  type: table\n  fields: [title]\n  # By filename, which starts with the date -- entries carry no `date:` of their\n  # own, and within a chapter alphabetical order IS chronological order.\n  sort: \"filename\"\n  # A plain table. Chronological is the only order an append-only record has,\n  # and a filter over three rows is furniture.\n  filter-ui: false\n  sort-ui: false\n  field-display-names:\n    title: \"Entries\"\n---\n\n\n\n\n::: {.callout-note collapse=\"true\"}\n## In force here, from earlier (16)\n\n**Inherited user specifications**\n\n1. **FT Master Series P-38 Lightning MkR2**, Flite Test.\n2. **Twin boom**, central crew nacelle, twin fins.\n3. **Tailplane** spans between the two booms.\n4. **Two tractor motors**, one at each boom nose.\n5. **Power Pack C Twin**: two motors, two ESCs.\n6. **Battery**: 2200-3300 mAh 3S LiPo.\n7. **Maker Foam**, 8 laser-cut sheets, folded and glued.\n8. **Four channels** minimum; aileron, elevator, rudder.\n9. **Build level challenging**, flying level medium.\n\n**Inherited assumptions**\n\n1. **No plan sheet**: Flite Test sell these plans.\n2. **Length not published**; fit it, declare it.\n3. **Dry weight not published**; no independent scale check.\n4. **Wing area not published**; derive it and declare it.\n5. **Chords, taper, boom stations fitted** to the photograph.\n6. **Airfoil**: flat foam plate, a declared stand-in.\n7. **One photograph only**; no cross-view check available.\n\n:::\n\n\n\n::: {#entries}\n:::\n\n::: {.callout-note collapse=\"true\"}\n## `_model.py`\n\n```python\n##### Imports\n\nimport aerosandbox as asb\nimport aerosandbox.numpy as np\n\n\n##### Vehicle\n\n```\n:::\n\n::: {.callout-note collapse=\"true\"}\n## `_analysis.py`\n\n```python\n\n```\n:::\n\n\n\n",
+    "supporting": [
+      "index_files"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}

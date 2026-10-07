@@ -466,6 +466,58 @@ every probe loads. Build the model, then:
 then `read_probe_figure("check.png")` AND LOOK AT IT. Usable photographs:
 %s.
 
+## Before you fit anything: is the model COMPLETE?
+
+    frac, note = completeness(airplane, "VIEW", hint=the_pose_you_found)
+    print(note)
+
+It names the regions of the photograph that no component covers. A
+reconstruction once reproduced eight published figures to 0.40%% while
+missing its power pod entirely, and no target table can catch that. Fix what
+it names before fitting geometry: fitting against a silhouette containing
+something the model lacks fits the model to that thing.
+
+There is NO pass mark, on purpose. A sound model at a correct pose still
+showed 17.5%% uncovered -- mostly thin slivers along edges -- so any fixed
+gate would reject good work. Look at the regions instead: a compact blob is
+a component you have not built, a sliver along an edge is one you have.
+
+It refuses to answer when the pose is DOUBTFUL, because an ill-posed model
+leaves most of the aircraft uncovered and then everything looks missing.
+Pass the pose you already found.
+
+A component the real aircraft has but the AERO model must not have -- a
+propeller, whose drag the propulsion model already counts -- goes behind a
+build flag, so the silhouette can carry it and the aerodynamics cannot:
+
+    def build(props: bool = False) -> asb.Airplane: ...
+    airplane         = build()            # what flies
+    airplane_for_fit = build(props=True)  # what the camera sees
+
+## Fitting dimensions the brief does not publish
+
+Published figures are INPUTS -- never fit span, length, or anything else the
+brief states. Everything you would otherwise invent can be fitted instead:
+
+    fit = fit_geometry(free={
+        "chord_outb": (0.12, 0.34, "the outer trailing edge sits aft of the model's"),
+    })
+    print(fit)        # values, cross-seed spread, a verdict per parameter
+    fit.apply()       # writes the CONSISTENT ones into _model.py
+
+Every free parameter needs a written reason, because a parameter freed
+because a finding pointed at it is evidence and one freed because it moved
+the number is not. It runs several seeds and reports the spread: CONSISTENT
+means the photographs constrain that dimension, SCATTERED means they do not
+and it stays a declared guess. **Never type a fitted number yourself** --
+`apply()` writes them, which is how the number in the model stays the number
+the fit produced.
+
+Refit only for a structural reason -- a parameter on a bound, a SCATTERED
+parameter to drop, a component the completeness check named. Refitting
+because you would like a better number is the one thing this machinery is
+built to prevent.
+
 It fits the camera itself, by chamfer distance, and draws each component in
 its own colour: filled where it faces you, solid on its outline, faint where
 it sits behind something else. There is no score, on purpose -- a number
