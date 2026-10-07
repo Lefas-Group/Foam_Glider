@@ -20,3 +20,5 @@ assumed:
   - fuselage-loft: Fuselage loft cross-sections fitted to store photographs.
   - empennage-geometry: Tail surfaces geometry fitted to store photographs.
   - mass-prediction: Dry mass predicted from cut area and catalogue components.
+overwrites:
+  - brief/edf-static-thrust: 22.0 N Powerfun 70 mm 6S bench rating.

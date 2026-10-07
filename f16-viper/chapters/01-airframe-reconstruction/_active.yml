@@ -17,6 +17,7 @@ specified:
   - brief/power-70-mm: **Power**: 70 mm 12-blade EDF, 2300 kV.
   - brief/esc-skywalker-80: **ESC**: SkyWalker 80 A continuous, 100 A burst.
   - brief/battery-4000-mah: **Battery**: 4000 mAh 6S, carried internally.
+  - brief/battery-mass-650: **Battery mass**: 650 g for a 4000 mAh 6S.
   - brief/airframe-maker-foam: **Airframe**: Maker Foam, laser-cut, folded and glued.
   - brief/foam-areal-density: **Maker Foam**: 5 mm, 0.293 kg/m2 areal density.
   - brief/layout-blended-cropped: **Layout**: blended cropped delta, single fin, all-moving stabilators.

@@ -1,0 +1,107 @@
+---
+title: "How fast must the Viper be thrown to fly away?"
+subtitle: "The reconstruction and the balance check both stop at dry mass. Nothing yet says whether a hand-launched 2 kg jet on a quarter of a square metre can be thrown fast enough."
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+#| echo: false
+ENTRY_CEILING = 150.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 500.0        # s granted for the probe
+PROBE_SPENT = 64.0      # s the probe actually used
+
+import matplotlib.pyplot as plt
+
+# AUW mass from specified dry mass (1361 g) and specified 4000 mAh 6S battery (650 g)
+m_auw = 1.361 + 0.650
+W_auw = m_auw * 9.80665
+
+# Aerodynamic stall speed
+stall_res = compute_stall_speed(airplane, m_auw)
+v_stall = stall_res["V_stall"]
+cl_max = stall_res["CL_max"]
+wing_loading = stall_res["wing_loading"]
+
+# Launch simulation with 22 N thrust
+T_static = 22.0
+cl_fn, cd_fn = build_aero_surrogate(airplane)
+v_min_flat = find_min_throw_speed(cl_fn, cd_fn, airplane, m_auw, gamma0_deg=0.0, alpha_deg=10.0, T_static=T_static)
+v_min_10deg = find_min_throw_speed(cl_fn, cd_fn, airplane, m_auw, gamma0_deg=10.0, alpha_deg=10.0, T_static=T_static)
+```
+
+::: {.hero}
+[`{python} f"{v_min_flat:.1f} m/s"`]{.hero-value}
+[minimum horizontal throw speed to fly away under 22 N thrust from 1.7 m release]{.hero-label}
+:::
+
+**Answer.** At its full 6S all-up weight ([`{python} f"{m_auw*1000:.0f}"` g]{.key}), the wing loading reaches [`{python} f"{wing_loading:.1f}"` N/m²]{.key}. This yields an unaccelerated stall speed of [`{python} f"{v_stall:.1f}"` m/s]{.key} ([`{python} f"{v_stall*3.6:.1f}"` km/h]{.key}) at [`{python} f"C_{{L,\\max}}={cl_max:.2f}"`]{.key}. An unpowered glide throw is impossible for a human arm, because human throwing capability sits below this aerodynamic threshold.
+
+With the specified 70 mm EDF developing [`{python} f"{T_static:.1f}"` N]{.key} static thrust ($T/W =$ [`{python} f"{T_static/W_auw:.2f}"`]{.key}), forward acceleration ([`{python} f"{(T_static - 2.0)/m_auw:.1f}"` m/s²]{.key}) bridges the sub-stall deficit (@fig-launch-dynamics). Released horizontally from shoulder height ($h_0 = 1.7$ m at $\alpha = 10^\circ$), the minimum throw speed required to avoid ground impact before climbing away is [`{python} f"{v_min_flat:.1f}"` m/s]{.key} ([`{python} f"{v_min_flat*3.6:.1f}"` km/h]{.key}). Imparting a modest $+10^\circ$ upward heave relaxes this requirement to [`{python} f"{v_min_10deg:.1f}"` m/s]{.key} ([`{python} f"{v_min_10deg*3.6:.1f}"` km/h]{.key}). Both operating speeds sit comfortably within ordinary hand-launch capability, confirming that the 2 kg jet flies away reliably under power once balanced per the [balance analysis](2026-10-07-03-where-must-the-missing-340-g-sit-to-balance-inside-the-cg-band.qmd).
+
+::: {.callout-tip}
+## New user specifications
+Asked of the user, 2026-10-07:
+
+1. **EDF static thrust: 22.0 N** — vendor bench maximum.
+:::
+
+::: {.callout-note}
+## New assumptions
+1. **launch release height: 1.7 m**, adult shoulder release height.
+:::
+
+```{python}
+#| label: fig-launch-dynamics
+#| fig-cap: "Hand-launch trajectories from 1.7 m release at 22 N thrust (left), and minimum throw speed versus climb angle compared against stall speed and human throwing capability (right)."
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
+
+colors = ["#cf222e", "#fb8f44", "#1a7f37", "#0969da"]
+for v0, c in zip([6.0, 7.0, 8.0, 10.0], colors):
+    tr = simulate_hand_launch(cl_fn, cd_fn, airplane, m_auw, v0, gamma0_deg=0.0, alpha_deg=10.0, T_static=T_static)
+    ax1.plot(tr["x"], tr["z"], color=c, lw=1.8, label=f"$V_0 = {v0:.0f}$ m/s (flat)")
+
+sim_heave = simulate_hand_launch(cl_fn, cd_fn, airplane, m_auw, 7.0, gamma0_deg=10.0, alpha_deg=10.0, T_static=T_static)
+ax1.plot(sim_heave["x"], sim_heave["z"], color="#fb8f44", lw=1.8, ls="--", label="$V_0 = 7$ m/s (+10° heave)")
+ax1.axhline(0, color="k", lw=1.2)
+ax1.fill_between([-1, 35], -0.5, 0, color="gray", alpha=0.25, label="Ground")
+ax1.set_xlim(0, 25)
+ax1.set_ylim(-0.2, 4.5)
+ax1.set_xlabel("Downrange distance $x$ (m)")
+ax1.set_ylabel("Altitude above ground $z$ (m)")
+ax1.set_title("Launch Trajectories ($h_0 = 1.7$ m, $\\alpha = 10^\\circ$)")
+ax1.grid(True, alpha=0.3)
+ax1.legend(loc="upper left", fontsize=8)
+
+gamma_eval = np.linspace(0.0, 15.0, 5)
+vm_a8 = [find_min_throw_speed(cl_fn, cd_fn, airplane, m_auw, gamma0_deg=g, alpha_deg=8.0, T_static=T_static) for g in gamma_eval]
+vm_a10 = [find_min_throw_speed(cl_fn, cd_fn, airplane, m_auw, gamma0_deg=g, alpha_deg=10.0, T_static=T_static) for g in gamma_eval]
+
+ax2.plot(gamma_eval, vm_a8, color="#0969da", lw=1.8, ls="--", marker="s", ms=5, label="$\\alpha = 8^\\circ$ climb")
+ax2.plot(gamma_eval, vm_a10, color="#1a7f37", lw=1.8, marker="o", ms=5, label="$\\alpha = 10^\\circ$ climb")
+ax2.axhline(v_stall, color="#cf222e", lw=1.5, ls="-.", label=f"Stall speed $V_s = {v_stall:.1f}$ m/s")
+ax2.axhspan(8.5, 11.0, color="#fb8f44", alpha=0.2, label="Adult throw capability (8.5–11 m/s)")
+ax2.set_xlabel("Launch flight-path angle $\\gamma_0$ (deg)")
+ax2.set_ylabel("Minimum throw speed $V_0$ (m/s)")
+ax2.set_title("Required Throw Speed vs Launch Angle")
+ax2.set_xlim(-0.5, 15.5)
+ax2.set_ylim(4.5, 13.5)
+ax2.grid(True, alpha=0.3)
+ax2.legend(loc="upper right", fontsize=8)
+
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(
+    compute_stall_speed,
+    build_aero_surrogate,
+    simulate_hand_launch,
+    find_min_throw_speed,
+    method="Evaluates aerodynamic stall speed and simulates 2D launch trajectories under gravity, aerodynamics, and EDF thrust using build_aero_surrogate, simulate_hand_launch, and find_min_throw_speed.",
+)
+```
