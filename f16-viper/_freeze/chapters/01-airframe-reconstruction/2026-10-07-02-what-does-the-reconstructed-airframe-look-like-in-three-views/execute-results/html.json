@@ -1,0 +1,12 @@
+{
+  "hash": "1be6bf148ca48b561c7756fa8169e797",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: \"What does the reconstructed airframe look like in three views?\"\nsubtitle: \"The reconstruction was checked only against two pose-fitted photographs. Nobody has yet seen the shape itself drawn straight, and every later chapter forks this geometry.\"\n---\n\n\n\n\n**Answer.** The orthographic drawing (@fig-three-view) reveals the reconstructed F-16 airframe in side elevation ($X$–$Z$), front elevation ($-Y$–$Z$), plan view ($X$–$Y$), and isometric projection. Unlike the oblique photographic poses evaluated during the [initial reconstruction](2026-10-07-01-can-we-reconstruct-the-ft-f-16-viper-within-tolerance.qmd), the orthogonal views clearly display the compound delta geometry: leading-edge root strakes swept at [72\\.3°]{.key} transition smoothly into outboard wings swept at [36\\.8°]{.key} spanning [914 mm]{.key}. The profile captures key Viper features, including the underslung chin intake cowl, bubble canopy, dorsal spine, single vertical fin with fillet ([210 mm]{.key} tall), twin canted ventral strakes, and all-moving stabilators ([525 mm]{.key} span) set at anhedral.\n\n::: {#cell-fig-three-view .cell execution_count=3}\n``` {.python .cell-code}\nimport matplotlib.pyplot as plt\n\nairplane.draw_three_view(show=False)\nplt.show()\n```\n\n::: {.cell-output .cell-output-display}\n![Standard orthographic three-view diagram and isometric projection of the reconstructed airframe, showing side elevation, front elevation, planform, and 3D layout.](2026-10-07-02-what-does-the-reconstructed-airframe-look-like-in-three-views_files/figure-html/fig-three-view-output-1.png){#fig-three-view width=1896 height=1896}\n:::\n:::\n\n\n::: {.callout-note collapse=\"true\"}\n## What the code does\n\nDraws orthographic three-view projections and isometric layout of the reconstructed airplane geometry using AeroSandbox Airplane.draw_three_view.\n:::\n\n[Rendered in 2.1 s (limit 150 s) · explored in 8 s (limit 400 s)]{.runtime}\n\n\n",
+    "supporting": [
+      "2026-10-07-02-what-does-the-reconstructed-airframe-look-like-in-three-views_files"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}

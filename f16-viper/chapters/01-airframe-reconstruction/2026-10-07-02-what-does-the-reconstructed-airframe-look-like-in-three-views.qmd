@@ -1,0 +1,46 @@
+---
+title: "What does the reconstructed airframe look like in three views?"
+subtitle: "The reconstruction was checked only against two pose-fitted photographs. Nobody has yet seen the shape itself drawn straight, and every later chapter forks this geometry."
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+#| echo: false
+ENTRY_CEILING = 150.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 400.0        # s granted for the probe
+PROBE_SPENT = 7.6      # s the probe actually used
+
+# Planform leading-edge sweep angles
+dx_strake = wing_x_break - wing_x_root
+dy_strake = wing_y_break - wing_y_root
+sweep_strake_deg = np.arctan2(dx_strake, dy_strake) * 180 / np.pi
+
+dx_wing = wing_x_tip - wing_x_break
+dy_wing = wing_semi_span - wing_y_break
+sweep_wing_deg = np.arctan2(dx_wing, dy_wing) * 180 / np.pi
+
+# Empennage dimensions
+hstab_span = hstab.span(include_centerline_distance=True)
+vstab_height = vstab_z_tip - vstab_z_fillet
+```
+
+**Answer.** The orthographic drawing (@fig-three-view) reveals the reconstructed F-16 airframe in side elevation ($X$–$Z$), front elevation ($-Y$–$Z$), plan view ($X$–$Y$), and isometric projection. Unlike the oblique photographic poses evaluated during the [initial reconstruction](2026-10-07-01-can-we-reconstruct-the-ft-f-16-viper-within-tolerance.qmd), the orthogonal views clearly display the compound delta geometry: leading-edge root strakes swept at [`{python} f"{sweep_strake_deg:.1f}"`°]{.key} transition smoothly into outboard wings swept at [`{python} f"{sweep_wing_deg:.1f}"`°]{.key} spanning [`{python} f"{wing_span*1000:.0f}"` mm]{.key}. The profile captures key Viper features, including the underslung chin intake cowl, bubble canopy, dorsal spine, single vertical fin with fillet ([`{python} f"{vstab_height*1000:.0f}"` mm]{.key} tall), twin canted ventral strakes, and all-moving stabilators ([`{python} f"{hstab_span*1000:.0f}"` mm]{.key} span) set at anhedral.
+
+```{python}
+#| label: fig-three-view
+#| fig-cap: "Standard orthographic three-view diagram and isometric projection of the reconstructed airframe, showing side elevation, front elevation, planform, and 3D layout."
+import matplotlib.pyplot as plt
+
+airplane.draw_three_view(show=False)
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(
+    method="Draws orthographic three-view projections and isometric layout of the reconstructed airplane geometry using AeroSandbox Airplane.draw_three_view.",
+)
+```
