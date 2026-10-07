@@ -187,7 +187,7 @@ components sum — were each one `api_search` away. It never searched.
   and `open_entry` freezes that number as the entry's render cost — measured,
   not estimated, which is why it is not something you are asked for.
 
-# The 45 rules lint checks
+# The 46 rules lint checks
 
 Know these before drafting, not after. Finding one from a lint run means the
 prose is already written.
@@ -236,6 +236,7 @@ prose is already written.
 42  a cell labelled `tbl-…` renders a table — `md_table(header, rows)`, never a trailing DataFrame
 43  (warning) counts the constants `_model.py` fixes against the inputs you declared
 44  (warning) a DERIVED target is not written into `_model.py` — it must fall out
+45  (warning) bind an overlay's note and say what it says — and do not cite a hedged one
 46  the entry carries the question's justification, verbatim, as its `subtitle`
 47  `footer(…)` carries `method="…"` — what your code computes, ≤ 60 words
 ```
