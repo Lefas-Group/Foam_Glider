@@ -1,6 +1,0 @@
----
-title: "Does it trim?"
-subtitle: "Everything downstream rests on trim and nothing has checked it."
----
-
-**Answer.** Yes.
