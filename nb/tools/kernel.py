@@ -18,16 +18,30 @@ what a probe printed before it was killed has already arrived.
 
 WHAT MAKES THIS SAFE, and none of it is optional:
 
-  1  A BUDGET KILL KILLS THE KERNEL. `budgets.py` records the measurement that
-     settles it -- a signal cannot stop a CasADi solve, landing at 1.15 s
-     against a 0.3 s limit, so the stop was always a process kill. Keeping it
-     one means state cannot survive a kill. That is the difference between this
-     and a wrong answer: the run that motivated the kernel monkey-patched a mass
-     function into `optimize_geometry_for_sink_rate.__globals__` and restored it
-     afterwards, and the probe that was killed died WITH THE PATCH INSTALLED.
-     A kernel that survived its own kill would have handed the next probe a
-     silently wrong baseline. Restart-on-kill degrades exactly to the old
-     behaviour at the moment the old behaviour was the safe one.
+  1  A BUDGET KILL INTERRUPTS FIRST, AND KEEPS THE NAMESPACE IF THAT WORKS.
+     This reverses an earlier decision, so both halves are on the record.
+
+     It used to kill the kernel outright, for a real failure: the run that
+     motivated the kernel monkey-patched a mass function into
+     `optimize_geometry_for_sink_rate.__globals__` and restored it afterwards,
+     and the probe that was killed died WITH THE PATCH INSTALLED. A kernel
+     that survives its own kill hands the next probe that patch.
+
+     What changed is the measured cost of the other side. On the F-16 Viper
+     reconstruction three probes were killed on budget inside a pose fit, and
+     the restart cost the run its model: the next probe died on
+     `NameError: name 'ap' is not defined` and the rebuild came out of the
+     same pool that had just been overspent. A long tool call is exactly where
+     a budget kill lands, and it was being punished twice.
+
+     So: SIGINT, wait for idle, and prove the kernel still executes. If it
+     comes back, the namespace is kept and the probe's output SAYS SO, and
+     says what the hazard is -- a killed probe can leave a global patched or
+     an object half-built, and `reset=True` is the way out. If the interrupt
+     does not land -- a CasADi solve does not take a signal, which is why the
+     stop was a process kill in the first place -- the kernel is shut down and
+     the restart is announced exactly as before. The budget is still absolute;
+     only the namespace survives, and only when the kernel proved it is sane.
 
   2  A CHAPTER-SOURCE CHANGE RESTARTS THE KERNEL. The same run edited
      `_analysis.py` and probed it two turns later. A kernel holds the old
@@ -227,11 +241,40 @@ class Kernel:
                   and content.get("execution_state") == "idle"):
                 return "".join(out), False
 
+    def _interrupt(self, wait_s=15.0):
+        """SIGINT the running cell and KEEP the namespace. -> did it come back?
+
+        Two things have to be true before the namespace can be trusted again:
+        the kernel has to go idle, and it has to execute something afterwards.
+        An interrupt that only does the first leaves a kernel that answers the
+        status channel and nothing else, which would hand every later probe a
+        timeout instead of a result.
+        """
+        import queue
+        try:
+            self.km.interrupt_kernel()
+        except Exception:
+            return False
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < wait_s:
+            try:
+                msg = self.kc.get_iopub_msg(timeout=POLL_S)
+            except queue.Empty:
+                continue
+            if (msg["msg_type"] == "status"
+                    and msg["content"].get("execution_state") == "idle"):
+                break
+        else:
+            return False
+        out, killed = self._run("pass", 10.0)
+        return not killed
+
     def execute(self, code, deadline_s):
         started = time.perf_counter()
         out, killed = self._run(code, deadline_s)
         elapsed = time.perf_counter() - started
         if killed:
+            kept = self._interrupt()
             # The wording the in-process watchdog used, kept deliberately: the
             # model has met this stop before, and it names the three real ways
             # out without naming the one that turns a guard into a formality.
@@ -243,9 +286,20 @@ class Kernel:
                     f"arm instead of a sweep;\n"
                     f"   - ask the user for more time, with a bigger budget_s "
                     f"or a bigger pool.\n"
-                    f" Anything printed before the kill is above; the kernel "
-                    f"is restarted, so nothing is held.]")
-            self.shutdown()
+                    f" Anything printed before the kill is above")
+            if kept:
+                # SAID OUT LOUD, for the reason a restart is: the model is
+                # about to reuse names from a probe that did not finish.
+                out += (", and the kernel was interrupted rather than "
+                        "restarted, so names from EARLIER probes are still "
+                        "held. Nothing this probe was part-way through "
+                        "completed -- a global it patched is still patched, "
+                        "an object it was building is half-built. If the next "
+                        "result has to be clean, probe with `reset=True`.]")
+            else:
+                out += (", and the interrupt did not land, so the kernel was "
+                        "restarted and nothing is held.]")
+                self.shutdown()
         return out, elapsed
 
     def held(self):

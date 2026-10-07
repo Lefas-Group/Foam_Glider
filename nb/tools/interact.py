@@ -1118,6 +1118,12 @@ def open_entry(session, title, inputs_none_because=""):
         for i in session.inputs.values())
     return briefs.WRITE.format(
         chapter=session.chapter, stem=stem, today=today,
+        title=title,
+        # QUOTED BACK AT THE MOMENT OF WRITING, not only in the opening brief.
+        # It is two sentences the model has to reproduce exactly, and by here it
+        # is twenty turns of probe output upstream.
+        why=" ".join(str(getattr(session, "justification", "") or "").split())
+            or "Not recorded: this run was launched without one.",
         ceiling=f"{(ceiling if ceiling is not None else default_ceiling or 200.0):.1f}",
         solve=f"{(default_solve or 60.0):.1f}",
         pool=f"{total:.1f}", spent=f"{max(0.0, total - left):.1f}",

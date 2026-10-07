@@ -207,7 +207,7 @@ A notebook can start from a real aeroplane rather than from a blank sheet, and
 reconstructing one is a DIFFERENT ACTIVITY from answering a question. Answering
 a question is done once; converging a model onto a published spec sheet is
 iterate-to-tolerance — which the ordinary contract is built to refuse (rule 5
-bans a `range()` loop around a solve, rule 6 caps prose at 100 words) and whose
+bans a `range()` loop around a solve, rule 6 caps prose at 200 words) and whose
 closing gate is "targets met" rather than "lint clean".
 
 So it is a third BRIEF into the same machinery, not a second system:
@@ -272,11 +272,21 @@ pose, hides the same faults, and costs a turn to confirm what the first
 already said. Launch compares the masks and warns above IoU 0.80. Measured on
 the Mini Explorer at 0.88 — the same studio shot with a decal set added.
 
-Two rules exist for this path. **43** (warning) counts the numeric constants
-`_model.py` fixes against the inputs the chapter declares. **44** (warning)
-catches a DERIVED target written back into `_model.py` as a literal — a
-reconstruction that reported 0.54% worst error across eight published targets
-had assigned seven of them, five to an exact 0.00%.
+Three rules exist for this path. **43** (warning) counts the numeric
+constants `_model.py` fixes against the inputs the chapter declares. **44**
+(warning) catches a DERIVED target written back into `_model.py` as a literal
+— a reconstruction that reported 0.54% worst error across eight published
+targets had assigned seven of them, five to an exact 0.00%. **45** (warning)
+catches an entry resting on a camera fit the tool itself hedged: the F-16
+Viper reconstruction printed "not the best basin this photograph has" into
+the page and wrote that the overlay confirms the planform.
+
+A published DIMENSION is neither kind of target. Span and length SET the
+model and make the silhouette fit identifiable at all — with span free, size
+trades against camera distance — so they belong in the brief's `specified:`
+block, or in `targets:` marked `(given)`. Converging on one is not a check:
+the same F-16 run built a wing, got 734 mm, solved for the tip station that
+makes `span()` return the published 914, and reported 0.39% worst error.
 
 ## Budgets
 

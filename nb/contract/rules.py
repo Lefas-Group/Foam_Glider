@@ -39,6 +39,8 @@ from .shared import (
     _visuals_of, body_prose, callouts_of, code_of, declared_items,
     entry_calls, entry_cells, fixed_count_solves, limits_of, notebook_items,
     prose_of, read_fork, read_inputs, rendered_by_footer, words,
+    MAX_JUSTIFICATION, MAX_METHOD_SUMMARY, after_cut_in, method_summary,
+    subtitle_of,
 )
 
 
@@ -2112,3 +2114,177 @@ def _derived_target_assigned(root, chapters, entries):
                     f"measurement the model should be calibrated to rather "
                     f"than predict, mark the row `(given)` in the brief")))
     return out
+
+
+@register(45)
+def _overlay_verdict_dropped(root, chapters, entries):
+    """
+    Rule 45, a warning. An overlay is shown and its verdict is not.
+
+    `compare_to_photo` and `show_comparison` return NO SCORE, deliberately --
+    a number there is a number that gets optimised. What they return instead
+    is a note, and the note is the only statement of whether the picture can
+    be read at all: `POSE NOT CONVERGED` when a parameter sat on a bound,
+    `Pose: DOUBTFUL` when the outline is not tracking the aircraft, and `Not
+    the best basin this photograph has` when the residual is above 1% and
+    another seed usually does better.
+
+    TWO WAYS TO SHIP A PICTURE NOBODY CAN TRUST, and this catches both.
+
+    The note is THROWN AWAY. The F-16 Viper reconstruction wrote
+    `show_comparison(airplane, "threequarter", hint=(19.6, 208.2, -14.9))` as
+    a bare statement. `_notebook.py` turns the last-expression echo off, so
+    the string went nowhere: the run had been told in its probe that a better
+    basin existed, the page showed the overlay with no verdict beside it, and
+    the prose said the overlay "confirms planform and tail alignment". Bind it
+    -- `note = show_comparison(...)` -- and put what it says on the page, as
+    the Tubby B-17 entry does by parsing the residual into its hero line.
+
+    The note is PRINTED AND HEDGED. Then the rendered page carries the tool's
+    own warning, and the warning is the finding: refit from another seed, or
+    say in the prose what the note said.
+
+    A WARNING for both. The remedy for the second is one more fit, which
+    costs pool, and that is a judgement; the remedy for the first is one line.
+    """
+    import ast as _ast
+    from .shared import entry_cells
+    DRAWS = ("compare_to_photo", "show_comparison")
+    HEDGES = ("POSE NOT CONVERGED", "Pose: DOUBTFUL",
+              "Not the best basin this photograph has")
+    out = []
+    for f in entries:
+        text = f.read_text()
+        if not any(d in text for d in DRAWS):
+            continue
+
+        # DISCARDED RETURN VALUE, which is an `ast.Expr` wrapping the call.
+        # Anything bound, printed, unpacked or passed on is use enough -- the
+        # rule is about the value going nowhere, not about where it goes.
+        try:
+            tree = _ast.parse(entry_cells(text))
+        except SyntaxError:
+            tree = None
+        dropped = []
+        for node in _ast.walk(tree) if tree else ():
+            if not isinstance(node, _ast.Expr) or not isinstance(node.value, _ast.Call):
+                continue
+            fn = node.value.func
+            name = getattr(fn, "id", None) or getattr(fn, "attr", None)
+            if name in DRAWS:
+                dropped.append(name)
+        if dropped:
+            out.append((f, (
+                f"(warning) `{dropped[0]}(...)` is called and its note is "
+                f"discarded. The note is the only thing that says whether "
+                f"the overlay can be read -- the pose, the residual, and "
+                f"whether a better fit exists -- and the echo is off, so "
+                f"nothing of it reaches the page. Bind it (`note = "
+                f"{dropped[0]}(...)`) and put what it says in the entry")))
+
+        frozen = (root / "_freeze" / "chapters" / f.parent.name / f.stem
+                  / "execute-results" / "html.json")
+        if not frozen.exists():
+            continue          # rule 12 owns the missing-freeze case
+        try:
+            md = json.loads(frozen.read_text())["result"]["markdown"]
+        except (ValueError, KeyError, TypeError):
+            continue
+        hit = [h for h in HEDGES if h in md]
+        if hit:
+            out.append((f, (
+                f"(warning) the page renders a camera fit the tool hedged: "
+                f"{'; '.join(hit)}. Read nothing about SHAPE off that "
+                f"overlay until a better pose is found -- reseed with "
+                f"`hint=(elev, azim, roll)` from the note's own numbers and "
+                f"refit, or say in the prose what the note said. An overlay "
+                f"cited as confirmation while its note says another seed "
+                f"does better is evidence the run was told it did not have")))
+    return out
+
+
+@register(46)
+def _justification_is_carried(entries):
+    """
+    Rule 46: the entry carries the question's justification, as its `subtitle`.
+
+    THE COORDINATOR WROTE IT, at `nb ask --why`, and the model copies it into
+    front matter. Checked here only for PRESENCE and length: the verbatim test
+    needs the run that holds the original, so it lives in `cli/run.problems_now`
+    beside the targets check, where a mismatch is handed back to the model as
+    something to fix rather than refused at the commit.
+
+    FRONT MATTER IS THE CARRIER because the body is expensive. The text is
+    human prose and may name a number, a sibling entry or five quantities in a
+    sentence; in a `::: {.why}` div it would have to be exempted from rules 1,
+    6, 9, 10 and 25 one at a time. Here `prose_of` and `body_prose` already
+    strip it, and Quarto renders it straight under the title.
+    """
+    problems = []
+    for e in entries:
+        if e.text is None or not after_cut_in(e):
+            continue
+        why = subtitle_of(e.text)
+        if not why:
+            problems.append(
+                (e, f"carries no `subtitle` — it is the JUSTIFICATION the "
+                    f"question arrived with, and it is in the brief above, "
+                    f"verbatim. Put it in front matter under the title: "
+                    f'`subtitle: "<the reason, as given>"`. Do not reword it '
+                    f"and do not write one of your own; a reason rewritten by "
+                    f"the party it was given to is not a record of the "
+                    f"decision"))
+            continue
+        n = words(why)
+        if n > MAX_JUSTIFICATION:
+            problems.append(
+                (e, f"`subtitle` is {n} words, over {MAX_JUSTIFICATION} — the "
+                    f"justification is the coordinator's and is copied as "
+                    f"given, so this means the question was asked with too "
+                    f"long a reason. Say so in your final message rather than "
+                    f"trimming it yourself"))
+    return problems
+
+
+
+@register(47)
+def _footer_summarises_the_code(entries):
+    """
+    Rule 47: `footer()` carries a summary of the code the entry wrote.
+
+    A KEYWORD, so rule 13 cannot see it: `rendered_by_footer` collects
+    `c.args` only, and a summary passed positionally would read as a function
+    the entry rendered. It also keeps the text out of rules 6 and 9, which see
+    python cells as holes -- which is the point of putting it here rather than
+    in prose. Its own budget instead.
+
+    Rule 13 already refuses an entry with no `footer(…)` cell, so silence here
+    means the cell exists and was given no summary.
+    """
+    problems = []
+    for e in entries:
+        if e.text is None or not after_cut_in(e):
+            continue
+        if "footer(" not in e.text:
+            continue                   # rule 13 owns the missing footer
+        got = method_summary(e.text)
+        if got is None or not got.strip():
+            problems.append(
+                (e, f"`footer(…)` carries no `method=` summary — say in a "
+                    f"sentence or two what the code you wrote COMPUTES and "
+                    f"which shared helpers did it, so a reader can decide "
+                    f"whether to unfold the source: "
+                    f'`footer(trim, method="…")`. It is folded away beside '
+                    f"the source it describes, so it costs the answer none of "
+                    f"its words. A string literal, not an f-string built from "
+                    f"the results — this describes the method, not the "
+                    f"outcome"))
+            continue
+        n = words(got)
+        if n > MAX_METHOD_SUMMARY:
+            problems.append(
+                (e, f"`method=` summary is {n} words, over "
+                    f"{MAX_METHOD_SUMMARY} — it says what the code computes "
+                    f"and which helpers did it, not what the entry concluded. "
+                    f"The conclusion is the answer, and it is already written"))
+    return problems

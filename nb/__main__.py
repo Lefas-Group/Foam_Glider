@@ -6,10 +6,11 @@
                                               …not the aircraft's name
     nb reconstruct <notebook> --chapter NN-name
              [--pool N] [--ceiling N]          build the vehicle, prove it
-                                               reproduces the brief's targets
+             [--why "<reason>"]                 reproduces the brief's targets
 
     nb ask   <notebook> --chapter NN-name    probe, write, render, commit
-             "<question>"                      …the chapter is REQUIRED
+             "<question>" --why "<reason>"      …both REQUIRED; the reason
+                                               …renders under the question
              [--pool N] [--ceiling N]         …budgets, instead of being asked
              [--quiet] [--answers f.json]     …no board on this terminal;
              [--no-watch]                     …and no window for this run;
@@ -157,6 +158,7 @@ def main(argv):
                   "vehicle.")
             return 2
         return reconstruct(rest[0], chapter=chapter,
+                           justification=_opt(rest, "--why", number=False) or "",
                            pool=_opt(rest, "--pool"),
                            ceiling=_opt(rest, "--ceiling"),
                            quiet=("--quiet" in rest or "--detach" in rest),
@@ -180,6 +182,20 @@ def main(argv):
         # cost a turn on every run and made the fork criterion a six-way
         # classification instead of one comparison. Naming it is the caller's
         # half of the question.
+        # REQUIRED, FOR THE SAME REASON `--chapter` IS: it is the caller's half
+        # of the question, it cannot be worked out afterwards, and refusing here
+        # costs nothing. The entry renders it under the title, permanently --
+        # the board and this conversation are transcripts nobody reads back, so
+        # without it a committed page says what was asked and never why.
+        why = _opt(rest, "--why", number=False)
+        if not why:
+            print("  --why is required: the entry renders it UNDER the "
+                  "question, as its subtitle, so a reader a month from now")
+            print("  knows why this was worth asking. Two sentences at most "
+                  "— it is the reason, not the method.")
+            print(f'\n  nb ask {rest[0]} --chapter <NN-name> "<question>?" '
+                  f'--why "<why now>"')
+            return 2
         chapter = _opt(rest, "--chapter", number=False)
         if not chapter:
             from .config import Notebook
@@ -196,7 +212,7 @@ def main(argv):
             return 2
         # Everything that is not a flag or a flag's value is the question.
         taken = set()
-        for f in ("--pool", "--ceiling", "--chapter", "--answers"):
+        for f in ("--pool", "--ceiling", "--chapter", "--answers", "--why"):
             if f in rest:
                 taken.add(rest.index(f) + 1)
         words = [r for i, r in enumerate(rest)
@@ -204,7 +220,7 @@ def main(argv):
                  and not r.endswith(".json")]
         return ask(rest[0], " ".join(words), quiet=quiet, answers=answers,
                    pool=pool, ceiling=ceiling, chapter=chapter,
-                   watch="--no-watch" not in rest)
+                   justification=why, watch="--no-watch" not in rest)
 
     # `resume` is the crash path and the two approvals now, not the routine
     # one: a run that is answered at the keyboard never comes back here. `write`

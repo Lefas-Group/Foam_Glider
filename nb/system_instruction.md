@@ -187,7 +187,7 @@ components sum — were each one `api_search` away. It never searched.
   and `open_entry` freezes that number as the entry's render cost — measured,
   not estimated, which is why it is not something you are asked for.
 
-# The 43 rules lint checks
+# The 45 rules lint checks
 
 Know these before drafting, not after. Finding one from a lint run means the
 prose is already written.
@@ -198,7 +198,7 @@ prose is already written.
  3  `**Answer.**` comes before the last code cell
  4  no sweeping a decision that should have been asked — record it as Specified
  5  no `for … in range(…)` around an aero solve — iterate to a tolerance
- 6  prose ≤ 100 words for the whole entry, warnings included
+ 6  prose ≤ 200 words for the whole entry, warnings included
  7  figure caption ≤ 50 words
  8  each Specified / Assumed item ≤ 10 words
  9  one prose section — no second `**Heading.**` or `##`
@@ -236,6 +236,8 @@ prose is already written.
 42  a cell labelled `tbl-…` renders a table — `md_table(header, rows)`, never a trailing DataFrame
 43  (warning) counts the constants `_model.py` fixes against the inputs you declared
 44  (warning) a DERIVED target is not written into `_model.py` — it must fall out
+46  the entry carries the question's justification, verbatim, as its `subtitle`
+47  `footer(…)` carries `method="…"` — what your code computes, ≤ 60 words
 ```
 
 There is no rule 36: it checked the categories system, which was retired, and
@@ -280,6 +282,7 @@ number is what it is belongs in the caption or a code comment, not the answer.
 ```
 ---
 title: "<the question THIS entry answers, as one question, ~8 words>"
+subtitle: "<the justification the question arrived with, copied verbatim>"
 ---
 
 {{< include _model.qmd >}}
@@ -317,14 +320,17 @@ Asked of the user, <date>:
 ```{python}
 #| echo: false
 #| output: asis
-footer(<the _analysis.py functions this entry NAMES>)
+footer(<the _analysis.py functions this entry NAMES>,
+       method="<what your code computes, and which helpers did it>")
 ```
 ```
 
 
 | | limit | counts |
 |---|---|---|
-| **prose, whole entry** | **100 words** | the answer, every warning, all running text |
+| **prose, whole entry** | **200 words** | the answer, every warning, all running text |
+| the `subtitle` | 40 words | the coordinator's justification — copied, never written by you |
+| `footer(method=…)` | 60 words | what your code computes, and which helpers did it |
 | figure caption | 50 words | each |
 | declared input item | 10 words | each |
 
@@ -333,8 +339,13 @@ fights computing the numbers in it.
 
 Order: hero → `**Answer.**` → callouts → evidence → `footer(...)`.
 
-- **Front matter is the title only.** No `date`, `categories` or `description`.
-  The filename carries the date.
+- **Front matter is the title and the subtitle.** No `date`, `categories` or
+  `description`; the filename carries the date. The `subtitle` is the
+  JUSTIFICATION the question arrived with — why it was worth asking, now. It is
+  the coordinator's sentence, quoted in your brief, and you copy it **verbatim**
+  (rule 46): a reason reworded by the party it was given to is not a record of
+  the decision. Never write one of your own, and if it is over its budget say so
+  in your final message rather than trimming it.
 - **One hero number, or none.** `::: {.hero}` carries the single value the entry
   exists to produce; `.hero-pair` when the answer *is* a comparison; nothing when
   the answer is a figure or a yes/no. Supporting values get `[…]{.key}`.
@@ -348,7 +359,7 @@ Order: hero → `**Answer.**` → callouts → evidence → `footer(...)`.
   carried from a SIBLING entry is fine and stays fine: cite it, and let the
   hero be what this entry computed from it.
 - **One prose section.** A procedure folds into the answer as a numbered list; a
-  caveat becomes a `::: {.callout-warning}`, which still counts against the 100.
+  caveat becomes a `::: {.callout-warning}`, which still counts against the 200.
 - **Choose the form the reader takes in fastest.** Not a ranking to apply blind:
   a sentence for one or two values; a **drawing** when the answer is what
   something *is* — a shape, a layout, a geometry; a **plot** when the answer is
@@ -413,7 +424,12 @@ Order: hero → `**Answer.**` → callouts → evidence → `footer(...)`.
   no `scope` field: a thing is chapter-level because it is in the chapter's
   file.
 - **Every entry ends with one `footer(...)` cell**, passing the shared functions
-  it called by name.
+  it called by name — and `method="…"`, one or two sentences on what your code
+  COMPUTES and which of those helpers did it (rule 47). It renders in its own
+  collapsed box above the source, so it costs the answer none of its words and
+  a reader decides from it whether to unfold forty lines of setup. It describes
+  the method, not the result: a plain string, never an f-string built from the
+  numbers.
 - A claim the prose makes but does not quote gets an `assert`, so the page fails
   to render rather than going quietly stale.
 

@@ -53,6 +53,13 @@ from ..process.log import detach_output, detached, open_log, say, tell
 # Seconds a `compare_to_photo` camera fit adds to one render. Measured
 # 11-14 s across three photographs of the FT Mini Mustang; 25 covers the
 # spread without granting slack nobody chose.
+#
+# UNCHANGED BY THE MESH-8 POSE FIT, on purpose. That made the search 2.5x
+# cheaper (measured on the F-16 Viper: 61.8 s -> 25.0 s and 47.6 s -> 18.1 s
+# for a COLD fit), but this grant is per render and a render fits every
+# overlay the page draws. The slack it carries is now real rather than
+# notional; cutting it would buy a tighter cap on the one budget that has
+# never been the binding one.
 OVERLAY_SECONDS = 25.0
 
 
@@ -217,7 +224,8 @@ def _reference_problems(notebook):
 
 def main(notebook_path, question, verbose=True,
          pool=None, ceiling=None, run_id=None, quiet=False,
-         answers=None, chapter=None, watch=True, kind="run"):
+         answers=None, chapter=None, watch=True, kind="run",
+         justification=""):
     bad = preflight(notebook_path)
     if bad:
         for b in bad:
@@ -242,6 +250,21 @@ def main(notebook_path, question, verbose=True,
         for line in refuse:
             tell(line)
         return 2
+    # THE JUSTIFICATION, held to its budget HERE and nowhere else that matters.
+    # It is the coordinator's words and the model copies them verbatim, so rule
+    # 46 firing on the page would be a violation the model cannot fix -- the only
+    # remedy would be rewording someone else's reason. Refused at the launch
+    # instead, where the person who wrote it is the person reading the error.
+    justification = " ".join(str(justification or "").split())
+    if justification:
+        from ..contract.shared import MAX_JUSTIFICATION, words
+        n = words(justification)
+        if n > MAX_JUSTIFICATION:
+            tell(f"  --why is {n} words, over {MAX_JUSTIFICATION}: it renders "
+                 f"under the question as the entry's subtitle, so it is two "
+                 f"sentences on why this question, now.")
+            tell(f"  Nothing started.")
+            return 2
     _start(notebook, quiet, answers, watch)   # forks; takes the lock first
     # `watch` RIDES IN run.json rather than down four signatures. `_finish`
     # runs in the daemon and wants it too, to decide whether to open the
@@ -249,7 +272,8 @@ def main(notebook_path, question, verbose=True,
     # function's callers for a flag neither of them cares about. A `nb resume`
     # then inherits what the original `nb ask` was told, which is correct.
     runstate.write(notebook, phase="run", question=question,
-                   chapter=chapter, turn=0, waiting_on=None, watch=watch)
+                   chapter=chapter, turn=0, waiting_on=None, watch=watch,
+                   justification=justification)
     open_log(notebook, "run", question)
     run_metrics = metrics.Run(notebook, "run", question)
 
@@ -287,7 +311,8 @@ def main(notebook_path, question, verbose=True,
         ceiling = ask_render_ceiling(base, why)
 
     session = Session(notebook, question, chapter=chapter,
-                      metrics=run_metrics, probe_pool=pool)
+                      metrics=run_metrics, probe_pool=pool,
+                      justification=justification)
     session.render_ceiling = ceiling
     # Read by the targets gate before the commit, and by nothing else.
     session.kind = kind
@@ -333,16 +358,69 @@ def main(notebook_path, question, verbose=True,
     # third mode is cheap rather than a second system.
     if kind == "reconstruct":
         text = briefs.RECONSTRUCT.format(
-            chapter=chapter, question=question,
+            chapter=chapter, question=question, why=_why_brief(justification),
             targets=_targets_brief(notebook),
             reference=_reference_brief(notebook),
             aircraft_visual=_aircraft_visual_brief(notebook))
     else:
         text = briefs.BRIEF.format(
-            question=question, max_turns=session.max_turns, chapter=chapter)
+            question=question, max_turns=session.max_turns, chapter=chapter,
+            why=_why_brief(justification))
     contents = [{"role": "user", "parts": [{"text": text}]}]
     return _execute(notebook, session, contents, run_metrics, fs, handlers,
                     make_config, verbose, accept_refactor=False)
+
+
+def _subtitle_mismatch(session):
+    """
+    One line if the entry's `subtitle` is not the justification given, or "".
+
+    COMPARED ON WORDS, not on bytes: the model writes the line into YAML, so
+    quoting, a wrapped line and the collapsing of runs of spaces are all its
+    business and none of them change the text. Punctuation and case are not --
+    "verbatim" is the whole point, and a model that rewrites a reason into its
+    own register is the failure this exists to catch.
+
+    Silent when the run was launched without one. Nothing to compare against is
+    not a violation, and rule 46 does not fire on those entries either.
+    """
+    why = " ".join(str(getattr(session, "justification", "") or "").split())
+    if not why or session.entry_path is None:
+        return ""
+    try:
+        text = session.entry_path.read_text()
+    except OSError:
+        return ""
+    from ..contract.shared import subtitle_of
+    got = " ".join((subtitle_of(text) or "").split())
+    if got == why:
+        return ""
+    return (f"the `subtitle` is not the justification this question arrived "
+            f"with. It is the coordinator's sentence and it is copied, not "
+            f"rewritten -- what it says is a record of a decision somebody "
+            f"else made.\n\n  what you wrote:  {got or '(nothing)'}\n"
+            f"  what was given:  {why}\n\nReplace it with the second line, "
+            f"exactly.")
+
+
+def _why_brief(justification):
+    """
+    The justification, as the model is shown it -- or the standing line.
+
+    QUOTED, INDENTED AND NAMED AS NOT ITS OWN. The model copies this verbatim
+    into the entry's `subtitle` (rule 46), and a paraphrase is the failure mode:
+    a reason reworded by the party it was given to is not a record of the
+    decision. So it arrives looking like a quotation rather than like guidance.
+
+    A run launched without one -- an old script, a `nb resume` of a run that
+    predates the flag -- gets the honest line rather than an empty subtitle,
+    because an entry with no reason on it should say that it has none rather
+    than look like one nobody wrote.
+    """
+    text = " ".join(str(justification or "").split())
+    if not text:
+        text = "Not recorded: this run was launched without one."
+    return text
 
 
 def _aircraft_visual_brief(notebook):
@@ -396,15 +474,37 @@ def _targets_brief(notebook):
                           else "   [DERIVED -- it must fall out]")
             for _h, t, g in rows]
     out += ["", """Each is a published FACT about the real aircraft, and the
-two kinds are not interchangeable.
+kinds are not interchangeable.
 
-A DERIVED target must be a CONSEQUENCE of the geometry you build. Do not
-write its value into `_model.py` anywhere. If you size a chord until
-`wing.area()` returns the published area, you have destroyed the only check
-on the planform -- and the planform drives every aerodynamic answer you will
-give afterwards. Build the geometry from what you measured, then report what
-it comes to. Rule 44 warns when a derived target's number appears in the
-model.
+A PUBLISHED DIMENSION IS AN INPUT. Span, length, wheel diameter, propeller
+size -- any linear dimension the manufacturer prints -- SETS this model.
+Write it in, let whatever station or tip follows from it be what it must be,
+and say in the entry that it was set. Treat such a row as GIVEN even when it
+is not marked `(given)`: converging on it is not a check, because nothing
+stops you typing the station that produces it.
+
+Measured, on this aircraft: a run built a wing, got 734 mm of span, solved
+for the tip station that makes `span()` return the published 914 mm, wrote
+1.295 as the last fuselage station, and reported "span 912.0 mm, length
+1290 mm, worst error 0.39%, all targets inside tolerance". Every one of
+those numbers was the model being compared with itself, and the headline of
+the entry was that circle.
+
+It is also what keeps the shape fit identifiable. Span and length are the
+scale reference the photographs are matched against; with them free, size
+trades directly against camera distance and the fit goes degenerate. Fit the
+dimensions the brief does NOT publish -- that is where the evidence is.
+
+A DERIVED target is a quantity no constant can be typed as: wing area, wing
+loading, aspect ratio, a mass that comes out of areas times areal density.
+It must be a CONSEQUENCE of the geometry you build, so do not write its
+value into `_model.py` anywhere. If you size a chord until `wing.area()`
+returns the published area, you have destroyed the only check on the
+planform -- and the planform drives every aerodynamic answer you will give
+afterwards. Build the geometry from what you measured, then report what it
+comes to. Rule 44 warns when a derived target's number appears in the model;
+on a dimension row you were told to set, that warning is the record of the
+setting, not a fault -- say so in the entry.
 
 A GIVEN target is a bench measurement you may calibrate to: total mass and
 CG are what somebody weighs and balances, almost every answer rests on them,
@@ -465,6 +565,24 @@ every probe loads. Build the model, then:
 
 then `read_probe_figure("check.png")` AND LOOK AT IT. Usable photographs:
 %s.
+
+**READ THE DOCSTRING, NOT THE SOURCE.** `print(compare_to_photo.__doc__)`,
+and the same for `completeness` and `fit_geometry`: the contract, the
+failures each guard was written for and what to do about a bad result are
+all in there. `inspect.getsource` on these cost one run 24 of its 90 turns,
+printed in 2000-character chunks, and told it nothing the docstrings do not.
+`nb/` itself is outside the sandbox on purpose -- do not go looking for it.
+
+**WHAT THESE COST, so you can budget them.** A cold pose fit is one CMA
+search: give it `budget_s=45`. A hinted one is cheaper and lands in the
+basin you chose. `completeness` fits a pose too -- pass the one you have.
+`fit_geometry` is the expensive one: measured at 334-385 s for ONE free
+parameter over one view, two seeds, so budget it in minutes and ask for more
+pool rather than discovering the kill. CARRY THE POSE FORWARD: the camera
+does not move when the geometry does, so `hint=` the pose you found into the
+next overlay and pass `poses={"view": (elev, azim, roll)}` into
+`fit_geometry`. A fit seeded from the overlay you actually looked at is
+answering about the same camera the picture showed you.
 
 ## Before you fit anything: is the model COMPLETE?
 
@@ -537,6 +655,12 @@ here is a number you would optimise, and what it measures is not fidelity.
 aircraft and the picture means nothing -- reseed, or report the photograph
 as unusable.
 
+**AND DO NOT CITE AN OVERLAY THE NOTE HEDGED.** "Not the best basin this
+photograph has" is the tool telling you another seed does better, and an
+entry that says the overlay CONFIRMS the shape while the note says that is
+claiming evidence it was told it did not have. Either spend one more fit
+from a different seed, or say in the entry what the note said.
+
 **TELL A POSE ERROR FROM A SHAPE ERROR,** because they look alike and only
 one of them is yours to fix. Every component displaced the same way -- the
 whole outline rotated, or sitting high, or slid left -- is the CAMERA, and
@@ -550,6 +674,12 @@ displaced, not only when the note says DOUBTFUL: a fit can be the best one
 available and still be worth a second seed. The hint only says where to
 look; the photograph still decides, and a hint that does not fit comes back
 DOUBTFUL rather than being accepted.
+
+**THE ENTRY SHOWS THE VERDICT, NOT ONLY THE PICTURE.** Bind the note in the
+figure cell -- `note = show_comparison(airplane, "VIEW", hint=...)` -- and
+put what it says on the page: the residual as a number, and the pose. A bare
+`show_comparison(...)` discards it, the echo is off, and a reader is left
+with an overlay and no way to know whether it can be read. Rule 45 warns.
 
 **FIX WHAT YOU SEE, IN `_model.py`.** The errors worth finding are
 structural and obvious once drawn: a part missing altogether, a fuselage
@@ -594,7 +724,7 @@ puts it in front of someone who can go and check it.
 
 def reconstruct(notebook_path, chapter=None, pool=None, ceiling=None,
                 run_id=None, verbose=True, quiet=False, answers=None,
-                watch=True):
+                watch=True, justification=""):
     """
     Build a chapter's vehicle and prove it reproduces the brief's targets.
 
@@ -602,7 +732,7 @@ def reconstruct(notebook_path, chapter=None, pool=None, ceiling=None,
     everything but its opening text and what it is gated on. Reconstruction is
     converge-to-tolerance where the ordinary contract is built for answering a
     question once -- rule 5 bans a `range()` loop around a solve, rule 6 caps
-    prose at 100 words -- so it gets its own brief and the targets gate, and
+    prose at 200 words -- so it gets its own brief and the targets gate, and
     nothing else is duplicated.
 
     It produces ONE ORDINARY ENTRY in a chapter that already exists. `nb new`
@@ -617,14 +747,31 @@ def reconstruct(notebook_path, chapter=None, pool=None, ceiling=None,
     """
     question = ("Can we reconstruct this chapter's aircraft within the "
                 "tolerances the brief states?")
-    # A BIGGER DEFAULT POOL than `ask`, because the shape loop spends it:
-    # reject at the prompt, rebuild, re-render, prompt again. Only applied
-    # when the caller named nothing, so `--pool` still wins.
+    # ITS OWN JUSTIFICATION IS STANDING, because its question is. Every other
+    # chapter forks the `_model.py` this run produces, so nothing downstream is
+    # worth more than this being right -- and that is the same sentence every
+    # time, which is exactly what the caller should not be made to retype.
+    # `--why` still overrides it, for a reconstruction being redone and for a
+    # reason.
+    justification = justification or (
+        "Every later chapter forks this model, so nothing downstream is "
+        "trustworthy until it reproduces the published aircraft.")
+    # 1500 s, UP FROM 480, AND THE NUMBER COMES FROM THE TOOLS THIS RUN IS
+    # TOLD TO USE. A cold pose fit is tens of seconds and a geometry fit is
+    # minutes -- measured, 334-385 s for ONE free parameter over one view.
+    # At 480 s the brief was advertising `fit_geometry` to a run that could
+    # not buy a single call of it, and the F-16 Viper reconstruction proved
+    # what that costs: it read 9 KB of the tool's source, never called it,
+    # spent its whole pool on pose fits, had three probes killed mid-fit, and
+    # shipped the one overlay it could afford to look at -- the one the tool
+    # itself had flagged as not the best basin available.
+    #
+    # Only applied when the caller named nothing, so `--pool` still wins.
     return main(notebook_path, question, verbose=verbose,
-                pool=pool if pool is not None else PROBE_POOL * 4,
+                pool=pool if pool is not None else 1500.0,
                 ceiling=ceiling, run_id=run_id, quiet=quiet,
                 answers=answers, chapter=chapter, watch=watch,
-                kind="reconstruct")
+                kind="reconstruct", justification=justification)
 
 
 def _disk_state(notebook, chapter, stem):
@@ -753,7 +900,12 @@ def resume(notebook_path, run_id=None, allow_refactor=False,
     pool = state.get("pool_left")
     session = Session(notebook, question, chapter,
                       metrics=run_metrics,
-                      probe_pool=pool if pool is not None else 0.0)
+                      probe_pool=pool if pool is not None else 0.0,
+                      # READ BACK, never re-asked. The justification belongs to
+                      # the question, and a resume is the same question: the
+                      # entry on disk already carries it as its subtitle, and
+                      # the gate below has to compare against the same words.
+                      justification=state.get("justification") or "")
     session.render_ceiling = state.get("ceiling")
     session.pool_total = state.get("pool_total")
     # Accepting implies allowing: you cannot accept a diff you were never
@@ -867,6 +1019,16 @@ def _execute(notebook, session, contents, run_metrics, fs, handlers,
         #
         # The commit-time check stays as the guarantee, exactly as the render
         # ceiling does: this teaches, that one refuses.
+        # THE JUSTIFICATION IS THE COORDINATOR'S WORDS, and this is the only
+        # place that can prove it. Rule 46 checks that a subtitle is there and
+        # is short enough, which is all a standalone lint of a committed
+        # notebook could ever check -- it does not hold the question. The run
+        # does, so the paraphrase is caught here, and caught the way lint
+        # catches things: handed back for the model to fix, not refused at the
+        # commit with the entry already written.
+        mismatch = _subtitle_mismatch(session)
+        if mismatch:
+            return False, list(problems) + [(46, mismatch)]
         if getattr(session, "kind", "run") == "reconstruct":
             from ..contract import shared
             note = targets_unreported(notebook, session.entry_path,

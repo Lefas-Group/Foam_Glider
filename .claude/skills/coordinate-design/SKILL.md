@@ -69,6 +69,7 @@ agent will have.
 ```bash
 uv run --group nb python -m nb ask <notebook> \
   --chapter NN-name "<one question ending in ?>" \
+  --why "<why this question, now>" \
   --pool 200 --ceiling 90 --quiet
 ```
 
@@ -81,6 +82,25 @@ uv run --group nb python -m nb ask <notebook> \
   the run sending the open tab to its entry — for a run nobody is watching.
 - **`--chapter` is required; routing is yours.** A chapter is a vehicle: pick
   the one whose `_model.py` the question is about. Omitted, nothing starts.
+- **`--why` is required, and it is YOUR SENTENCE ON THE PAGE.** It renders under
+  the question as the entry's subtitle, verbatim — the run is told to copy it
+  and is refused if it rewords it. Write it for whoever reads the notebook in
+  a month, not for the agent: what the last run found that makes this the next
+  question, or which decision is waiting on it. **40 words, and nothing starts
+  if it is over** — two sentences at most, the reason and not the method.
+
+  It is the one part of your reasoning that survives. `nb note` and this
+  conversation are transcripts nobody reads back; the entry is committed,
+  rendered and read later. Before `--why`, a reader could see two entries
+  answering adjacent questions and not tell whether the second followed from
+  the first or from a change of mind.
+
+  ```
+  --why "The 0.39% reconstruction compared the model with itself, so nothing
+         yet checks the planform independently."
+  ```
+
+  `nb reconstruct` carries a standing one and takes `--why` only to override it.
 - **The question is ONE quoted argument.** It must not start with `--` or end
   with `.json`; the parser drops those.
 - **A question needing a different vehicle still names the nearest chapter.**
@@ -366,6 +386,27 @@ overlay diagnoses shape; published figures fix scale; and measuring a tiled
 plan by hand is where a coordinator misread the tile key, dropped the two
 tiles holding the wing panels, and had the airframe reconstructed from its
 assembly jigs.
+
+**A published DIMENSION is an input. It does not go in `--target`.** Span,
+length, wheel diameter, propeller size — anything linear the manufacturer
+prints — is what SETS the model's scale, and what makes the silhouette fit
+identifiable at all: with span free, size trades against camera distance and
+the fit goes degenerate. Put those in `--spec`, or in `--target` marked
+`(given)` so the run is told to calibrate to them rather than converge on
+them.
+
+`--target` is for what the geometry must PRODUCE and no constant can be
+typed as: wing area, wing loading, aspect ratio, a dry mass that comes out
+of areas times areal density, CG.
+
+Measured, on the F-16 Viper: span and length went in as derived targets, the
+run built a wing, got 734 mm, solved for the tip station that makes `span()`
+return the published 914 mm, and wrote 1.295 m as its last fuselage station.
+The entry's headline — "0.39%, all airframe targets inside tolerance" — was
+the model being compared with itself, and the only real check in it, the
+overlay, was not what the number measured. Rule 44 exists to catch a derived
+target typed into the model, and it did not fire: the run had typed the
+half-span, 0.456.
 
 ### Check the assumptions prompt against the plan
 

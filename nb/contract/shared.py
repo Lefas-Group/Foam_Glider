@@ -201,7 +201,38 @@ ENTRY_SELF = {"this", "that", "the", "a", "an", "each", "every", "same",
 
 # Word budgets. Prose is the whole entry's readable text; the two callouts and
 # the figure captions are excluded because they are indexes rather than reading.
-MAX_PROSE, MAX_FIG_CAP, MAX_CALLOUT_ITEM = 100, 50, 10
+#
+# PROSE WAS 100 AND IS NOW 200. The cap was never the thing holding entries
+# short -- measured across all five notebooks on disk, 122 pages, rule 6 fired
+# exactly ZERO times, so nothing was writing to the limit and doubling it costs
+# no baseline. What 100 did cost was the clause that says why a number is what
+# it is: the budget table told the model to push that into a caption or a code
+# comment, which is where a reader does not look.
+MAX_PROSE, MAX_FIG_CAP, MAX_CALLOUT_ITEM = 200, 50, 10
+
+
+# Rules 45 and 46 -- the two texts an entry carries ABOUT itself rather than
+# about the aircraft, each with its own budget so that neither competes with
+# the answer for rule 6's words.
+#
+# 45 is the coordinator's justification, which rides in as the entry's
+# `subtitle`. Two sentences: why this question, now. Sized beside the 50-word
+# caption cap and under it, because a reason that needs more than two sentences
+# is a question that has not been decided yet.
+#
+# 46 is the model's own summary of the code it wrote, printed by `footer()`
+# above the source it renders. 60 words is "what it computes, and which shared
+# helpers did it" -- enough to decide whether to unfold the source, and short
+# enough that it cannot become a second answer.
+MAX_JUSTIFICATION, MAX_METHOD_SUMMARY = 40, 60
+
+
+# WHERE RULES 45 AND 46 START. Both postdate every entry on disk: applied to
+# all of them they would add ~150 findings across the three pinned baselines in
+# `nb.corpus`, which is how the signal that baseline exists for gets buried. An
+# entry's stem IS its date, so the cut-in is one string compare -- and an entry
+# is written once and left alone, so an older one is not a gap to backfill.
+SUMMARY_FROM = "2026-10-08"
 
 
 # Rule 25. Measured across 32 written entries: the most inline expressions any
@@ -376,6 +407,71 @@ def rendered_by_footer(text):
                     footers += 1
                 names |= {a.id for a in c.args if isinstance(a, ast.Name)}
     return names, footers
+
+
+
+def method_summary(text):
+    """
+    The `method=` string `footer()` was given, or None if it was not given one.
+
+    KEYWORD, not a positional, which is what keeps rule 13 out of this: it
+    counts `c.args` only, so a summary cannot be mistaken for a function the
+    entry rendered, and adding one to an entry that already lints changes
+    nothing else about it.
+
+    A joined literal (`"one " "two"`) folds to a constant before this sees it;
+    anything built at runtime does not, and comes back None. That is the right
+    answer rather than a limitation -- the summary is a sentence about code the
+    model just wrote, and a summary assembled by the code it describes is a
+    summary nobody wrote.
+    """
+    for src in re.findall(r"```\{python\}(.*?)```", text, re.S):
+        src = re.sub(r"^\s*#\|.*$", "", src, flags=re.M)
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:
+            continue
+        for c in ast.walk(tree):
+            if not isinstance(c, ast.Call):
+                continue
+            if getattr(c.func, "id", None) != "footer":
+                continue
+            for k in c.keywords:
+                if k.arg == "method" and isinstance(k.value, ast.Constant) \
+                        and isinstance(k.value.value, str):
+                    return k.value.value
+    return None
+
+
+def subtitle_of(text):
+    """
+    The entry's front-matter `subtitle`, or None.
+
+    FRONT MATTER IS WHY THIS IS CHEAP. The justification is written by the
+    coordinator, not the model: it is ordinary human prose and may name a
+    number, a sibling or five quantities in one sentence. Carried in the BODY it
+    would have to be exempted from rules 1, 6, 9, 10 and 25 one at a time.
+    Carried here it is already invisible to every one of them -- `prose_of` and
+    `body_prose` strip the block, and rule 9 counts headings below it -- and
+    Quarto renders it directly beneath the title, which is where it belongs.
+    """
+    m = re.match(r"^---\n(.*?)\n---\n", text, flags=re.S)
+    if not m:
+        return None
+    got = re.search(r'^subtitle:\s*(.+?)\s*$', m.group(1), re.M)
+    return got.group(1).strip().strip('"').strip("'") if got else None
+
+
+def after_cut_in(entry):
+    """
+    Is this entry dated on or after `SUMMARY_FROM`? See that constant.
+
+    The stem is `YYYY-MM-DD-NN-slug`, so the date is the first ten characters
+    and an ISO string compares correctly as a string. A page whose name is not
+    an entry stem -- a chapter index -- answers False and is never asked.
+    """
+    return ENTRY_FILE.match(entry.name) is not None \
+        and entry.name[:10] >= SUMMARY_FROM
 
 
 

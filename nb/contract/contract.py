@@ -166,6 +166,36 @@ WHY = {
         "and starts meaning PROBABLY FINE. So this counts, and leaves the "
         "judgement with the person at the assumptions prompt, who is the one "
         "who can open the plan.",
+    45: "`compare_to_photo` says when its camera fit cannot be trusted -- a "
+        "parameter on a bound, an outline that does not track the aircraft, "
+        "or a residual above 1%, where another seed usually does better. The "
+        "F-16 Viper reconstruction fitted its three-quarter view at 2.86%, "
+        "was told in the same string that a better basin existed, had no "
+        "probe pool left to look for one, printed the note into the entry -- "
+        "and wrote that the overlay CONFIRMS the planform. The hedge and the "
+        "claim were on the same page and nothing compared them. Shape is the "
+        "one thing no published target checks, so an overlay is the whole of "
+        "that evidence, and citing a hedged one spends it on nothing.",
+    46: "A question arrived at the notebook as a title and nothing else, so "
+        "the page said WHAT was asked and never why it was worth asking. The "
+        "programme's reasoning lived in the coordinator's conversation and on "
+        "the board, both of which are transcripts nobody reads back, while "
+        "the entry -- the thing that is committed, rendered and read a month "
+        "later -- carried no trace of it. Two entries can answer adjacent "
+        "questions in sequence and a reader cannot tell whether the second "
+        "followed from the first or from a change of mind. The justification "
+        "is the coordinator's, written at `nb ask`, and it is carried verbatim "
+        "rather than paraphrased: a reason rewritten by the party it was "
+        "given to is not a record of the decision.",
+    47: "`footer()` renders the source of every shared function the entry "
+        "called, collapsed, which is the method and not a description of it. "
+        "A reader deciding whether to unfold forty lines of optimiser setup "
+        "had only the function names to go on, and the entry's prose is about "
+        "the AIRCRAFT -- rule 6's words are spent on the answer, correctly. "
+        "So the summary sits with the source rather than in the prose, has "
+        "its own budget, and is folded away beside it: the reader who wants "
+        "to know how the number was got opens one box and finds a sentence "
+        "before the code.",
     44: "A reconstruction reported 0.54% worst error across eight published "
         "targets, and seven of the eight had been ASSIGNED rather than "
         "predicted -- five to an exact 0.00%. `_model.py` held "
@@ -259,6 +289,9 @@ RULES = {
     42: "a cell labelled `tbl-…` renders a table",
     43: "(warning) how many constants `_model.py` fixes, against inputs declared",
     44: "(warning) a DERIVED target is not written into `_model.py` as a literal",
+    45: "(warning) an overlay's note reaches the page, and is not hedged",
+    46: "the entry carries the question's justification as its `subtitle`",
+    47: "`footer(…)` carries a `method=` summary of the code the entry wrote",
 }
 
 

@@ -15,9 +15,15 @@ from ..config import PROBE_POOL
 
 class Session:
     def __init__(self, notebook, question, chapter=None,
-                 metrics=None, probe_pool=PROBE_POOL):
+                 metrics=None, probe_pool=PROBE_POOL, justification=""):
         self.notebook = notebook
         self.question = question
+        # WHY THIS QUESTION, NOW -- the coordinator's words from `nb ask --why`,
+        # carried so that two things can use them: the brief, which quotes them
+        # to the model, and the gate before the commit, which proves the entry's
+        # `subtitle` is them and not a paraphrase. Empty on a run launched
+        # without one, and then neither fires.
+        self.justification = justification
         self.chapter = chapter
         self.metrics = metrics
         self.asked = {}          # name -> value, from ask_specified

@@ -329,10 +329,20 @@ def _ask_panel(run):
     `started` since the registry existed; the conversation simply never read
     them, so the board could show a programme's worth of answers with no
     record of what had been asked.
+
+    THE JUSTIFICATION GOES WITH IT, on its own line, because the two are one
+    decision. A reader scrolling the conversation to work out why the programme
+    went this way was reading a list of questions with the reasoning stripped
+    out -- the reasoning was in `nb note`, if the coordinator remembered to
+    write one. `--why` is not optional, so this line is always there.
     """
+    said = run.get("asked") or ""
+    why = (run.get("justification") or "").strip()
+    if why:
+        said = f"{said}\n  {why}" if said else why
     return _panel("coordinator",
                   f"asked {run.get('chapter') or run.get('run', '?')}",
-                  run.get("asked") or "", COORD_COLOUR, run.get("started"))
+                  said, COORD_COLOUR, run.get("started"))
 
 
 # What each kind of gate is asking, for records written before the question

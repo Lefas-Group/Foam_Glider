@@ -19,6 +19,15 @@ The question:
 
     {question}
 
+Why it was asked, in the coordinator's own words:
+
+    {why}
+
+That sentence is the entry's `subtitle` and you copy it VERBATIM (rule 46).
+It is a record of somebody else's decision, so rewriting it into your own
+register destroys the thing it is for. If it is wrong or over its budget, say
+so in your final message and write it anyway.
+
 You are in **chapters/{chapter}**. It is settled, it is claimed for this run,
 and its model is quoted above in full. Probe it and write into it.
 
@@ -113,6 +122,21 @@ The entry is open. Write it at `{chapter}/{stem}.qmd` — `write_file` once, the
 `_analysis.py` are scaffolded already, so edit those.
 
 {inputs}
+
+FRONT MATTER IS THE TITLE AND THE SUBTITLE, and the subtitle is the
+justification quoted to you above — copied verbatim, never reworded (rule 46):
+
+    ---
+    title: "{title}"
+    subtitle: "{why}"
+    ---
+
+THE FOOTER CELL CARRIES `method=` (rule 47) — one or two sentences, 60 words at
+most, on what your code COMPUTES and which shared helpers did it. It renders in
+its own collapsed box directly above the source `footer()` already shows, so it
+costs the answer none of its words and a reader decides from it whether to
+unfold the code. A plain string: it describes the method, not the result, so
+never build it from the numbers.
 
 Its FIRST code cell opens with exactly these four lines (rule 28):
 
@@ -269,4 +293,9 @@ three-view again and open the entry again. That loop is the point of the
 prompt; it is not an error.
 
 {question}
+
+Why it was asked, in the coordinator's own words. This is the entry's
+`subtitle` and you copy it VERBATIM (rule 46):
+
+    {why}
 """

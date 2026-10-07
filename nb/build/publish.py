@@ -368,6 +368,11 @@ def _readable(md, width=76):
     m = re.search(r'^title:\s*"(.+)"$', md[:400], re.M)
     if m:
         title = m.group(1)
+    # THE SUBTITLE COMES WITH THE TITLE, before the block is dropped. It is the
+    # justification the question arrived with, and a coordinator reading its own
+    # run back off `run.json` should see the reason beside the question -- the
+    # alternative is reading the `.qmd` to find a line it wrote itself.
+    sub = re.search(r'^subtitle:\s*"(.+)"$', md[:600], re.M)
     md = FRONTMATTER.sub("", md)
     # The hero pair is one fact -- a number and what it measures -- written as
     # two spans on two lines so the page can style them. Joined before the
@@ -379,6 +384,8 @@ def _readable(md, width=76):
     md = md.replace("**", "")
 
     out = [title, ""] if title else []
+    if sub:
+        out += [sub.group(1), ""]
     for line in md.splitlines():
         line = line.rstrip()
         if not line:

@@ -1,0 +1,12 @@
+{
+  "hash": "2f0f00cc06bff8de3849158e5fa8c82d",
+  "result": {
+    "engine": "jupyter",
+    "markdown": "---\ntitle: \"Wing\"\n# The sidebar's `auto:` does not sort without this -- it falls back to readdir\n# order, which is a hash of the directory names (rule 33).\norder: 1\nlisting:\n  id: entries\n  contents: \"20*.qmd\"\n  type: table\n  fields: [title]\n  # By filename, which starts with the date -- entries carry no `date:` of their\n  # own, and within a chapter alphabetical order IS chronological order.\n  sort: \"filename\"\n  # A plain table. Chronological is the only order an append-only record has,\n  # and a filter over three rows is furniture.\n  filter-ui: false\n  sort-ui: false\n  field-display-names:\n    title: \"Entries\"\n---\n\n\n\n\n::: {.callout-note collapse=\"true\"}\n## In force here, from earlier (2)\n\n**Inherited user specifications**\n\n1. **Span**: 1.0 m.\n\n**Inherited assumptions**\n\n1. **Foam**, 5 mm.\n\n:::\n\n\n\n::: {#entries}\n:::\n\n::: {.callout-note collapse=\"true\"}\n## `_model.py`\n\n```python\n##### Imports\n\nimport aerosandbox as asb\nimport aerosandbox.numpy as np\n\n\n##### Vehicle\n\n```\n:::\n\n::: {.callout-note collapse=\"true\"}\n## `_analysis.py`\n\n```python\n\n```\n:::\n\n\n\n",
+    "supporting": [
+      "index_files"
+    ],
+    "filters": [],
+    "includes": {}
+  }
+}

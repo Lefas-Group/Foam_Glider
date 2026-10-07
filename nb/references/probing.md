@@ -26,10 +26,18 @@ here or the discovery listing is empty.
 
 The kernel is thrown away and rebuilt, announced in the result, when: the
 chapter's source changes (so you never probe definitions you have just
-replaced), the chapter changes, a probe overruns its budget, or you pass
-`reset=True`. **After any of those, nothing is held.** The announcement is the
-only signal — a number computed before a restart is not comparable with one
-computed after unless you recomputed it.
+replaced), the chapter changes, or you pass `reset=True`. **After any of
+those, nothing is held.** The announcement is the only signal — a number
+computed before a restart is not comparable with one computed after unless you
+recomputed it.
+
+A BUDGET OVERRUN NO LONGER THROWS IT AWAY. The cell is interrupted and the
+namespace survives, so a long fit that overran does not also cost you the model
+you built three probes ago. Two things follow. The probe that was killed did
+not finish, so anything it was half-way through — a patched global, an object
+under construction — is in that state now; `reset=True` is how you get a clean
+one. And if the interrupt cannot land, which a CasADi solve will not take, the
+kernel is restarted instead and the result says so.
 
 **A surprise about a return type means READ, not probe again.** A `TypeError`
 about 0-dimensional arrays, a value that is an array where you expected a
