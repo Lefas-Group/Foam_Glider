@@ -1,0 +1,61 @@
+Published specifications: https://store.flitetest.com/ft-little-piggy/
+  Wingspan 29 in (736.6 mm); Length 19.75 in (501.65 mm);
+  Weight without battery 1.2 lb (531.5 g);
+  CG 2.75 in (69.85 mm) from the leading edge ("See marks on wing");
+  Battery 2200 mAh 3S; 4 channels minimum; 3 hour build;
+  Build level Challenging, Flying level Challenging, Park field.
+  Kit contents: 4 lasercut Maker Foam sheets, Little Piggy plywood kit,
+  Little Piggy spar, 2 swappable control horns, 3 BBQ skewers,
+  2 x 16.5 in pushrod wire, medium landing gear wire, 2 x 2 in wheels,
+  2 x 3/4 in wing mount screws, battery strap, velcro, zip ties.
+  WING AREA and WING LOADING are NOT published. Neither is thrust.
+
+Power system: https://store.flitetest.com/ft-little-piggy-power-add-on/
+  2 x FT Radial 2206 2500 kV; 2 x 25 A ESC (XT30);
+  2 x FT 9 g servo; 1 x HQ 6x4.5 CCW and 1 x HQ 6x4.5 CW prop;
+  Aura 5 flight controller flashed to the Piggy tune;
+  XT30 Y-harness, XT60-to-XT30 adapter, linkage stoppers.
+  Receiver and battery not included.
+
+Motor: https://store.flitetest.com/ft-radial-2206-2500kv-brushless-motor/
+  2500 kV, 12N14P, 22 mm x 6 mm stator, 4 mm shaft, 32 g with wire,
+  3-6S. NO thrust table is published, for any prop or cell count.
+  The brief therefore records the absence rather than a number; if a
+  run needs static thrust it must declare the assumption it made.
+
+Battery mass: a 2200 mAh 3S LiPo runs 180-195 g across common packs
+  (Turnigy nano-tech 2200 3S 188 g; Admiral 2200 3S 183 g). 185 g taken.
+  Flite Test publish no pack mass, so all-up weight is 531.5 + 185 = 717 g.
+
+Maker Foam areal density: Flite Test 5 mm waterproof foam board sheet,
+  510 x 750 mm (0.3825 m2), 112 g per sheet -> 0.293 kg/m2.
+  https://www.buildyourowndrone.co.uk/flite-test-wr-5mm-foam-board-sheet
+  Cross-check, Adams Readi-Board 20 x 30 in 3/16 in at 115 g -> 0.297 kg/m2
+  https://www.flitetest.com/articles/comparing-foam-board
+
+Plan sheet: NOT used. Flite Test do not publish plans for this kit, and
+nothing in this notebook is measured off a plan or off a photograph by
+hand. Geometry is obtained by fitting the model's whole silhouette to
+the reference masks.
+
+Photographs: store product images, product id 3303, five frames offered.
+  studio-white.png  image 10568, white_pig_-_png_480   (KEPT, vendor alpha)
+  studio-pink.png   image 10573, merica_painted_480    (KEPT, vendor alpha)
+The three in-flight frames (10567 flying_white_3, 10569 flying_white_2,
+10570 flying_white_1) were downloaded, cut and REJECTED. All three are
+480 px with the airframe lit from behind against foliage or bright sky;
+every rule tried -- luminance, saturation, greenness, local texture
+variance -- dropped a whole wing panel, because the near wing surfaces
+sit in shade at the same tone as the trees. A mask that loses a wing is
+worse than no second viewpoint, so they are not in the notebook. If a
+better in-flight frame appears, that is the viewpoint to add: both kept
+photographs are from one studio session and differ mainly in camera
+elevation (mask IoU 0.77).
+
+Aircraft description: the FT Little Piggy is a 2026 Flite Test kit
+celebrating the Flying Pig mascot, released for the DARPA Lift
+Challenge at Flite Fest 2026. The fuselage is a faceted low-poly pig;
+there is no horizontal tail; the ears and the wingtip endplates are the
+only vertical surfaces. Flite Test describe it as "intentionally
+unconventional" and "aerodynamically challenging", and shipped a custom
+Aura 5 gyro tune to make it flyable.

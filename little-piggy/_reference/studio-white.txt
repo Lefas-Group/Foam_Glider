@@ -1,0 +1,19 @@
+photo  Flite Test store studio photograph, product 3303, image 10568,
+`white_pig_-_png_480`. The unpainted white build, isolated on white; the
+mask is the vendor's own alpha channel, so the silhouette is exact.
+
+Three-quarter view from ABOVE and from AHEAD. The flat rectangular
+SNOUT is at lower left; the body runs up and to the right; the straight
+constant-chord WING crosses the frame to the right and ends in a large
+upswept endplate fin at frame right. The far wing panel is visible
+passing behind the head at upper left. Upper (dorsal) surfaces of body
+and wing are what is visible.
+
+Both motors are in frame: one propeller at frame left, past the head,
+and one at lower centre. Each sits on a plywood pod on the wing LEADING
+EDGE, tractor. Above the head rise two swept EARS, which are the only
+vertical surfaces besides the wingtip endplates. There is NO horizontal
+tail of any kind. A wheel shows below the belly at lower centre.
+
+The elevation is a reading of the image, not a fitted value -- fit the
+camera and read the number back before trusting it.

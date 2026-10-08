@@ -1,0 +1,39 @@
+# THE BRIEF for the aircraft. True of the whole aircraft, inherited by every
+# chapter and every entry, and never superseded: a fork that departs from one
+# of these is not a fork, it is a different aircraft and so a different
+# notebook. Written by a PERSON, never by a run.
+#
+# Rendered into index.qmd. Same format as a chapter's `_inputs.yml`:
+# `- <id>: <text>`, ten words each.
+#
+# The test for what belongs here rather than in the first chapter: IF THIS
+# CHANGED, WOULD IT STILL BE THE SAME AEROPLANE? A 300 mm span, no. Foam 5 mm
+# — yes, that is the same project at a different thickness, so it is a chapter.
+specified:
+  - ft-little-piggy: "**FT Little Piggy**, a Flite Test laser-cut foam kit."
+  - wingspan-736-6: "**Wingspan**: 736.6 mm (29 in); calibrate scale to it."
+  - length-501-65: "**Length**: 501.65 mm (19.75 in); calibrate scale to it."
+  - weight-without-battery: "**Weight without battery**: 531.5 g, airframe plus electronics."
+  - cg-69-85: "**CG**: 69.85 mm aft of wing leading edge."
+  - layout-faceted-low: "**Layout**: faceted low-poly pig fuselage; no horizontal tail."
+  - wing-straight-constant: "**Wing**: straight, constant chord, mounted high and aft."
+  - wingtips-carry-large: "**Wingtips** carry large upswept endplate fins, both sides."
+  - vertical-surfaces-two: "**Vertical surfaces**: two upswept ears above the pig's head."
+  - motors-two-ft: "**Motors**: two FT Radial 2206 2500 kV."
+  - motor-pods-plywood: "**Motor pods**: plywood, on the wing leading edge, tractor."
+  - propellers-hq-6x4: "**Propellers**: HQ 6x4.5, one CW and one CCW."
+  - escs-two-25: "**ESCs**: two 25 A, XT30 connectors."
+  - servos-two-9g: "**Servos**: two FT 9 g."
+  - motor-mass-32: "**Motor mass**: 32 g each, with wire."
+  - battery-2200-mah: "**Battery**: 2200 mAh 3S, about 185 g."
+  - flight-controller-aura: "**Flight controller**: Aura 5, custom Little Piggy tune."
+  - airframe-four-maker: "**Airframe**: four Maker Foam sheets, plywood kit, one spar."
+  - maker-foam-5: "**Maker Foam**: 5 mm, 0.293 kg/m2 areal density."
+  - landing-gear-two: "**Landing gear**: two 2 in wheels on wire."
+  - four-channels-minimum: "**Four channels minimum**; three-hour build, Challenging to fly."
+  - motor-static-thrust: "**Motor static thrust** is not published by Flite Test."
+  - wing-area-and: "**Wing area and wing loading** are not published."
+assumed:
+  - planform-and-fuselage: "**Planform and fuselage** are fitted to photographs, not measured."
+  - airfoil-flat-foam: "**Airfoil**: flat foam plate, a declared stand-in."
+  - pitch-and-roll: "**Pitch and roll** by wing elevons; yaw by differential thrust."
