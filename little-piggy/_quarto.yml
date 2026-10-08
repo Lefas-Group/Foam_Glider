@@ -6,7 +6,7 @@ project:
   execute-dir: project
 
 website:
-  title: "FT Little Piggy Notebook"
+  title: "Little Piggy Notebook"
   description: "A chronological record of questions asked about the aircraft."
   # Next/Previous links in each page footer, so entries read straight through.
   # Only true once the chapters are ordered -- see the sidebar note below.
@@ -40,7 +40,7 @@ website:
       # notebook is chapters -- and `auto: "chapters/*"` crashes Quarto's
       # navigation. So each chapter is named, and the rule makes a chapter
       # missing from here loud rather than invisible.
-      - auto: "chapters/01-little-piggy-airframe"
+      - auto: "chapters/01-ft-little-piggy-airframe"
 
 format:
   html:
@@ -83,6 +83,6 @@ execute:
   # freezes them. Commit _freeze/ so a fresh clone renders without re-solving.
   # NOTE: freeze tracks page files, not their includes -- so editing a
   # chapter's _model.py does NOT invalidate its entries. Delete
-  # _freeze/chapters/01-little-piggy-airframe/ and render. There is no --no-freeze flag.
+  # _freeze/chapters/01-ft-little-piggy-airframe/ and render. There is no --no-freeze flag.
   freeze: auto
   warning: false

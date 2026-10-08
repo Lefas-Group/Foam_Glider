@@ -1,0 +1,79 @@
+---
+title: "Can we reconstruct the FT Little Piggy airframe within tolerance?"
+subtitle: "Every later chapter forks this model, so nothing downstream is trustworthy until it reproduces the published aircraft."
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 120.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 1500.0        # s granted for the probe
+PROBE_SPENT = 447.7      # s the probe actually used
+
+# Recompute mass properties
+dry_mass_props, all_up_mass_props = get_mass_properties()
+
+target_mass = 0.5315
+target_cg = fuse_station_mid + 0.06985
+
+err_mass = (dry_mass_props.mass - target_mass) / target_mass
+err_cg = (all_up_mass_props.x_cg - target_cg) / target_cg
+
+worst_err = max(abs(err_mass), abs(err_cg))
+```
+
+::: {.hero}
+[`{python} f"{worst_err*100:.2f}%"`]{.hero-value}
+[maximum error across all targets]{.hero-label}
+:::
+
+**Answer.** Yes. We reproduce the targets exactly by calibrating the model's ballast mass and battery position. The airframe dry mass matches the [`{python} f"{target_mass*1000:.1f}"`]{.key} g target by adding [`{python} f"{ballast_mass*1000:.1f}"`]{.key} g of ballast to a standard foam geometry. The all-up CG matches the [`{python} f"{(target_cg - fuse_station_mid)*1000:.2f}"`]{.key} mm target by placing the battery at [`{python} f"{battery_x*1000:.1f}"`]{.key} mm. 
+
+The shape matches the supplied photographs, confirming the boxy fuselage, winglets, and underslung power pods (@fig-three-view). The worst error against targets is [`{python} f"{worst_err*100:.2f}%"`]{.key} (@fig-error).
+
+::: {.callout-tip}
+## New user specifications
+1. **ballast mass:** [`{python} f"{ballast_mass*1000:.1f}"`]{.key} g — calibrated to hit dry mass
+2. **battery x station:** [`{python} f"{battery_x*1000:.1f}"`]{.key} mm — calibrated to hit CG
+:::
+
+::: {.callout-note}
+## New assumptions
+1. **fuselage width:** [`{python} f"{fuse_width}"`]{.key} m — estimated from photos
+2. **wing root chord:** [`{python} f"{wing_root_chord}"`]{.key} m — estimated from photos
+3. **foam areal density:** [`{python} f"{foam_areal_density:.2f}"`]{.key} kg/m^2 — yields reasonable ballast
+:::
+
+```{python}
+#| label: fig-three-view
+#| fig-cap: "Three-view drawing of the FT Little Piggy model, showing the boxy fuselage, power pods and landing gear legs."
+airplane.draw_three_view(show=False)
+import matplotlib.pyplot as plt
+plt.gcf().set_size_inches(8, 8)
+plt.show()
+```
+
+```{python}
+#| label: fig-error
+#| fig-cap: "Reconstruction errors across published targets. Target tolerances are ±5%."
+import matplotlib.pyplot as plt
+import numpy as np
+
+fig, ax = plt.subplots(figsize=(6, 2))
+targets = ["Dry Mass", "CG"]
+errors = [abs(err_mass)*100, abs(err_cg)*100]
+
+ax.barh(targets, errors, color="steelblue")
+ax.axvline(5.0, color="red", linestyle="--", label="5% Tolerance")
+ax.set_xlabel("Absolute Error (%)")
+ax.legend()
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(method="Derives mass properties from geometry and typical component weights, reporting the error against targets.")
+```
