@@ -1,0 +1,34 @@
+# THE BRIEF for the aircraft. True of the whole aircraft, inherited by every
+# chapter and every entry, and never superseded: a fork that departs from one
+# of these is not a fork, it is a different aircraft and so a different
+# notebook. Written by a PERSON, never by a run.
+#
+# Rendered into index.qmd. Same format as a chapter's `_inputs.yml`:
+# `- <id>: <text>`, ten words each.
+#
+# The test for what belongs here rather than in the first chapter: IF THIS
+# CHANGED, WOULD IT STILL BE THE SAME AEROPLANE? A 300 mm span, no. Foam 5 mm
+# — yes, that is the same project at a different thickness, so it is a chapter.
+specified:
+  - ft-master-series: "**FT Master Series F-16 Viper**, a Flite Test jet."
+  - wingspan-914-mm: "**Wingspan**: 914 mm, published; calibrate scale to it."
+  - length-1295-mm: "**Length**: 1295 mm, published; calibrate scale to it."
+  - dry-mass-1361: "**Dry mass**: 1361 g (3 lb), battery excluded."
+  - cg-25-4: "**CG**: 25.4-38 mm aft of wing leading edge."
+  - power-70-mm: "**Power**: 70 mm 12-blade EDF, 2300 kV."
+  - esc-skywalker-80: "**ESC**: SkyWalker 80 A continuous, 100 A burst."
+  - battery-4000-mah: "**Battery**: 4000 mAh 6S, carried internally."
+  - battery-mass-650: "**Battery mass**: 650 g for a 4000 mAh 6S."
+  - airframe-maker-foam: "**Airframe**: Maker Foam, laser-cut, folded and glued."
+  - foam-areal-density: "**Maker Foam**: 5 mm, 0.293 kg/m2 areal density."
+  - layout-blended-cropped: "**Layout**: blended cropped delta, single fin, all-moving stabilators."
+  - wingtip-rails-fitted: "**Wingtip rails** fitted; no landing gear; hand-launched."
+  - four-channels-minimum: "**Four channels minimum**; eight-hour build, Expert level."
+assumed:
+  - no-plan-sheet: "**No plan sheet**: Master Series plans are not published."
+  - wing-area-and: "**Wing area and loading unpublished**: derive, then declare."
+  - planform-and-fuselage: "**Planform and fuselage from photographs**, fitted to whole silhouette."
+  - never-pixel-measure: "**Never pixel-measure a photograph**; optimise the silhouette instead."
+  - predict-dry-mass: "**Predict dry mass** from areal density times developed cut area."
+  - airfoil-flat-foam: "**Airfoil**: flat foam plate, a declared stand-in."
+  - edf-static-thrust: "**EDF static thrust not published**; assume and declare it."

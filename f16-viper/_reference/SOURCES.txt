@@ -1,0 +1,36 @@
+Published specifications: https://store.flitetest.com/ft-master-series-f-16-viper/
+  Wingspan 36 in (914 mm); Length 51 in (1295.4 mm);
+  Weight without battery 3 lb (1361 g);
+  CG 1-1.5 in (25.4-38 mm) from the wing leading edge;
+  Motor 70 mm 12-blade EDF, 2300 kV brushless;
+  ESC SkyWalker 80 A EDF (80 A continuous, 100 A burst), XT-90;
+  Battery 4000 mAh 6S; 4-channel minimum; 8 hour build; Expert.
+  Wing area and wing loading are NOT published.
+
+Plan sheet: NOT used. Flite Test do not publish Master Series plans
+free, and nothing in this notebook is measured off a plan or off a
+photograph by hand. Geometry is obtained by fitting the model's whole
+silhouette to the reference masks.
+
+Photographs: store product images, product id 3253.
+  studio.png  image 10419, Asset_2__03782.1665422663
+  belly.png   image 10423, f-16_3__71653.1746208376
+A third store frame (10422, a near side-on in-flight shot) was cut and
+REJECTED: the dark stabilator sits against a dark treeline and no
+colour rule separates them, so the mask would have been drawn by hand
+along the one edge that matters.
+
+Foam areal density: Flite Test WR 5 mm foam board sheet, 510 x 750 mm
+(0.3825 m2), 112 g per sheet -> 0.293 kg/m2.
+  https://www.buildyourowndrone.co.uk/flite-test-wr-5mm-foam-board-sheet
+Cross-check, Adams Readi-Board 20 x 30 in 3/16 in at 115 g -> 0.297 kg/m2
+  https://www.flitetest.com/articles/comparing-foam-board
+
+Battery mass: a 4000 mAh 6S LiPo is 630-660 g across common packs
+(Turnigy Graphene 658 g, Admiral 45C 630 g); 650 g taken. Flite Test do
+not publish a pack mass, so all-up weight is dry 1361 g + 650 g = 2011 g.
+
+EDF static thrust: the unit Flite Test sell for this airframe is the
+Powerfun 70 mm 12-blade 2300 kV, rated 2240 g static on 6S at 65 A /
+1638 W -> 22.0 N. Vendor bench maximum at full charge.
+  https://store.flitetest.com/70mm-edf-12-blades-ducted-fan-with-rc-brushless-motor-2300kv/

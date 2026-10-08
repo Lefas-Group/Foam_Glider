@@ -1,0 +1,9 @@
+photo  Flite Test store studio photograph, white background, finished
+build with decals. Front three-quarter from ABOVE and to PORT: nose at
+lower left, tail at upper right, the whole airframe in frame. Upper
+surfaces visible. Yellow-tinted bubble canopy. A single fin, two
+all-moving slab stabilators, wingtip missile rails with small missiles
+fitted both tips. Cropped delta wing blended into a slab-sided
+fuselage; a rectangular ventral intake hangs under the belly below the
+canopy. No landing gear. Mask cut by thresholding against the white
+background.

@@ -1,0 +1,8 @@
+photo  Flite Test in-flight photograph against pale sky, same finished
+build. Seen from BELOW and BEHIND, banked: nose at RIGHT, EDF exhaust
+at LEFT, so this is the mirror sense of the studio frame. The UNDER
+surface of the wing and the full fin profile are both visible, and the
+ventral fin and intake are silhouetted. Blurred treeline across the
+bottom of the frame is background, excluded from the mask. Mask cut by
+luminance threshold (the airframe is everywhere darker than the sky)
+plus exclusion of the treeline.
