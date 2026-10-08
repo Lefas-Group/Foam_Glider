@@ -159,6 +159,10 @@ _SOURCE_SUFFIXES = (".pdf",)
 # ground and returns a house, some sky and half an aeroplane on grass -- so
 # it is done by the party that can look at the result. A bad mask poisons
 # every pose fitted against it and nothing downstream catches that.
+#
+# `masks.py` is SCAFFOLDING FOR THAT HAND CUT, not a cutter: it owns the
+# morphology, the border fill and the overlay, and it has no default rule, so
+# the discriminant and the thresholds are still chosen by someone who looked.
 MASK_SUFFIX = ".mask.png"
 
 
@@ -291,11 +295,16 @@ def duplicate_photos(notebook, threshold=0.80):
     one shoot -- the same aircraft, the same camera, a decal set added
     between them -- fit the same pose and hide the same faults, so the run
     spends a turn on the second overlay and learns nothing it did not already
-    know. Measured here at IoU 0.88 on a pair that looked like two checks.
+    know. Measured here at IoU 0.87 on a pair that looked like two checks.
 
-    Masks are compared after centring on their own centroid, so this reports
-    a repeated VIEWPOINT rather than a repeated framing. Returns [] if numpy
-    or PIL is unavailable: a warning is not worth an import error.
+    Masks are compared after centring on their own centroid IN A COMMON
+    CANVAS, so this reports a repeated VIEWPOINT rather than a repeated
+    framing -- and so that two frames cropped to different sizes are still
+    compared. They used to be skipped, which meant the one pair most likely
+    to be two crops of one shoot was the one pair never checked: the F-16's
+    1280x1280 and 1280x985 frames got no comparison at all, at launch or
+    anywhere else. Returns [] if numpy or PIL is unavailable: a warning is
+    not worth an import error.
     """
     try:
         import numpy as np
@@ -303,29 +312,41 @@ def duplicate_photos(notebook, threshold=0.80):
     except ImportError:
         return []
 
-    def centred(mask_path):
+    def read(mask_path):
         a = np.array(Image.open(mask_path).convert("L")) > 128
-        if not a.any():
-            return None
-        ys, xs = np.nonzero(a)
-        return np.roll(a, (int(a.shape[0] // 2 - ys.mean()),
-                           int(a.shape[1] // 2 - xs.mean())), (0, 1))
+        return a if a.any() else None
 
     photos = reference_photos(notebook)
     loaded = []
     for name, _, mask in photos:
         try:
-            m = centred(mask)
+            m = read(mask)
         except OSError:
             m = None
         if m is not None:
             loaded.append((name, m))
+    if not loaded:
+        return []
+
+    # One canvas for every mask, big enough that nothing centred into it is
+    # clipped. Sized from the masks themselves rather than a constant so a
+    # pair of 4000 px frames is not quietly downsampled into agreement.
+    ch = 2 * max(m.shape[0] for _, m in loaded)
+    cw = 2 * max(m.shape[1] for _, m in loaded)
+
+    def centred(m):
+        out = np.zeros((ch, cw), bool)
+        ys, xs = np.nonzero(m)
+        y0 = int(ch // 2 - ys.mean())
+        x0 = int(cw // 2 - xs.mean())
+        out[y0:y0 + m.shape[0], x0:x0 + m.shape[1]] = m
+        return out
+
+    loaded = [(name, centred(m)) for name, m in loaded]
 
     out = []
     for i, (na, ma) in enumerate(loaded):
         for nb_, mb in loaded[i + 1:]:
-            if ma.shape != mb.shape:
-                continue
             union = (ma | mb).sum()
             if not union:
                 continue

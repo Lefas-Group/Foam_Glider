@@ -20,6 +20,8 @@
              [--allow-refactor]               …run that died with work on disk
              [--accept-refactor]              …committing a diff you have read
     nb view  <notebook> [--force]            render the whole site
+    nb reference <notebook>                  every photograph, its mask and
+             [--overlays] [--listing]        …the spread between viewpoints
     nb open  <notebook>                      the board in a window, the
                                              site in a browser
     nb eval  <notebook>                      what each model actually did
@@ -311,6 +313,13 @@ def main(argv):
             return 2
         from .cli.view import main as view
         return view(rest)
+
+    if cmd == "reference":
+        if not rest:
+            print(USAGE)
+            return 2
+        from .cli.reference import main as reference
+        return reference(rest)
 
     print(f"unknown command {cmd!r}\n\n{USAGE}")
     return 2

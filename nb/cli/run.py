@@ -212,6 +212,26 @@ def _reference_problems(notebook):
              "the shape UNVERIFIED.")
         return []
 
+    # A MASK THAT IS NOT ITS PHOTOGRAPH'S SIZE REFUSES. Everything else in
+    # this function is a judgement the coordinator may have made; this is a
+    # mistake every time. `compare_to_photo` takes H, W from the MASK and then
+    # indexes the photograph with it, and `_fit_pose` seeds scale and
+    # translation from the mask bounding box -- so a mis-sized mask does not
+    # fail loudly, it returns a pose in the wrong coordinate frame with a
+    # residual beside it, looking like an answer. Nothing else checks it.
+    from . import reference as _ref
+    sized = _ref.mismatched_masks(notebook)
+    if sized:
+        out = ["  A MASK IS NOT THE SIZE OF ITS PHOTOGRAPH, so the pose fitted "
+               "against it would be in the wrong coordinates."]
+        for name, photo, mask in sized:
+            out.append(f"    {name}  photograph {photo[0]}x{photo[1]}, "
+                       f"mask {mask[0]}x{mask[1]}")
+        out.append("    Re-cut each from the photograph it sits beside:")
+        out.append(f"      uv run --group nb python -m nb reference "
+                   f"{notebook.root.name}")
+        return out
+
     for p in stray:
         tell(f"  a stray _reference/ sits at {p} and is read by nothing.")
     for a, b, iou in figures.duplicate_photos(notebook):

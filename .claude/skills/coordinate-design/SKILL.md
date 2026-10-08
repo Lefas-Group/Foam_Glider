@@ -386,13 +386,28 @@ _reference/studio.txt          first word `photo`, then a description
 cwd persists between calls, so a `cp` issued after a `cd` into the notebook
 puts the files at `<nb>/<nb>/_reference/`. Nothing used to complain: the run
 simply launched with no photographs and honestly declared the shape
-unverified. Launch now refuses on that, but confirm it yourself before asking:
+unverified. Launch now refuses on that.
+
+**One command checks the whole set, and it is the pre-flight before the first
+`nb ask`:**
 
 ```bash
-uv run --group nb python -c "
-from nb.config import Notebook; from nb.tools import figures
-print(figures.reference_listing(Notebook('<notebook>')))"
+uv run --group nb python -m nb reference <notebook>              # the check
+uv run --group nb python -m nb reference <notebook> --overlays   # …and look
 ```
+
+It reports every photograph, whether each is labelled `photo` with a mask
+beside it, whether each mask is the SAME PIXEL SIZE as its photograph, each
+mask's area and extent, and the pairwise viewpoint spread. It exits 1 on a
+fault a run cannot work around. `--listing` adds the text the run will
+actually be shown.
+
+The size check is there because nothing else makes it: `compare_to_photo`
+takes its frame from the MASK and then indexes the photograph with it, and
+`_fit_pose` seeds scale and translation from the mask bounding box — so a
+mis-sized mask does not fail loudly, it returns a pose in the wrong
+coordinates with a residual beside it, looking like an answer. Launch refuses
+on it now.
 
 **ANGULAR SPREAD IS THE WHOLE POINT, and it is the thing to maximise.** Each
 camera position pins down what it happens to show and says nothing about the
@@ -403,20 +418,13 @@ survive in exactly the directions nobody photographed. Two frames from one
 shoot are ONE photograph — they fit the same pose, hide the same faults, and
 cost the run a turn to confirm what the first already said. Retailers shoot a
 product once and recolour it, so "two store photos" is usually one viewpoint
-twice; the Mini Explorer's pair measured IoU 0.88, and a Little Piggy pair
+twice; the Mini Explorer's pair measured IoU 0.87, and a Little Piggy pair
 that differed in paint, framing and apparent elevation still measured 0.82.
 
-So before the first `nb ask`, cut EVERY frame the source offers, then print
-the pairwise overlap and keep the spread:
-
-```bash
-uv run --group nb python -c "
-from nb.config import Notebook; from nb.tools import figures
-print(figures.duplicate_photos(Notebook('<notebook>'), threshold=0.0))"
-```
-
-Drop a frame only when some other frame already covers its angle. Four
-viewpoints whose worst pair is 0.46 are four checks; two at 0.82 are one.
+So before the first `nb ask`, cut EVERY frame the source offers, then read
+the spread off `nb reference` and keep it. Drop a frame only when some other
+frame already covers its angle. Four viewpoints whose worst pair is 0.47 are
+four checks; two at 0.82 are one.
 
 **A hard mask is work to do, not a reason to drop the angle.** This is the
 trap, and it is baited by convenience: the easy frames are studio shots of one
@@ -427,7 +435,7 @@ were REJECTED on the honest-sounding ground that a mask which loses a wing is
 worse than no second viewpoint. True, and the wrong conclusion — what it
 bought was a notebook whose only two photographs were one shoot at IoU 0.82,
 which is what launch had already warned about. Cutting them properly took
-about twenty minutes and produced four angles at worst-pair 0.46.
+about twenty minutes and produced four angles at worst-pair 0.47.
 
 When one rule fails, the fix is a DIFFERENT DISCRIMINANT, not a smaller
 ambition. White foam against foliage separates by GREENNESS (airframe 0 to +2,
@@ -438,6 +446,46 @@ opposite rules, and within one frame a single shadowed panel needed a local
 override of the rule that cut the rest. A backlit panel darker than the haze
 behind it may separate by neither, and then bound it from the frame by hand
 and say so in the `.txt`.
+
+`nb/tools/masks.py` carries the plumbing for that — the border fill, the
+morphology, the largest-blob pick, the 0/255 PNG, the overlay — so what you
+write is the rule and nothing else. Write a short script in the scratchpad
+and run it with `PYTHONPATH=. uv run --group nb python <script>`:
+
+```python
+from nb.config import Notebook
+from nb.tools.masks import cut, rect, background, from_alpha
+
+nb = Notebook("little-piggy")
+
+# `bg` has NO DEFAULT. Choosing the discriminant is the step that cannot be
+# automated, so there is no call that skips it.
+def bg(green_hi, lum_lo):
+    return lambda lum, g, grad: background(lum, g, grad,
+                                           green_hi=green_hi, lum_lo=lum_lo)
+
+# `keep` is the LOCAL OVERRIDE. On this frame both wing panels sit at
+# lum 97-115 against trees at 28-46 at the SAME greenness, so the rule that
+# cut the body loses the wings entirely.
+def wings(lum, green, grad):
+    import numpy as np
+    yy, xx = np.mgrid[0:lum.shape[0], 0:lum.shape[1]]
+    band = (xx >= 22) & (xx < 458) & (yy >= 196) & (yy < 300)
+    return band & (lum > 78) & (green < 22)
+
+m, report = cut(nb, "below-front", bg=bg(14, 92), keep=wings,
+                bound=rect((75, 360, 10, 470)))
+print(report)        # names the overlay to look at
+
+# A vendor's own alpha beats any rule you would write against the flattened
+# RGB -- retailers cut their product shots, and two of the five Little Piggy
+# store frames carried one.
+from_alpha(nb, "studio", "scratch/white_pig.webp")
+```
+
+`bound` is a claim about the FRAME, not about the aircraft — "outboard of the
+body there is nothing but wing" — and it is the one hand-made part of a mask,
+so record it in the `.txt`.
 
 **Hunt for plain backgrounds** when choosing between frames of the SAME angle
 — on white the mask is one threshold, on grass it is a judgement call, and a
@@ -453,8 +501,11 @@ starts. Look at it the one way that actually shows a fault: draw the mask
 boundary back over the photograph in red and read the edge, panel by panel.
 A mask inspected as a white blob on black looks plausible while missing a
 wing; the same mask over the photograph makes the missing wing obvious in a
-glance. Iterate until every panel is traced, and record in each `.txt` which
-rule cut that frame and which region needed an override — the next
+glance. `cut` writes that overlay every time and names it in its report, and
+`nb reference --overlays` redraws them all — but writing it is not reading
+it, and nothing can read it for you. Iterate until every panel is traced, and
+record in each `.txt` which rule cut that frame and which region needed an
+override — the next
 coordinator needs to know which parts of the silhouette were hand-bounded.
 
 The run then calls `compare_to_photo` itself, fits the camera by chamfer

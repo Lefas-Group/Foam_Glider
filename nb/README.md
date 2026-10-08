@@ -97,6 +97,7 @@ open glider-notebook/_site/index.html
 
 ```bash
 uv run --group nb python -m nb new    <notebook> …           # once per aircraft
+uv run --group nb python -m nb reference <notebook> [--overlays]  # …its photographs, checked
 uv run --group nb python -m nb reconstruct <notebook> --chapter NN-name
                                                              # …a real aircraft, to tolerance
 uv run --group nb python -m nb ask    <notebook> "<q>"       # the main one
@@ -278,7 +279,27 @@ and say loudly — without refusing — when there is no photograph at all.
 the entire value of a second file: a frame from the same shoot fits the same
 pose, hides the same faults, and costs a turn to confirm what the first
 already said. Launch compares the masks and warns above IoU 0.80. Measured on
-the Mini Explorer at 0.88 — the same studio shot with a decal set added.
+the Mini Explorer at 0.87 — the same studio shot with a decal set added.
+Masks of different pixel sizes used to be skipped by that comparison, which
+meant the pair most likely to be two crops of one shoot was the pair never
+checked; they are centred into a common canvas now.
+
+**A mask that is not its photograph's size refuses the launch.** It is the one
+reference fault that is never deliberate, and the only one nothing else
+detects: `compare_to_photo` takes its frame from the MASK and then indexes the
+photograph with it, and `_fit_pose` seeds scale and translation from the mask
+bounding box, so the run comes back with a pose in the wrong coordinates and a
+residual beside it, looking like an answer.
+
+**`nb reference <notebook>`** is the pre-flight for all of this — every
+photograph, whether it is labelled and masked, whether the sizes agree, the
+mask's area and extent, and the pairwise viewpoint spread. `--overlays`
+redraws each mask boundary over its photograph into `_scratch/masks/`, which
+is the only inspection that finds a missing wing; `--listing` adds the text
+the run will actually be shown. `nb/tools/masks.py` holds the cutting
+scaffolding the coordinator drives — morphology, border fill, the overlay —
+and deliberately has no default rule, because choosing the discriminant is
+the step that cannot be automated.
 
 Three rules exist for this path. **43** (warning) counts the numeric
 constants `_model.py` fixes against the inputs the chapter declares. **44**
