@@ -15,5 +15,6 @@ EDGE, tractor. Above the head rise two swept EARS, which are the only
 vertical surfaces besides the wingtip endplates. There is NO horizontal
 tail of any kind. A wheel shows below the belly at lower centre.
 
-The elevation is a reading of the image, not a fitted value -- fit the
-camera and read the number back before trusting it.
+The elevation and azimuth above are a READING OF THE IMAGE, not a
+fitted value. Fit the camera and read the numbers back against this
+note before trusting either.

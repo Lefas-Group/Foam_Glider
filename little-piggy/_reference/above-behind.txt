@@ -1,0 +1,21 @@
+photo  Flite Test in-flight photograph, product 3303, image 10570,
+`flying_white_1_480`. Dark blurred treeline behind; a blurred fence and
+field across the bottom of the frame, excluded from the mask.
+
+An oblique view onto the aircraft's PORT side with the aircraft banked,
+nose low toward frame lower-left: the port wing sweeps up and away to
+upper LEFT and ends in its upswept endplate fin, the starboard wing
+runs down to frame RIGHT, and both EARS stand clear above the body.
+Both propellers and both plywood pods are in frame. The legs, both
+wheels and the stepped underside of the body hang toward the camera, so
+this frame carries the LANDING-GEAR geometry and the body's depth
+better than any other.
+
+Mask: greenness separates the airframe (green bias about 0 to +2) from
+the foliage (+18 to +30). The STARBOARD wing and the flank beneath the
+starboard ear are deep in the body's own shadow, at the same greenness
+as the trees and only luminance apart from them -- 78-90 against 10-55
+-- so that region is recovered by a local brightness rule instead.
+
+The viewpoint above is a READING OF THE IMAGE. Fit the camera and read
+the numbers back against this note before trusting it.

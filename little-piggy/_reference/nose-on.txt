@@ -1,0 +1,25 @@
+photo  Flite Test in-flight photograph, product 3303, image 10569,
+`flying_white_2_480`. Pale overcast sky above, blurred foliage across
+the lower half and the right edge.
+
+Close to HEAD-ON, and the camera is near the aircraft's own level or a
+little BELOW it: the belly, both wheels on their wire legs, the rear
+underside block and the under-surface of the wing root are what is
+visible, and no dorsal surface is. The wing crosses the frame almost
+exactly horizontally, left tip to right tip, so this frame is where the
+SPAN, the dihedral and the wingtip endplate cant are least ambiguous.
+Both plywood motor pods sit on the leading edge at roughly a third of
+semi-span, propellers turning. The two EARS stand up on top of the
+head, canted outward. No horizontal tail.
+
+Mask: cut by flood-filling the sky from the frame border through smooth
+bright pixels, with foliage removed by greenness, and enclosed pockets
+of sky matched on tone. The PORT wing (frame left) is backlit -- its
+underside is DARKER than the hazy background behind it, so no tone rule
+separates them and the fill ran about 12 px past the trailing edge. Its
+extent is bounded from the frame instead, as a straight bar from root
+to tip plus the tip fin, each with a 5 px margin. That bound is the one
+hand-made part of this mask.
+
+The viewpoint above is a READING OF THE IMAGE. Fit the camera and read
+the numbers back against this note before trusting them.

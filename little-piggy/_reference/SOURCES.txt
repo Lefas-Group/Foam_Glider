@@ -39,18 +39,38 @@ hand. Geometry is obtained by fitting the model's whole silhouette to
 the reference masks.
 
 Photographs: store product images, product id 3303, five frames offered.
-  studio-white.png  image 10568, white_pig_-_png_480   (KEPT, vendor alpha)
-  studio-pink.png   image 10573, merica_painted_480    (KEPT, vendor alpha)
-The three in-flight frames (10567 flying_white_3, 10569 flying_white_2,
-10570 flying_white_1) were downloaded, cut and REJECTED. All three are
-480 px with the airframe lit from behind against foliage or bright sky;
-every rule tried -- luminance, saturation, greenness, local texture
-variance -- dropped a whole wing panel, because the near wing surfaces
-sit in shade at the same tone as the trees. A mask that loses a wing is
-worse than no second viewpoint, so they are not in the notebook. If a
-better in-flight frame appears, that is the viewpoint to add: both kept
-photographs are from one studio session and differ mainly in camera
-elevation (mask IoU 0.77).
+FOUR are kept, chosen to spread the camera as widely as the five allow:
+
+  studio.png        10568 white_pig_-_png_480     3/4 from above and ahead
+  nose-on.png       10569 flying_white_2_480      head-on, at or below level
+  above-behind.png  10570 flying_white_1_480      oblique onto the port side
+  below-front.png   10567 flying_white_3_480      from ahead and below
+
+Pairwise mask IoU, on nb's own centroid-centred measure:
+
+                studio  nose-on  above-behind  below-front
+  studio          --      0.20       0.29          0.46
+  nose-on        0.20      --        0.38          0.24
+  above-behind   0.29     0.38        --           0.32
+  below-front    0.46     0.24       0.32           --
+
+The fifth frame, 10573 `merica_painted_480`, is the SAME viewpoint as
+`studio` at IoU 0.82 -- one shoot, one camera, a paint scheme added
+between frames -- so it is not in the notebook. Its mask was perfect and
+that bought nothing; a second overlay from the same pose fits the same
+pose and hides the same faults.
+
+Masks: `studio` uses the vendor's own alpha channel, so it is exact. The
+three in-flight frames were cut by hand against the frame, and each
+`.txt` records which rule cut it and which part needed a local override.
+The first pass on all three used a single global luminance rule and
+dropped a whole wing panel from each -- the near surfaces sit in shade at
+the same tone as the trees. That is a reason to cut the frame properly,
+not a reason to drop the viewpoint: a backlit wing is separable by
+GREENNESS where it is not separable by brightness, and vice versa, and
+the two in-flight frames needed opposite rules. Every mask here was
+checked by drawing its boundary back over the photograph and looking at
+it.
 
 Aircraft description: the FT Little Piggy is a 2026 Flite Test kit
 celebrating the Flying Pig mascot, released for the DARPA Lift

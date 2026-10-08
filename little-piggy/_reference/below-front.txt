@@ -1,0 +1,20 @@
+photo  Flite Test in-flight photograph, product 3303, image 10567,
+`flying_white_3_480`. Blurred green foliage fills the whole frame; a
+pale hazy patch at upper left is background, not aircraft.
+
+From AHEAD and BELOW, close to the centreline: the UNDER-surface of
+both wing panels is what is visible -- both read as one flat, evenly
+shaded block -- together with the belly, both wheels, the chin and the
+stepped rear underside. The two EARS show above the head. Both wingtip
+endplate fins are in frame, pointing down-and-outward from this side.
+This is the only frame that shows the wing's lower surface and the
+anhedral/dihedral break at the root, and it is the natural check on
+wing INCIDENCE.
+
+Mask: greenness separates airframe from foliage over the body, but both
+wing panels sit at lum 97-115 against trees at 28-46 at the SAME
+greenness, so the wing bands are recovered by a local brightness rule
+(lum > 78, greenness < 22) instead.
+
+The viewpoint above is a READING OF THE IMAGE. Fit the camera and read
+the numbers back against this note before trusting it.
