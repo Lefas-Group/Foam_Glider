@@ -22,6 +22,9 @@
     nb view  <notebook> [--force]            render the whole site
     nb reference <notebook>                  every photograph, its mask and
              [--overlays] [--listing]        …the spread between viewpoints
+    nb mask  <notebook> [name ...]           cut the reference masks, by model
+             [--all] [--force]               …re-cutting needs --force once
+                                             …a notebook has entries
     nb open  <notebook>                      the board in a window, the
                                              site in a browser
     nb eval  <notebook>                      what each model actually did
@@ -320,6 +323,13 @@ def main(argv):
             return 2
         from .cli.reference import main as reference
         return reference(rest)
+
+    if cmd == "mask":
+        if not rest:
+            print(USAGE)
+            return 2
+        from .cli.mask import main as mask
+        return mask(rest)
 
     print(f"unknown command {cmd!r}\n\n{USAGE}")
     return 2

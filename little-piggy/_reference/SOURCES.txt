@@ -65,28 +65,30 @@ between frames -- so it is not in the notebook. Its mask was perfect and
 that bought nothing; a second overlay from the same pose fits the same
 pose and hides the same faults.
 
-Masks: `studio` uses the vendor's own alpha channel, so it is exact. The
-three in-flight frames were cut by hand against the frame, and each `.txt`
-records which rule cut it and which region needed a local override.
+Masks: all four cut by `nb mask`, which runs the pinned
+`birefnet-general-lite` session (BiRefNet, MIT, via rembg). Nothing here is
+thresholded or bounded by hand any more.
 
-They were cut TWICE. The first pass used brightness and greenness, lost a
-whole wing panel from each frame, was patched with local brightness rules
-until the boundary traced the airframe, and was accepted on the strength of
-that boundary drawn over the photograph. It was still wrong: the shaded
-belly, chin, legs and wheels lay OUTSIDE all three masks, and a patch of sky
-inside one. A shaded white facet in sunlight is a warm cream, which is what
-both of those axes score as foliage -- on `nose-on` the shaded belly is
-lum 107 against foliage at lum 100.
+They were cut three times, and the history is the reason the tool exists.
+The FIRST pass used brightness and greenness, lost a whole wing panel from
+each in-flight frame, and was patched with local brightness rules until the
+boundary traced the airframe. It was still wrong: the shaded belly, chin,
+legs and wheels lay OUTSIDE all three masks, because a shaded white facet in
+sunlight is a warm cream that both axes score as foliage -- on `nose-on` the
+shaded belly is lum 107 against foliage at lum 100. The SECOND pass cut on
+saturation, which does separate them, and fixed that. The THIRD is this one.
 
-SATURATION is the axis that separates them, because white foam is achromatic
-by construction however dark it gets while foliage is chromatic however
-bright: 0.34 against 0.51 on `nose-on`, 0.38 against 0.79 on `above-behind`.
-Re-cut on saturation, the share of each boundary that is sub-5px noise fell
-from 14.4%, 2.6% and 1.7% to 3.8%, 0.9% and 0.4%, against 0.6% for the
-vendor's own alpha.
+A bake-off over all 13 masks in the repo settled it: birefnet-general-lite
+scored IoU 0.950 against them and 0.992 against `studio`, whose mask was the
+vendor's own alpha and so exactly right, with a boundary cleaner than the
+hand cuts -- 1.5% against 3.0% on the 5 px smoothing test. Per frame here,
+model against the hand cut it replaced: studio 0.992, above-behind 0.973,
+below-front 0.935, nose-on 0.771. The last is low because the HAND cut was
+wrong there, not the model: it bounded the backlit port wing with a
+fabricated straight bar and left ragged spurs off the starboard tip.
 
-The inspection that caught it was tinting the mask INTERIOR over the
-photograph rather than tracing its edge. A boundary reads as correct
+The inspection that caught every one of these was tinting the mask INTERIOR
+over the photograph rather than tracing its edge. A boundary reads as correct
 wherever it follows a real edge, and the crease between a lit facet and a
 shaded one is a real edge.
 

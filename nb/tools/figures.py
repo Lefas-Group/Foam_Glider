@@ -154,15 +154,21 @@ _SOURCE_SUFFIXES = (".pdf",)
 
 # A SUBJECT MASK, beside its photograph: `studio.jpg` -> `studio.mask.png`.
 #
-# Cut by the coordinator, never by a run. Segmentation is the one step that
-# cannot be automated across photographs -- a threshold is exact on a white
-# ground and returns a house, some sky and half an aeroplane on grass -- so
-# it is done by the party that can look at the result. A bad mask poisons
-# every pose fitted against it and nothing downstream catches that.
+# Cut by the coordinator, never by a run: a bad mask poisons every pose fitted
+# against it and nothing downstream catches that.
 #
-# `masks.py` is SCAFFOLDING FOR THAT HAND CUT, not a cutter: it owns the
-# morphology, the border fill and the overlay, and it has no default rule, so
-# the discriminant and the thresholds are still chosen by someone who looked.
+# This comment used to say segmentation itself could not be automated. That was
+# true of the per-pixel colour rules it was written about -- they have no
+# notion of OBJECT, and they failed exactly where tone does not separate
+# subject from ground, dropping every shaded surface on one aircraft and taking
+# in the hand holding another. It is no longer true. `nb mask` cuts with a
+# pinned model that scored IoU 0.950 against all 13 committed masks and 0.992
+# against the one that is exactly right, with a cleaner boundary than any of
+# them.
+#
+# WHAT CANNOT BE AUTOMATED IS LOOKING AT THE RESULT. The model reports nothing
+# when it is wrong, so `nb mask` writes a tinted overlay every time and
+# `nb reference` scores the boundary. Neither can read it for you.
 MASK_SUFFIX = ".mask.png"
 
 

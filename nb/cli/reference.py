@@ -109,7 +109,9 @@ def _report_masks(notebook, assets, photos):
             continue
         if p.stem not in usable:
             tell(f"    {p.stem:16s} NO MASK -- a photograph without one "
-                 f"cannot be compared against")
+                 f"cannot be compared against;")
+            tell(f"    {'':16s} cut it: uv run --group nb python -m nb mask "
+                 f"{notebook.root.name} {p.stem}")
             bad += 1
             continue
         s = masks.stats(notebook, p.stem)

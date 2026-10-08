@@ -35,6 +35,23 @@ nb = [
     # against a true 24), and 40x more seeds did not fix it -- the ranking was
     # wrong, not the density. CMA-ES also has no zero-seeded-simplex trap.
     "cma>=4",
+    # Reference masks, for `nb mask`. By far the heaviest thing in this group
+    # -- ~29 packages, onnxruntime and (through pymatting) scikit-image, numba
+    # and llvmlite -- and it is here rather than in a group of its own so that
+    # `nb mask` needs no sync step anyone can forget. Weights are NOT shipped:
+    # 214 MB lands in ~/.rembg on first use.
+    #
+    # Chosen by measurement over all 13 committed masks. birefnet-general-lite
+    # scored IoU 0.950 against them and 0.992 against the one mask that is
+    # exactly right (a vendor alpha channel), with a boundary CLEANER than the
+    # hand-cut masks on the 5 px smoothing test -- 1.5% against 3.0%. isnet
+    # tied on accuracy with rougher edges; u2net scored 0.031 on the control.
+    #
+    # ALWAYS PIN THE SESSION. rembg's own default is `bria-rmbg`, whose weights
+    # need a paid agreement for commercial use; rembg is MIT but says plainly
+    # that "model weights carry their own licenses". BiRefNet is MIT, both code
+    # and weights.
+    "rembg[cpu]>=2.0.60",
 ]
 # Pinned to 1.x: the vendored server uses mcp.server.fastmcp.FastMCP,
 # which 2.x renamed to MCPServer.

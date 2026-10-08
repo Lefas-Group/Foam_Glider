@@ -11,12 +11,9 @@ This is the only frame that shows the wing's lower surface and the
 anhedral/dihedral break at the root, and it is the natural check on
 wing INCIDENCE.
 
-Mask: cut on SATURATION. Background is sat > 0.45 or lum < 55: the wing
-undersides sit at sat 0.29-0.39 and the foliage at 0.80, where on
-brightness the two are 91-114 against 36 and on greenness they overlap.
-The defocused bokeh at upper left is also low-saturation and is removed by
-the frame bound. Three local positional rules recover the port tip fin and
-the two plywood motor pods, which are brown and so read as saturated.
+Mask: cut by `nb mask` with the pinned `birefnet-general-lite`
+session. Agrees with the hand cut it replaced to IoU 0.935, with a
+cleaner boundary -- 0.0% noise against 0.4%.
 
 The viewpoint above is a READING OF THE IMAGE. Fit the camera and read
 the numbers back against this note before trusting it.

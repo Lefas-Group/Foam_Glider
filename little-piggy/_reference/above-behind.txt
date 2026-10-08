@@ -11,16 +11,9 @@ wheels and the stepped underside of the body hang toward the camera, so
 this frame carries the LANDING-GEAR geometry and the body's depth
 better than any other.
 
-Mask: cut on SATURATION, not greenness. Background is sat > 0.68 or
-lum < 50; the foliage here runs sat 0.79 while the aircraft's shaded cream
-underside runs 0.38-0.53, which is the gap greenness does not offer. The
-sunlit tan belly plate is more saturated still and is recovered by a local
-positional rule over that patch alone.
-
-An earlier cut used greenness and brightness and dropped the whole cream
-underside -- belly plate, lower legs, the rear underside block -- because a
-shaded white facet in sunlight is a warm cream that both those axes score
-as foliage.
+Mask: cut by `nb mask` with the pinned `birefnet-general-lite`
+session. Agrees with the hand cut it replaced to IoU 0.973, with a
+cleaner boundary -- 0.4% noise against 0.9%.
 
 The viewpoint above is a READING OF THE IMAGE. Fit the camera and read
 the numbers back against this note before trusting it.

@@ -98,6 +98,7 @@ open glider-notebook/_site/index.html
 ```bash
 uv run --group nb python -m nb new    <notebook> …           # once per aircraft
 uv run --group nb python -m nb reference <notebook> [--overlays]  # …its photographs, checked
+uv run --group nb python -m nb mask      <notebook> [--all]      # …cut its masks, by model
 uv run --group nb python -m nb reconstruct <notebook> --chapter NN-name
                                                              # …a real aircraft, to tolerance
 uv run --group nb python -m nb ask    <notebook> "<q>"       # the main one
@@ -291,15 +292,35 @@ photograph with it, and `_fit_pose` seeds scale and translation from the mask
 bounding box, so the run comes back with a pose in the wrong coordinates and a
 residual beside it, looking like an answer.
 
-**`nb reference <notebook>`** is the pre-flight for all of this — every
-photograph, whether it is labelled and masked, whether the sizes agree, the
-mask's area and extent, and the pairwise viewpoint spread. `--overlays`
-redraws each mask boundary over its photograph into `_scratch/masks/`, which
-is the only inspection that finds a missing wing; `--listing` adds the text
-the run will actually be shown. `nb/tools/masks.py` holds the cutting
-scaffolding the coordinator drives — morphology, border fill, the overlay —
-and deliberately has no default rule, because choosing the discriminant is
-the step that cannot be automated.
+**Masks are cut by a model, not by hand.** `nb mask <notebook>` runs a pinned
+segmentation session over every photograph that has none. It replaced per-pixel
+colour rules, which have no notion of OBJECT and so failed wherever tone does
+not separate subject from ground: they put the belly, chin, legs and wheels of
+one aircraft outside its mask, and dropped the red rudder and spinner of
+another while taking in the hand holding it. Chosen by measurement over all 13
+committed masks — IoU 0.950 against them, 0.992 against the one that is exactly
+right (a vendor's alpha channel), and a cleaner boundary than any of them, 1.5%
+against 3.0% on the 5 px smoothing test. About a minute a photograph on CPU;
+214 MB of weights land in `~/.rembg` on first use. The session is pinned
+because rembg's own default needs a paid commercial agreement.
+
+There is deliberately **no escape hatch**. A salient-object model cannot know
+the hand holding the aeroplane is not part of it, and no parameter fixes that —
+use a different frame, or paint the PNG.
+
+**`nb mask` refuses to overwrite a mask in a notebook that has committed
+entries**, unless forced. A mask is an input to fits that are already rendered
+and frozen, and nothing notices it changing: freeze keys on the `.qmd`, the
+staleness check compares page against freeze, and rule 12's list does not name
+`_reference/`. Those numbers are load-bearing — one entry's hero value IS its
+chamfer residual — so a silent re-cut would falsify the record.
+
+**`nb reference <notebook>`** is the pre-flight — every photograph, whether it
+is labelled and masked, whether the sizes agree, the mask's area, boundary
+roughness and noise, and the pairwise viewpoint spread. `--overlays` redraws
+each mask tinted over its photograph into `_scratch/masks/`, which is the
+inspection that finds a missing wing; `--listing` adds the text the run will
+actually be shown.
 
 Three rules exist for this path. **43** (warning) counts the numeric
 constants `_model.py` fixes against the inputs the chapter declares. **44**

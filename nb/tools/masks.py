@@ -1,26 +1,35 @@
 """
-masks -- scaffolding for the coordinator's hand cut of a reference mask.
+masks -- cut a reference photograph's subject mask with a segmentation model.
 
-NOT A SEGMENTER, and the distinction is the whole design. `figures.py` states
-the policy this module has to live under: segmentation cannot be automated
-across photographs, so it is done by the party that can look at the result.
-Nothing here chooses a threshold, a discriminant or a region. What it removes
-is the plumbing -- sobel, closing, largest blob, fill, the 0/255 PNG -- and
-the inspection artefact, which is the part that was being skipped.
+WHAT CANNOT BE AUTOMATED IS LOOKING AT THE RESULT. `figures.py` used to say
+segmentation itself could not be, and that was true of the per-pixel colour
+rules this replaces: they have no notion of OBJECT, so they fail wherever tone
+alone does not separate subject from ground. Measured twice. On the Little
+Piggy a brightness-and-greenness rule put the belly, the chin, both legs and
+both wheels OUTSIDE the mask, because a shaded white facet in sunlight is a
+warm cream and foliage scores the same on both axes. On the Mustang the same
+class of rule dropped the red rudder and spinner, missed the propeller, and
+took in part of the hand holding the aircraft.
 
-Measured on the FT Little Piggy: cutting four frames cost about fifteen turns
-and eleven throwaway scripts, and the first three masks each lost a whole
-wing panel. Every one of those was invisible as a white blob on black and
-obvious the moment the boundary was drawn back over the photograph. So `cut`
-writes that overlay unconditionally, and takes no default rule: a cut nobody
-chose is the failure this module exists to make harder, not easier.
+A model carries the object prior those rules lack, and it was chosen by
+measurement over all 13 masks then committed:
 
-ONE FRAME, ONE RULE is the thing the API is shaped around. Two Little Piggy
-frames from the same shoot needed OPPOSITE discriminants -- white foam
-separates from foliage by GREENNESS at tones where brightness cannot tell
-them apart, and a panel in the body's own shadow separates by BRIGHTNESS at
-greenness where the colour rule cannot -- and one shadowed panel in each
-needed a local override of the rule that cut the rest. That is `keep`.
+    model                   IoU vs 4 verified   IoU vs all 13   own noise
+    birefnet-general-lite               0.918           0.950        1.5%
+    isnet-general-use                   0.920           0.908        2.3%
+    u2net                               0.580           0.807        2.3%
+    the hand-cut masks                      -               -        3.0%
+
+On `little-piggy/studio`, whose mask is a vendor's own alpha channel and so is
+exactly right, it scores 0.992 from a 480 px JPEG. Its boundary is cleaner than
+the hand cuts on the one test that needs no ground truth.
+
+NO ESCAPE HATCH, deliberately. There is no predicate, no bound, no crop. A
+salient-object model cannot know that the hand holding the aeroplane is not
+part of it, and no parameter fixes that -- on the Mustang every model kept the
+hand. When the model takes in something that is not the aircraft, use a
+different photograph; a mask is also just a PNG, so paint it out if the
+viewpoint is worth keeping. Both beat carrying a rule language for the case.
 
 Coordinator-only. Nothing here is registered in `nb/tools/__init__.py`: a run
 must never cut the mask it is then measured against.
@@ -28,9 +37,14 @@ must never cut the mask it is then measured against.
 
 from . import figures
 
-#: Written beside the photograph, so a mask lands where `_reference_image`
-#: looks for it rather than wherever the shell happened to be -- the
-#: `<nb>/<nb>/_reference/` mistake, made once and warned about ever since.
+#: The session, PINNED. rembg's own default is `bria-rmbg`, whose weights need
+#: a paid agreement for commercial use -- rembg is MIT but says plainly that
+#: "model weights carry their own licenses". BiRefNet is MIT, code and weights.
+MODEL = "birefnet-general-lite"
+
+#: Overlays live under `_scratch/`, which is gitignored, and NOT in
+#: `_reference/`: an `x.overlay.png` there would be picked up by
+#: `reference_paths` as an unlabelled asset and offered to the run.
 OVERLAY_DIR = "masks"
 
 #: The boundary colour over the photograph. Red because no airframe in any
@@ -46,21 +60,15 @@ FILL_ALPHA = 0.55
 
 
 def _np():
-    """numpy, PIL.Image and scipy.ndimage, or a SystemExit naming what to do.
-
-    Imported here rather than at module scope for `figures.py`'s reason --
-    this module is reachable from the launch path through `nb reference` --
-    but NOT degraded to a no-op the way a warning is. Image work without
-    numpy is not a reduced service, it is nothing at all.
-    """
+    """numpy, PIL.Image and scipy.ndimage, or a SystemExit naming the fix."""
     try:
         import numpy as np
         from PIL import Image
         from scipy import ndimage
     except ImportError as exc:                      # pragma: no cover
         raise SystemExit(
-            f"nb.tools.masks needs numpy, pillow and scipy ({exc}). They "
-            f"arrive with the project dependencies: `uv sync`.")
+            f"nb.tools.masks needs numpy, pillow and scipy ({exc}). "
+            f"`uv sync --group nb`.")
     return np, Image, ndimage
 
 
@@ -79,195 +87,60 @@ def _paths(notebook, name):
     return img, root / f"{name}{figures.MASK_SUFFIX}"
 
 
-class Tones:
-    """The axes a mask rule may cut on, for one photograph.
-
-    A record rather than a tuple because the axis that matters is not known
-    in advance and a tuple pins the signature of every rule ever written.
-    `sat` was added after three masks were cut without it and lost every
-    downward-facing surface on the aircraft.
-
-      lum    0-255 mean of RGB
-      green  G - (R+B)/2, the lit-foam-against-foliage axis
-      sat    HSV saturation, (max-min)/max -- THE SHADED-SURFACE AXIS
-      grad   sobel magnitude, for the border fill's walls
-    """
-
-    def __init__(self, lum, green, sat, grad):
-        self.lum, self.green, self.sat, self.grad = lum, green, sat, grad
-
-    @property
-    def shape(self):
-        return self.lum.shape
+#: One session per model, for the life of the process. `new_session` loads 214
+#: MB from disk and builds an onnxruntime graph, which is about 40 s -- paid
+#: once per `nb mask`, not once per photograph. Four frames went from four
+#: loads to one.
+_SESSIONS = {}
 
 
-def load(notebook, name):
-    """The photograph's tone axes. -> Tones.
-
-    REACH FOR `sat` FIRST ON A SUNLIT SUBJECT. White foam is achromatic by
-    construction, so however deep a facet falls into shadow it stays
-    low-saturation; foliage is chromatic however bright it gets. Brightness
-    and greenness both FAIL on exactly the surfaces that matter: measured on
-    `nose-on`, the shaded belly is lum 107 against foliage at lum 100, and
-    green +16.7 against +22.4 -- no threshold on either separates them -- but
-    saturation is 0.34 against 0.51, and on `above-behind` 0.38 against 0.79.
-
-    Three Little Piggy masks were cut on brightness and greenness alone and
-    every downward-facing surface -- belly, chin, legs, wheels -- fell outside
-    the mask, because a shaded white facet in sunlight is a warm cream that
-    both those axes score as foliage.
-    """
-    np, Image, ndimage = _np()
-    img, _ = _paths(notebook, name)
-    a = np.asarray(Image.open(img).convert("RGB")).astype(float)
-    lum = a.mean(2)
-    green = a[..., 1] - (a[..., 0] + a[..., 2]) / 2.0
-    mx, mn = a.max(2), a.min(2)
-    sat = np.where(mx > 0, (mx - mn) / np.maximum(mx, 1.0), 0.0)
-    grad = np.hypot(ndimage.sobel(lum, 1), ndimage.sobel(lum, 0))
-    return Tones(lum, green, sat, grad)
+def _session(model):
+    """The rembg session for `model`, built once. -> session."""
+    if model not in _SESSIONS:
+        try:
+            from rembg import new_session
+        except ImportError as exc:                  # pragma: no cover
+            raise SystemExit(
+                f"nb.tools.masks needs rembg to cut a mask ({exc}). "
+                f"`uv sync --group nb`. The weights -- 214 MB -- download to "
+                f"~/.rembg on first use.")
+        _SESSIONS[model] = new_session(model)
+    return _SESSIONS[model]
 
 
-def background(t, *, sat_hi=None, green_hi=None, lum_lo, grad_hi=22.0,
-               pocket=14.0):
-    """Background by tone, then by reachability from the frame border.
-
-    Three passes, and the third is the one that is easy to leave out. Tone
-    first: anything greener than `green_hi` or darker than `lum_lo`. Then a
-    flood from the border through smooth pixels, which is what removes a sky
-    or a studio ground whose tone overlaps the airframe's. Then POCKETS --
-    regions of the same tone as the flood that the airframe shuts off from
-    the border, such as the sky under a wing. Without that pass the fill
-    stops at the trailing edge and about twelve pixels of sky join the wing,
-    measured on `nose-on`.
-
-    Cut on EITHER `sat_hi` or `green_hi`, never both, and prefer `sat_hi` --
-    see `load`. The thresholds are yours: there is no sensible default, and
-    the five Little Piggy frames share none.
-    """
-    np, _, ndimage = _np()
-    if (sat_hi is None) == (green_hi is None):
-        raise SystemExit("background() takes exactly one of sat_hi or "
-                         "green_hi. On a sunlit subject against "
-                         "vegetation it is sat_hi -- see load().")
-    lum, grad = t.lum, t.grad
-    chroma = t.sat if sat_hi is not None else t.green
-    tone = (chroma > (sat_hi if sat_hi is not None else green_hi)) | (lum < lum_lo)
-
-    passable = (~tone) & (grad < grad_hi)
-    lab, n = ndimage.label(passable)
-    seed = np.zeros(lum.shape, bool)
-    seed[0:3, :] = True
-    seed[-3:, :] = True
-    seed[:, 0:3] = True
-    seed[:, -3:] = True
-    keep = set(np.unique(lab[seed & (lab > 0)]).tolist()) - {0}
-    if not keep:
-        return tone
-    reached = np.isin(lab, list(keep)) & (lab > 0)
-    tone_of_ground = lum[reached].mean()
-    for i in range(1, n + 1):
-        sel = lab == i
-        if sel.sum() >= 250 and abs(lum[sel].mean() - tone_of_ground) < pocket:
-            keep.add(i)
-    ground = np.isin(lab, list(keep)) & (lab > 0)
-    # Dilated by one, to take back the edge pixels the gradient wall held
-    # out of the fill. Without it the mask carries a one-pixel halo of
-    # background all the way round, which the chamfer fit reads as shape.
-    return tone | ndimage.binary_dilation(ground, np.ones((3, 3)))
-
-
-def rect(*boxes):
-    """A (h, w) -> bool callable from (y0, y1, x0, x1) boxes, for `bound`.
-
-    The honest way to say "outboard of the body there is nothing but wing".
-    A bound is a claim about the FRAME, not about the aircraft, and it goes
-    in the `.txt` beside the photograph so the next reader knows which part
-    of the silhouette was drawn rather than cut.
-    """
-    def region(h, w):
-        np, _, _ = _np()
-        b = np.zeros((h, w), bool)
-        for (y0, y1, x0, x1) in boxes:
-            b[y0:y1, x0:x1] = True
-        return b
-    return region
-
-
-def cut(notebook, name, *, bg, keep=None, bound=None, close=5):
+def cut(notebook, name, model=MODEL):
     """The mask for one reference photograph. -> (mask, report).
 
-    `bg` and `keep` are predicates over a `Tones` record returning a bool
-    array; `bound` is a (h, w) -> bool callable, usually `rect(...)`.
+    Writes `<name>.mask.png` beside the photograph as clean 0/255 L-mode, so
+    the `> 127` and `> 128` readers downstream cannot disagree, and the
+    overlay, always.
 
-    `keep` IS THE LOCAL OVERRIDE, and it is why this takes a callable rather
-    than a set of thresholds. On `below-front` both wing panels sit at lum
-    97-115 against trees at 28-46 at the SAME greenness, so the rule that cut
-    the body loses the wings entirely; `keep` puts them back by brightness
-    over the wing band alone.
+    LOOK AT THE OVERLAY. It is the one step that is still yours: the model
+    reports nothing when it is wrong, and a mask read as a white blob on black
+    looks plausible while missing half an aircraft.
 
-    `bg` has NO DEFAULT. Passing one would make it possible to accept a cut
-    without choosing a discriminant, which is the whole failure this module
-    is answering.
-
-    Writes `<name>.mask.png` beside the photograph, clean 0/255 L-mode so the
-    `> 127` and `> 128` readers downstream cannot disagree, and the overlay,
-    always. LOOK AT THE OVERLAY. A mask that has lost a wing looks fine as a
-    blob and is unmistakable over the photograph.
+    Largest component then fill, after the model: the pose fit wants ONE solid
+    silhouette, and a detached speck of background would be extra outline for
+    the chamfer to chase.
     """
     np, Image, ndimage = _np()
-    t = load(notebook, name)
+    from rembg import remove
 
-    m = ~bg(t)
-    if keep is not None:
-        m |= keep(t)
-    if bound is not None:
-        m &= bound(*t.shape)
-
-    m = ndimage.binary_closing(m, np.ones((close, close)))
-    lab, n = ndimage.label(m)
-    if n:
-        sizes = ndimage.sum(m, lab, range(1, n + 1))
-        m = lab == (1 + int(np.argmax(sizes)))
-    m = ndimage.binary_fill_holes(m)
-
-    _, mask_path = _paths(notebook, name)
+    sess = _session(model)
+    img_path, mask_path = _paths(notebook, name)
+    photo = Image.open(img_path).convert("RGB")
+    raw = remove(photo, session=sess, only_mask=True, post_process_mask=True)
+    m = np.asarray(raw.convert("L")) > 127
+    if m.any():
+        lab, n = ndimage.label(m)
+        if n > 1:
+            sizes = ndimage.sum(m, lab, range(1, n + 1))
+            m = lab == (1 + int(np.argmax(sizes)))
+        m = ndimage.binary_fill_holes(m)
     _write(Image, np, m, mask_path)
     shot = overlay(notebook, name)
     return m, (f"{name}: {m.sum() / m.size:.4f} of frame, "
-               f"{_bbox(m) or 'EMPTY'}\n  mask    {mask_path}"
-               f"\n  overlay {shot}   <- look at this")
-
-
-def from_alpha(notebook, name, source, threshold=128, close=3):
-    """The mask from an ALPHA-CARRYING source file. -> (mask, report).
-
-    Retailers cut their product shots for the web, and a vendor's own alpha
-    is exact -- better than any rule you would write against the flattened
-    RGB. Two of the five Little Piggy store frames carried one; re-cutting
-    the flattened version by luminance reproduced it only to IoU 0.985, and
-    the difference was the snout against the white ground.
-
-    `source` is the alpha-carrying file, which is NOT the one in
-    `_reference/`: the photograph committed there is flattened onto white,
-    because `_reference_image` converts to RGB and a transparent pixel would
-    otherwise reach the overlay as black. So the alpha source is an input
-    kept outside the notebook, named here and recorded in the `.txt`.
-    """
-    np, Image, ndimage = _np()
-    a = np.asarray(Image.open(source).convert("RGBA"))[..., 3] > threshold
-    m = ndimage.binary_fill_holes(
-        ndimage.binary_closing(a, np.ones((close, close))))
-    img_path, mask_path = _paths(notebook, name)
-    with Image.open(img_path) as im:
-        if im.size != (m.shape[1], m.shape[0]):
-            raise SystemExit(
-                f"{name}: the alpha source is {m.shape[1]}x{m.shape[0]} and "
-                f"the photograph in _reference/ is {im.size[0]}x{im.size[1]}. "
-                f"They must be the same frame.")
-    _write(Image, np, m, mask_path)
-    shot = overlay(notebook, name)
-    return m, (f"{name}: {m.sum() / m.size:.4f} of frame, from alpha"
+               f"{_bbox(m) or 'EMPTY'}  [{model}]"
                f"\n  mask    {mask_path}"
                f"\n  overlay {shot}   <- look at this")
 
@@ -275,7 +148,7 @@ def from_alpha(notebook, name, source, threshold=128, close=3):
 def _write(Image, np, mask, path):
     """The mask as a clean 0/255 L-mode PNG.
 
-    0/255 rather than whatever the morphology left, because the two readers
+    0/255 rather than whatever the model left, because the two readers
     downstream disagree by one level -- `duplicate_photos` binarises at > 128
     and `_reference_image` at > 127. On a clean mask neither can be wrong.
     """
@@ -304,12 +177,8 @@ def overlay(notebook, name):
     hole is unmissable in a glance.
 
     The edge is drawn too, because the fill alone hides a one-pixel halo of
-    background. Separate from `cut` so a mask cut elsewhere, or edited by
-    hand, can still be checked.
-
-    Written under `_scratch/`, which is gitignored, and NOT into
-    `_reference/`: an `x.overlay.png` there would be picked up by
-    `reference_paths` as an unlabelled asset and offered to the run.
+    background. Separate from `cut` so a mask edited by hand can still be
+    checked.
     """
     np, Image, ndimage = _np()
     img_path, mask_path = _paths(notebook, name)
@@ -339,29 +208,29 @@ def stats(notebook, name):
     `noise` is the share of the boundary that smoothing at 5 px -- below any
     real feature on these aircraft -- takes away. A clean silhouette loses
     almost none of its outline to that; a mask cut by a per-pixel rule on a
-    low-contrast subject loses a seventh of it. Measured on the Little Piggy:
-    the vendor's own alpha 0.6%, a `nose-on` cut on brightness and greenness
-    14.4%, the same frame re-cut on saturation 3.8%. `roughness` is
-    perimeter over sqrt(area), which also rises with genuine thinness -- a
-    head-on wing is legitimately a long thin bar -- so read the two together.
+    low-contrast subject loses a seventh of it. Measured: the vendor's own
+    alpha 0.6%, a hand-cut `nose-on` 14.4%, the model 1.5% on average across
+    all 13 frames against 3.0% for the hand cuts. `roughness` is perimeter
+    over sqrt(area), which also rises with genuine thinness -- a head-on wing
+    is legitimately a long thin bar -- so read the two together.
 
     `matches` is the check nothing else in the system makes: `compare_to_photo`
-    takes `H, W` from the MASK and then indexes the photograph with it, so a
-    mis-sized mask either raises deep in the fit or silently composites the
-    top-left corner, and `_fit_pose` seeds scale and translation from the mask
-    bounding box -- a pose in the wrong frame, reported as a number.
+    takes `H, W` from the MASK and then indexes the photograph with it, and
+    `_fit_pose` seeds scale and translation from the mask bounding box -- so a
+    mis-sized mask does not fail loudly, it returns a pose in the wrong
+    coordinate frame with a residual beside it, looking like an answer.
     """
-    np, Image, _ = _np()
+    np, Image, ndimage = _np()
     img_path, mask_path = _paths(notebook, name)
     with Image.open(img_path) as im:
         photo_size = im.size
     if not mask_path.exists():
         return {"photo_size": photo_size, "mask_size": None, "matches": False,
-                "area_frac": 0.0, "bbox": None, "empty": True}
+                "area_frac": 0.0, "bbox": None, "empty": True,
+                "roughness": 0.0, "noise": 0.0}
     with Image.open(mask_path) as im:
         mask_size = im.size
         mask = np.asarray(im.convert("L")) > 127
-    _, _, ndimage = _np()
     smooth = ndimage.binary_fill_holes(ndimage.binary_opening(
         ndimage.binary_closing(mask, np.ones((5, 5))), np.ones((3, 3))))
     p0 = float((mask ^ ndimage.binary_erosion(mask)).sum())

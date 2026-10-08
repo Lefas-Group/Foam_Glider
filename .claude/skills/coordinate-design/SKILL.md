@@ -373,41 +373,25 @@ figures to 0.40% while missing its power pod entirely and lofting a smooth
 pod where the real aircraft is a slab-sided box. Both were obvious the moment
 the model was drawn over a photograph.
 
-So collect EVERY distinct angle the source offers and put them in
-`_reference/`:
-
-```
-_reference/studio.png          the photograph
-_reference/studio.mask.png     the subject, white on black
-_reference/studio.txt          first word `photo`, then a description
-```
-
-**Write the path from the repo root, and check it resolves.** The shell's
-cwd persists between calls, so a `cp` issued after a `cd` into the notebook
-puts the files at `<nb>/<nb>/_reference/`. Nothing used to complain: the run
-simply launched with no photographs and honestly declared the shape
-unverified. Launch now refuses on that.
-
-**One command checks the whole set, and it is the pre-flight before the first
-`nb ask`:**
+So collect EVERY distinct angle the source offers, put the photographs in
+`_reference/` with a `.txt` beside each whose first word is `photo`, and cut
+the masks:
 
 ```bash
-uv run --group nb python -m nb reference <notebook>              # the check
-uv run --group nb python -m nb reference <notebook> --overlays   # …and look
+uv run --group nb python -m nb mask <notebook>          # cut what has no mask
+uv run --group nb python -m nb reference <notebook>     # check the whole set
 ```
 
-It reports every photograph, whether each is labelled `photo` with a mask
-beside it, whether each mask is the SAME PIXEL SIZE as its photograph, each
-mask's area and extent, and the pairwise viewpoint spread. It exits 1 on a
-fault a run cannot work around. `--listing` adds the text the run will
-actually be shown.
+`nb mask` cuts with a pinned segmentation model — about a minute a
+photograph, and 214 MB of weights on the very first run. There are no
+thresholds to choose and no rules to write. `nb reference` then reports every
+photograph, whether each has a mask, whether each mask is the SAME PIXEL SIZE
+as its photograph, and the pairwise viewpoint spread.
 
-The size check is there because nothing else makes it: `compare_to_photo`
-takes its frame from the MASK and then indexes the photograph with it, and
-`_fit_pose` seeds scale and translation from the mask bounding box — so a
-mis-sized mask does not fail loudly, it returns a pose in the wrong
-coordinates with a residual beside it, looking like an answer. Launch refuses
-on it now.
+**Write the path from the repo root, and check it resolves.** The shell's cwd
+persists between calls, so a `cp` issued after a `cd` into the notebook puts
+the files at `<nb>/<nb>/_reference/`. Launch refuses when the directory it
+reads is empty and a stray one exists elsewhere.
 
 **ANGULAR SPREAD IS THE WHOLE POINT, and it is the thing to maximise.** Each
 camera position pins down what it happens to show and says nothing about the
@@ -418,159 +402,38 @@ survive in exactly the directions nobody photographed. Two frames from one
 shoot are ONE photograph — they fit the same pose, hide the same faults, and
 cost the run a turn to confirm what the first already said. Retailers shoot a
 product once and recolour it, so "two store photos" is usually one viewpoint
-twice; the Mini Explorer's pair measured IoU 0.87, and a Little Piggy pair
-that differed in paint, framing and apparent elevation still measured 0.82.
+twice; the Mini Explorer's pair measured IoU 0.87. `nb reference` prints the
+full pairwise table; drop a frame only when another already covers its angle.
 
-So before the first `nb ask`, cut EVERY frame the source offers, then read
-the spread off `nb reference` and keep it. Drop a frame only when some other
-frame already covers its angle. Four viewpoints whose worst pair is 0.47 are
-four checks; two at 0.82 are one.
+**LOOK AT THE OVERLAYS. This is the part no tool does for you.** The model
+reports nothing when it is wrong. `nb mask` writes a tinted overlay for every
+mask and names it; `nb reference --overlays` redraws them all.
 
-**A hard mask is work to do, not a reason to drop the angle.** This is the
-trap, and it is baited by convenience: the easy frames are studio shots of one
-pose on white, and the hard frames are the in-flight ones that carry every
-other angle. Measured on the Little Piggy: three in-flight frames were cut
-with one global luminance rule, each lost a whole wing panel, and all three
-were REJECTED on the honest-sounding ground that a mask which loses a wing is
-worse than no second viewpoint. True, and the wrong conclusion — what it
-bought was a notebook whose only two photographs were one shoot at IoU 0.82,
-which is what launch had already warned about. Cutting them properly took
-about twenty minutes and produced four angles at worst-pair 0.47.
+Judge the FILL, not the edge. A boundary drawn over a busy photograph reads as
+correct wherever it happens to follow a real edge — and the crease between a
+lit facet and a shaded one IS a real edge, so a mask that has dropped an
+entire shaded underside still draws a clean, convincing line. Three masks once
+passed that inspection while missing a belly, a chin, two legs and two wheels.
+Filled in, the hole is unmissable.
 
-**Reach for SATURATION first on a sunlit subject against vegetation.** White
-foam is achromatic by construction, so however deep a facet falls into shadow
-it stays low-saturation; foliage is chromatic however bright it gets. That is
-the one axis which survives shading, and the two obvious axes both fail on
-exactly the surfaces that matter. Measured on the Little Piggy `nose-on`
-frame, shaded belly against foliage:
+Two numbers back the eye up, both from `nb reference`. `noise` is the share of
+a boundary that 5 px of smoothing removes — below any real feature on these
+aircraft, so a clean silhouette loses almost none of it, and anything above 8%
+prints ROUGH. `rough` is perimeter over sqrt(area), which also rises with
+genuine thinness, so read the two together.
 
-    brightness   lum 107  vs  lum 100     <- no threshold separates these
-    greenness    +16.7    vs  +22.4       <- nor these
-    saturation   0.34     vs  0.51        <- this one does
+**When the model is wrong, change the photograph, not the code.** A
+salient-object model has no way to know that the hand holding the aeroplane is
+not part of it — on one store photograph every model tested kept the hand. It
+cannot be fixed with a parameter, so there is deliberately no parameter for
+it. Use a different frame, or paint the mask, which is an ordinary PNG. Then
+record in that photograph's `.txt` what you did and why.
 
-Cut on brightness and greenness alone and you lose every downward-facing
-surface on the aeroplane, because a shaded white facet in sunlight is a warm
-cream and both those axes score cream as foliage. That is exactly what
-happened: three masks were cut that way, patched with local brightness rules
-until the boundary traced the airframe, and accepted — with the belly, the
-chin, both legs and both wheels outside the mask, and a patch of sky inside
-one of them.
-
-Saturation is not a universal answer either. DEFOCUSED background is also
-low-saturation — bokeh desaturates — so on a frame with a blurred treeline
-the sat rule lets the background in and the extent has to be bounded from the
-frame. Brown parts (plywood pods, wood spars) are saturated and need a local
-override to be kept. A backlit panel darker than the haze behind it separates
-on no axis at all, and then you bound it by hand and say so in the `.txt`.
-
-The method is: sample the THREE classes before choosing anything — lit
-airframe, SHADED airframe, background — and pick the axis with a gap on all
-three. Sampling only the lit surfaces and the background is what produced the
-rule that failed; the shaded class is the one that decides.
-
-`nb/tools/masks.py` carries the plumbing for that — the border fill, the
-morphology, the largest-blob pick, the 0/255 PNG, the overlay — so what you
-write is the rule and nothing else. Write a short script in the scratchpad
-and run it with `PYTHONPATH=. uv run --group nb python <script>`:
-
-```python
-import numpy as np
-from nb.config import Notebook
-from nb.tools.masks import cut, rect, background, from_alpha
-
-nb = Notebook("little-piggy")
-
-# `bg` has NO DEFAULT. Choosing the discriminant is the step that cannot be
-# automated, so there is no call that skips it. `background` takes exactly
-# one of sat_hi or green_hi -- on a sunlit subject it is sat_hi.
-def bg(sat_hi, lum_lo):
-    return lambda t: background(t, sat_hi=sat_hi, lum_lo=lum_lo)
-
-# `keep` is the LOCAL OVERRIDE, for what the global rule cannot see. Here:
-# the brown plywood motor pods, which read as saturated, and a tip fin the
-# sky fill ate. A predicate takes a Tones record -- .lum .green .sat .grad.
-def zones(*specs):
-    def f(t):
-        yy, xx = np.mgrid[0:t.shape[0], 0:t.shape[1]]
-        out = np.zeros(t.shape, bool)
-        for (y0, y1, x0, x1, lo, shi) in specs:
-            out |= ((xx >= x0) & (xx < x1) & (yy >= y0) & (yy < y1)
-                    & (t.lum > lo) & (t.sat < shi))
-        return out
-    return f
-
-m, report = cut(nb, "below-front", bg=bg(0.45, 55),
-                keep=zones((230, 295, 18, 62, 90, 0.40),    # port tip fin
-                           (150, 230, 138, 195, 45, 1.01),  # plywood pod
-                           (145, 220, 352, 412, 45, 1.01)), # plywood pod
-                bound=rect((75, 360, 10, 470)))
-print(report)        # names the overlay to look at
-
-# A vendor's own alpha beats any rule you would write against the flattened
-# RGB -- retailers cut their product shots, and two of the five Little Piggy
-# store frames carried one.
-from_alpha(nb, "studio", "scratch/white_pig.webp")
-```
-
-`bound` is a claim about the FRAME, not about the aircraft — "outboard of the
-body there is nothing but wing" — and it is the one hand-made part of a mask,
-so record it in the `.txt`.
-
-**Hunt for plain backgrounds** when choosing between frames of the SAME angle
-— on white the mask is one threshold, on grass it is a judgement call, and a
-product shot with a hand in it puts the hand inside the mask. Never use it to
-choose between angles.
-
-**Cut the mask yourself, and LOOK AT IT — TINTED, not traced.** This is the
-step that cannot be automated. A bad mask poisons every pose fitted against
-it and nothing downstream catches that. The run never sees the mask: if it is
-wrong, that is yours to fix before the run starts.
-
-Inspect it by tinting the mask INTERIOR over the photograph, which is what
-`cut` writes and `nb reference --overlays` redraws. Do not judge it by the
-boundary alone. A red outline over a busy photograph reads as correct
-wherever it happens to follow a real edge — and the crease between a lit
-facet and a shaded one IS a real edge, so a mask that has dropped the entire
-shaded underside still draws a clean, convincing line. Three Little Piggy
-masks passed that inspection while missing the belly, the chin, the legs and
-both wheels. Filled in, the hole is unmissable in a glance.
-
-Two numbers back the eye up, and `nb reference` prints both. `noise` is the
-share of the boundary that 5 px of smoothing removes — below any real feature
-on these aircraft, so a clean silhouette loses almost none of it. The
-vendor's own alpha measures 0.6%; the masks cut on brightness and greenness
-measured 14.4%, 2.6% and 1.7%; re-cut on saturation, 3.8%, 0.9% and 0.4%.
-`rough` is perimeter over sqrt(area), which also rises with genuine thinness
-— a head-on wing is legitimately a long thin bar — so read the two together.
-A high `noise` means the rule could not see the subject.
-
-Iterate until every panel is filled, and record in each `.txt` which rule cut
-that frame and which region needed an override — the next
-coordinator needs to know which parts of the silhouette were hand-bounded.
-
-The run then calls `compare_to_photo` itself, fits the camera by chamfer
-distance, and draws each component in its own colour over the photograph. It
-reports whether the pose is trustworthy and refuses to be read when it is
-not. It gets **no score** — a number there would be optimised, and a model
-tuned to a photograph has been fitted to the thing it was meant to be
-checked against.
-
-**Read the fitted camera back against your own description.** You write the
-`.txt` before anything has been fitted, the run reads it as fact, and nothing
-checks it. The note now states the viewpoint in words — `camera 36° ABOVE,
-azim 120°` — and a positive elevation is a camera above the aircraft. Fit each
-photograph once yourself before the first `nb ask` and compare.
-
-Measured on the F-16 Viper: a photograph was named `belly` and described as
-"Seen from BELOW and BEHIND… the UNDER surface of the wing". It is from
-ABOVE — gold canopy, dorsal spine and the top of the wing all visible. Every
-fit had returned **elev +36°** from the first call and nobody read the number
-back, so the description stood through four entries and reached committed
-prose: *"the studio perspective reveals the upper surfaces that the ventral
-view obscured"*, of two photographs both taken from above.
-
-A handle is not evidence. Name the file for the angle if you can, but the
-`.txt` is what the run reads, so that is the one that has to be right.
+**Re-cutting an existing mask is guarded, and the guard is right.** A mask is
+an input to fits that are already rendered and frozen, and nothing downstream
+notices it changing — freeze tracks the page, not `_reference/`. So `nb mask`
+refuses to overwrite a mask in a notebook that has committed entries, and
+names them. If you mean it, re-render those entries too.
 
 ### Transcribe what the plan PRINTS, do not measure it
 
