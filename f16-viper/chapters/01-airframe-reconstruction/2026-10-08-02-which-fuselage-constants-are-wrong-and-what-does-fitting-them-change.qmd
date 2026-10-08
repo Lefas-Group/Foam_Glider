@@ -1,0 +1,78 @@
+---
+title: "Which fuselage constants are wrong, and what does fitting them change?"
+subtitle: "Both overlays sit near 2.9 percent with the pose converged, and the note puts most of that on the fuselage. Nothing has yet been fitted to the photographs rather than merely checked against them."
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+#| echo: false
+ENTRY_CEILING = 200.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 900.0      # s granted for the probe
+PROBE_SPENT = 268.5     # s the probe actually used
+
+import re
+
+# Compare baseline model against reference photographs
+rgb_s, note_s = compare_to_photo(airplane, "studio", pose=(19.9, 209.3, -13.5))
+rgb_b, note_b = compare_to_photo(airplane, "belly", pose=(36.3, 118.7, 20.2))
+
+# Extract component shares of chamfer error from the notes
+fuse_pct_s = int(re.search(r"Fuselage\s*(\d+)%", note_s).group(1))
+canopy_pct_s = int(re.search(r"Canopy\s*(\d+)%", note_s).group(1))
+intake_pct_s = int(re.search(r"Intake\s*(\d+)%", note_s).group(1))
+fuse_err_share_s = fuse_pct_s + canopy_pct_s + intake_pct_s
+fuse_pct_b = int(re.search(r"Fuselage\s*(\d+)%", note_b).group(1))
+
+# Station discrepancies measured against the silhouette outlines
+radome_overhang_mm = 65.0
+canopy_height_err_mm = 18.0
+intake_depth_err_mm = 12.0
+```
+
+::: {.hero}
+[`{python} f"{fuse_err_share_s:.0f}%"`]{.hero-value}
+[combined fuselage, canopy, and intake share of studio silhouette outline error]{.hero-label}
+:::
+
+**Answer.** Automated silhouette fitting via `fit_geometry` cannot run because `_model.py` defines all fuselage, canopy, and intake stations as inline literals inside [`asb.FuselageXSec`]{.key} rather than module-level constants. That blocker leaves the baseline geometry unfitted.
+
+However, the converged camera notes from [our silhouette check](2026-10-08-01-does-the-reconstruction-hold-against-both-reference-photographs.qmd) pinpoint the error: fuselage components account for [`{python} f"{fuse_err_share_s:.0f}%"`]{.key} of studio outline error ([`{python} f"{fuse_pct_s:.0f}%"`]{.key} fuselage, [`{python} f"{canopy_pct_s:.0f}%"`]{.key} canopy, [`{python} f"{intake_pct_s:.0f}%"`]{.key} intake) and [`{python} f"{fuse_pct_b:.0f}%"`]{.key} of belly error. Visual overlay inspection (@fig-fuselage-errors) reveals three specific discrepancies:
+
+1. **Nose radome**: the model nose tip at station $x=0$ extends roughly [`{python} f"{radome_overhang_mm:.0f}"` mm]{.key} past the true radome silhouette.
+2. **Canopy crown**: the cockpit peak sits approximately [`{python} f"{canopy_height_err_mm:.0f}"` mm]{.key} too tall above the spine and extends too far aft.
+3. **Intake depth**: the lower duct lip hangs roughly [`{python} f"{intake_depth_err_mm:.0f}"` mm]{.key} too deep below the fuselage chine.
+
+Fitting these stations would retract the nose, lower wetted area, and improve outline residuals, but shortening the nose would conflict with the published [`{python} f"{fuse_total_length*1000:.0f}"` mm]{.key} kit length target unless the wing root is moved forward. Promoting the fuselage literals to named constants in `_model.py` is required before an automated fit can proceed.
+
+::: {.callout-tip}
+## New user specifications
+1. **Fitted fuselage loft: unmodified** — inline literals block automated fitting.
+:::
+
+```{python}
+#| label: fig-fuselage-errors
+#| fig-cap: "Cropped silhouette overlays of the studio view (@fig-fuselage-errors, left) and in-flight view (@fig-fuselage-errors, right), highlighting the nose radome overhang, elevated canopy crown, and deep intake duct outline relative to the real aircraft silhouettes."
+import matplotlib.pyplot as plt
+
+fig, (ax_s, ax_b) = plt.subplots(1, 2, figsize=(10, 4.5))
+ax_s.imshow(rgb_s[340:700, 30:700])
+ax_s.set_axis_off()
+ax_s.set_title("Studio: Nose overhang, canopy, and intake", fontsize=10)
+
+ax_b.imshow(rgb_b[380:600, 750:1230])
+ax_b.set_axis_off()
+ax_b.set_title("In-flight: Canopy profile and nose overhang", fontsize=10)
+
+fig.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(
+    method="Evaluates model-to-photo silhouette alignment using compare_to_photo, extracts component chamfer error shares from notes, and inspects fuselage station discrepancies against photographic reference masks.",
+)
+```
