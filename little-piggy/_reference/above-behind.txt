@@ -11,11 +11,16 @@ wheels and the stepped underside of the body hang toward the camera, so
 this frame carries the LANDING-GEAR geometry and the body's depth
 better than any other.
 
-Mask: greenness separates the airframe (green bias about 0 to +2) from
-the foliage (+18 to +30). The STARBOARD wing and the flank beneath the
-starboard ear are deep in the body's own shadow, at the same greenness
-as the trees and only luminance apart from them -- 78-90 against 10-55
--- so that region is recovered by a local brightness rule instead.
+Mask: cut on SATURATION, not greenness. Background is sat > 0.68 or
+lum < 50; the foliage here runs sat 0.79 while the aircraft's shaded cream
+underside runs 0.38-0.53, which is the gap greenness does not offer. The
+sunlit tan belly plate is more saturated still and is recovered by a local
+positional rule over that patch alone.
+
+An earlier cut used greenness and brightness and dropped the whole cream
+underside -- belly plate, lower legs, the rear underside block -- because a
+shaded white facet in sunlight is a warm cream that both those axes score
+as foliage.
 
 The viewpoint above is a READING OF THE IMAGE. Fit the camera and read
 the numbers back against this note before trusting it.

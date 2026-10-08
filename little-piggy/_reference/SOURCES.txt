@@ -49,10 +49,15 @@ FOUR are kept, chosen to spread the camera as widely as the five allow:
 Pairwise mask IoU, on nb's own centroid-centred measure:
 
                 studio  nose-on  above-behind  below-front
-  studio          --      0.20       0.29          0.46
-  nose-on        0.20      --        0.38          0.24
-  above-behind   0.29     0.38        --           0.32
-  below-front    0.46     0.24       0.32           --
+  studio          --      0.37       0.39          0.50
+  nose-on        0.37      --        0.52          0.36
+  above-behind   0.39     0.52        --           0.40
+  below-front    0.50     0.36       0.40           --
+
+These rose from a 0.20-0.47 spread when the three in-flight masks were
+re-cut on saturation. The earlier, lower numbers flattered the diversity:
+masks that are each wrong in a different way disagree more than masks that
+are each right.
 
 The fifth frame, 10573 `merica_painted_480`, is the SAME viewpoint as
 `studio` at IoU 0.82 -- one shoot, one camera, a paint scheme added
@@ -61,16 +66,29 @@ that bought nothing; a second overlay from the same pose fits the same
 pose and hides the same faults.
 
 Masks: `studio` uses the vendor's own alpha channel, so it is exact. The
-three in-flight frames were cut by hand against the frame, and each
-`.txt` records which rule cut it and which part needed a local override.
-The first pass on all three used a single global luminance rule and
-dropped a whole wing panel from each -- the near surfaces sit in shade at
-the same tone as the trees. That is a reason to cut the frame properly,
-not a reason to drop the viewpoint: a backlit wing is separable by
-GREENNESS where it is not separable by brightness, and vice versa, and
-the two in-flight frames needed opposite rules. Every mask here was
-checked by drawing its boundary back over the photograph and looking at
-it.
+three in-flight frames were cut by hand against the frame, and each `.txt`
+records which rule cut it and which region needed a local override.
+
+They were cut TWICE. The first pass used brightness and greenness, lost a
+whole wing panel from each frame, was patched with local brightness rules
+until the boundary traced the airframe, and was accepted on the strength of
+that boundary drawn over the photograph. It was still wrong: the shaded
+belly, chin, legs and wheels lay OUTSIDE all three masks, and a patch of sky
+inside one. A shaded white facet in sunlight is a warm cream, which is what
+both of those axes score as foliage -- on `nose-on` the shaded belly is
+lum 107 against foliage at lum 100.
+
+SATURATION is the axis that separates them, because white foam is achromatic
+by construction however dark it gets while foliage is chromatic however
+bright: 0.34 against 0.51 on `nose-on`, 0.38 against 0.79 on `above-behind`.
+Re-cut on saturation, the share of each boundary that is sub-5px noise fell
+from 14.4%, 2.6% and 1.7% to 3.8%, 0.9% and 0.4%, against 0.6% for the
+vendor's own alpha.
+
+The inspection that caught it was tinting the mask INTERIOR over the
+photograph rather than tracing its edge. A boundary reads as correct
+wherever it follows a real edge, and the crease between a lit facet and a
+shaded one is a real edge.
 
 Aircraft description: the FT Little Piggy is a 2026 Flite Test kit
 celebrating the Flying Pig mascot, released for the DARPA Lift

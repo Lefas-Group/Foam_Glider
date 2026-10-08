@@ -437,15 +437,36 @@ bought was a notebook whose only two photographs were one shoot at IoU 0.82,
 which is what launch had already warned about. Cutting them properly took
 about twenty minutes and produced four angles at worst-pair 0.47.
 
-When one rule fails, the fix is a DIFFERENT DISCRIMINANT, not a smaller
-ambition. White foam against foliage separates by GREENNESS (airframe 0 to +2,
-trees +18 to +30) at tones where brightness cannot tell them apart; a panel
-deep in the body's shadow separates by BRIGHTNESS (78-90 against trees at
-10-55) at greenness where the colour rule cannot. Those two frames needed
-opposite rules, and within one frame a single shadowed panel needed a local
-override of the rule that cut the rest. A backlit panel darker than the haze
-behind it may separate by neither, and then bound it from the frame by hand
-and say so in the `.txt`.
+**Reach for SATURATION first on a sunlit subject against vegetation.** White
+foam is achromatic by construction, so however deep a facet falls into shadow
+it stays low-saturation; foliage is chromatic however bright it gets. That is
+the one axis which survives shading, and the two obvious axes both fail on
+exactly the surfaces that matter. Measured on the Little Piggy `nose-on`
+frame, shaded belly against foliage:
+
+    brightness   lum 107  vs  lum 100     <- no threshold separates these
+    greenness    +16.7    vs  +22.4       <- nor these
+    saturation   0.34     vs  0.51        <- this one does
+
+Cut on brightness and greenness alone and you lose every downward-facing
+surface on the aeroplane, because a shaded white facet in sunlight is a warm
+cream and both those axes score cream as foliage. That is exactly what
+happened: three masks were cut that way, patched with local brightness rules
+until the boundary traced the airframe, and accepted — with the belly, the
+chin, both legs and both wheels outside the mask, and a patch of sky inside
+one of them.
+
+Saturation is not a universal answer either. DEFOCUSED background is also
+low-saturation — bokeh desaturates — so on a frame with a blurred treeline
+the sat rule lets the background in and the extent has to be bounded from the
+frame. Brown parts (plywood pods, wood spars) are saturated and need a local
+override to be kept. A backlit panel darker than the haze behind it separates
+on no axis at all, and then you bound it by hand and say so in the `.txt`.
+
+The method is: sample the THREE classes before choosing anything — lit
+airframe, SHADED airframe, background — and pick the axis with a gap on all
+three. Sampling only the lit surfaces and the background is what produced the
+rule that failed; the shaded class is the one that decides.
 
 `nb/tools/masks.py` carries the plumbing for that — the border fill, the
 morphology, the largest-blob pick, the 0/255 PNG, the overlay — so what you
@@ -453,27 +474,35 @@ write is the rule and nothing else. Write a short script in the scratchpad
 and run it with `PYTHONPATH=. uv run --group nb python <script>`:
 
 ```python
+import numpy as np
 from nb.config import Notebook
 from nb.tools.masks import cut, rect, background, from_alpha
 
 nb = Notebook("little-piggy")
 
 # `bg` has NO DEFAULT. Choosing the discriminant is the step that cannot be
-# automated, so there is no call that skips it.
-def bg(green_hi, lum_lo):
-    return lambda lum, g, grad: background(lum, g, grad,
-                                           green_hi=green_hi, lum_lo=lum_lo)
+# automated, so there is no call that skips it. `background` takes exactly
+# one of sat_hi or green_hi -- on a sunlit subject it is sat_hi.
+def bg(sat_hi, lum_lo):
+    return lambda t: background(t, sat_hi=sat_hi, lum_lo=lum_lo)
 
-# `keep` is the LOCAL OVERRIDE. On this frame both wing panels sit at
-# lum 97-115 against trees at 28-46 at the SAME greenness, so the rule that
-# cut the body loses the wings entirely.
-def wings(lum, green, grad):
-    import numpy as np
-    yy, xx = np.mgrid[0:lum.shape[0], 0:lum.shape[1]]
-    band = (xx >= 22) & (xx < 458) & (yy >= 196) & (yy < 300)
-    return band & (lum > 78) & (green < 22)
+# `keep` is the LOCAL OVERRIDE, for what the global rule cannot see. Here:
+# the brown plywood motor pods, which read as saturated, and a tip fin the
+# sky fill ate. A predicate takes a Tones record -- .lum .green .sat .grad.
+def zones(*specs):
+    def f(t):
+        yy, xx = np.mgrid[0:t.shape[0], 0:t.shape[1]]
+        out = np.zeros(t.shape, bool)
+        for (y0, y1, x0, x1, lo, shi) in specs:
+            out |= ((xx >= x0) & (xx < x1) & (yy >= y0) & (yy < y1)
+                    & (t.lum > lo) & (t.sat < shi))
+        return out
+    return f
 
-m, report = cut(nb, "below-front", bg=bg(14, 92), keep=wings,
+m, report = cut(nb, "below-front", bg=bg(0.45, 55),
+                keep=zones((230, 295, 18, 62, 90, 0.40),    # port tip fin
+                           (150, 230, 138, 195, 45, 1.01),  # plywood pod
+                           (145, 220, 352, 412, 45, 1.01)), # plywood pod
                 bound=rect((75, 360, 10, 470)))
 print(report)        # names the overlay to look at
 
@@ -492,20 +521,31 @@ so record it in the `.txt`.
 product shot with a hand in it puts the hand inside the mask. Never use it to
 choose between angles.
 
-**Cut the mask yourself, and LOOK AT IT.** This is the step that cannot be
-automated — a border-seeded rule recovered about half an aircraft on a good
-photograph and essentially nothing on a cluttered one. A bad mask poisons
-every pose fitted against it and nothing downstream catches that. The run
-never sees the mask: if it is wrong, that is yours to fix before the run
-starts. Look at it the one way that actually shows a fault: draw the mask
-boundary back over the photograph in red and read the edge, panel by panel.
-A mask inspected as a white blob on black looks plausible while missing a
-wing; the same mask over the photograph makes the missing wing obvious in a
-glance. `cut` writes that overlay every time and names it in its report, and
-`nb reference --overlays` redraws them all — but writing it is not reading
-it, and nothing can read it for you. Iterate until every panel is traced, and
-record in each `.txt` which rule cut that frame and which region needed an
-override — the next
+**Cut the mask yourself, and LOOK AT IT — TINTED, not traced.** This is the
+step that cannot be automated. A bad mask poisons every pose fitted against
+it and nothing downstream catches that. The run never sees the mask: if it is
+wrong, that is yours to fix before the run starts.
+
+Inspect it by tinting the mask INTERIOR over the photograph, which is what
+`cut` writes and `nb reference --overlays` redraws. Do not judge it by the
+boundary alone. A red outline over a busy photograph reads as correct
+wherever it happens to follow a real edge — and the crease between a lit
+facet and a shaded one IS a real edge, so a mask that has dropped the entire
+shaded underside still draws a clean, convincing line. Three Little Piggy
+masks passed that inspection while missing the belly, the chin, the legs and
+both wheels. Filled in, the hole is unmissable in a glance.
+
+Two numbers back the eye up, and `nb reference` prints both. `noise` is the
+share of the boundary that 5 px of smoothing removes — below any real feature
+on these aircraft, so a clean silhouette loses almost none of it. The
+vendor's own alpha measures 0.6%; the masks cut on brightness and greenness
+measured 14.4%, 2.6% and 1.7%; re-cut on saturation, 3.8%, 0.9% and 0.4%.
+`rough` is perimeter over sqrt(area), which also rises with genuine thinness
+— a head-on wing is legitimately a long thin bar — so read the two together.
+A high `noise` means the rule could not see the subject.
+
+Iterate until every panel is filled, and record in each `.txt` which rule cut
+that frame and which region needed an override — the next
 coordinator needs to know which parts of the silhouette were hand-bounded.
 
 The run then calls `compare_to_photo` itself, fits the camera by chamfer

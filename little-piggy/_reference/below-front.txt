@@ -11,10 +11,12 @@ This is the only frame that shows the wing's lower surface and the
 anhedral/dihedral break at the root, and it is the natural check on
 wing INCIDENCE.
 
-Mask: greenness separates airframe from foliage over the body, but both
-wing panels sit at lum 97-115 against trees at 28-46 at the SAME
-greenness, so the wing bands are recovered by a local brightness rule
-(lum > 78, greenness < 22) instead.
+Mask: cut on SATURATION. Background is sat > 0.45 or lum < 55: the wing
+undersides sit at sat 0.29-0.39 and the foliage at 0.80, where on
+brightness the two are 91-114 against 36 and on greenness they overlap.
+The defocused bokeh at upper left is also low-saturation and is removed by
+the frame bound. Three local positional rules recover the port tip fin and
+the two plywood motor pods, which are brown and so read as saturated.
 
 The viewpoint above is a READING OF THE IMAGE. Fit the camera and read
 the numbers back against this note before trusting it.

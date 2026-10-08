@@ -97,8 +97,8 @@ def _report_masks(notebook, assets, photos):
     """One line per asset, size check included. -> count of unusable ones."""
     from ..tools import masks
 
-    tell(f"\n    {'photograph':16s} {'photo':9s} {'mask':9s} "
-         f"{'area':6s}  extent")
+    tell(f"\n    {'photograph':16s} {'photo':9s} {'mask':9s} {'area':6s} "
+         f"{'rough':6s} {'noise':6s} extent")
     bad = 0
     usable = {name for name, _, _ in photos}
     for p in assets:
@@ -126,8 +126,11 @@ def _report_masks(notebook, assets, photos):
             bad += 1
             continue
         y0, y1, x0, x1 = s["bbox"]
-        tell(f"    {p.stem:16s} {photo:9s} {mask:9s} {s['area_frac']:<6.4f}  "
-             f"rows {y0}-{y1} cols {x0}-{x1}")
+        # A boundary that collapses under 5 px of smoothing was cut by a rule
+        # that could not see the subject -- see `masks.stats`.
+        rough = "ROUGH" if s["noise"] > 0.08 else f"{s['noise']:.1%}"
+        tell(f"    {p.stem:16s} {photo:9s} {mask:9s} {s['area_frac']:<6.4f} "
+             f"{s['roughness']:<6.2f} {rough:6s} rows {y0}-{y1} cols {x0}-{x1}")
     return bad
 
 

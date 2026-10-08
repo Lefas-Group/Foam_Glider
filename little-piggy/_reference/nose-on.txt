@@ -12,14 +12,24 @@ Both plywood motor pods sit on the leading edge at roughly a third of
 semi-span, propellers turning. The two EARS stand up on top of the
 head, canted outward. No horizontal tail.
 
-Mask: cut by flood-filling the sky from the frame border through smooth
-bright pixels, with foliage removed by greenness, and enclosed pockets
-of sky matched on tone. The PORT wing (frame left) is backlit -- its
-underside is DARKER than the hazy background behind it, so no tone rule
-separates them and the fill ran about 12 px past the trailing edge. Its
-extent is bounded from the frame instead, as a straight bar from root
-to tip plus the tip fin, each with a 5 px margin. That bound is the one
-hand-made part of this mask.
+Mask: cut on SATURATION, not brightness. The shaded belly of this aircraft
+sits at lum 107 against foliage at lum 100 and greenness +16.7 against
++22.4 -- no threshold on either axis separates them -- but saturation is
+0.337 against 0.509, because white foam stays achromatic however deep into
+shadow a facet falls. Background is sat > 0.42 or lum < 55, plus the sky
+flood-filled from the frame border through smooth bright pixels with
+enclosed pockets matched on tone.
+
+The PORT wing is backlit -- its underside is DARKER than the hazy
+background behind it, and the defocused foliage on this frame is also
+LOW-saturation, so neither axis bounds it. Its extent is taken from the
+frame instead, as a straight bar from root to tip plus the tip fin, each
+with a 5 px margin. That bound is the one hand-made part of this mask.
+
+An earlier cut of this frame used brightness and greenness alone and left
+the belly, the chin, both legs and both wheels OUTSIDE the mask while
+taking in a patch of sky; 14.4% of its boundary was sub-5px noise, against
+3.8% now and 0.6% for the vendor's own alpha on `studio`.
 
 The viewpoint above is a READING OF THE IMAGE. Fit the camera and read
 the numbers back against this note before trusting them.

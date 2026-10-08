@@ -38,6 +38,12 @@ OVERLAY_DIR = "masks"
 #: foliage and a white studio ground.
 EDGE = (255, 0, 0)
 
+#: The interior tint, and how hard. Green at 55% survives both a white studio
+#: ground and a treeline, and leaves enough of the photograph showing that an
+#: included patch of BACKGROUND is still recognisable as background.
+FILL = (0, 255, 0)
+FILL_ALPHA = 0.55
+
 
 def _np():
     """numpy, PIL.Image and scipy.ndimage, or a SystemExit naming what to do.
@@ -73,25 +79,56 @@ def _paths(notebook, name):
     return img, root / f"{name}{figures.MASK_SUFFIX}"
 
 
-def load(notebook, name):
-    """The photograph as (lum, green, grad). -> three float arrays, (h, w).
+class Tones:
+    """The axes a mask rule may cut on, for one photograph.
 
-    `green` is G - (R+B)/2, and it is the discriminant worth reaching for
-    first on an in-flight frame: white foam sits at 0 to +2 where foliage
-    sits at +18 to +30, across a brightness range they share. `grad` is the
-    sobel magnitude, which is what stops a border fill at an edge the tone
-    rule cannot see.
+    A record rather than a tuple because the axis that matters is not known
+    in advance and a tuple pins the signature of every rule ever written.
+    `sat` was added after three masks were cut without it and lost every
+    downward-facing surface on the aircraft.
+
+      lum    0-255 mean of RGB
+      green  G - (R+B)/2, the lit-foam-against-foliage axis
+      sat    HSV saturation, (max-min)/max -- THE SHADED-SURFACE AXIS
+      grad   sobel magnitude, for the border fill's walls
+    """
+
+    def __init__(self, lum, green, sat, grad):
+        self.lum, self.green, self.sat, self.grad = lum, green, sat, grad
+
+    @property
+    def shape(self):
+        return self.lum.shape
+
+
+def load(notebook, name):
+    """The photograph's tone axes. -> Tones.
+
+    REACH FOR `sat` FIRST ON A SUNLIT SUBJECT. White foam is achromatic by
+    construction, so however deep a facet falls into shadow it stays
+    low-saturation; foliage is chromatic however bright it gets. Brightness
+    and greenness both FAIL on exactly the surfaces that matter: measured on
+    `nose-on`, the shaded belly is lum 107 against foliage at lum 100, and
+    green +16.7 against +22.4 -- no threshold on either separates them -- but
+    saturation is 0.34 against 0.51, and on `above-behind` 0.38 against 0.79.
+
+    Three Little Piggy masks were cut on brightness and greenness alone and
+    every downward-facing surface -- belly, chin, legs, wheels -- fell outside
+    the mask, because a shaded white facet in sunlight is a warm cream that
+    both those axes score as foliage.
     """
     np, Image, ndimage = _np()
     img, _ = _paths(notebook, name)
     a = np.asarray(Image.open(img).convert("RGB")).astype(float)
     lum = a.mean(2)
     green = a[..., 1] - (a[..., 0] + a[..., 2]) / 2.0
+    mx, mn = a.max(2), a.min(2)
+    sat = np.where(mx > 0, (mx - mn) / np.maximum(mx, 1.0), 0.0)
     grad = np.hypot(ndimage.sobel(lum, 1), ndimage.sobel(lum, 0))
-    return lum, green, grad
+    return Tones(lum, green, sat, grad)
 
 
-def background(lum, green, grad, *, green_hi, lum_lo, grad_hi=22.0,
+def background(t, *, sat_hi=None, green_hi=None, lum_lo, grad_hi=22.0,
                pocket=14.0):
     """Background by tone, then by reachability from the frame border.
 
@@ -104,12 +141,18 @@ def background(lum, green, grad, *, green_hi, lum_lo, grad_hi=22.0,
     stops at the trailing edge and about twelve pixels of sky join the wing,
     measured on `nose-on`.
 
-    `green_hi` and `lum_lo` are yours. There is no sensible default: the two
-    Little Piggy studio frames and the three in-flight frames do not share
-    one.
+    Cut on EITHER `sat_hi` or `green_hi`, never both, and prefer `sat_hi` --
+    see `load`. The thresholds are yours: there is no sensible default, and
+    the five Little Piggy frames share none.
     """
     np, _, ndimage = _np()
-    tone = (green > green_hi) | (lum < lum_lo)
+    if (sat_hi is None) == (green_hi is None):
+        raise SystemExit("background() takes exactly one of sat_hi or "
+                         "green_hi. On a sunlit subject against "
+                         "vegetation it is sat_hi -- see load().")
+    lum, grad = t.lum, t.grad
+    chroma = t.sat if sat_hi is not None else t.green
+    tone = (chroma > (sat_hi if sat_hi is not None else green_hi)) | (lum < lum_lo)
 
     passable = (~tone) & (grad < grad_hi)
     lab, n = ndimage.label(passable)
@@ -154,7 +197,7 @@ def rect(*boxes):
 def cut(notebook, name, *, bg, keep=None, bound=None, close=5):
     """The mask for one reference photograph. -> (mask, report).
 
-    `bg` and `keep` are predicates over (lum, green, grad) returning a bool
+    `bg` and `keep` are predicates over a `Tones` record returning a bool
     array; `bound` is a (h, w) -> bool callable, usually `rect(...)`.
 
     `keep` IS THE LOCAL OVERRIDE, and it is why this takes a callable rather
@@ -173,13 +216,13 @@ def cut(notebook, name, *, bg, keep=None, bound=None, close=5):
     blob and is unmistakable over the photograph.
     """
     np, Image, ndimage = _np()
-    lum, green, grad = load(notebook, name)
+    t = load(notebook, name)
 
-    m = ~bg(lum, green, grad)
+    m = ~bg(t)
     if keep is not None:
-        m |= keep(lum, green, grad)
+        m |= keep(t)
     if bound is not None:
-        m &= bound(*lum.shape)
+        m &= bound(*t.shape)
 
     m = ndimage.binary_closing(m, np.ones((close, close)))
     lab, n = ndimage.label(m)
@@ -250,13 +293,19 @@ def _bbox(mask):
 
 
 def overlay(notebook, name):
-    """The mask boundary drawn over its photograph. -> the path written.
+    """The mask drawn over its photograph, INTERIOR TINTED. -> path written.
 
-    THE ONLY INSPECTION THAT WORKS. Read as a white blob on black, three of
-    the first four Little Piggy masks looked plausible and each was missing a
-    wing panel; drawn back over the photograph, every one was obvious at a
-    glance. Separate from `cut` so a mask cut elsewhere, or edited by hand,
-    can still be checked.
+    TINT THE INSIDE, do not just trace the edge. A boundary drawn over a busy
+    photograph reads as correct wherever it happens to follow a real edge --
+    and the crease between a lit facet and a shaded one IS a real edge, so a
+    mask that has dropped the whole shaded underside still draws a clean,
+    convincing red line. Three Little Piggy masks passed that inspection and
+    were missing the belly, the chin, the legs and both wheels. Filled, the
+    hole is unmissable in a glance.
+
+    The edge is drawn too, because the fill alone hides a one-pixel halo of
+    background. Separate from `cut` so a mask cut elsewhere, or edited by
+    hand, can still be checked.
 
     Written under `_scratch/`, which is gitignored, and NOT into
     `_reference/`: an `x.overlay.png` there would be picked up by
@@ -274,6 +323,8 @@ def overlay(notebook, name):
             f"photograph is {photo.shape[1]}x{photo.shape[0]}. The fit takes "
             f"its frame from the mask, so a mismatch puts the pose in the "
             f"wrong coordinates. Re-cut it from this photograph.")
+    inside = photo[mask] * (1 - FILL_ALPHA) + np.array(FILL) * FILL_ALPHA
+    photo[mask] = inside.astype(photo.dtype)
     photo[mask ^ ndimage.binary_erosion(mask)] = EDGE
     out = notebook.scratch / OVERLAY_DIR
     out.mkdir(parents=True, exist_ok=True)
@@ -284,6 +335,15 @@ def overlay(notebook, name):
 
 def stats(notebook, name):
     """What `nb reference` prints for one photograph. -> dict.
+
+    `noise` is the share of the boundary that smoothing at 5 px -- below any
+    real feature on these aircraft -- takes away. A clean silhouette loses
+    almost none of its outline to that; a mask cut by a per-pixel rule on a
+    low-contrast subject loses a seventh of it. Measured on the Little Piggy:
+    the vendor's own alpha 0.6%, a `nose-on` cut on brightness and greenness
+    14.4%, the same frame re-cut on saturation 3.8%. `roughness` is
+    perimeter over sqrt(area), which also rises with genuine thinness -- a
+    head-on wing is legitimately a long thin bar -- so read the two together.
 
     `matches` is the check nothing else in the system makes: `compare_to_photo`
     takes `H, W` from the MASK and then indexes the photograph with it, so a
@@ -301,7 +361,14 @@ def stats(notebook, name):
     with Image.open(mask_path) as im:
         mask_size = im.size
         mask = np.asarray(im.convert("L")) > 127
+    _, _, ndimage = _np()
+    smooth = ndimage.binary_fill_holes(ndimage.binary_opening(
+        ndimage.binary_closing(mask, np.ones((5, 5))), np.ones((3, 3))))
+    p0 = float((mask ^ ndimage.binary_erosion(mask)).sum())
+    p1 = float((smooth ^ ndimage.binary_erosion(smooth)).sum())
     return {"photo_size": photo_size, "mask_size": mask_size,
             "matches": photo_size == mask_size,
             "area_frac": float(mask.sum() / mask.size),
-            "bbox": _bbox(mask), "empty": not mask.any()}
+            "bbox": _bbox(mask), "empty": not mask.any(),
+            "roughness": p0 / np.sqrt(max(mask.sum(), 1)),
+            "noise": (p0 - p1) / p0 if p0 else 0.0}
