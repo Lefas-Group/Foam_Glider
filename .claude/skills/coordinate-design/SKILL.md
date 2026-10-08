@@ -373,7 +373,7 @@ figures to 0.40% while missing its power pod entirely and lofting a smooth
 pod where the real aircraft is a slab-sided box. Both were obvious the moment
 the model was drawn over a photograph.
 
-So find two or three photographs of the real thing and put them in
+So collect EVERY distinct angle the source offers and put them in
 `_reference/`:
 
 ```
@@ -394,25 +394,68 @@ from nb.config import Notebook; from nb.tools import figures
 print(figures.reference_listing(Notebook('<notebook>')))"
 ```
 
-**Two frames from one shoot are ONE photograph.** The second ANGLE is the
-whole value of a second file — a frame from the same session fits the same
-pose, hides the same faults, and costs the run a turn to confirm what the
-first already told it. Retailers shoot a product once and recolour it, so
-"two store photos" is usually one viewpoint twice. Launch warns above mask
-IoU 0.80; the Mini Explorer's pair measured 0.88. Spend the effort finding a
-genuinely different azimuth instead of a second copy of the easy one.
+**ANGULAR SPREAD IS THE WHOLE POINT, and it is the thing to maximise.** Each
+camera position pins down what it happens to show and says nothing about the
+rest: a head-on frame fixes span, dihedral and tip cant and tells you nothing
+about chord; a frame from below is the only place wing incidence shows; a
+three-quarter from above fixes the planform and hides the gear. Shape faults
+survive in exactly the directions nobody photographed. Two frames from one
+shoot are ONE photograph — they fit the same pose, hide the same faults, and
+cost the run a turn to confirm what the first already said. Retailers shoot a
+product once and recolour it, so "two store photos" is usually one viewpoint
+twice; the Mini Explorer's pair measured IoU 0.88, and a Little Piggy pair
+that differed in paint, framing and apparent elevation still measured 0.82.
 
-**Hunt for plain backgrounds.** On white the mask is one threshold; on grass
-it is a judgement call, and a product shot with a hand in it puts the hand
-inside the mask. Retailer listings and the plan's own page one are the usual
-sources.
+So before the first `nb ask`, cut EVERY frame the source offers, then print
+the pairwise overlap and keep the spread:
+
+```bash
+uv run --group nb python -c "
+from nb.config import Notebook; from nb.tools import figures
+print(figures.duplicate_photos(Notebook('<notebook>'), threshold=0.0))"
+```
+
+Drop a frame only when some other frame already covers its angle. Four
+viewpoints whose worst pair is 0.46 are four checks; two at 0.82 are one.
+
+**A hard mask is work to do, not a reason to drop the angle.** This is the
+trap, and it is baited by convenience: the easy frames are studio shots of one
+pose on white, and the hard frames are the in-flight ones that carry every
+other angle. Measured on the Little Piggy: three in-flight frames were cut
+with one global luminance rule, each lost a whole wing panel, and all three
+were REJECTED on the honest-sounding ground that a mask which loses a wing is
+worse than no second viewpoint. True, and the wrong conclusion — what it
+bought was a notebook whose only two photographs were one shoot at IoU 0.82,
+which is what launch had already warned about. Cutting them properly took
+about twenty minutes and produced four angles at worst-pair 0.46.
+
+When one rule fails, the fix is a DIFFERENT DISCRIMINANT, not a smaller
+ambition. White foam against foliage separates by GREENNESS (airframe 0 to +2,
+trees +18 to +30) at tones where brightness cannot tell them apart; a panel
+deep in the body's shadow separates by BRIGHTNESS (78-90 against trees at
+10-55) at greenness where the colour rule cannot. Those two frames needed
+opposite rules, and within one frame a single shadowed panel needed a local
+override of the rule that cut the rest. A backlit panel darker than the haze
+behind it may separate by neither, and then bound it from the frame by hand
+and say so in the `.txt`.
+
+**Hunt for plain backgrounds** when choosing between frames of the SAME angle
+— on white the mask is one threshold, on grass it is a judgement call, and a
+product shot with a hand in it puts the hand inside the mask. Never use it to
+choose between angles.
 
 **Cut the mask yourself, and LOOK AT IT.** This is the step that cannot be
 automated — a border-seeded rule recovered about half an aircraft on a good
 photograph and essentially nothing on a cluttered one. A bad mask poisons
 every pose fitted against it and nothing downstream catches that. The run
 never sees the mask: if it is wrong, that is yours to fix before the run
-starts.
+starts. Look at it the one way that actually shows a fault: draw the mask
+boundary back over the photograph in red and read the edge, panel by panel.
+A mask inspected as a white blob on black looks plausible while missing a
+wing; the same mask over the photograph makes the missing wing obvious in a
+glance. Iterate until every panel is traced, and record in each `.txt` which
+rule cut that frame and which region needed an override — the next
+coordinator needs to know which parts of the silhouette were hand-bounded.
 
 The run then calls `compare_to_photo` itself, fits the camera by chamfer
 distance, and draws each component in its own colour over the photograph. It
