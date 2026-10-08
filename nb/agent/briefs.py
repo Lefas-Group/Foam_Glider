@@ -327,7 +327,7 @@ checked.** `read_reference("photographs")` is the one page on this; read it
 before your first overlay. The short version: fit the camera with
 `compare_to_photo`, look at the overlay, and if the residual sits above
 about 1.2% after ONE reseed, the camera is converged and what is left is
-shape -- which is `fit_geometry(free={...}, poses={...})`, freeing the few
+shape -- which is `fit_geometry(free={{...}}, poses={{...}})`, freeing the few
 `_model.py` constants a fault in the picture actually points at, seeded
 with the poses you just read off the notes. Never free a published
 dimension: span and length are the scale reference. A reconstruction that
