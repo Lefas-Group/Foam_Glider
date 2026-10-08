@@ -173,10 +173,13 @@ naming the entry it came from, and your prose links that entry:
 [its title](YYYY-MM-DD-NN-slug.qmd). Nothing recomputes it, so the link is the
 only trail back when someone asks where 0.36 came from.
 
-Attribute each input to where it came from. "Asked of the user, {today}" covers
-ONLY what was put to them and answered — which includes any `ask_specified`
-answer from this run. Anything inherited from an earlier chapter, or read out of
-the question, is stated without a claim that anyone was asked.
+Under New user specifications go ONLY inputs that were put to a person and
+answered — which includes any `ask_specified` answer from this run. Anything
+inherited from an earlier chapter, or read out of the question, is stated
+without a claim that anyone was asked. Write NO lead-in line above the
+numbered items of either callout: the heading already says what the list is,
+and a date there dates the asking rather than the entry, which is dated
+already.
 
 Anything interesting you were NOT asked about goes to the human in your final
 message, never into the entry.
@@ -289,6 +292,47 @@ and wing loading with a completely wrong fuselage. That has happened here --
 a reconstruction passed its mass checks as a smooth pod where the real
 aircraft is a slab-sided foam box. So the picture comes first, and the
 numbers after.
+
+**Write `_model.py` so the photographs can ARGUE with it.** Every dimension
+a silhouette could have an opinion about -- a station, a chord, a sweep, a
+cross-section width -- is a NAMED MODULE-LEVEL CONSTANT, assigned at the top
+and referenced below. `fit_geometry` can only free names, so a number written
+inline is one the photographs cannot reach:
+
+    fuse_station_3  = 0.35                      # fittable
+    fuse_width_3    = 0.12
+    ...
+    asb.FuselageXSec(xyz_c=[fuse_station_3, 0, 0.005],
+                     width=fuse_width_3, height=fuse_height_3)
+
+    asb.FuselageXSec(xyz_c=[0.35, 0, 0.005],    # NOT fittable: no name
+                     width=0.12, height=0.10)
+
+Measured: a reconstruction wrote every fuselage, canopy and intake station as
+a literal inside `asb.FuselageXSec(...)`. The overlay then put 28% of its
+residual on the fuselage, the next run read that, reached for `fit_geometry`
+-- and got `KeyError: not a module-level constant`. There was nothing to
+free. It hand-set the loft by eye instead, which is the model being fitted to
+the photograph by a person, and that is the failure the overlay exists to
+prevent. Rule 43 counts this for you: a chapter fixing dozens of constants
+while declaring a handful of inputs is one whose geometry is mostly
+unreachable.
+
+A number the photographs cannot see -- a material density, a solver
+tolerance, a reference area -- does not need a name for this reason. Judge
+by whether a silhouette could disagree with it.
+
+**The photographs are how the geometry is OBTAINED, not only how it is
+checked.** `read_reference("photographs")` is the one page on this; read it
+before your first overlay. The short version: fit the camera with
+`compare_to_photo`, look at the overlay, and if the residual sits above
+about 1.2% after ONE reseed, the camera is converged and what is left is
+shape -- which is `fit_geometry(free={...}, poses={...})`, freeing the few
+`_model.py` constants a fault in the picture actually points at, seeded
+with the poses you just read off the notes. Never free a published
+dimension: span and length are the scale reference. A reconstruction that
+hand-sets every station and uses the photographs only to confirm them has
+checked the model against itself.
 
 **Declare every dimension you had to supply yourself.** The brief gives what
 was measured; everything else -- a station table you inferred, a dihedral

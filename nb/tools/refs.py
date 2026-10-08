@@ -24,6 +24,10 @@ DOCS = {
     "surrogates": "Lookup tables and cached polars: what level to cache at.",
     "quarto": "Render and tooling traps. Read when a render fails, or before "
               "writing a figure or table you have not written here before.",
+    "photographs": "Checking the model against `_reference/` photographs: how "
+                   "to read a pose note, when a residual means the camera and "
+                   "when it means the shape, and how to fit geometry to the "
+                   "silhouettes. Read before any overlay or any fit.",
     # `aerosandbox` and `aerosandbox-api` are deliberately NOT here: both are in
     # the prefix now (see nb/prefix.py PREFIX_DOCS), so offering them would buy
     # a turn to re-read what the model already has in front of it. That turn was

@@ -1,8 +1,14 @@
 photo  Flite Test in-flight photograph against pale sky, same finished
-build. Seen from BELOW and BEHIND, banked: nose at RIGHT, EDF exhaust
-at LEFT, so this is the mirror sense of the studio frame. The UNDER
-surface of the wing and the full fin profile are both visible, and the
-ventral fin and intake are silhouetted. Blurred treeline across the
-bottom of the frame is background, excluded from the mask. Mask cut by
-luminance threshold (the airframe is everywhere darker than the sky)
-plus exclusion of the treeline.
+build. Seen from ABOVE and BEHIND, banked hard: nose at RIGHT, EDF
+exhaust at LEFT. The UPPER surfaces are what is visible -- the gold
+canopy, the dorsal spine, the top of the wing and the port side of the
+fin. The chin intake and the ventral fin are seen obliquely from above
+and to the side, not silhouetted from below. The port wing is the near
+one. Blurred treeline across the bottom of the frame is background,
+excluded from the mask. Mask cut by luminance threshold (the airframe
+is everywhere darker than the sky) plus exclusion of the treeline.
+
+The file is named `belly` and the name is WRONG -- it was written
+before anything was fitted and kept only because two committed entries
+call it. The camera fits at elevation +36 deg, which is above. Read the
+description, not the handle.

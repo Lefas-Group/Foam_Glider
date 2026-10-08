@@ -34,3 +34,9 @@ EDF static thrust: the unit Flite Test sell for this airframe is the
 Powerfun 70 mm 12-blade 2300 kV, rated 2240 g static on 6S at 65 A /
 1638 W -> 22.0 N. Vendor bench maximum at full charge.
   https://store.flitetest.com/70mm-edf-12-blades-ducted-fan-with-rc-brushless-motor-2300kv/
+
+Viewpoint correction, 2026-10-08: `belly` was described as "from BELOW
+and BEHIND" when it is from ABOVE and behind. Every fit of it had
+returned elev +36 deg from the first call; nobody read the number back
+against the description. The handle is kept because two committed
+entries call it.

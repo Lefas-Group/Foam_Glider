@@ -1351,7 +1351,11 @@ def _root_index_freeze(root, chapters, entries):
 @register(39)
 def _index_shape(root, chapters, entries):
     """
-    Rule 39. An index RENDERS its input callouts and does not also write them.
+    Rule 39. An input callout is a list, and carries nothing but its items.
+
+    On an index that means RENDERING them rather than also writing them; on
+    an entry, which writes its two by hand, it means no lead-in line above
+    the numbers.
 
     The callouts are data now (`_inputs.yml`) and the page carries
     `chapter_inputs("<chapter>")`, which prints New user specifications, New
@@ -1420,6 +1424,32 @@ def _index_shape(root, chapters, entries):
                     f"says {lead[0].strip()[:40]!r} above its numbered items. "
                     f"The callout IS the list; anything before it is a "
                     f"sentence introducing three lines")))
+
+    # THE SAME CHECK ON ENTRIES, unconditionally. An entry writes its two
+    # input callouts by hand -- that is the format -- so the index branch
+    # above never reaches them, and the lead-in line went unlinted while the
+    # entry template itself printed one: "Asked of the user, <date>:". Seven
+    # of them are in the frozen corpus. The date is the worst version of the
+    # fault, because the entry is dated in its own front matter and a second
+    # date inside a callout dates the ASKING, which nothing downstream reads
+    # and which a reader takes for the entry's.
+    for e in entries:
+        try:
+            text = e.read_text()
+        except OSError:
+            continue
+        for title, body in callouts_of(text):
+            if title not in INPUT_TITLES:
+                continue
+            lead = [l for l in body.strip().splitlines()
+                    if l.strip() and not re.match(r"^\s*\d+\.", l)
+                    and not re.match(r"^\s*##\s", l)]
+            if lead and not lead[0].startswith(" "):
+                out.append((e, (
+                    f"says {lead[0].strip()[:48]!r} above the numbered items "
+                    f"of its `## {title}` callout. The callout IS the list: "
+                    f"delete the line. A date there dates the asking, and the "
+                    f"entry is dated already")))
     return out
 
 
@@ -2125,9 +2155,9 @@ def _overlay_verdict_dropped(root, chapters, entries):
     a number there is a number that gets optimised. What they return instead
     is a note, and the note is the only statement of whether the picture can
     be read at all: `POSE NOT CONVERGED` when a parameter sat on a bound,
-    `Pose: DOUBTFUL` when the outline is not tracking the aircraft, and `Not
-    the best basin this photograph has` when the residual is above 1% and
-    another seed usually does better.
+    `Pose: DOUBTFUL` when the outline is not tracking the aircraft, and
+    `POSE CONVERGED` when a second seed agreed and what is left of the
+    residual is the model's shape rather than the camera's.
 
     TWO WAYS TO SHIP A PICTURE NOBODY CAN TRUST, and this catches both.
 
@@ -2141,17 +2171,25 @@ def _overlay_verdict_dropped(root, chapters, entries):
     the Tubby B-17 entry does by parsing the residual into its hero line.
 
     The note is PRINTED AND HEDGED. Then the rendered page carries the tool's
-    own warning, and the warning is the finding: refit from another seed, or
-    say in the prose what the note said.
+    own warning, and the warning is the finding: fit the geometry, or say in
+    the prose what the note said.
 
-    A WARNING for both. The remedy for the second is one more fit, which
-    costs pool, and that is a judgement; the remedy for the first is one line.
+    A WARNING for both. The remedy for the second is a `fit_geometry` run,
+    which costs pool, and that is a judgement; the first is one line.
     """
     import ast as _ast
     from .shared import entry_cells
     DRAWS = ("compare_to_photo", "show_comparison")
+    # KEYED ON THE NOTE'S WORDING, so these move with it. "Not the best basin
+    # this photograph has" is gone: it asserted an untested diagnosis and
+    # prescribed a pose perturbation that could only make a converged fit
+    # worse. `compare_to_photo` now runs the second seed itself, and says
+    # POSE CONVERGED when the residual that is left is SHAPE rather than
+    # camera -- still a hedge on the PICTURE, because shape is exactly what
+    # a reader must not then read off it.
     HEDGES = ("POSE NOT CONVERGED", "Pose: DOUBTFUL",
-              "Not the best basin this photograph has")
+              "POSE CONVERGED", "POSE STANDS", "POSE IMPROVED",
+              "POSE DISPUTED", "POSE HEDGED")
     out = []
     for f in entries:
         text = f.read_text()
@@ -2195,11 +2233,13 @@ def _overlay_verdict_dropped(root, chapters, entries):
             out.append((f, (
                 f"(warning) the page renders a camera fit the tool hedged: "
                 f"{'; '.join(hit)}. Read nothing about SHAPE off that "
-                f"overlay until a better pose is found -- reseed with "
-                f"`hint=(elev, azim, roll)` from the note's own numbers and "
-                f"refit, or say in the prose what the note said. An overlay "
-                f"cited as confirmation while its note says another seed "
-                f"does better is evidence the run was told it did not have")))
+                f"overlay until the hedge is gone -- POSE CONVERGED means the "
+                f"residual IS shape, so fit it with `fit_geometry` and redraw; "
+                f"a DOUBTFUL or unconverged pose wants `pose=(elev, azim, "
+                f"roll)` from the note's own numbers. Or say in the prose what "
+                f"the note said. An overlay cited as confirmation while its "
+                f"own note hedges it is evidence the run was told it did not "
+                f"have")))
     return out
 
 
@@ -2245,6 +2285,60 @@ def _justification_is_carried(entries):
                     f"trimming it yourself"))
     return problems
 
+
+
+@register(48)
+def _inline_python_yields_a_number(entries):
+    r"""
+    Rule 48: an inline `{python}` expression produces a VALUE, not markup.
+
+    Quarto inserts an inline expression's result as literal text. It is not
+    re-parsed as markdown and it is not re-parsed as LaTeX, so markup built
+    inside the f-string arrives on the page as characters. Measured on the
+    F-16 Viper:
+
+        [`{python} f"C_{{L,\\max}}={cl_max:.2f}"`]{.key}
+
+    rendered as `C\_{L,\\\\max}=0.92` -- the backslash survived, the
+    underscore was escaped as markdown, and the reader got source code where
+    a symbol belonged. The entry was lint-clean and rendered without error,
+    which is why this needs a rule rather than a paragraph.
+
+    The fix is always the same shape: the markup goes in the markdown, where
+    Quarto can see its `$...$`, and only the number comes from Python.
+
+        at $C_{L,\max} =$ [`{python} f"{cl_max:.2f}"`]{.key}
+
+    A `$` or a backslash inside the expression is the signal. Units are not:
+    `f"{v:.1f} m/s"` is a value with its unit and is how every entry here
+    writes one.
+    """
+    problems = []
+    for e in entries:
+        # NO CUT-IN DATE. `after_cut_in` grandfathers rule 47's `method=`
+        # migration; this is not a format change, it is a page that renders
+        # source code at the reader. An old entry with it is still wrong.
+        if e.text is None:
+            continue
+        # SINGLE backticks only. A fenced ```{python} cell starts with three,
+        # and a pattern that did not exclude them matched the whole cell body
+        # and reported every entry that happened to use a backslash in code.
+        for expr in re.findall(r"(?<!`)`\{python\}([^`\n]*)`(?!`)", e.text):
+            # A DOUBLE backslash or a `$`, not any backslash. `f"{x:.0f}\\u00b0"`
+            # is a Python escape that Python consumes -- the page gets a degree
+            # sign and nothing is wrong. `\\\\max` is a LITERAL backslash that
+            # survives into the output, which is the fault. One corpus entry
+            # separates the two cases and it is the escape, correctly silent.
+            if "\\\\" not in expr and "$" not in expr:
+                continue
+            problems.append(
+                (e, f"inline `{{python}}` expression builds markup: "
+                    f"{' '.join(expr.split())[:52]!r}. Quarto inserts the "
+                    f"result as literal text and never re-parses it, so a "
+                    f"backslash or a `$` reaches the page as itself. Put the "
+                    f"math in the markdown and only the value in Python: "
+                    f"`$C_{{L,\\max}} =$ [`{{python}} f\"{{x:.2f}}\"`]{{.key}}`"))
+    return problems
 
 
 @register(47)

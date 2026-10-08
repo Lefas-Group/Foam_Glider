@@ -15,27 +15,28 @@ PROBE_SPENT = 233.9     # s the probe actually used
 import re
 
 # Fit camera poses against both reference photographs
-rgb_s, note_s = compare_to_photo(airplane, "studio", hint=(20.0, 209.6, -13.5))
-rgb_b, note_b = compare_to_photo(airplane, "belly", hint=(36.0, 118.2, 19.7))
+rgb_s, note_s = compare_to_photo(airplane, "studio", pose=(20.0, 209.6, -13.5))
+rgb_b, note_b = compare_to_photo(airplane, "belly", pose=(36.0, 118.2, 19.7))
 
-# Parse camera angles
-m_cam_s = re.search(r"camera elev\s*([\d\.-]+)°\s*azim\s*([\d\.-]+)°\s*roll\s*([\d\.-]+)°", note_s)
-elev_s = float(m_cam_s.group(1)) if m_cam_s else 20.0
-azim_s = float(m_cam_s.group(2)) if m_cam_s else 210.5
-roll_s = float(m_cam_s.group(3)) if m_cam_s else -12.8
+# Parse the camera and the residual out of each note. NO FALLBACKS: the
+# first version of this cell defaulted every value when its regex missed,
+# and when the note's format changed the page went on rendering the frozen
+# literals as though they were live.
+def _cam(note):
+    m = re.search(r"camera\s*([\d\.]+)°\s*(ABOVE|BELOW),\s*"
+                  r"azim\s*([\d\.-]+)°,\s*roll\s*([\d\.-]+)°", note)
+    e = float(m.group(1))
+    return (e if m.group(2) == "ABOVE" else -e,
+            float(m.group(3)), float(m.group(4)))
 
-# Parse chamfer residuals and mask scales
-m_s = re.search(r"Fit:\s*([\d\.]+)\s*px\s*=\s*([\d\.]+)%\s*of\s*sqrt\(mask area\)\s*\(([\d\.]+)\s*px\)", note_s)
-resid_s_px = float(m_s.group(1)) if m_s else 7.4
-resid_s_pct = float(m_s.group(2)) if m_s else 2.03
-scale_s_px = float(m_s.group(3)) if m_s else 363.0
+def _resid(note):
+    return float(re.search(r"Fit:\s*([\d\.]+)%\s*of\s*sqrt\(mask area\)",
+                           note).group(1))
 
-m_b = re.search(r"Fit:\s*([\d\.]+)\s*px\s*=\s*([\d\.]+)%\s*of\s*sqrt\(mask area\)\s*\(([\d\.]+)\s*px\)", note_b)
-resid_b_px = float(m_b.group(1)) if m_b else 15.1
-resid_b_pct = float(m_b.group(2)) if m_b else 2.90
-scale_b_px = float(m_b.group(3)) if m_b else 522.0
-
-hedge_threshold_pct = 1.0
+elev_s, azim_s, roll_s = _cam(note_s)
+elev_b, azim_b, roll_b = _cam(note_b)
+resid_s_pct = _resid(note_s)
+resid_b_pct = _resid(note_b)
 ```
 
 ::: {.hero}
@@ -43,13 +44,13 @@ hedge_threshold_pct = 1.0
 [studio outline chamfer residual relative to mask scale, confirming upper airframe geometry]{.hero-label}
 :::
 
-**Answer.** Yes. Evaluating the airframe against both store photographs confirms that the reconstruction holds across all major features (@fig-overlays). While the [initial reconstruction](2026-10-07-01-can-we-reconstruct-the-ft-f-16-viper-within-tolerance.qmd) displayed only the belly frame, the studio perspective reveals the upper surfaces that the ventral view obscured: the bubble canopy height, dorsal spine taper, wing leading-edge strakes, and wingtip missile rail alignment.
+**Answer.** Yes, and the second view corrects the first. Both store photographs are taken from ABOVE — the fits return [`{python} f"{elev_s:.0f}"`°]{.key} and [`{python} f"{elev_b:.0f}"`°]{.key} of elevation — so the [initial reconstruction](2026-10-07-01-can-we-reconstruct-the-ft-f-16-viper-within-tolerance.qmd) was never checked against an underside at all, and this entry originally said otherwise because the reference photograph was labelled and described as a belly view when it is not. What the second frame adds is a second azimuth, not a second hemisphere: the bubble canopy, dorsal spine, leading-edge strakes and wingtip rails are seen twice from different bearings, and the fuselage underside and ventral fin remain unverified by any photograph (@fig-overlays).
 
-The studio pose converges cleanly at camera elevation [`{python} f"{elev_s:.1f}"`°]{.key}, azimuth [`{python} f"{azim_s:.1f}"`°]{.key}, and roll [`{python} f"{roll_s:.1f}"`°]{.key}, achieving an outline residual of [`{python} f"{resid_s_px:.1f}"` px]{.key} ([`{python} f"{resid_s_pct:.2f}"`%]{.key} of mask scale). This matches the physical silhouette even more tightly than the in-flight belly frame ([`{python} f"{resid_b_px:.1f}"` px]{.key}, [`{python} f"{resid_b_pct:.2f}"`%]{.key}). Both poses report valid convergence (`Pose: good`), though the solver notes each basin remains hedged because unmodelled details—wingtip ordnance, canopy frame thickness, and intake ducting—prevent residuals from dropping below the strict [`{python} f"{hedge_threshold_pct:.0f}"`%]{.key} hedge threshold. The visual overlay confirms that no gross loft or planform errors were hidden by the belly view.
+The studio pose sits at azimuth [`{python} f"{azim_s:.0f}"`°]{.key} and roll [`{python} f"{roll_s:.1f}"`°]{.key}, for an outline residual of [`{python} f"{resid_s_pct:.2f}"`%]{.key} of mask scale. The in-flight frame sits at azimuth [`{python} f"{azim_b:.0f}"`°]{.key} and returns [`{python} f"{resid_b_pct:.2f}"`%]{.key}. Both poses are good and neither is improved by a second seed, so what is left is the model's shape rather than the camera's — unmodelled wingtip ordnance, canopy frame thickness and intake ducting. No gross loft or planform error is hidden in either bearing.
 
 ```{python}
 #| label: fig-overlays
-#| fig-cap: "Fitted model outlines against studio (@fig-overlays, left) and in-flight belly (@fig-overlays, right) reference photographs. Studio residual is 7.4 px (2.03% of mask scale); belly residual is 15.1 px (2.90%). Both poses converge with valid alignments, though hedged as unmodelled hardware exceeds the 1% threshold."
+#| fig-cap: "Fitted model outlines against the studio frame (@fig-overlays, left) and the in-flight frame (@fig-overlays, right). Both cameras sit above the aircraft; the residuals are 2.0% and 2.9% of mask scale, and both are hedged because what remains at that level is shape rather than pose."
 import matplotlib.pyplot as plt
 
 fig, (ax_s, ax_b) = plt.subplots(1, 2, figsize=(11, 5.5), gridspec_kw={"width_ratios": [1.3, 1]})
@@ -59,7 +60,7 @@ ax_s.set_title("Studio front three-quarter view", fontsize=11)
 
 ax_b.imshow(rgb_b)
 ax_b.set_axis_off()
-ax_b.set_title("Belly in-flight view", fontsize=11)
+ax_b.set_title("In-flight view, from above and behind", fontsize=11)
 
 fig.tight_layout()
 plt.show()

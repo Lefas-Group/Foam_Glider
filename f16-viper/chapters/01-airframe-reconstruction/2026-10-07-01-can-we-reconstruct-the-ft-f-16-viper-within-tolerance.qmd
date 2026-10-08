@@ -41,11 +41,11 @@ target_cg_max = (target_results["CG aft LE"]["target"] + target_results["CG aft 
 
 ```{python}
 #| label: fig-belly
-#| fig-cap: "Fitted model outline against in-flight belly photograph (@fig-belly). Camera elevation 36.3°, azimuth 118.7°, roll 20.2°; residual 15.1 px (2.90% of mask area). Pose is good, though hedged as not the best basin."
+#| fig-cap: "Fitted model outline against the in-flight photograph (@fig-belly), which is taken from above and behind. Camera elevation 36°, azimuth 119°, roll 20°; residual 2.90% of mask scale. The pose is good and hedged: at that level what remains is the model's shape, not the camera."
 import matplotlib.pyplot as plt
 
 fig_b, ax_b = plt.subplots(figsize=(7, 7))
-belly_note = show_comparison(airplane, "belly", hint=(36.0, 118.2, 19.7), ax=ax_b)
+belly_note = show_comparison(airplane, "belly", pose=(36.0, 118.2, 19.7), ax=ax_b)
 plt.show()
 ```
 

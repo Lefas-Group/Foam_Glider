@@ -223,11 +223,27 @@ def chapter_context(notebook):
             out.append("    (empty — scaffolded; the vehicle belongs here)")
         out.append("")
 
-        sigs = signatures(d / "_analysis.py")
+        # IN FULL, not signatures. This file is the single most-read thing
+        # in the corpus -- `this_chapter` records `_model.py` as 13 of 50
+        # `read_text_file` calls and `_analysis.py` as MORE than that, and
+        # only `_model.py` got the fix. Measured again on the F-16 runs:
+        # 3 of 5 read it, 2 of them whole, after a brief saying every
+        # signature was already given. A signature does not say what a
+        # helper returns, what its units are, or which of its arguments the
+        # entry is meant to vary, so a run that must call one correctly has
+        # no choice but to fetch it. Mean `_analysis.py` here is ~2 kB.
+        src = (d / "_analysis.py")
+        try:
+            text = src.read_text().strip()
+        except OSError:
+            text = ""
         out.append("### _analysis.py — how this chapter measures the vehicle\n")
-        if sigs:
-            out.append("Pass to `footer(...)` whatever your entry NAMES (rule 13):\n")
-            out += sigs
+        if text:
+            out.append("In full. Pass to `footer(...)` whatever your entry "
+                       "NAMES (rule 13). Do not read this file; it is here.\n")
+            out.append("```python")
+            out.append(text)
+            out.append("```")
         else:
             out.append("    (empty — nothing promoted yet)")
         out.append("")

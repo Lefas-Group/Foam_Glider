@@ -1141,7 +1141,7 @@ def _depth_order(parts, params, centre):
                   key=lambda i: -float(((parts[i][0] - centre) @ R.T)[:, 2].mean()))
 
 
-def _fit_pose(parts, mask, hint=None, work=220):
+def _fit_pose(parts, mask, pose=None, work=220, seed=1):
     """
     Camera pose by symmetric chamfer distance between outlines.
 
@@ -1152,6 +1152,11 @@ def _fit_pose(parts, mask, hint=None, work=220):
     descended on. Running a full Nelder-Mead from every seed spent its time
     polishing basins that could not win -- 156 s against 13 s for the same
     optimum.
+
+    `seed` IS THE CMA SEED, and it is the only thing that makes a second run
+    a second OPINION. It was fixed at 1, so re-running a cold fit returned a
+    bit-identical answer and "try another seed" was advice no caller could
+    act on. `compare_to_photo` now varies it to confirm its own result.
     """
     import numpy as _np
     from scipy.optimize import minimize as _minimize
@@ -1195,9 +1200,9 @@ def _fit_pose(parts, mask, hint=None, work=220):
     s0 = max(_np.ptp(xs), _np.ptp(ys)) / _np.ptp(allp, axis=0).max()
     cx, cy = xs.mean(), ys.mean()
 
-    if hint is not None:
-        roll0 = float(hint[2]) if len(hint) > 2 else 0.0
-        starts = [[float(hint[0]), float(hint[1]), roll0, s0, cx, cy, 0.0]]
+    if pose is not None:
+        roll0 = float(pose[2]) if len(pose) > 2 else 0.0
+        starts = [[float(pose[0]), float(pose[1]), roll0, s0, cx, cy, 0.0]]
     else:
         starts = [[e0, float(a0), 0.0, s0, cx, cy, 0.0]
                   for a0 in range(0, 360, 30) for e0 in (15.0, 40.0, 65.0)]
@@ -1216,15 +1221,20 @@ def _fit_pose(parts, mask, hint=None, work=220):
     import cma as _cma
     lo = _np.array([-30.0,   0.0, -30.0, 0.3*s0, cx-250, cy-250, -7.0])
     hi = _np.array([ 85.0, 360.0,  30.0, 3.0*s0, cx+250, cy+250,  7.0])
-    if hint is not None:
-        lo[0], hi[0] = float(hint[0])-25, float(hint[0])+25
-        lo[1], hi[1] = float(hint[1])-25, float(hint[1])+25
-        # A ROLL HINT MOVES ITS BAND TOO. Roll is bounded +/-30 deg cold, so a
-        # hinted roll outside that was clipped back to +/-30 and the number the
-        # caller passed never reached the search -- a hint silently ignored,
-        # which is worse than one refused.
-        if len(hint) > 2:
-            lo[2], hi[2] = float(hint[2])-25, float(hint[2])+25
+    # A POSE NARROWS THE SEARCH, it does not merely seed it. +/-25 deg around
+    # what the caller asserted, which is why a WRONG pose is worse than none:
+    # it trades a global search for a local one centred off-target. Measured
+    # on the F-16 studio view, perturbing a converged pose by 5 deg elevation
+    # and 5 of azimuth returned 8.89% against a 2.05% cold baseline.
+    if pose is not None:
+        lo[0], hi[0] = float(pose[0])-25, float(pose[0])+25
+        lo[1], hi[1] = float(pose[1])-25, float(pose[1])+25
+        # A ROLL ASSERTION MOVES ITS BAND TOO. Roll is bounded +/-30 deg cold,
+        # so one outside that was clipped back to +/-30 and the number the
+        # caller passed never reached the search -- silently ignored, which is
+        # worse than refused.
+        if len(pose) > 2:
+            lo[2], hi[2] = float(pose[2])-25, float(pose[2])+25
     x0 = _np.clip(_np.array(scored[0][1], float),
                   lo + 1e-6*(hi-lo), hi - 1e-6*(hi-lo))
     def _u(x):   return (x - lo)/(hi - lo)
@@ -1232,7 +1242,7 @@ def _fit_pose(parts, mask, hint=None, work=220):
     es = _cma.CMAEvolutionStrategy(
         _u(x0), 0.25,
         {"bounds": [0, 1], "popsize": 18, "maxiter": 400,
-         "tolfun": 2e-2, "tolfunhist": 2e-3, "verbose": -9, "seed": 1})
+         "tolfun": 2e-2, "tolfunhist": 2e-3, "verbose": -9, "seed": seed})
     es.optimize(lambda u: cost(_x(_np.asarray(u))))
     v, val = _x(es.result.xbest), es.result.fbest
     e, a, ro, s, tx, ty, d = unpack(v)
@@ -1247,11 +1257,96 @@ def _fit_pose(parts, mask, hint=None, work=220):
     return (e, a % 360, ro, s/sc, tx/sc, ty/sc, d), val/sc, centre, railed
 
 
+def _component_residuals(airplane, mask, params, centre, work=220):
+    """Each component's share of the model-to-photo chamfer. -> {name: 0..1}
+
+    WHICH COMPONENT IS WRONG is the question a high residual actually raises,
+    and it is the one `fit_geometry`'s caller has to answer to choose a `free`
+    set. `_model.py` fixes dozens of constants; picking three of them by eye
+    off an overlay is the step that does not happen, and the run then does not
+    call the fitter at all.
+
+    SUMMED, not averaged, which is where this differs from `fit_geometry`'s
+    own `_score(per_part=True)`. That one compares a component against
+    ITSELF before and after, so a per-pixel mean is the right statistic.
+    Here one total is being apportioned, so a component's share has to scale
+    with how much outline it owns -- averaging makes a wingtip rail with
+    twenty bad pixels rank beside a fuselage with two thousand.
+
+    MODEL-TO-PHOTO ONLY. The symmetric cost `_fit_pose` minimises also runs
+    photo-to-model, which cannot be attributed: a stretch of photograph
+    outline that no component reaches belongs to whichever is MISSING, and
+    naming one would be a guess. `completeness` is the tool for that half.
+    """
+    import numpy as _np
+    from scipy import ndimage as _nd
+    from PIL import Image as _Image
+
+    h, w = mask.shape
+    sc = work / max(h, w)
+    tw, th = max(1, int(w*sc)), max(1, int(h*sc))
+    tgt = _np.asarray(_Image.fromarray(mask.astype(_np.uint8)*255)
+                      .resize((tw, th), _Image.NEAREST)) > 127
+    dt = _nd.distance_transform_edt(~(tgt & ~_nd.binary_erosion(tgt)))
+
+    e, a, ro, s, tx, ty, d = params
+    p = (e, a, ro, s*sc, tx*sc, ty*sc, d)
+    names = [c.name for c in list(airplane.wings) + list(airplane.fuselages)]
+    parts = _parts_of(airplane, resolution=_FIT_RESOLUTION)
+
+    share = {}
+    for name, (pts, faces) in zip(names, parts):
+        m = _raster(pts, faces, p, (tw, th), centre)
+        edge = m & ~_nd.binary_erosion(m)
+        if edge.any():
+            share[name] = share.get(name, 0.0) + float(dt[edge].sum())
+    total = sum(share.values())
+    if not total:
+        return {}
+    return {k: v/total for k, v in sorted(share.items(),
+                                          key=lambda kv: -kv[1])}
+
+
 # How far the chamfer residual may run, as a fraction of sqrt(mask area),
 # before the overlay is declared untrustworthy. A good fit sits near 2%;
 # the seed-to-seed noise floor measured on two store photographs is 0.024%,
 # so anything inside that is not a difference.
 _POSE_DOUBTFUL = 0.040
+
+#: When two independent CMA seeds count as the SAME answer, as a fraction of
+#: sqrt(mask area). This is a materiality test, not a measurement-noise one:
+#: reseeding a NARROWED search reproduces itself to 0.024%, but two COLD
+#: searches explore a genuinely multi-modal landscape and scatter far wider.
+#: Measured here -- belly 2.97% and 2.91% (the same answer twice), studio
+#: 2.05% and 5.20% (not). 0.25 pp separates them and is about a tenth of a
+#: typical residual, which is the scale at which a difference would change
+#: what anyone did about it.
+_POSE_AGREE = 0.0025
+
+#: Last converged pose per (view, geometry), within one probe kernel. Never
+#: consulted at render: see `compare_to_photo`.
+_POSE_CACHE = {}
+
+
+def _geometry_fingerprint(airplane):
+    """A cheap key for "is this the same aircraft as last call?". -> str
+
+    Vertex counts and the bounding box, not the mesh: a fit moves stations by
+    millimetres and a warm start that survives that is the whole point, while
+    anything structural -- a component added, a span changed -- moves the box
+    and drops the entry. Wrong in the safe direction either way, since a miss
+    only costs the cold search that used to run every time.
+    """
+    import numpy as _np
+    try:
+        comps = list(airplane.wings) + list(airplane.fuselages)
+        pts = _np.vstack([_np.asarray(c.mesh_body(method="quad")[0], float)
+                          for c in comps])
+    except Exception:
+        return "?"
+    lo, hi = pts.min(axis=0), pts.max(axis=0)
+    return (f"{len(comps)}:{len(pts)}:"
+            + ":".join(f"{v:.3f}" for v in (*lo, *hi)))
 
 
 def _reference_image(name):
@@ -1274,7 +1369,7 @@ def _reference_image(name):
             _np.asarray(_Image.open(mask_path).convert("L")) > 127)
 
 
-def compare_to_photo(airplane, name, hint=None, fill=0.22):
+def compare_to_photo(airplane, name, pose=None, fill=0.22):
     """
     Draw the model over a photograph of the real aircraft. -> (rgb, note)
 
@@ -1291,18 +1386,25 @@ def compare_to_photo(airplane, name, hint=None, fill=0.22):
     chased, and chasing this one makes the model worse. The note reports the
     POSE, and flags when the pose is too poor to read anything from.
 
-    `hint=(elev, azim)` or `(elev, azim, roll)` RESEEDS the search; the
-    chamfer still does the fitting from there. Reach for it whenever the
-    outline is displaced as a whole -- every component out in the same
-    direction is a pose error, one component wrong while the others sit
-    right is a shape error -- and not only when the note says DOUBTFUL, a
-    fit can be the best one available and still be worth a second seed from
-    somewhere else.
+    `pose=(elev, azim)` or `(elev, azim, roll)` ASSERTS the camera. It used
+    to be called `hint`, which read as a free suggestion, and it is not one:
+    a pose NARROWS the search to +/-25 deg around itself, so a wrong one is
+    worse than none. Measured on the F-16 studio view, perturbing an already
+    converged pose by 5 deg of elevation and 5 of azimuth returned 8.89%
+    against a 2.05% cold baseline. Pass one when you are ASSERTING something
+    the chamfer cannot see -- an aircraft is near-symmetric, so azimuth and
+    azimuth+180 can both fit a silhouette and only a person can say which is
+    nose-left -- or to pin the camera in an entry so the figure redraws the
+    same way at render. The scale, translation and perspective distance are
+    still fitted from the mask either way.
 
-    There is still no way to SET a pose outright. Judging a camera angle by
-    eye is the one part of this a reader does badly: an eyeball estimate was
-    21 degrees out in elevation on a photograph that then fitted cleanly. A
-    hint says where to look, and the photograph decides.
+    Do NOT pass one to go looking for a better basin. In a probe the last
+    converged pose for this view is reused automatically, and above a 1.2%
+    residual the fit confirms itself from a second CMA seed and says whether
+    what is left is camera or SHAPE. A caller that perturbs the pose by hand
+    is re-implementing that loop, badly: the run this was written for wrote
+    a 3x3 grid, had both probes killed on budget, and got two numbers worse
+    than the one it started from.
     """
     import numpy as _np
     from PIL import Image as _Image
@@ -1316,8 +1418,72 @@ def compare_to_photo(airplane, name, hint=None, fill=0.22):
     # meshes -- and the pose that comes back is the same one. Both use the
     # centre the fit returned, so the projection is identical either way.
     parts = _parts_of(airplane)
-    params, resid, centre, railed = _fit_pose(
-        _parts_of(airplane, resolution=_FIT_RESOLUTION), mask, hint=hint)
+    cheap = _parts_of(airplane, resolution=_FIT_RESOLUTION)
+
+    # WARM START, PROBE-SIDE ONLY. Within one probe kernel the geometry barely
+    # moves between calls and the camera does not move at all, so re-running a
+    # cold 36-seed screen per call is work already done. At RENDER this is off:
+    # an entry pins its camera with `pose=`, and a figure that silently picked
+    # up state from whatever ran before it would stop being reproducible, which
+    # is the property rule 12 exists to protect.
+    warm = pose
+    if warm is None and _IN_PROBE:
+        warm = _POSE_CACHE.get((name, _geometry_fingerprint(airplane)))
+
+    params, resid, centre, railed = _fit_pose(cheap, mask, pose=warm)
+    scale_px = float(_np.sqrt(mask.sum()))
+
+    # CONFIRM THE RESULT RATHER THAN ASK THE CALLER TO. Above 1.2% this used
+    # to assert "another seed does better" -- untested -- and prescribe
+    # `hint=(elev±5, azim±10)`. Both halves were wrong. The F-16's cold fits
+    # had already converged (2.05% and 2.97%, reproduced to a tenth of a
+    # degree by a reseed), so the advice sent a run to confirm a fit it
+    # already had: it wrote a 3x3 grid around a function that screens 36
+    # seeds and runs CMA-ES internally, had both probes killed on budget
+    # (2 of 9 fits, 2 of 4), and the two studio perturbations it did get back
+    # were 8.89% and 4.79% against a 2.05% baseline -- because a pose NARROWS
+    # the search to +/-25 deg around a centre that was already right.
+    #
+    # Only this function can settle it cheaply, so it does: one more fit from
+    # a different CMA seed, ~20 s, against the 75 s the caller spent failing.
+    # Probe-side only -- at render the entry has pinned its pose and the
+    # figure just redraws it, so ENTRY_CEILING is unmoved.
+    confirmed = None
+    if (_IN_PROBE and not railed and resid <= _POSE_DOUBTFUL * scale_px
+            and resid > 0.012 * scale_px):
+        # THE CONFIRM FIT IS COLD, ALWAYS, and that is the point of it. Run
+        # from the same `pose` it would be narrowed to the same +/-25 deg
+        # band, agree with itself, and report a wrong assertion as converged
+        # shape -- a confident false diagnosis, which is worse than the
+        # ambiguity it replaced. Cold, it TESTS the assertion instead.
+        p2, r2, c2, rl2 = _fit_pose(cheap, mask, pose=None, seed=7)
+        gap = 100.0*abs(r2 - resid)/scale_px
+        was = 100.0*resid/scale_px
+        # TAKE THE BETTER FIT ALWAYS -- it is free, it is already computed --
+        # but CLASSIFY on whether the two answers differ MATERIALLY, which is
+        # a separate question. Measured on this notebook: belly's seeds came
+        # back 2.97% and 2.91%, a 2% relative difference that is the same
+        # answer twice; studio's came back 2.05% and 5.20%, which is not.
+        better = (not rl2) and r2 < resid
+        # AN ASSERTED POSE IS NEVER OVERRIDDEN. `pose=` is for the thing the
+        # chamfer cannot see -- an aircraft is near-symmetric, so azimuth and
+        # azimuth+180 both fit a silhouette and only a person can say which
+        # is nose-left. A cold fit that scores lower may simply have found
+        # the mirror. So a better cold result is REPORTED against the
+        # assertion and not silently swapped in.
+        if better and pose is None:
+            params, resid, centre, railed = p2, r2, c2, rl2
+        if better and pose is not None:
+            confirmed = ("disputed", gap, 100.0*r2/scale_px)
+        elif gap <= _POSE_AGREE * scale_px:
+            confirmed = ("converged", gap, was)
+        elif better:
+            confirmed = ("improved", gap, was)
+        else:
+            confirmed = ("stands", gap, 100.0*r2/scale_px)
+
+    if _IN_PROBE and not railed:
+        _POSE_CACHE[(name, _geometry_fingerprint(airplane))] = params[:3]
 
     out = photo.copy()
     covered = _np.zeros((H, W), bool)
@@ -1343,45 +1509,109 @@ def compare_to_photo(airplane, name, hint=None, fill=0.22):
     # that freed six wing dimensions beat the untouched model on raw-pixel
     # mean AND raw-pixel worst-case, while actually being worse; normalised
     # by sqrt(area) the untouched model wins on both.
-    ys, xs = _np.nonzero(mask)
-    scale_px = float(_np.sqrt(mask.sum()))
+    pct = 100.0*resid/scale_px
     ok = resid <= _POSE_DOUBTFUL * scale_px
-    # ROLL IS IN THE NOTE because it is what a hint usually needs to carry:
-    # an overlay that is displaced as a whole is most often rotated in the
-    # image plane, and the reader cannot reseed a number it was never shown.
-    note = (f"{name} — camera elev {params[0]:.1f}° azim {params[1]:.1f}° "
-            f"roll {params[2]:.1f}°, {params[3]:.0f} px/m. ")
+
+    # WHAT THE NOTE DOES NOT SAY, and why each was dropped:
+    #
+    #   the VIEW NAME. The caller passed it and already knows it. Saying it
+    #   back lends a label nothing measured the authority of a measurement:
+    #   this notebook's `belly` is a photograph taken from ABOVE, the fit
+    #   returned elev +36 deg from the first call, and the disagreement went
+    #   unread for four entries because the elevation was a bare number
+    #   printed beside a confident name. Hence the plain words below.
+    #
+    #   the RESIDUAL IN PIXELS, and sqrt(mask area) beside it. Raw pixels are
+    #   not comparable across views -- that is the whole reason for the
+    #   normalisation ten lines up -- and printing them first got them quoted
+    #   in prose: "studio 7.4 px, belly 15.1 px", two numbers a reader will
+    #   divide and must not.
+    #
+    #   px/m. No run has used it.
+    #
+    # ROLL STAYS: an overlay displaced as a whole is most often rotated in
+    # the image plane, and a reader cannot assert a number never shown.
+    where = ("ABOVE" if params[0] >= 0 else "BELOW")
+    note = (f"camera {abs(params[0]):.0f}° {where}, azim {params[1]:.0f}°, "
+            f"roll {params[2]:.1f}°. ")
     if railed:
         note += ("POSE NOT CONVERGED: " + ", ".join(railed) +
                  " sat on a bound. Read nothing from this overlay. ")
-    # THE RESIDUAL IS IN THE NOTE, as a number and not only as a verdict.
-    # `ok` is one bit against a 2.5% gate, and a bit cannot say that a fit is
-    # three times worse than one already found. Measured on the Mini
-    # Explorer: the overlay an entry committed sat at 2.1% while a 0.9% pose
-    # existed, had been FOUND by that same run minutes earlier, and was
-    # discarded -- and both printed "Pose: good", so nothing in the record
-    # distinguished them. The entry then read shape faults off the worse one.
-    #
-    # A good fit is near 1%. Anything above that is worth one more search
-    # from a different seed before any shape is read off the picture, which
-    # is what the number -- and not the verdict -- tells a reader to do.
-    note += (f"Fit: {resid:.1f} px = {100*resid/scale_px:.2f}% of "
-             f"sqrt(mask area) ({scale_px:.0f} px). ")
-    note += ("Pose: good." if ok else
-             "Pose: DOUBTFUL — the outline does not track the aircraft. "
-             "Read nothing from this overlay; reseed with "
-             "hint=(elev, azim, roll), or ask for a better photograph.")
-    if ok and resid > 0.012 * scale_px:
-        note += (" Not the best basin this photograph has: a fit this far "
-                 "above 1% usually means another seed does better. Try "
-                 "hint=(elev±5, azim±10, roll) before reading shape from it.")
+    note += f"Fit: {pct:.2f}% of sqrt(mask area). "
+    # NO "Pose: good" AFTER A RAILED FIT. The two used to print together --
+    # "Read nothing from this overlay. ... Pose: good." -- because `ok` only
+    # ever tested the DOUBTFUL gate. A verdict that contradicts the warning
+    # three words earlier is one a reader resolves in the direction they
+    # already wanted.
+    if not railed:
+        note += ("Pose: good." if ok else
+                 "Pose: DOUBTFUL — the outline does not track the aircraft. "
+                 "Read nothing from this overlay; assert the camera with "
+                 "pose=(elev, azim, roll), or ask for a better photograph.")
+
+    # THE BRANCH. A residual above 1.2% has two causes and they want opposite
+    # remedies, so the old note's single sentence was wrong half the time and
+    # there was no way for the reader to tell which half. Now the confirm fit
+    # above has already decided, and this reports what it found.
+    # THE SHAPE VERDICT IS CHEAP AND RUNS EVERYWHERE; only the CONFIRM FIT
+    # is probe-side. Splitting these was a correction: gating both on
+    # `_IN_PROBE` meant a rendered note carried no component breakdown at
+    # all, and the first entry to cite one -- reasonably, it is the useful
+    # half -- crashed its render parsing for a line that was never emitted.
+    # A second fit costs 20 s. One distance transform and N rasters costs
+    # about one, so the page can have it.
+    if not railed and ok and resid > 0.012 * scale_px:
+        share = _component_residuals(airplane, mask, params, centre)
+        worst = ", ".join(f"{k} {100*v:.0f}%"
+                          for k, v in list(share.items())[:3])
+        if confirmed and confirmed[0] == "converged":
+            lead = (f" POSE CONVERGED — a second seed agrees to "
+                    f"{confirmed[1]:.2f} pp, so the {pct:.2f}% left is SHAPE, "
+                    f"not camera, and no further seed will move it.")
+        elif confirmed and confirmed[0] == "stands":
+            lead = (f" POSE STANDS — a second seed did worse "
+                    f"({confirmed[2]:.2f}% against {pct:.2f}%), so this is the "
+                    f"better of two independent searches and nothing found a "
+                    f"lower basin. The {pct:.2f}% is most likely SHAPE.")
+        else:
+            # No confirm fit ran -- a render, or a seed that disagreed. The
+            # residual is still above the line, and that still means a reader
+            # must not take shape off the picture.
+            lead = (f" POSE HEDGED — {pct:.2f}% is above the 1.2% a converged "
+                    f"fit sits at, so what is left is most likely SHAPE.")
+        note += lead + ((f" Error sits on: {worst}." if worst else "")
+                        + f" Free the constants those point at:"
+                          f" fit_geometry(free={{...}}, poses={{{name!r}:"
+                          f" ({params[0]:.1f}, {params[1]:.1f},"
+                          f" {params[2]:.1f})}}).")
+
+    if confirmed and confirmed[0] == "improved":
+        note += (f" POSE IMPROVED — a second seed found a better basin and it "
+                 f"is what you are looking at: {confirmed[2]:.2f}% -> "
+                 f"{pct:.2f}%. The two disagreed, so this one is not confirmed "
+                 f"either; if the outline still sits off as a whole, assert "
+                 f"the camera with pose=(elev, azim, roll).")
+    elif confirmed and confirmed[0] == "disputed":
+        note += (f" POSE DISPUTED — you asserted this camera, and an "
+                 f"unconstrained search found a better one: {confirmed[2]:.2f}% "
+                 f"against your {pct:.2f}%. Yours is still what is drawn, "
+                 f"because a lower residual can be the mirror basin on a "
+                 f"near-symmetric aircraft and only you can rule that out. "
+                 f"Look at the overlay: if the outline is displaced as a "
+                 f"whole, drop the pose= and let it fit cold.")
     return out.astype(_np.uint8), note
 
 
-def show_comparison(airplane, name, hint=None, fill=0.22, ax=None):
-    """`compare_to_photo` onto matplotlib axes, for an entry. -> the note."""
+def show_comparison(airplane, name, pose=None, fill=0.22, ax=None):
+    """`compare_to_photo` onto matplotlib axes, for an entry. -> the note.
+
+    PIN THE CAMERA HERE. An entry re-runs this at render, so passing the
+    `pose` the probe converged on is what makes the committed figure redraw
+    the same way every time. Without it the render refits cold, which costs
+    the ceiling ~25 s a panel and can land somewhere else.
+    """
     import matplotlib.pyplot as _plt
-    rgb, note = compare_to_photo(airplane, name, hint=hint, fill=fill)
+    rgb, note = compare_to_photo(airplane, name, pose=pose, fill=fill)
     if ax is None:
         _, ax = _plt.subplots(figsize=(7.0, 7.0*rgb.shape[0]/rgb.shape[1]))
     ax.imshow(rgb)
@@ -1419,7 +1649,7 @@ def with_control_surface(airplane, wing_name, name, deflection_deg):
     return out
 
 
-def completeness(airplane, name, hint=None):
+def completeness(airplane, name, pose=None):
     """
     What is in the photograph that no component covers? -> (frac, note)
 
@@ -1443,7 +1673,7 @@ def completeness(airplane, name, hint=None):
         30 deg out in azimuth      7.21%       33.4%
         mirrored, from below       6.89%       44.0%
 
-    So this refuses to report when the pose is DOUBTFUL. Pass `hint=` to
+    So this refuses to report when the pose is DOUBTFUL. Pass `pose=` to
     reuse a pose you have already found with `compare_to_photo`, which is
     cheaper than fitting again and cannot land somewhere different.
     """
@@ -1454,8 +1684,19 @@ def completeness(airplane, name, hint=None):
     # `compare_to_photo`. The uncovered regions are what is being read here,
     # so they are rasterised at full resolution.
     parts = _parts_of(airplane)
-    params, resid, centre, railed = _fit_pose(
-        _parts_of(airplane, resolution=_FIT_RESOLUTION), mask, hint=hint)
+    cheap = _parts_of(airplane, resolution=_FIT_RESOLUTION)
+
+    # WARM START, PROBE-SIDE ONLY. Within one probe kernel the geometry barely
+    # moves between calls and the camera does not move at all, so re-running a
+    # cold 36-seed screen per call is work already done. At RENDER this is off:
+    # an entry pins its camera with `pose=`, and a figure that silently picked
+    # up state from whatever ran before it would stop being reproducible, which
+    # is the property rule 12 exists to protect.
+    warm = pose
+    if warm is None and _IN_PROBE:
+        warm = _POSE_CACHE.get((name, _geometry_fingerprint(airplane)))
+
+    params, resid, centre, railed = _fit_pose(cheap, mask, pose=warm)
     scale_px = float(_np.sqrt(mask.sum()))
     pose_pct = 100.0*resid/scale_px
 
@@ -1466,7 +1707,7 @@ def completeness(airplane, name, hint=None):
             + (f" and {', '.join(railed)} sat on a bound" if railed else "")
             + ". An ill-posed model leaves most of the aircraft uncovered, "
               "so every region would look missing. Fix the pose first — "
-              "reseed with hint=(elev, azim, roll) — then ask again.")
+              "assert it with pose=(elev, azim, roll) — then ask again.")
 
     H, W = mask.shape
     cn = [c.name for c in list(airplane.wings) + list(airplane.fuselages)]
@@ -1701,6 +1942,22 @@ def fit_geometry(free, reliability="normal", views=None, poses=None,
         print(fit)
         fit.apply()
 
+    ON A FIRST RECONSTRUCTION there is no entry to cite, and the example
+    above reads as though there must be. There need not be: the overlay in
+    front of you is evidence, and naming what it shows is the reason.
+
+        fit = fit_geometry(free={
+            "fuse_nose_len": (0.18, 0.34, "overlay: nose outline runs past "
+                                          "the radome in both views"),
+        }, poses={"studio": (19.9, 209.6, -13.4),
+                  "belly":  (36.0, 118.2, 19.7)})
+
+    WHAT IT COSTS, because a call nobody can price is a call nobody makes.
+    `reliability` buys seeds -- `quick` 2, `normal` 3, `careful` 5 -- and each
+    seed re-fits the geometry against EVERY view, so cost goes as seeds x
+    views x free parameters. Budget a probe accordingly, and read `.seconds`
+    off the result: it records what the run actually took.
+
     `poses` SEEDS THE CAMERA, one entry per view, `(elev, azim)` or
     `(elev, azim, roll)` -- the three numbers `compare_to_photo` prints in its
     note. Pass the pose of the overlay you actually looked at. The geometry
@@ -1861,7 +2118,7 @@ def fit_geometry(free, reliability="normal", views=None, poses=None,
     parts0 = _parts_of(_build(start), resolution=_FIT_RESOLUTION)
     seed_pose, plo, phi, seed_fit = {}, {}, {}, {}
     for v, d in V.items():
-        pr, _r0, _c0, _rl = _fit_pose(parts0, d["mask"], hint=hints.get(v))
+        pr, _r0, _c0, _rl = _fit_pose(parts0, d["mask"], pose=hints.get(v))
         seed_fit[v] = (100.0*_r0/d["nrm"], bool(_rl), v in hints)
         logit = float(_np.clip(-_np.log(max(19.6/max(pr[6]-0.4, 1e-6) - 1, 1e-9)),
                                -6.5, 6.5))

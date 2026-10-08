@@ -36,14 +36,12 @@ v_min_10deg = find_min_throw_speed(cl_fn, cd_fn, airplane, m_auw, gamma0_deg=10.
 [minimum horizontal throw speed to fly away under 22 N thrust from 1.7 m release]{.hero-label}
 :::
 
-**Answer.** At its full 6S all-up weight ([`{python} f"{m_auw*1000:.0f}"` g]{.key}), the wing loading reaches [`{python} f"{wing_loading:.1f}"` N/m²]{.key}. This yields an unaccelerated stall speed of [`{python} f"{v_stall:.1f}"` m/s]{.key} ([`{python} f"{v_stall*3.6:.1f}"` km/h]{.key}) at [`{python} f"C_{{L,\\max}}={cl_max:.2f}"`]{.key}. An unpowered glide throw is impossible for a human arm, because human throwing capability sits below this aerodynamic threshold.
+**Answer.** At its full 6S all-up weight ([`{python} f"{m_auw*1000:.0f}"` g]{.key}), the wing loading reaches [`{python} f"{wing_loading:.1f}"` N/m²]{.key}. This yields an unaccelerated stall speed of [`{python} f"{v_stall:.1f}"` m/s]{.key} ([`{python} f"{v_stall*3.6:.1f}"` km/h]{.key}) at $C_{L,\max} =$ [`{python} f"{cl_max:.2f}"`]{.key}. An unpowered glide throw is impossible for a human arm, because human throwing capability sits below this aerodynamic threshold.
 
 With the specified 70 mm EDF developing [`{python} f"{T_static:.1f}"` N]{.key} static thrust ($T/W =$ [`{python} f"{T_static/W_auw:.2f}"`]{.key}), forward acceleration ([`{python} f"{(T_static - 2.0)/m_auw:.1f}"` m/s²]{.key}) bridges the sub-stall deficit (@fig-launch-dynamics). Released horizontally from shoulder height ($h_0 = 1.7$ m at $\alpha = 10^\circ$), the minimum throw speed required to avoid ground impact before climbing away is [`{python} f"{v_min_flat:.1f}"` m/s]{.key} ([`{python} f"{v_min_flat*3.6:.1f}"` km/h]{.key}). Imparting a modest $+10^\circ$ upward heave relaxes this requirement to [`{python} f"{v_min_10deg:.1f}"` m/s]{.key} ([`{python} f"{v_min_10deg*3.6:.1f}"` km/h]{.key}). Both operating speeds sit comfortably within ordinary hand-launch capability, confirming that the 2 kg jet flies away reliably under power once balanced per the [balance analysis](2026-10-07-03-where-must-the-missing-340-g-sit-to-balance-inside-the-cg-band.qmd).
 
 ::: {.callout-tip}
 ## New user specifications
-Asked of the user, 2026-10-07:
-
 1. **EDF static thrust: 22.0 N** — vendor bench maximum.
 :::
 

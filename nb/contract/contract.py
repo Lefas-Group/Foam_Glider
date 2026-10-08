@@ -196,6 +196,14 @@ WHY = {
         "its own budget, and is folded away beside it: the reader who wants "
         "to know how the number was got opens one box and finds a sentence "
         "before the code.",
+    48: "An entry built a symbol inside an inline expression and the page "
+        "showed the backslashes. Quarto inserts an inline expression's "
+        "result as literal text and never re-parses it as markdown or as "
+        "LaTeX, so markup assembled in the f-string arrives as characters. "
+        "It renders without error and lints clean, which is why it needs a "
+        "rule rather than a paragraph. The math belongs in the markdown, "
+        "where its dollar signs are seen; the expression carries the "
+        "number.",
     44: "A reconstruction reported 0.54% worst error across eight published "
         "targets, and seven of the eight had been ASSIGNED rather than "
         "predicted -- five to an exact 0.00%. `_model.py` held "
@@ -292,6 +300,7 @@ RULES = {
     45: "(warning) an overlay's note reaches the page, and is not hedged",
     46: "the entry carries the question's justification as its `subtitle`",
     47: "`footer(…)` carries a `method=` summary of the code the entry wrote",
+    48: "an inline `{python}` expression produces a value, never markup",
 }
 
 

@@ -436,17 +436,37 @@ def _aircraft_visual_brief(notebook):
     unlike a figure saved during the run it can never go stale against a
     `_model.py` that changed afterwards, which is the property rule 12 exists
     to protect.
+
+    EVERY PHOTOGRAPH, one panel each, not the first one. This named
+    `photos[0]` and offered the rest only as a fallback for a DOUBTFUL pose,
+    and the model did exactly that: the F-16 reconstruction fitted both of
+    its views, found a good pose for each, and put only the belly view in the
+    entry. The second view is the one that catches what the first hides --
+    it is the whole reason a second angle was cut -- and a reader who is
+    shown one overlay cannot tell whether the other was checked or merely
+    not mentioned. One figure with N panels keeps it a single visual, so
+    rule 14 is unmoved.
     """
     from ..tools import figures
     photos = figures.reference_photos(notebook)
     if not photos:
         return "  * a three-view of what you built;"
-    return """  * the model drawn over a photograph, with
-    `show_comparison(airplane, "%s")` -- it returns the pose note, which
-    belongs in the caption so a reader knows the camera was fitted and not
-    chosen. If the pose comes back DOUBTFUL, try another photograph
-    (%s) and fall back to a three-view if none fits;""" % (
-        photos[0][0], ", ".join('"%s"' % n for n, _, _ in photos))
+    names = [n for n, _, _ in photos]
+    panels = "\n".join(
+        '        show_comparison(airplane, "%s", ax=axes[%d])' % (n, i)
+        for i, n in enumerate(names))
+    return """  * the model drawn over EVERY reference photograph -- %d of
+    them (%s) -- as ONE figure with one panel each, so it stays a single
+    visual under rule 14:
+
+%s
+
+    Each call returns that view's pose note; put all of them in the caption,
+    so a reader knows each camera was fitted and not chosen. A view whose
+    pose comes back DOUBTFUL still gets its panel, captioned as doubtful --
+    dropping it hides the view the model fits worst, which is the one worth
+    seeing. Only if NO view fits do you fall back to a three-view;""" % (
+        len(names), ", ".join('"%s"' % n for n in names), panels)
 
 
 def _targets_brief(notebook):

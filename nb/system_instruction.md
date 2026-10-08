@@ -187,7 +187,7 @@ components sum — were each one `api_search` away. It never searched.
   and `open_entry` freezes that number as the entry's render cost — measured,
   not estimated, which is why it is not something you are asked for.
 
-# The 46 rules lint checks
+# The 47 rules lint checks
 
 Know these before drafting, not after. Finding one from a lint run means the
 prose is already written.
@@ -239,6 +239,7 @@ prose is already written.
 45  (warning) bind an overlay's note and say what it says — and do not cite a hedged one
 46  the entry carries the question's justification, verbatim, as its `subtitle`
 47  `footer(…)` carries `method="…"` — what your code computes, ≤ 60 words
+48  an inline `{python}` expression yields a VALUE — never markup
 ```
 
 There is no rule 36: it checked the categories system, which was retired, and
@@ -302,8 +303,6 @@ Cross-reference the visual as (@fig-<name>).>
 
 ::: {.callout-tip}
 ## New user specifications
-Asked of the user, <date>:
-
 1. **<quantity>: <value>** — <why, if it fits>.
 :::
 
@@ -337,6 +336,16 @@ footer(<the _analysis.py functions this entry NAMES>,
 
 An inline `{python}` expression counts as one word, so tightening prose never
 fights computing the numbers in it.
+
+**It yields a value, never markup (rule 48).** Quarto inserts the result as
+literal text and never re-parses it, so a symbol built inside the f-string
+reaches the page as characters: `f"C_{{L,\\max}}={cl:.2f}"` rendered as
+`C\_{L,\\\\max}=0.92`. Put the math in the markdown, where its `$…$` is seen,
+and let the expression carry the number:
+
+    at $C_{L,\max} =$ [`{python} f"{cl_max:.2f}"`]{.key}
+
+A unit inside the string is fine — `f"{v:.1f} m/s"` is a value with its unit.
 
 Order: hero → `**Answer.**` → callouts → evidence → `footer(...)`.
 

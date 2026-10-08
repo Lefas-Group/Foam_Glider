@@ -316,9 +316,54 @@ fits:
 --spec "**Root chord**: 140 mm (5.5 in)." --spec "**Tip chord**: 99 mm."
 ```
 
-**Record what you could not find, too** — `--spec "**Fuselage**: not
-published; assume and declare it."` An unknown you name is one the run
-declares; an unknown you leave silent is one it invents and attributes.
+**Record what you could not find, too** — but as a FACT, never as an order.
+`--assume "**Fuselage stations** are inferred, not published."` An unknown you
+name is one the run declares; an unknown you leave silent is one it invents
+and attributes.
+
+### `--assume` is what is assumed ABOUT THE AIRCRAFT. Never a directive.
+
+Both blocks render verbatim into the front page and into every chapter that
+inherits them, under the headings **Specified** and **Assumed**. So a row
+phrased as an instruction to the run becomes one of the aeroplane's declared
+assumptions, on every page, forever.
+
+Measured on the F-16 Viper: four of six `--assume` rows were method
+directives the coordinator wrote — "Never pixel-measure a photograph;
+optimise the silhouette instead", "Predict dry mass from areal density times
+developed cut area", "Wing area and loading unpublished: derive, then
+declare", "No plan sheet: Master Series plans are not published". None is a
+property of an F-16. All four rendered as assumptions the aircraft was
+modelled under, and the user asked why they were there.
+
+It got worse than cosmetic. `--assume "**EDF static thrust not published**;
+assume and declare it."` is a standing instruction, so the moment a value was
+supplied the run had to record that the brief's claim no longer held, and
+wrote `overwrites: brief/edf-static-thrust` into the chapter — a Warning
+callout saying the aircraft had departed from its own brief. The brief is
+supposed to be the one thing never overwritten.
+
+    GOOD  --assume "**Airfoil**: flat foam plate, a declared stand-in."
+    GOOD  --assume "**Planform** is fitted to photographs, not measured."
+    BAD   --assume "**Never pixel-measure**; optimise the silhouette instead."
+    BAD   --assume "**Thrust not published**; assume and declare it."
+
+The test: **could this sentence be true or false of the real aeroplane?** If
+it is an instruction to whoever builds the model, it does not belong in the
+brief at all.
+
+Where the directives go instead:
+  * a METHOD you want used on every run — into `nb/`, not the brief. It is a
+    property of the system, not of this aircraft.
+  * a reason, a source, a URL, a figure you could not find — into
+    `_reference/SOURCES.txt`, which is for exactly this and renders nowhere.
+  * a one-off steer for the next run — into that run's `--why`, or answer it
+    at the assumptions prompt when it comes up.
+
+And prefer to CLOSE the gap rather than describe it. "Thrust not published,
+assume one" had the run inventing 16.7 N against the vendor's published
+2240 g. You can research; it cannot. A row that states the number is worth
+five that state its absence.
 
 ### Give it photographs to check the shape against
 
@@ -375,6 +420,23 @@ reports whether the pose is trustworthy and refuses to be read when it is
 not. It gets **no score** — a number there would be optimised, and a model
 tuned to a photograph has been fitted to the thing it was meant to be
 checked against.
+
+**Read the fitted camera back against your own description.** You write the
+`.txt` before anything has been fitted, the run reads it as fact, and nothing
+checks it. The note now states the viewpoint in words — `camera 36° ABOVE,
+azim 120°` — and a positive elevation is a camera above the aircraft. Fit each
+photograph once yourself before the first `nb ask` and compare.
+
+Measured on the F-16 Viper: a photograph was named `belly` and described as
+"Seen from BELOW and BEHIND… the UNDER surface of the wing". It is from
+ABOVE — gold canopy, dorsal spine and the top of the wing all visible. Every
+fit had returned **elev +36°** from the first call and nobody read the number
+back, so the description stood through four entries and reached committed
+prose: *"the studio perspective reveals the upper surfaces that the ventral
+view obscured"*, of two photographs both taken from above.
+
+A handle is not evidence. Name the file for the angle if you can, but the
+`.txt` is what the run reads, so that is the one that has to be right.
 
 ### Transcribe what the plan PRINTS, do not measure it
 
