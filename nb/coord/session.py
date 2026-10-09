@@ -60,6 +60,9 @@ class Coordination:
         self._tmp = None
         # (url, text) recorded before `new` existed. Flushed by `adopt`.
         self.pending_sources = []
+        # How many times `new` has failed. A tool that fails the same
+        # way twice is a tool the model cannot fix by trying again.
+        self.new_failures = 0
 
     def adopt(self, notebook):
         """
@@ -88,6 +91,9 @@ class Coordination:
             from . import research
             research.write_sources(notebook, self.pending_sources)
             self.pending_sources = []
+        # How many times `new` has failed. A tool that fails the same
+        # way twice is a tool the model cannot fix by trying again.
+        self.new_failures = 0
         # THE DIRECTION, RECORDED THE MOMENT THERE IS SOMEWHERE TO RECORD IT.
         # Observed live: setting an aircraft up, the model's first call was
         # `direction` -- correctly, the doctrine says to record it before

@@ -705,9 +705,34 @@ def _new(session, chapter_title, defines, spec=(), assume=(), target=()):
         # somebody else's, and removing it is not a scaffolding failure's to do.
         if not existed:
             shutil.rmtree(directory, ignore_errors=True)
+        session.new_failures += 1
+        # DO NOT INVITE A RETRY THE MODEL CANNOT WIN. This used to end "fix
+        # the brief and call `new` again with the same name", and a model
+        # reading `exit: 1` with no diagnosis it could act on did exactly
+        # that: measured on the FT A-10 Warthog, 49 of 80 turns were `new`,
+        # failing identically every time, and the session hit its cap having
+        # produced one file.
+        #
+        # The second failure is therefore terminal advice rather than
+        # encouragement. `new` is not a tool whose output the model can debug
+        # -- a non-zero exit here is a scaffold, a lint or a render problem in
+        # `nb`, none of which a coordinator can reach.
+        if session.new_failures >= 2:
+            return {"created": False, "exit": code, "output": text[-2000:],
+                    "refused": (
+                        f"`new` has now failed {session.new_failures} times "
+                        f"with the same error. It will not succeed on a "
+                        f"third attempt: this is a fault in `nb`, not in your "
+                        f"arguments, and nothing you can change from here "
+                        f"fixes it. STOP CALLING IT. `escalate` the output "
+                        f"below to the user and `wait`, or `finish` and say "
+                        f"what you got as far as.")}
         return {"created": False, "exit": code, "output": text[-2000:],
-                "note": ("Nothing was left behind — fix the brief and call "
-                         "`new` again with the same name.")}
+                "note": ("Nothing was left behind. If the output above names "
+                         "something in your arguments, fix it and try once "
+                         "more; if it does not, escalate rather than "
+                         "retrying — a second identical failure is a fault "
+                         "in `nb`.")}
     session.adopt(Notebook(directory))
     return {"created": True, "notebook": session.notebook.root.name,
             "output": text[-1500:],

@@ -107,23 +107,31 @@ def main(path, title=None, subject=None, chapter=None,
          chapter_title=None, defines=None, verbose=True,
          specs=(), assumes=(), targets=()):
     root = pathlib.Path(path).resolve()
-    # SCRATCH DOES NOT COUNT, nor does an empty directory. This was
+    # WHAT A COORDINATOR PUTS HERE FIRST DOES NOT COUNT. This was
     # `any(root.iterdir())`, which refused a directory holding nothing but the
-    # skeleton this command is about to build itself ten lines below.
+    # work the setup order REQUIRES to precede it.
     #
-    # `nb designer` has to put the coordinator's mailbox under `_scratch/runs/`
-    # BEFORE the aircraft is scaffolded -- the board lives there and the
-    # direction is asked on the board -- and by the time `new` runs that
-    # mailbox holds a `run.json` and a `question.json`. So "empty" was not
-    # enough: the test has to know that `_scratch/` is never the user's.
+    # Two things legitimately arrive before the aircraft. `nb designer` puts
+    # the coordinator's mailbox under `_scratch/runs/` so the board has
+    # somewhere to live while the direction is being asked. And `source`
+    # writes `_reference/SOURCES.txt` while the specifications are still being
+    # researched -- which has to happen first, because what it finds is what
+    # fills `--spec`. Both are system territory: `new` creates `_scratch/`
+    # itself, every notebook's `.gitignore` carries `/_scratch/*`, and
+    # `_reference/` is the one directory a coordinator owns outright.
     #
-    # It is never the user's by construction. Every notebook's own `.gitignore`
-    # carries `/_scratch/*` (see GITIGNORE below), `new` creates the directory
-    # itself, and `nb clean` reclaims inside it. The guard this was written to
-    # be is intact: a file anywhere else, or a non-empty subdirectory anywhere
-    # else, is somebody's work and is still refused.
+    # Measured on the FT A-10 Warthog, and this is why the exemption is NAMED
+    # rather than a general "empty enough": exempting only `_scratch/` left
+    # `_reference/SOURCES.txt` tripping the guard, and the coordinator spent
+    # 49 of its 80 turns calling `new`, reading `exit: 1`, and trying again.
+    # The whole session produced one file.
+    #
+    # The guard this was written to be is intact: a file anywhere else, or a
+    # non-empty subdirectory anywhere else, is somebody's work and is refused.
+    BEFORE_THE_AIRCRAFT = ("_scratch", "_reference")
+
     def _occupied(d, top=False):
-        return any(not (top and p.name == "_scratch")
+        return any(not (top and p.name in BEFORE_THE_AIRCRAFT)
                    and (p.is_file() or _occupied(p))
                    for p in d.iterdir())
 
@@ -207,6 +215,7 @@ def main(path, title=None, subject=None, chapter=None,
     # at the top of this function.
     (root / "chapters").mkdir(parents=True, exist_ok=True)
     (root / "_scratch").mkdir(parents=True, exist_ok=True)
+    (root / "_reference").mkdir(parents=True, exist_ok=True)
 
     for seed, dest in COPIED_VERBATIM:
         shutil.copy(SCAFFOLD / seed, root / dest)
