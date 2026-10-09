@@ -558,7 +558,22 @@ Then calibrate ballast or battery position to reach the given all-up weight
 and CG, which is what you would physically do.
 
 Report EVERY target with its error, including the ones that passed. A target
-you miss is a finding worth stating; a target nobody names is a hole."""]
+you miss is a finding worth stating; a target nobody names is a hole.
+
+THERE IS NO NUMERIC TOLERANCE, and do not go looking for one. Nothing in
+`nb` holds a threshold a target is checked against: no rule compares your
+error to a number, and no gate passes or fails on one. The tolerance is the
+sentence you write about the error -- 2% on a mass you calibrated is a
+different claim from 2% on an area that fell out of the planform, and only
+you can say which this is.
+
+Measured, and this is why it is stated here: a run spent 25 of its 54 turns
+probing `nb`'s own source -- grepping `rules.py` for the function that
+checks a target, globbing the repo -- hunting a threshold that was never
+there. It made no aero solve, declared no input, and left `_model.py` at
+seven lines. It is also the wrong instinct even when a threshold exists: an
+entry written against the number it will be graded by is an entry measuring
+itself, which is the failure every paragraph above is about."""]
     return "\n".join(out)
 
 

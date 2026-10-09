@@ -112,6 +112,107 @@ def _die_with_parent(_ppid=_os_guard.getppid()):
 
 _threading.Thread(target=_die_with_parent, daemon=True).start()
 
+# =============================================================================
+# THE NOTEBOOK IS THE WORLD. A probe may read what belongs to the aircraft and
+# nothing else.
+#
+# `tools/__init__.py` deleted the `bash` tool and noted, correctly, that it
+# "changes nothing about what a run CAN do -- only about what it can do
+# UNINSTRUMENTED", because `probe` runs arbitrary Python by design. The brief
+# asks the model not to explore the filesystem. A request is not a boundary.
+#
+# MEASURED, on the FT A-10 Warthog, 2026-10-09. The run spent 25 of 54 turns
+# probing `nb`'s OWN SOURCE -- `text.find("def _input_item_budget")`,
+# `text.find("def _derived_target_not_...")`, `glob.glob` over the repo --
+# reading the lint rules it was about to be graded against, looking for the
+# tolerance a target check applies. Zero aero solves. Zero `declare_input`.
+# `_model.py` untouched at seven lines. It was reading the mark scheme instead
+# of sitting the exam, and the only thing stopping it was a sentence in a
+# brief.
+#
+# That is worse than a wasted budget. Rule 44 exists because a run solved
+# backwards for a published span and rule 50 because one typed ballast to hit
+# a mass; an agent that can read the threshold a check applies can aim at the
+# threshold rather than at the aeroplane. The rules have to be something the
+# work is measured against, not something the work can consult.
+#
+# WHAT IS ALLOWED, and why each: the notebook itself (its chapters, its
+# references, its freeze), the system temp directory (matplotlib, fontconfig
+# and numpy all write caches there), and the installed packages -- AeroSandbox
+# is read constantly and legitimately, by `api()` and by `show_source`.
+#
+# WRAPPED, NOT SANDBOXED. This stops a probe reaching for `nb/` or the rest of
+# the repo; it is not a security boundary and does not pretend to be -- the
+# kernel runs as the user and `os` is one import away. It is the same kind of
+# guard as the chapter lock: it makes the honest mistake impossible and the
+# dishonest one deliberate.
+# =============================================================================
+import builtins as _bi
+import pathlib as _pl
+import sys as _sys_guard
+
+# `sys.path` MINUS THE EMPTY STRING AND THE CWD. `''` means "where the process
+# is", which for a probe kernel is the run directory INSIDE the notebook --
+# whose parent chain reaches the repo root, and resolving it whitelisted the
+# entire tree including `nb/` itself. Measured: with it in, every refusal
+# below silently passed. Site-packages are named explicitly instead.
+_ALLOWED = tuple(str(_pl.Path(_p).resolve()) for _p in
+                 [NB_ROOT,                                   # noqa: F821
+                  __import__("tempfile").gettempdir(),
+                  *(_q for _q in _sys_guard.path
+                    if _q and _pl.Path(_q).is_dir()
+                    and _pl.Path(_q).name in ("site-packages", "dist-packages",
+                                              "lib-dynload")
+                    or _q.endswith(".zip")),
+                  __import__("sysconfig").get_paths()["stdlib"],
+                  __import__("sysconfig").get_paths()["purelib"]] if _p)
+# WHERE `nb` ITSELF LIVES. Not from `__file__` -- this file is exec'd as a
+# cell and has none -- but from the installed module, which is the same code
+# the run is using. It sits inside the repo and often inside an allowed
+# package root, so it is refused explicitly rather than by omission.
+try:
+    import importlib.util as _ilu
+    _NB_PACKAGE = str(_pl.Path(_ilu.find_spec("nb").origin).resolve().parent)
+except Exception:                                            # noqa: BLE001
+    _NB_PACKAGE = None
+
+
+def _outside(path):
+    """True when `path` is not the notebook's, nor a package, nor scratch."""
+    try:
+        full = str(_pl.Path(path).resolve())
+    except (OSError, ValueError, TypeError):
+        return False
+    if _NB_PACKAGE and (full == _NB_PACKAGE or
+                        full.startswith(_NB_PACKAGE + "/")):
+        return True                       # `nb` itself, even though importable
+    return not any(full == a or full.startswith(a + "/") for a in _ALLOWED)
+
+
+_real_open = _bi.open
+
+
+def _guarded_open(file, mode="r", *a, **kw):
+    if isinstance(file, (str, bytes, _pl.PurePath)) and _outside(file):
+        raise PermissionError(
+            f"{file} is outside this notebook. A probe reads the aircraft -- "
+            f"its chapters, its references, its freeze -- and the libraries "
+            f"it models with. `nb`'s own source is not among them: the rules "
+            f"are what your entry is MEASURED against, so an entry written "
+            f"with them open is measuring itself. If you are looking for a "
+            f"tolerance or a target, it is in the brief and in the chapter's "
+            f"`_inputs.yml`, both of which are already in front of you.")
+    return _real_open(file, mode, *a, **kw)
+
+
+_bi.open = _guarded_open
+# AND IN THIS NAMESPACE. Patching `builtins` alone was not enough: IPython
+# puts its own `open` in the user namespace, so a bare `open(...)` in a probe
+# resolved to that one and never reached the guard -- `builtins.open` read
+# `_guarded_open` while `open` read `open`, and every refusal below silently
+# passed. Measured, and the reason this line exists.
+open = _guarded_open                                         # noqa: A001
+
 # The names the chapter brought in, so `kernel.py` can tell the model what it is
 # holding from earlier probes. Taken here, before any probe has run, so the diff
 # against it later is exactly what the probes themselves defined.
