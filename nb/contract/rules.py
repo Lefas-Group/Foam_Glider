@@ -2382,3 +2382,117 @@ def _footer_summarises_the_code(entries):
                     f"and which helpers did it, not what the entry concluded. "
                     f"The conclusion is the answer, and it is already written"))
     return problems
+
+
+@register(49)
+def _shape_claimed_without_an_overlay(root, chapters, entries):
+    """
+    Rule 49. The prose says the photographs agree; nothing on the page does.
+
+    MEASURED, and it is the failure this whole file exists to make impossible.
+    A Little Piggy reconstruction committed "The shape matches the supplied
+    photographs, confirming the boxy fuselage, winglets and underslung power
+    pods" over two figures: `draw_three_view` and a bar chart of target error.
+    Both compare the model with itself. `show_comparison` appeared nowhere in
+    the entry, and `compare_to_photo` had been called thirty-seven times in
+    probes that all came back DOUBTFUL.
+
+    The run was not lying and was not even disobeying: its brief says an
+    overlay beats a three-view "unless the note says DOUBTFUL ... and then the
+    three-view is the only honest thing to show". It showed the three-view
+    correctly and then described it as though it were the overlay.
+
+    So this does not ask for an overlay. It asks that a CLAIM about the
+    photographs be carried by one -- either draw it, or write prose that says
+    what you actually have. Rule 44 catches a derived target typed as a
+    constant; this catches the same move made in words.
+
+    `DRAWING` already knows the difference between a drawing of the model and
+    a comparison against a photograph, so the predicate is two sets of names
+    rather than a judgement about schematics.
+    """
+    import re as _re
+    from .shared import body_prose
+    # `plot_photo_comparisons` is the older spelling, still the only one in the
+    # four notebooks that have not taken a new `_notebook.py`. Omitting it made
+    # this rule fire on `mini-explorer`, which draws a perfectly good overlay.
+    COMPARES = ("compare_to_photo", "show_comparison", "plot_photo_comparisons")
+    # A LINK TO A SIBLING IS A CITATION, NOT A CLAIM. Rule 10 makes entries
+    # refer to each other by stem, so "[the three-quarter photograph match](
+    # 2026-10-05-02-...)" is one entry pointing at another's result -- which
+    # this fired on. Strip links before reading the prose.
+    LINK = _re.compile(r"\[[^\]]*\]\([^)]*\)")
+    # Prose that asserts agreement WITH THE PHOTOGRAPHS, not merely that
+    # photographs exist. "fitted to photographs" in an assumption is a method
+    # note and says nothing about the result, so it is not matched.
+    CLAIM = _re.compile(
+        r"\b(match\w*|agree\w*|confirm\w*|consistent|reproduc\w*|track\w*)\b"
+        r"[^.]{0,80}\b(photograph|photo|silhouette|overlay)\w*\b"
+        r"|\b(photograph|photo|silhouette|overlay)\w*\b[^.]{0,80}"
+        r"\b(match\w*|agree\w*|confirm\w*|consistent)\b", _re.I)
+    found = []
+    for f in entries:
+        text = f.read_text()
+        if any(n in text for n in COMPARES):
+            continue                       # the page draws one; nothing to say
+        said = CLAIM.search(LINK.sub(" ", body_prose(text) or ""))
+        if said:
+            found.append((f, (
+                f"the prose claims the photographs agree -- "
+                f"{said.group(0).strip()[:60]!r} -- and the entry never draws "
+                f"an overlay. Render `show_comparison(...)`, or say what the "
+                f"page actually shows: a three-view is the model against "
+                f"itself and cannot confirm a shape")))
+    return found
+
+
+@register(50)
+def _calibrated_to_a_target(root, chapters, entries):
+    """
+    Rule 50. A constant chosen to make a target come out right.
+
+    Rule 44 exists to stop a derived target being typed into `_model.py`, and
+    it has now missed twice because it looks for the target's VALUE. Both
+    misses announced themselves in words instead.
+
+    The F-16 solved for the tip station that makes `span()` return the
+    published 914 mm and wrote 1.295 m as a fuselage station -- rule 44 saw
+    0.456, the half-span, and said nothing. The Little Piggy declared
+    `ballast mass: 130.1 g -- calibrated to hit dry mass` and
+    `battery x station: 348.3 mm -- calibrated to hit CG`, then reported
+    "0.01% maximum error across all targets". Two free constants, each tuned
+    to one target, and the headline was the model agreeing with itself.
+
+    The tell is the REASON, which the run writes honestly because it is asked
+    to. A reason that argues from the answer -- calibrated to hit, tuned to
+    match, chosen so that -- is a derived target wearing a constant's clothes.
+    Cheap to check, and it catches the class rule 44's value-matching cannot:
+    the number need not resemble the target at all.
+    """
+    import re as _re
+    from .shared import entry_items
+    TUNED = _re.compile(
+        r"\b(calibrat\w*|tun\w*|solv\w*|back[- ]?solv\w*|chosen|picked|set)\b"
+        r"[^.]{0,40}\b(to (hit|match|reach|give|produce)|so that|such that)\b"
+        r"|\byields? (a )?(reasonable|sensible|plausible)\b", _re.I)
+    # READ FROM THE ENTRY'S OWN CALLOUTS, not `_inputs.yml`. Rule 39 keeps a
+    # CHAPTER's items out of markdown and an ENTRY's items in it, and a value
+    # tuned to a target is always the entry's: it is what THIS question
+    # introduced. `entry_items` is the reader for that half of the register.
+    by_stem = {}
+    for c in chapters:
+        for kind, text, stem in entry_items(root, c):
+            by_stem.setdefault(stem, []).append(text)
+    found = []
+    for f in entries:
+        for text in by_stem.get(f.stem, ()):
+            said = TUNED.search(text)
+            if said:
+                name = text.split("**")[1] if "**" in text else text[:28]
+                found.append((f, (
+                    f"{name.strip(': ')!r} is declared "
+                    f"{said.group(0).strip()[:44]!r} -- a value chosen for "
+                    f"what it produces is not a measurement, and a target it "
+                    f"was tuned to no longer tests anything. Derive it, or "
+                    f"state it as the target's input rather than its proof")))
+    return found

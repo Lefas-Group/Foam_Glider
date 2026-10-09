@@ -301,6 +301,8 @@ RULES = {
     46: "the entry carries the question's justification as its `subtitle`",
     47: "`footer(…)` carries a `method=` summary of the code the entry wrote",
     48: "an inline `{python}` expression produces a value, never markup",
+    49: "prose claiming the photographs agree shows the overlay that says so",
+    50: "a constant calibrated to hit a target is a derived target in disguise",
 }
 
 

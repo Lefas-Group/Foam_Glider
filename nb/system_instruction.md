@@ -187,7 +187,7 @@ components sum — were each one `api_search` away. It never searched.
   and `open_entry` freezes that number as the entry's render cost — measured,
   not estimated, which is why it is not something you are asked for.
 
-# The 47 rules lint checks
+# The 49 rules lint checks
 
 Know these before drafting, not after. Finding one from a lint run means the
 prose is already written.
@@ -240,6 +240,10 @@ prose is already written.
 46  the entry carries the question's justification, verbatim, as its `subtitle`
 47  `footer(…)` carries `method="…"` — what your code computes, ≤ 60 words
 48  an inline `{python}` expression yields a VALUE — never markup
+49  prose that says the PHOTOGRAPHS agree shows the overlay that says so —
+    a three-view is the model against itself and confirms no shape
+50  a constant calibrated to hit a target is a derived target in disguise —
+    if the reason is "to hit X", X no longer tests anything
 ```
 
 There is no rule 36: it checked the categories system, which was retired, and

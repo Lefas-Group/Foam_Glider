@@ -2,6 +2,8 @@
     nb new   <notebook>                      scaffold a notebook, then prove it
              --chapter-title "…" --defines "…" …the first chapter, named now
              [--spec "…"] [--assume "…"]      …the brief, repeatable
+             [--target "…"]                   …and what the geometry must
+                                              …PRODUCE, not what sets its scale
              [--title "…"]                    …only if the directory name is
                                               …not the aircraft's name
     nb reconstruct <notebook> --chapter NN-name
@@ -24,19 +26,26 @@
              [--overlays] [--listing]        …the spread between viewpoints
     nb mask  <notebook> [name ...]           cut the reference masks, by model
              [--all] [--force]               …re-cutting needs --force once
-                                             …a notebook has entries
-    nb open  <notebook>                      the board in a window, the
-                                             site in a browser
+             [--model <name>]                …a notebook has entries
+    nb open  <notebook> [--stop]             the board in a window, the
+                                             site in a browser; --stop ends it
     nb eval  <notebook>                      what each model actually did
     nb board <notebook> [--all]              N agents, one terminal
     nb answer <notebook> [run] "<value>"     reply to a waiting run
              [--by coordinator]                  …saying who decided it
+    nb coordinate <notebook>                 the coordinator, as an agent:
+             ["<what to do>"]                 …decides what to ask, answers
+             [--max-turns N]                  …the runs, narrates to the board
+    nb doctrine [--setup|--coordinate]       what BOTH coordinators read:
+             [<page>] [--list]                …one source, no second copy
     nb direction <notebook> "<text>"         what the user asked for;
                                              pinned, and starts the history
     nb note   <notebook> "<text>"            a line of the programme, for
                                              the board
     nb escalate <notebook> "<name>"          put a question to the human,
              --prompt "<question>"           and return at once
+             [--why "…"] [--options "…"]     …context, and what to choose from
+             [--default "…"]                 …what silence means
     nb await  <notebook> [--timeout N]       block for the answer, print it
     nb listen <notebook> [--timeout N]       the inverse: block until a RUN
                                              asks, ends or dies
@@ -264,6 +273,17 @@ def main(argv):
             return 2
         from .cli.open_ import main as open_notebook
         return open_notebook(rest)
+
+    if cmd == "doctrine":
+        from .cli.doctrine import main as doctrine
+        return doctrine(rest)
+
+    if cmd == "coordinate":
+        if not rest:
+            print(USAGE)
+            return 2
+        from .cli.coordinate import main as coordinate
+        return coordinate(rest)
 
     if cmd in ("note", "escalate", "await", "listen", "direction"):
         if not rest:

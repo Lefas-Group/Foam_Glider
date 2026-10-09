@@ -73,7 +73,7 @@ def thinking():
 
 
 def config(tools=None, system_instruction=None, response_schema=None,
-           max_output_tokens=None):
+           max_output_tokens=None, tool_config=None):
     """
     A GenerateContentConfig.
 
@@ -95,6 +95,20 @@ def config(tools=None, system_instruction=None, response_schema=None,
         kw["system_instruction"] = system_instruction
     if tools:
         kw["tools"] = tools
+    # REQUIRED to mix a built-in tool with function declarations, and the API
+    # says so in the 400 rather than in the SDK's types: declaring
+    # `google_search` beside any FunctionDeclaration returns INVALID_ARGUMENT,
+    # "Please enable tool_config.include_server_side_tool_invocations to use
+    # Built-in tools with Function calling." Measured 2026-10-08 on
+    # gemini-3.1-pro-preview, for both one Tool carrying both and two Tools
+    # side by side; with the flag, both return 200 and the model still routes
+    # correctly -- a question only search can answer produced web queries and
+    # no function call, and the reverse for a notebook question.
+    #
+    # The run agent passes nothing here and is unaffected. Only the coordinator
+    # declares a built-in tool.
+    if tool_config is not None:
+        kw["tool_config"] = tool_config
     if response_schema is not None:
         kw["response_mime_type"] = "application/json"
         kw["response_schema"] = response_schema

@@ -740,3 +740,52 @@ def targets_drifted(notebook, errors):
     return ("target(s) worse than the recorded baseline: " + "; ".join(worse)
             + f". Either the change is wrong, or {BASELINE} needs updating in "
               "the same commit that justifies it -- the way nb.corpus works.")
+
+
+#: What DRAWS a comparison against a photograph, as opposed to a drawing of
+#: the model. `plot_photo_comparisons` is the older spelling and is still the
+#: only one in the notebooks that have not taken a new `_notebook.py`.
+_COMPARES = ("compare_to_photo", "show_comparison", "plot_photo_comparisons")
+
+#: The verdicts the note prints when the picture cannot be read. Keyed on the
+#: note's own wording, as rule 45's check is, so the two move together.
+_POSE_BAD = ("POSE NOT CONVERGED", "Pose: DOUBTFUL", "pose doubtful")
+
+
+def shape_check(notebook, chapter, stem):
+    """
+    Whether the entry checked its shape against a photograph. -> dict.
+
+    THE GAP THIS CLOSES. A coordinator reads `answer`, `prose`, `outcome` and
+    `findings`, and is told never to parse `status.log`. So when a run fitted
+    every camera DOUBTFUL, gave up on `fit_geometry` and fell back to a
+    three-view, all four fields looked healthy and nothing in the record said
+    the shape had gone unchecked -- while the entry's headline read "0.01%,
+    maximum error across all targets", which was the model compared with
+    itself.
+
+    DELIBERATELY NOT A PARSE OF THE PROSE. An earlier version read elevations
+    and residuals out of the rendered page, and there is no wording to rely on:
+    three notebooks here express the same fact three ways -- `camera 36° ABOVE`,
+    `elev 23.9° azim 225.7°`, and `at camera elevation [23.9 deg]{.key}` with
+    Quarto spans through it. Extracting numbers from that is the brittle
+    text-matching this system refuses to do to `status.log`, and it failed
+    silently on two notebooks of three while looking like it worked.
+
+    So it reports only what can be known for certain: whether the entry CALLS
+    a photograph comparison, read from its source, and whether the rendered
+    page carries a verdict saying the picture cannot be read. `drawn: False`
+    is the finding that matters -- the page makes no claim against a
+    photograph at all, whatever its prose says.
+    """
+    try:
+        src = (notebook.root / "chapters" / chapter / f"{stem}.qmd").read_text()
+    except OSError:
+        return None
+    drawn = any(n in src for n in _COMPARES)
+    md = frozen_markdown(notebook, chapter, stem)
+    # Code cells stripped: an entry that PARSES a pose note carries the note's
+    # own wording in a regex literal, which is not a result.
+    page = CODE_CELL.sub("", md) if md else ""
+    bad = sorted({w for w in _POSE_BAD if w.lower() in page.lower()})
+    return {"drawn": drawn, "doubtful": bool(bad), "verdicts": bad}

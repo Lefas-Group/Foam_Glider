@@ -70,6 +70,18 @@ SYSTEM_INSTRUCTION = NB / "system_instruction.md"
 # `NB_MODEL=gemini-3.1-pro-preview` is the way back.
 MODEL = os.environ.get("NB_MODEL", "gemini-3.8-flash")
 
+# THE COORDINATOR'S MODEL, deliberately not `MODEL`. The daily quota is per
+# model, so a coordinator on pro and runs on flash draw on two buckets of 250
+# rather than one -- and a programme spends far more turns running than
+# coordinating, so putting them on one bucket would let a busy afternoon of runs
+# starve the thing that decides what to run next.
+#
+# Pro rather than flash because the coordinator's job is the one flash was bad
+# at: not knowledge or budget, but deciding. Its recorded failure was 25 to 40
+# turns of probing without ever proposing an answer, and choosing the next
+# question is that same act with nothing else to hide behind.
+COORD_MODEL = os.environ.get("NB_COORD_MODEL", "gemini-3.1-pro-preview")
+
 # MINIMAL is in the enum but 400s on both candidate models. LOW/MEDIUM/HIGH are
 # the usable range, and this is the main cost lever.
 THINKING_LEVEL = "HIGH"

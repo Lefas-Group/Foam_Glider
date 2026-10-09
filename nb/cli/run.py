@@ -1366,10 +1366,18 @@ def _finish(notebook, session, run_metrics, first_pass, moved, accepted):
     # the model's reasoning. Both are read off the FREEZE, so they are the
     # numbers the published page shows.
     prose = rendered_prose(notebook, chapter, stem)
+    # WHETHER THE SHAPE WAS ACTUALLY CHECKED, beside what the entry concluded.
+    # `answer`, `prose`, `outcome` and `findings` all looked healthy on a run
+    # whose every camera fitted DOUBTFUL and whose page therefore fell back to
+    # a three-view -- the model against itself. The coordinator is told never
+    # to read `status.log`, so that was invisible to it. This is the one field
+    # that says so.
+    from ..build.publish import shape_check
     runstate.write(notebook, committed={
         "sha": sha, "entry": stem,
         "at": datetime.datetime.now().isoformat(timespec="seconds")},
         answer=answer_line(notebook, chapter, stem),
+        shape=shape_check(notebook, chapter, stem),
         prose=(prose[:PROSE_CAP] if prose else None))
     n_paths = len(detail.split(", "))
     committed = f"  commit    {sha} · {n_paths} file{'s' if n_paths != 1 else ''}"

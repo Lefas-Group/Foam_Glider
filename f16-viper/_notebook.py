@@ -11,6 +11,36 @@
 # plumbing.
 #
 # The leading underscore keeps Quarto from rendering this file, as with _scratch/.
+#
+# -----------------------------------------------------------------------------
+# THE POSE FITTER CHANGED ON 2026-10-09, and entries committed before that date
+# were fitted by the old one. `_notebook.py` is NOT in rule 12's staleness list
+# (`_model.py`, `_analysis.py`, `_model.qmd`, `_inputs.yml`, `_fork.yml`), so
+# nothing marks those entries stale and freeze will keep serving their published
+# numbers -- which is deliberate, and why this note exists instead.
+#
+# If a hero value moves when you force a re-render, this is why. Affected, all
+# predating the change: f16-viper's three fit-dependent entries, tubby-b-17's
+# two, mustang-mkr2's one.
+#
+# What changed in `_fit_pose`, each measured and none of it cosmetic:
+#   * cold fitting now descends in FOUR QUADRANTS (elevation sign x azimuth
+#     half) and keeps the lowest CONVERGED cost. One descent from the best
+#     screened seed chose between hemispheres on a score that cannot rank;
+#     measured on the Little Piggy, that found the right basin 1 time in 3.
+#   * the cold seed grid covers both hemispheres, (-65..65) rather than
+#     (15, 40, 65) -- every seed used to sit above an aircraft that is usually
+#     photographed from below.
+#   * elevation is bounded +/-85 rather than -30/+85.
+#   * a `pose=` hint is intersected with the physical band. It was not, so a
+#     -75 deg hint returned a fitted -100 deg.
+#   * azimuth is exempt from the railed verdict, being cyclic. See `_rails`.
+#   * `compare_to_photo` now compares the fitted side against the reference
+#     `.txt` and says so when they disagree. Top and bottom are a genuine
+#     degeneracy on a near-planar airframe and the residual cannot break the
+#     tie; the description can, and was the one check nobody performed.
+#
+# Cost: a cold fit is ~46 s against ~12 s. A hinted fit is unchanged at ~13 s.
 # =============================================================================
 import builtins
 import inspect
@@ -1141,17 +1171,74 @@ def _depth_order(parts, params, centre):
                   key=lambda i: -float(((parts[i][0] - centre) @ R.T)[:, 2].mean()))
 
 
-def _fit_pose(parts, mask, pose=None, work=220, seed=1):
+def _time_left(reserve=5.0):
+    """
+    Seconds before this probe is killed, or None outside a probe.
+
+    THE KILL IS ENFORCED FROM OUTSIDE and used to be invisible from in here, so
+    a long fit could only end one way: at the wall, with everything it had
+    computed thrown away. Measured -- a reconstruction spent two 300 s probes
+    inside `fit_geometry`, was killed on both, and then abandoned fitting and
+    set the fuselage width and root chord by eye.
+
+    `kernel.py` now puts `_PROBE_DEADLINE_S` in the namespace before the
+    probe's own code runs, so a search can bound itself and RETURN WHAT IT HAS
+    instead of losing it. `reserve` keeps back enough to print the result,
+    because a fit that converges and is killed while formatting has still lost.
+
+    None at render time and in a plain `python` process, where there is no
+    deadline and nothing should be truncated on account of one.
+    """
+    import time as _t
+    end = globals().get("_PROBE_DEADLINE_S")
+    if end is None:
+        return None
+    return max(0.0, float(end) - _t.monotonic() - reserve)
+
+
+def _rails(v, lo, hi):
+    """
+    Which pose parameters sat on a bound. Azimuth is exempt.
+
+    Pulled out of `_fit_pose` so the quadrant-scan trigger and the verdict it
+    reports cannot disagree about what "on a bound" means.
+
+    AZIMUTH IS EXEMPT because it is CYCLIC: cold it is bounded 0..360 and those
+    are the same camera, so measuring linear distance to each end flagged
+    anything within 2% of 360 deg -- 7.2 deg -- of the seam. That is every
+    nose-on and tail-on view. Measured on the Little Piggy `ahead-below` frame,
+    whose azimuth lands at 0.3-1.6 deg on every seed: even its CORRECT 6.17%
+    fit was stamped POSE NOT CONVERGED, after which `compare_to_photo` says
+    "read nothing", `completeness` refuses and `fit_geometry` marks the seed ON
+    A BOUND. A seam is not a wall.
+
+    It stays bounded rather than being made periodic because the normalisation
+    in `_fit_pose` needs a finite box; only the VERDICT was wrong.
+    """
+    return [n for n, x_, l_, h_ in zip(
+                ("elev", "azim", "roll", "scale", "tx", "ty", "distance"),
+                v, lo, hi)
+            if n != "azim"
+            and min(abs(x_ - l_), abs(x_ - h_)) < 0.02*(h_ - l_)]
+
+
+def _fit_pose(parts, mask, pose=None, work=220, seed=1, budget=None):
     """
     Camera pose by symmetric chamfer distance between outlines.
 
     SYMMETRIC: model-to-photo alone shrinks the model onto a corner of the
     subject, photo-to-model alone inflates it to cover everything.
 
-    SCREENED MULTI-START: 36 seeds are scored, and only the best four are
-    descended on. Running a full Nelder-Mead from every seed spent its time
-    polishing basins that could not win -- 156 s against 13 s for the same
-    optimum.
+    SCREENED MULTI-START: 72 seeds are scored and ONE is descended on. It was
+    36 scored and the best four descended, under Nelder-Mead -- running a full
+    descent from every seed spent its time polishing basins that could not win,
+    156 s against 13 s for the same optimum. The CMA rewrite reduced that to
+    `scored[0]` and this line went on claiming four for a while; it is one.
+
+    The screen covers both hemispheres now. It cannot RANK -- a raw seed's
+    score says nothing, because its scale and translation come from the mask
+    bounding box -- so its only job is to put the single descent somewhere
+    plausible, and it used to have nowhere below the aircraft to put it.
 
     `seed` IS THE CMA SEED, and it is the only thing that makes a second run
     a second OPINION. It was fixed at 1, so re-running a cold fit returned a
@@ -1204,8 +1291,22 @@ def _fit_pose(parts, mask, pose=None, work=220, seed=1):
         roll0 = float(pose[2]) if len(pose) > 2 else 0.0
         starts = [[float(pose[0]), float(pose[1]), roll0, s0, cx, cy, 0.0]]
     else:
+        # BOTH HEMISPHERES. These were (15, 40, 65) -- every seed ABOVE the
+        # aircraft -- while the bounds below run to -30. The comment under them
+        # claims CMA "carries no implicit camera-is-above assumption in a
+        # hand-picked elevation range", and that was true of the bounds and
+        # false of the seeds sitting on top of them.
+        #
+        # Measured on the Little Piggy, whose `ahead-below` frame is shot from
+        # underneath: the cold fit returned elev +85 (the ceiling) at 7.20% on
+        # two CMA seeds in three, against a true basin at 6.17%. Model aircraft
+        # in flight are mostly photographed from below, so the old grid had the
+        # prior exactly backwards. Raising `sigma0` does not help -- 0.25, 0.40
+        # and 0.55 all found the good basin 1 time in 3 -- because the problem
+        # is where the search STARTS, not how far it steps.
         starts = [[e0, float(a0), 0.0, s0, cx, cy, 0.0]
-                  for a0 in range(0, 360, 30) for e0 in (15.0, 40.0, 65.0)]
+                  for a0 in range(0, 360, 30)
+                  for e0 in (-65.0, -40.0, -15.0, 15.0, 40.0, 65.0)]
     scored = sorted(((cost(_np.array(v)), v) for v in starts),
                     key=lambda t: t[0])
 
@@ -1219,15 +1320,28 @@ def _fit_pose(parts, mask, pose=None, work=220, seed=1):
     # coordinate seeded at exactly 0.0 an absolute step of 2.5e-4, which
     # silently pinned roll and distance on every fit).
     import cma as _cma
-    lo = _np.array([-30.0,   0.0, -30.0, 0.3*s0, cx-250, cy-250, -7.0])
+    # SYMMETRIC IN ELEVATION. It was -30/+85, which cannot reach a camera more
+    # than 30 deg below the aircraft -- and an in-flight photograph of a model
+    # is usually taken from below. +/-85 rather than +/-90 because azimuth and
+    # roll become the same rotation at the pole, so a whole line of solutions
+    # scores identically and the optimiser wanders along it.
+    lo = _np.array([-85.0,   0.0, -30.0, 0.3*s0, cx-250, cy-250, -7.0])
     hi = _np.array([ 85.0, 360.0,  30.0, 3.0*s0, cx+250, cy+250,  7.0])
     # A POSE NARROWS THE SEARCH, it does not merely seed it. +/-25 deg around
     # what the caller asserted, which is why a WRONG pose is worse than none:
     # it trades a global search for a local one centred off-target. Measured
     # on the F-16 studio view, perturbing a converged pose by 5 deg elevation
     # and 5 of azimuth returned 8.89% against a 2.05% cold baseline.
+    #
+    # CLAMPED TO THE PHYSICAL BAND, which it was not. The window was the hint
+    # +/-25 with no intersection, so a -75 deg hint searched -100..-50 and
+    # returned a fitted -100 -- past straight-down, meaningless, and reported
+    # without comment. Re-seeding from a railed +84.8 was the same fault the
+    # other way: a window of 59.8..109.8, converging to +110. Azimuth is NOT
+    # clamped because it is cyclic; it wraps.
     if pose is not None:
-        lo[0], hi[0] = float(pose[0])-25, float(pose[0])+25
+        lo[0], hi[0] = (max(lo[0], float(pose[0])-25),
+                        min(hi[0], float(pose[0])+25))
         lo[1], hi[1] = float(pose[1])-25, float(pose[1])+25
         # A ROLL ASSERTION MOVES ITS BAND TOO. Roll is bounded +/-30 deg cold,
         # so one outside that was clipped back to +/-30 and the number the
@@ -1235,25 +1349,83 @@ def _fit_pose(parts, mask, pose=None, work=220, seed=1):
         # worse than refused.
         if len(pose) > 2:
             lo[2], hi[2] = float(pose[2])-25, float(pose[2])+25
-    x0 = _np.clip(_np.array(scored[0][1], float),
-                  lo + 1e-6*(hi-lo), hi - 1e-6*(hi-lo))
-    def _u(x):   return (x - lo)/(hi - lo)
-    def _x(u):   return lo + _np.clip(u, 0, 1)*(hi - lo)
-    es = _cma.CMAEvolutionStrategy(
-        _u(x0), 0.25,
-        {"bounds": [0, 1], "popsize": 18, "maxiter": 400,
-         "tolfun": 2e-2, "tolfunhist": 2e-3, "verbose": -9, "seed": seed})
-    es.optimize(lambda u: cost(_x(_np.asarray(u))))
-    v, val = _x(es.result.xbest), es.result.fbest
+    def _descend(lo, hi, start, secs=None):
+        """
+        One CMA descent inside [lo, hi]. -> (params7, cost)
+
+        `secs` bounds its wall clock, so it returns its best-so-far instead of
+        being killed with the run's work inside it. None outside a probe, where
+        there is no deadline and nothing should be truncated on account of one.
+        """
+        x0 = _np.clip(_np.array(start, float),
+                      lo + 1e-6*(hi-lo), hi - 1e-6*(hi-lo))
+        def _u(x):   return (x - lo)/(hi - lo)
+        def _x(u):   return lo + _np.clip(u, 0, 1)*(hi - lo)
+        opts = {"bounds": [0, 1], "popsize": 18, "maxiter": 400,
+                "tolfun": 2e-2, "tolfunhist": 2e-3, "verbose": -9,
+                "seed": seed}
+        if secs is not None:
+            opts["timeout"] = max(2.0, float(secs))
+        es = _cma.CMAEvolutionStrategy(_u(x0), 0.25, opts)
+        es.optimize(lambda u: cost(_x(_np.asarray(u))))
+        return _x(es.result.xbest), es.result.fbest
+
+    budget = _time_left() if budget is None else budget
+    per = None if budget is None else budget/4.0
+    # NOT ENOUGH TIME TO SCAN: spend it all on ONE descent instead. Four
+    # quadrants each given a couple of seconds is four fits that have not
+    # converged, which is worse than one that has -- and the floor inside
+    # `_descend` means four tiny slices still overrun a small grant. Measured:
+    # with a 40 s probe this spent 80 s before the fix and was killed.
+    if pose is not None or (per is not None and per < 8.0):
+        v, val = _descend(lo, hi, scored[0][1], budget)
+    else:
+        # FOUR QUADRANTS, JUDGED BY CONVERGED COST. One descent from the best
+        # SCREENED seed is what this used to do, and the screen cannot rank:
+        # a raw seed's score says nothing because its scale and translation
+        # come from the mask bounding box, which is why "forty times more
+        # seeds did not help". So the choice between hemispheres was made by
+        # the one number here that is meaningless.
+        #
+        # Measured, and this is why the cheap fix was not enough: simply
+        # seeding below as well as above moved WHICH arbitrary seed won, and
+        # on the F-16 that traded a 2.05% studio fit for a 5.20% one in the
+        # wrong hemisphere. Converged cost is the only signal worth choosing
+        # on, so run the descent in each region and compare the results.
+        #
+        # Four and not more: top/bottom and nose/tail are the two mirrors a
+        # near-planar airframe actually confuses, and they are INDEPENDENT --
+        # applying both lands on the antipodal camera, which measured worst or
+        # joint-worst on four views of four because it mirrors the
+        # silhouette's handedness while the mask does not mirror with it.
+        # A CONDITIONAL SCAN WAS TRIED AND COST MORE THAN IT SAVED. Running
+        # one descent first and scanning only when it railed or came back
+        # DOUBTFUL sounds cheaper; measured on the F-16 it fired on both views
+        # anyway and spent 57 s against 46 s, because a descent from an
+        # arbitrary screened seed over the full box usually does rail. Four
+        # descents, always, is the simpler and faster shape.
+        best = None
+        for e_lo, e_hi in ((0.0, hi[0]), (lo[0], 0.0)):
+            for a_lo, a_hi in ((0.0, 180.0), (180.0, 360.0)):
+                qlo, qhi = lo.copy(), hi.copy()
+                qlo[0], qhi[0] = e_lo, e_hi
+                qlo[1], qhi[1] = a_lo, a_hi
+                here = [s for s in starts
+                        if e_lo <= s[0] <= e_hi and a_lo <= s[1] <= a_hi]
+                seed_v = min(here, key=lambda s: cost(_np.array(s))) \
+                    if here else [(e_lo+e_hi)/2, (a_lo+a_hi)/2,
+                                  0.0, s0, cx, cy, 0.0]
+                got = _descend(qlo, qhi, seed_v, per)
+                if best is None or got[1] < best[1]:
+                    best = got
+        v, val = best
     e, a, ro, s, tx, ty, d = unpack(v)
     # A PARAMETER ON ITS BOUND IS NOT CONVERGED. The three-quarter pose this
     # notebook quoted as "best" for an entire session had its perspective
     # distance railed at the sigmoid ceiling -- effectively orthographic,
     # which _project's own docstring warns against -- and nothing said so.
-    railed = [n for n, x_, l_, h_ in zip(
-                  ("elev", "azim", "roll", "scale", "tx", "ty", "distance"),
-                  v, lo, hi)
-              if min(abs(x_ - l_), abs(x_ - h_)) < 0.02*(h_ - l_)]
+    # Azimuth is exempt; `_rails` says why.
+    railed = _rails(v, lo, hi)
     return (e, a % 360, ro, s/sc, tx/sc, ty/sc, d), val/sc, centre, railed
 
 
@@ -1367,6 +1539,58 @@ def _reference_image(name):
             f"compared against -- that is the coordinator's to cut.")
     return (_np.asarray(_Image.open(img_path).convert("RGB")).astype(float),
             _np.asarray(_Image.open(mask_path).convert("L")) > 127)
+
+
+#: Words in a reference `.txt` that assert which side the camera is on. The
+#: description is written BEFORE anything is fitted, which is what makes it
+#: independent evidence rather than a restatement of the fit.
+#: PART NAMES ARE NOT CAMERA POSITIONS, and the first version of this list
+#: conflated them. The F-16's description says "the dorsal spine" and "the
+#: ventral fin" in one sentence while asserting the camera is ABOVE; with
+#: `dorsal`/`ventral`/`belly`/`underside` in these lists it read as saying
+#: both and therefore nothing. Only words about where the CAMERA is.
+_SAYS_BELOW = ("below", "beneath", "underneath", "from under")
+_SAYS_ABOVE = ("above", "overhead", "from over", "top-down", "plan view")
+
+
+def _described_side(name):
+    """
+    +1, -1 or None: which side of the aircraft the `.txt` claims the camera is.
+
+    THE ONE PIECE OF EVIDENCE THE SILHOUETTE DOES NOT CONTAIN. A foam aircraft
+    is nearly planar, so the outline seen from 20 deg above and 20 deg below is
+    very nearly the same shape, and the chamfer residual between the two
+    mirrors differs by noise -- measured at 3.97% against 4.02% on the Little
+    Piggy studio frame, which is to say not at all. No optimiser can resolve
+    that, because the information is not there.
+
+    It is in the description. `read_reference("photographs")` already tells the
+    coordinator to "read the fitted camera back against your own description",
+    and the F-16 shows what happens when nobody does: a frame described as
+    "seen from BELOW and BEHIND" fitted at elev +36 through four entries and
+    reached committed prose. So the comparison is made here, every time, and
+    reported in the note rather than left as a chore.
+
+    NOT a constraint on the fit. The `.txt` is unverified prose and can itself
+    be wrong -- that is the F-16 case exactly -- so a disagreement is surfaced
+    for a person to settle, never silently imposed on the search.
+    """
+    root = _pathlib.Path(_os.environ.get("NB_ROOT", "."))
+    try:
+        said = (root / "_reference" / f"{name}.txt").read_text().lower()
+    except OSError:
+        return None
+    # COUNTED, NOT TESTED FOR PRESENCE. A description that settles the question
+    # still mentions the other side in passing -- "the chin intake ... seen
+    # obliquely from above, not silhouetted from below" asserts ABOVE twice and
+    # denies BELOW once, and presence-testing read that as a contradiction and
+    # gave up. Counting gets it right without parsing negation, which is the
+    # other way to handle it and needs a grammar.
+    below = sum(said.count(w) for w in _SAYS_BELOW)
+    above = sum(said.count(w) for w in _SAYS_ABOVE)
+    if below == above:          # silent, or genuinely balanced
+        return None
+    return -1 if below > above else +1
 
 
 def compare_to_photo(airplane, name, pose=None, fill=0.22):
@@ -1534,6 +1758,20 @@ def compare_to_photo(airplane, name, pose=None, fill=0.22):
     where = ("ABOVE" if params[0] >= 0 else "BELOW")
     note = (f"camera {abs(params[0]):.0f}° {where}, azim {params[1]:.0f}°, "
             f"roll {params[2]:.1f}°. ")
+    # THE DESCRIPTION DISAGREES, SAY SO. Top and bottom are a genuine
+    # degeneracy on a near-planar airframe -- the two mirrors scored 3.97% and
+    # 4.02% on one frame here -- so the fit flips between them from one CMA
+    # seed to the next and the residual cannot break the tie. The `.txt` can.
+    # Reported, never imposed: the description is unverified prose and is
+    # sometimes the thing that is wrong.
+    said = _described_side(name)
+    if said is not None and said != (1 if params[0] >= 0 else -1):
+        note += (f"BUT {name}.txt SAYS THE CAMERA IS "
+                 f"{'ABOVE' if said > 0 else 'BELOW'}. One of the two is "
+                 f"wrong, and the silhouette cannot tell you which -- top and "
+                 f"bottom mirror each other on a flat airframe. Look at the "
+                 f"photograph and settle it, then assert the right one with "
+                 f"pose=. ")
     if railed:
         note += ("POSE NOT CONVERGED: " + ", ".join(railed) +
                  " sat on a bound. Read nothing from this overlay. ")
@@ -1787,12 +2025,20 @@ def completeness(airplane, name, pose=None):
 class _FitResult:
     """What `fit_geometry` returns: values the agent reads, evidence it acts on."""
     def __init__(self, free, values, spread, verdict, before, after,
-                 per_component, railed, seconds, seeds, model_path, start=None):
+                 per_component, railed, seconds, seeds, model_path, start=None,
+                 cut_short=0, short_by=()):
         self.free, self.values, self.spread = free, values, spread
         self.start = start or {}
         self.verdict, self.before, self.after = verdict, before, after
         self.per_component, self.railed = per_component, railed
         self.seconds, self.seeds, self._model_path = seconds, seeds, model_path
+        # How many seeds ran out of probe time instead of converging. Reported
+        # because a fit that was cut short is EVIDENCE OF LESS than one that
+        # converged, and the spread across seeds -- which is what says whether
+        # a value is pinned by the data -- is meaningless if the seeds never
+        # finished. Silence here would let an under-converged number be read
+        # as a settled one.
+        self.cut_short, self.short_by = cut_short, tuple(short_by)
 
     #: How far seeds may disagree and still be written, as a fraction of span.
     #: RELAXED ON PURPOSE. Measured across three fits, the spreads form a
@@ -1897,6 +2143,36 @@ class _FitResult:
                       "\n>>> The fit wanted to go further and could not. Widen "
                       "the bound and refit; the value is yours, not the "
                       "photograph's.")
+        if self.cut_short:
+            # HOW FAR SHORT, in the one unit that is actionable: seconds to
+            # put in `budget_s`. "Ran out of time" alone reads the same whether
+            # the fit wanted a moment more or an order of magnitude more, and
+            # those call for opposite decisions.
+            worst = min(self.short_by, key=lambda t: t[0]/max(1, t[1]),
+                        default=None)
+            L.append(f">>> {self.cut_short} of {self.seeds} seeds RAN OUT OF "
+                     f"PROBE TIME rather than converging.")
+            if worst:
+                done, asked, secs = worst
+                frac = done/max(1, asked)
+                want = secs/max(frac, 1e-6)
+                L.append(
+                    f">>> The worst managed {done} of {asked} iterations -- "
+                    f"{100*frac:.0f}% of the search -- in {secs:.0f} s.\n"
+                    f">>> Finishing at that rate wants on the order of "
+                    f"{want:.0f} s PER SEED. That is an upper bound, since CMA "
+                    f"usually\n"
+                    f">>> stops early on tolfun, but the shortfall is a "
+                    f"MULTIPLE and not a margin: a\n"
+                    f">>> slightly bigger budget_s will not change this "
+                    f"answer.")
+            L.append(
+                f">>> These values are a best-so-far, and the spread above is "
+                f"not evidence that\n"
+                f">>> anything is pinned -- seeds that never finished cannot "
+                f"agree or disagree.\n"
+                f">>> Free fewer constants (cost goes as seeds x views x free) "
+                f"or raise budget_s.")
         return "\n".join(L)
 
     def apply(self):
@@ -2118,7 +2394,14 @@ def fit_geometry(free, reliability="normal", views=None, poses=None,
     parts0 = _parts_of(_build(start), resolution=_FIT_RESOLUTION)
     seed_pose, plo, phi, seed_fit = {}, {}, {}, {}
     for v, d in V.items():
-        pr, _r0, _c0, _rl = _fit_pose(parts0, d["mask"], pose=hints.get(v))
+        # A SLICE EACH, so seeding four views cannot eat the whole probe.
+        # These are COLD fits unless the caller passed a pose, and a cold fit
+        # now scans four quadrants -- measured at ~46 s, which is most of a
+        # 300 s grant once there are four photographs.
+        _b = _time_left()
+        pr, _r0, _c0, _rl = _fit_pose(
+            parts0, d["mask"], pose=hints.get(v),
+            budget=None if _b is None else 0.4*_b/max(1, len(V)))
         seed_fit[v] = (100.0*_r0/d["nrm"], bool(_rl), v in hints)
         logit = float(_np.clip(-_np.log(max(19.6/max(pr[6]-0.4, 1e-6) - 1, 1e-9)),
                                -6.5, 6.5))
@@ -2191,21 +2474,52 @@ def fit_geometry(free, reliability="normal", views=None, poses=None,
         x = X0.copy()
         x[NG:] = _real(_np.concatenate([u0[:NG], up]))[NG:]
         return _score(x)[0]
-    _es0 = _cma.CMAEvolutionStrategy(
-        u0[NG:], 0.15, {"bounds": [0, 1], "popsize": 14, "maxiter": 200,
-                        "tolfun": 2e-2, "tolfunhist": 2e-3,
-                        "verbose": -9, "seed": 1})
+    # WHAT THE PROBE HAS LEFT, divided between the baseline pose polish and the
+    # `seeds` geometry descents. This whole function used to run unbounded, and
+    # the kill that followed took the result with it: measured, a
+    # reconstruction freed 9 then 11 constants across 3 views at 3 seeds inside
+    # a 300 s grant, was killed both times, and abandoned fitting altogether in
+    # favour of setting the geometry by eye.
+    #
+    # Bounding beats refusing. An estimate up front -- seeds x views x free, as
+    # this docstring prices it -- would have to be calibrated, would be wrong on
+    # a new machine, and buys a refusal where a partial fit is strictly more
+    # useful: CMA returns its best-so-far, and `cut_short` below says the number
+    # is under-converged so nobody reads it as settled.
+    _spare = _time_left()
+    _slice = None if _spare is None else max(5.0, 0.15*_spare)
+    _o0 = {"bounds": [0, 1], "popsize": 14, "maxiter": 200,
+           "tolfun": 2e-2, "tolfunhist": 2e-3, "verbose": -9, "seed": 1}
+    if _slice is not None:
+        _o0["timeout"] = _slice
+    _es0 = _cma.CMAEvolutionStrategy(u0[NG:], 0.15, _o0)
     _es0.optimize(_obj_pose_only)
     X0b = X0.copy()
     X0b[NG:] = _real(_np.concatenate([u0[:NG], _es0.result.xbest]))[NG:]
     base_m, base_view, base_comp = _score(X0b, per_part=True)
-    results = []
+    results, cut_short, short_by = [], 0, []
     for sd in range(1, seeds + 1):
-        es = _cma.CMAEvolutionStrategy(
-            u0, 0.18, {"bounds": [0, 1], "popsize": 18, "maxiter": 350,
-                       "tolfun": 2e-2, "tolfunhist": 2e-3,
-                       "verbose": -9, "seed": sd})
+        _o = {"bounds": [0, 1], "popsize": 18, "maxiter": 350,
+              "tolfun": 2e-2, "tolfunhist": 2e-3, "verbose": -9, "seed": sd}
+        # EVERY SEED GETS AN EQUAL SHARE of what is left when it starts, so an
+        # early seed that converges fast hands its unused time to the later
+        # ones rather than the last seed paying for the first.
+        _rest = _time_left()
+        if _rest is not None:
+            _o["timeout"] = max(5.0, _rest/max(1, seeds - len(results)))
+        _t_seed = _time.time()
+        es = _cma.CMAEvolutionStrategy(u0, 0.18, _o)
         es.optimize(obj)
+        if "timeout" in (es.stop() or {}):
+            cut_short += 1
+            # HOW FAR SHORT, not merely that it was short. A seed that wanted
+            # 10% more time and one that wanted ten times it both read as "ran
+            # out", and they call for opposite responses -- wait a bit longer,
+            # or stop asking this question of this many constants. Recorded as
+            # iterations done against iterations asked for, which is the only
+            # honest measure of how much of the search actually happened.
+            short_by.append((es.countiter, int(_o["maxiter"]),
+                             _time.time() - _t_seed))
         results.append(_real(es.result.xbest))
     R = _np.array(results)
 
@@ -2268,6 +2582,7 @@ def fit_geometry(free, reliability="normal", views=None, poses=None,
 
     res = _FitResult(free, values, spread, verdict, base_view, fin_view,
                      per_component, railed, _time.time()-t0, seeds, model_path,
+                     cut_short=cut_short, short_by=short_by,
                      start={k: float(v) for k, v in zip(names, start)})
     # EVERY SEED'S ANSWER, kept. Reporting only a summary makes a later
     # comparison impossible: this was discovered the hard way, after three

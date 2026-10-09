@@ -163,40 +163,61 @@ def post(notebook, name, prompt="", why="", options="", default=None):
     return q
 
 
+def reply(notebook, q=None):
+    """
+    The answer to the escalation, if one is on disk YET -- one pass, no block.
+
+    EXTRACTED from `wait` so a caller that is already blocking on something
+    else can poll this as one more source. The coordinator agent waits on runs
+    and on the human in a single tool call, and `wait(timeout=0)` cannot serve
+    it: a zero deadline fails the loop test before reading the file at all, so
+    it would answer None however long the reply had been sitting there.
+
+    Consuming is part of it. A reply read and left on disk is one the next pass
+    reads again, so this deletes the pair and records the exchange exactly as
+    `wait` always did -- which means it must not be called speculatively.
+    """
+    from . import mailbox
+    nb = mailbox_for(notebook)
+    if q is None:
+        q = mailbox.pending(nb.run) or {}
+    try:
+        got = json.loads(nb.answer_path.read_text())
+    except (OSError, ValueError):
+        return None
+    # `replying_to` guards the same mistake it guards for a run: an answer
+    # written before this question was posted belongs to the previous one.
+    if "replying_to" in got and got["replying_to"] != q.get("asked_at"):
+        return None
+    nb.question_path.unlink(missing_ok=True)
+    nb.answer_path.unlink(missing_ok=True)
+    value = str(got.get("value", ""))
+    # RECORDED LIKE ANY OTHER EXCHANGE. A run's `Mailbox._record` appends
+    # every question and answer to its `run.json`, which is what the board
+    # reads the conversation from; nothing does that for an escalation,
+    # so the one question the person actually answered was the one the
+    # history could not show.
+    state = touch(notebook, waiting_on=None, question=None)
+    answered = list(state.get("answered") or [])
+    answered.append({"kind": "specified", "name": q.get("name", ""),
+                     "why": q.get("prompt") or q.get("why", ""),
+                     "value": value, "source": got.get("by") or "user",
+                     "asked_at": q.get("asked_at"), "at": time.time()})
+    touch(notebook, answered=answered)
+    return value
+
+
 def wait(notebook, timeout=TIMEOUT, poll=POLL):
     """
     Block until the question is answered. Returns the answer, or None on
     timeout with the question left on disk for the next waiter.
     """
     from . import mailbox
-    nb = mailbox_for(notebook)
-    q = mailbox.pending(nb.run) or {}
+    q = mailbox.pending(mailbox_for(notebook).run) or {}
     deadline = time.time() + timeout
     while time.time() < deadline:
-        try:
-            got = json.loads(nb.answer_path.read_text())
-        except (OSError, ValueError):
-            time.sleep(poll)
-            continue
-        # `replying_to` guards the same mistake it guards for a run: an answer
-        # written before this question was posted belongs to the previous one.
-        if "replying_to" in got and got["replying_to"] != q.get("asked_at"):
-            time.sleep(poll)
-            continue
-        nb.question_path.unlink(missing_ok=True)
-        nb.answer_path.unlink(missing_ok=True)
-        value = str(got.get("value", ""))
-        # RECORDED LIKE ANY OTHER EXCHANGE. A run's `Mailbox._record` appends
-        # every question and answer to its `run.json`, which is what the board
-        # reads the conversation from; nothing does that for an escalation,
-        # so the one question the person actually answered was the one the
-        # history could not show.
-        state = touch(notebook, waiting_on=None, question=None)
-        answered = list(state.get("answered") or [])
-        answered.append({"kind": "specified", "name": q.get("name", ""),
-                         "why": q.get("prompt") or q.get("why", ""),
-                         "value": value, "source": got.get("by") or "user",
-                         "asked_at": q.get("asked_at"), "at": time.time()})
-        touch(notebook, answered=answered)
-        return value
+        got = reply(notebook, q)
+        if got is not None:
+            return got
+        time.sleep(poll)
     return None

@@ -8,17 +8,36 @@ allowed-tools: Bash(uv run --group nb python -m nb *) Bash(git log *) Read Glob 
 Now: !`date "+%Y-%m-%d %H:%M"`
 Notebooks: !`ls -d */_quarto.yml 2>/dev/null | cut -d/ -f1 | tr '\n' ' '`
 
-## What you hold
+## The doctrine is NOT in this file
 
-You hold the direction. `nb` holds the aircraft. One `nb ask` is one question
-and one entry, written by an agent you do not talk to.
+The `nb coordinate` agent does this same job from the same CLI, and two copies
+of a lesson learned from a wrong taper ratio is one copy that will still be
+wrong next year. So everything that is true of COORDINATING -- rather than of
+this harness -- lives in `nb/references/coordinator/` and both of you read it.
 
-**You never write an entry, edit a chapter, or touch `_model.py`.** A run does
-that, and a second writer in a chapter is refused by a lock. Your work is four
-things: which question, which chapter, answering what the run asks, and telling
-the user what came back.
+**Read it before you start. One command, not five files:**
 
-`nb` is run as `uv run --group nb python -m nb <cmd>`, from the repo root.
+```bash
+uv run --group nb python -m nb doctrine --coordinate   # before the first `nb ask`
+uv run --group nb python -m nb doctrine --setup        # before `nb new`
+uv run --group nb python -m nb doctrine --list         # what each page is for
+```
+
+It covers: what you hold and what a run holds · never asking what has been
+answered · `--why` as your sentence on the page · choosing the next question
+from the finding · every kind of question a run asks and how to reply · the
+assumptions prompt as a defect report on your inputs · Specified inputs ·
+researching an aircraft AND the materials its targets rest on · `spec` vs
+`target` vs `assume` · angular spread · why the overlay is the only real check
+on a mask.
+
+**What stays here is the harness**: the board window, backgrounding a blocking
+wait, the ten-minute shell cap, and the cwd trap. Those are true of Claude Code
+and of nothing else.
+
+If you change doctrine, change it there. Preflight — which runs before every
+`nb ask` and `nb reconstruct` — fails on a sentence duplicated between this
+file and a doctrine page.
 
 ## Open it first
 
@@ -50,20 +69,6 @@ If there is no `_site` yet it says so and names `nb view <notebook>` rather than
 building it — a project render re-executes any entry whose freeze is missing,
 which is minutes of solver time, so that stays a decision you make deliberately.
 
-## Read the programme before asking
-
-**Never ask what has been answered.** Two read-only views:
-
-```bash
-git log --format="%h %s" -- <notebook>/chapters/     # every question, newest first
-uv run --group nb python -c "
-from nb.config import Notebook; from nb.domain import manifest
-print(manifest.build(Notebook('<notebook>')))"       # …with each answer
-```
-
-The manifest is what the run itself is shown, so it is the same picture the
-agent will have.
-
 ## Ask
 
 ```bash
@@ -73,44 +78,23 @@ uv run --group nb python -m nb ask <notebook> \
   --pool 200 --ceiling 90 --quiet
 ```
 
-- **`--quiet` is not optional for you.** Without it the parent process runs a
-  blocking TUI. With it, the parent prints `run <run-id>`, detaches and exits.
+What `--chapter` and `--why` are FOR is doctrine, and it is in
+`nb doctrine --coordinate`. `--why` in particular has a 40-word cap and
+renders verbatim as the entry's subtitle; read the page before writing one.
+What follows is only how this command behaves from a Claude Code shell.
+
+- **`--quiet` is not optional for you.** Without it the parent runs a blocking
+  TUI. With it, the parent prints `run <run-id>`, detaches and exits.
   **Capture that run id** — you need it to answer.
 - **A watcher window opens for each run**, carrying its transcript from the
   first line and closing itself a few seconds after the run ends. You do not
   ask for it and do not need to close it. `--no-watch` suppresses it, and stops
-  the run sending the open tab to its entry — for a run nobody is watching.
-- **`--chapter` is required; routing is yours.** A chapter is a vehicle: pick
-  the one whose `_model.py` the question is about. Omitted, nothing starts.
-- **`--why` is required, and it is YOUR SENTENCE ON THE PAGE.** It renders under
-  the question as the entry's subtitle, verbatim — the run is told to copy it
-  and is refused if it rewords it. Write it for whoever reads the notebook in
-  a month, not for the agent: what the last run found that makes this the next
-  question, or which decision is waiting on it. **40 words, and nothing starts
-  if it is over** — two sentences at most, the reason and not the method.
-
-  It is the one part of your reasoning that survives. `nb note` and this
-  conversation are transcripts nobody reads back; the entry is committed,
-  rendered and read later. Before `--why`, a reader could see two entries
-  answering adjacent questions and not tell whether the second followed from
-  the first or from a change of mind.
-
-  ```
-  --why "The 0.39% reconstruction compared the model with itself, so nothing
-         yet checks the planform independently."
-  ```
-
-  `nb reconstruct` carries a standing one and takes `--why` only to override it.
+  the run sending the open tab to its entry.
 - **The question is ONE quoted argument.** It must not start with `--` or end
   with `.json`; the parser drops those.
-- **A question needing a different vehicle still names the nearest chapter.**
-  The run recognises the fork itself and asks you to approve one.
-- **One question per ask**; a run refuses a second folded in.
-- **Several at once, one per chapter.** A same-chapter collision is refused at
-  turn 0, before a token is spent — but you will not see it in the exit code.
 - **The exit code only tells you the LAUNCH worked.** `--quiet` forks and
-  returns 0 as soon as the run is detached; everything after that — including
-  the chapter lock — is reported in `run.json`'s `outcome`. A non-zero exit
+  returns 0 as soon as the run is detached; everything after that — the
+  chapter lock included — is in `run.json`'s `outcome`. A non-zero exit
   (`2` bad arguments, `1` preflight) means nothing started at all.
 
 ## Watch
@@ -140,63 +124,6 @@ Endings are reported once and then they are history; a question or a death is
 reported every time until you act on it. A notebook you have never listened to
 reports nothing on the first call — it starts the clock. For the whole picture
 at any moment, `nb board <notebook>`.
-
-## Answer
-
-```bash
-uv run --group nb python -m nb answer <notebook> <run-id> "<value>"
-```
-
-**Say who decided.** Add `--by coordinator` when the answer is *yours* — a
-chapter you approved, an assumption you accepted, a budget you set. Leave it off
-only when you are relaying what the user actually told you, because then they
-are the author and the record should say so. Without it every answer is
-recorded as the user's and the board captions it "you".
-
-**Always pass the run id.** Omitting it refuses only when two runs are waiting
-at the same instant — and a run you answered a second ago still looks like the
-only one waiting until it consumes the reply. A second bare `nb answer` then
-overwrites the first, and the record says the user typed the second. Measured.
-
-| `kind` | `name` is | how to answer |
-|---|---|---|
-| `budget` | `PROBE TIME POOL`, `ENTRY RENDER BUDGET` | seconds. `--pool`/`--ceiling` pre-empt it |
-| `assumptions` | `assumptions` | `""` accepts · `1: 2.5e-4` corrects a value · `1: redo — why` sends it back to probe |
-| `inherited` | `inherited` | `""` keeps all · `3` or `3; 5` strikes what the fork breaks |
-| `stuck` | `NO PROGRESS` | `continue`, `stop`, or advice passed to the model |
-| `chapter` | the proposed slug | anything approves · `no — why` sends it back |
-| `refactor` | `_model.py` / `_analysis.py` | anything allows · `no — why` restores the file |
-| `specified` | the quantity | **see below** |
-
-**The number on a proposed chapter is not yours to police.** Allocation takes
-the next free number under a lock and walks past anything a concurrent run took
-first, so two runs proposing the same number is not a collision and sending one
-back to be renumbered only costs a round trip. Judge the slug, the title and
-what it `defines`.
-
-**A Specified input is the one you may not invent.** It is an input where a
-different answer changes *what is being built*. Answer it yourself **only when
-the user's direction already settles it**, and say which part of their
-direction you used. Otherwise **escalate — see below**. The reply syntax for
-every kind is in `question.json`'s `how`; the board shows only a one-line
-version of it.
-
-`specified`, `chapter` and `refactor` wait an hour, then exit `no_answer`; the
-other four take a safe default after five minutes. **An hour is shorter than a
-person, so expect to miss it.** Never `nb answer` a timed-out run — it refuses
-with *"its question outlived it"* and discards the reply. Recover by where it
-stopped:
-
-- **`stem` null in `run.json`** — it asked before opening an entry, nothing is
-  on disk, and `resume` refuses. Re-ask with the answer pre-loaded, now that you
-  know the key: `--answers f.json` holding `{"<the name it asked>": "<value>"}`.
-- **`stem` set** — the page exists; `nb resume <nb> <run-id>` picks it up.
-
-`--answers file.json` pre-answers by `name`, once each — e.g.
-`{"assumptions": "", "_model.py": "", "static margin": "10% of MAC"}`. The
-refactor key is the filename and the chapter key is the bare slug — no number,
-because the number is allocated at creation and the model's guess is
-discarded.
 
 ## Escalate what the direction does not settle
 
@@ -233,279 +160,6 @@ work done under a previous direction stays on the record but is not replayed.
 Record a new one when the user changes what they are after — that is what
 marks the pivot.
 
-## Narrate every decision
-
-```bash
-uv run --group nb python -m nb note <nb> "<one line>"
-```
-
-The board is the user's only view of your reasoning — the runs publish
-themselves, you do not. Note what you asked and why, what a finished run
-changed, and what you chose next. One line each, in the scrollback beside the
-questions they explain.
-
-## Read what came back
-
-Everything is in `run.json`. **Never parse `status.log`.**
-
-| field | what |
-|---|---|
-| `answer` | the entry's headline value and label, read off the render |
-| `prose` | the rendered entry, real numbers, code stripped |
-| `outcome` | `committed` · `no_entry` · `lint_failed` · `build_failed` · `max_turns` · `chapter_locked` · `stopped` · … (absent, and not alive, means it died) |
-| `findings` | `[{rule, message}]` when lint blocked it |
-| `failure` | the build error, when it would not render |
-| `answered` | every question put to a human, and where the answer came from |
-| `committed` | `{sha, entry, at}` |
-
-## Choose the next question
-
-- **Follow the finding, not the plan.** "It cannot trim" changes what to ask
-  next more than any backlog does.
-- **One unknown at a time.** That is what makes an entry worth citing.
-- **A question about a different vehicle is a fork** — ask it against the parent
-  chapter and let the run propose one.
-- **Report after each run**: the `answer` line and one sentence. Do not batch a
-  programme's worth of results into a wall of text.
-
-## Starting an aircraft
-
-```bash
-uv run --group nb python -m nb new <dir> \
-  --chapter-title "…" --defines "…" \
-  --spec "**<what>**: <value>." --assume "**<what>**, <reason>."
-```
-
-The title comes from the directory name. `--chapter-title` and `--defines` are
-required — a chapter created unnamed is one that gets renamed later, underneath
-entry stems and freeze paths. `--spec`/`--assume` are repeatable and **must come
-from the user**: they are the whole-aircraft commitments nothing later
-overwrites. It returns 0 only when the scaffold lints, preflights *and* renders.
-
-**A new notebook is a new aircraft. Confirm before creating one.**
-
-### If the aircraft already exists, find its plan FIRST
-
-**The agent cannot research.** No network, sandboxed to `chapters/`. Every
-dimension you do not supply, it supplies from memory — and it will not look
-any different in the entry from one you measured.
-
-Measured, on the three entries of an early Mustang reconstruction: a brief of seven
-scalar rows said nothing about form, so the run invented chord, taper,
-dihedral, six fuselage stations and five cut-part areas, and captioned them
-`# from the plan sheet`. Flite Test publish the plan free. Page one is a
-specification table giving length, CG, span, area, dry weight, all-up weight
-and **wing loading** — and the entry's computed wing loading was 20 % above the
-published figure. Nobody had looked.
-
-```bash
-curl -sL -o <notebook>/<plan>.pdf "<url>"       # commit it; a URL 404s, a file does not
-pdftoppm -png -r 150 -f 1 -l 1 <plan>.pdf pg    # page 1 is usually the spec table
-```
-
-FT plans print 1:1 and carry an inch/cm scale bar, so a render at a known dpi
-measures in millimetres directly — no scaling, no perspective correction.
-Tiles split parts across pages, so an exact planform needs stitching; that is
-real work, and 1b below is usually cheaper than doing it up front.
-
-Then put what you found in as `--spec` rows, one dimension each. The ten-word
-cap is **per row** and nothing caps the number of rows, so a dimension table
-fits:
-
-```bash
---spec "**Root chord**: 140 mm (5.5 in)." --spec "**Tip chord**: 99 mm."
-```
-
-**Record what you could not find, too** — but as a FACT, never as an order.
-`--assume "**Fuselage stations** are inferred, not published."` An unknown you
-name is one the run declares; an unknown you leave silent is one it invents
-and attributes.
-
-### `--assume` is what is assumed ABOUT THE AIRCRAFT. Never a directive.
-
-Both blocks render verbatim into the front page and into every chapter that
-inherits them, under the headings **Specified** and **Assumed**. So a row
-phrased as an instruction to the run becomes one of the aeroplane's declared
-assumptions, on every page, forever.
-
-Measured on the F-16 Viper: four of six `--assume` rows were method
-directives the coordinator wrote — "Never pixel-measure a photograph;
-optimise the silhouette instead", "Predict dry mass from areal density times
-developed cut area", "Wing area and loading unpublished: derive, then
-declare", "No plan sheet: Master Series plans are not published". None is a
-property of an F-16. All four rendered as assumptions the aircraft was
-modelled under, and the user asked why they were there.
-
-It got worse than cosmetic. `--assume "**EDF static thrust not published**;
-assume and declare it."` is a standing instruction, so the moment a value was
-supplied the run had to record that the brief's claim no longer held, and
-wrote `overwrites: brief/edf-static-thrust` into the chapter — a Warning
-callout saying the aircraft had departed from its own brief. The brief is
-supposed to be the one thing never overwritten.
-
-    GOOD  --assume "**Airfoil**: flat foam plate, a declared stand-in."
-    GOOD  --assume "**Planform** is fitted to photographs, not measured."
-    BAD   --assume "**Never pixel-measure**; optimise the silhouette instead."
-    BAD   --assume "**Thrust not published**; assume and declare it."
-
-The test: **could this sentence be true or false of the real aeroplane?** If
-it is an instruction to whoever builds the model, it does not belong in the
-brief at all.
-
-Where the directives go instead:
-  * a METHOD you want used on every run — into `nb/`, not the brief. It is a
-    property of the system, not of this aircraft.
-  * a reason, a source, a URL, a figure you could not find — into
-    `_reference/SOURCES.txt`, which is for exactly this and renders nowhere.
-  * a one-off steer for the next run — into that run's `--why`, or answer it
-    at the assumptions prompt when it comes up.
-
-And prefer to CLOSE the gap rather than describe it. "Thrust not published,
-assume one" had the run inventing 16.7 N against the vendor's published
-2240 g. You can research; it cannot. A row that states the number is worth
-five that state its absence.
-
-### Give it photographs to check the shape against
-
-The targets check the model against published NUMBERS. Nothing checks its
-SHAPE, and the gap is wide: one reconstruction reproduced all eight published
-figures to 0.40% while missing its power pod entirely and lofting a smooth
-pod where the real aircraft is a slab-sided box. Both were obvious the moment
-the model was drawn over a photograph.
-
-So collect EVERY distinct angle the source offers, put the photographs in
-`_reference/` with a `.txt` beside each whose first word is `photo`, and cut
-the masks:
-
-```bash
-uv run --group nb python -m nb mask <notebook>          # cut what has no mask
-uv run --group nb python -m nb reference <notebook>     # check the whole set
-```
-
-`nb mask` cuts with a pinned segmentation model — about a minute a
-photograph, and 214 MB of weights on the very first run. There are no
-thresholds to choose and no rules to write. `nb reference` then reports every
-photograph, whether each has a mask, whether each mask is the SAME PIXEL SIZE
-as its photograph, and the pairwise viewpoint spread.
-
-**Write the path from the repo root, and check it resolves.** The shell's cwd
-persists between calls, so a `cp` issued after a `cd` into the notebook puts
-the files at `<nb>/<nb>/_reference/`. Launch refuses when the directory it
-reads is empty and a stray one exists elsewhere.
-
-**ANGULAR SPREAD IS THE WHOLE POINT, and it is the thing to maximise.** Each
-camera position pins down what it happens to show and says nothing about the
-rest: a head-on frame fixes span, dihedral and tip cant and tells you nothing
-about chord; a frame from below is the only place wing incidence shows; a
-three-quarter from above fixes the planform and hides the gear. Shape faults
-survive in exactly the directions nobody photographed. Two frames from one
-shoot are ONE photograph — they fit the same pose, hide the same faults, and
-cost the run a turn to confirm what the first already said. Retailers shoot a
-product once and recolour it, so "two store photos" is usually one viewpoint
-twice; the Mini Explorer's pair measured IoU 0.87. `nb reference` prints the
-full pairwise table; drop a frame only when another already covers its angle.
-
-**LOOK AT THE OVERLAYS. This is the part no tool does for you.** The model
-reports nothing when it is wrong. `nb mask` writes a tinted overlay for every
-mask and names it; `nb reference --overlays` redraws them all.
-
-Judge the FILL, not the edge. A boundary drawn over a busy photograph reads as
-correct wherever it happens to follow a real edge — and the crease between a
-lit facet and a shaded one IS a real edge, so a mask that has dropped an
-entire shaded underside still draws a clean, convincing line. Three masks once
-passed that inspection while missing a belly, a chin, two legs and two wheels.
-Filled in, the hole is unmissable.
-
-Two numbers back the eye up, both from `nb reference`. `noise` is the share of
-a boundary that 5 px of smoothing removes — below any real feature on these
-aircraft, so a clean silhouette loses almost none of it, and anything above 8%
-prints ROUGH. `rough` is perimeter over sqrt(area), which also rises with
-genuine thinness, so read the two together.
-
-**When the model is wrong, change the photograph, not the code.** A
-salient-object model has no way to know that the hand holding the aeroplane is
-not part of it — on one store photograph every model tested kept the hand. It
-cannot be fixed with a parameter, so there is deliberately no parameter for
-it. Use a different frame, or paint the mask, which is an ordinary PNG. Then
-record in that photograph's `.txt` what you did and why.
-
-**Re-cutting an existing mask is guarded, and the guard is right.** A mask is
-an input to fits that are already rendered and frozen, and nothing downstream
-notices it changing — freeze tracks the page, not `_reference/`. So `nb mask`
-refuses to overwrite a mask in a notebook that has committed entries, and
-names them. If you mean it, re-render those entries too.
-
-### Transcribe what the plan PRINTS, do not measure it
-
-Page one of an FT plan is a specification table. Read it and put those
-figures in as `--spec` and `--target` rows.
-
-Do **not** measure dimensions off the drawing yourself at this stage. The
-overlay diagnoses shape; published figures fix scale; and measuring a tiled
-plan by hand is where a coordinator misread the tile key, dropped the two
-tiles holding the wing panels, and had the airframe reconstructed from its
-assembly jigs.
-
-**A published DIMENSION is an input. It does not go in `--target`.** Span,
-length, wheel diameter, propeller size — anything linear the manufacturer
-prints — is what SETS the model's scale, and what makes the silhouette fit
-identifiable at all: with span free, size trades against camera distance and
-the fit goes degenerate. Put those in `--spec`, or in `--target` marked
-`(given)` so the run is told to calibrate to them rather than converge on
-them.
-
-`--target` is for what the geometry must PRODUCE and no constant can be
-typed as: wing area, wing loading, aspect ratio, a dry mass that comes out
-of areas times areal density, CG.
-
-Measured, on the F-16 Viper: span and length went in as derived targets, the
-run built a wing, got 734 mm, solved for the tip station that makes `span()`
-return the published 914 mm, and wrote 1.295 m as its last fuselage station.
-The entry's headline — "0.39%, all airframe targets inside tolerance" — was
-the model being compared with itself, and the only real check in it, the
-overlay, was not what the number measured. Rule 44 exists to catch a derived
-target typed into the model, and it did not fire: the run had typed the
-half-span, 0.456.
-
-### Check the assumptions prompt against the plan
-
-The other half, and the one that needs nothing built. The prompt is already a
-list of every number the run made up, shown to the only party holding the
-plan, at the cheapest moment to change one — it fires **before `_model.py` is
-written**, so a correction costs about one probe, not a re-render.
-
-```
-ASSUMPTIONS — confirm, correct a value, or reject one
-  1. Wing taper ratio: 0.704
-  2. Fuselage cross-sections: from photographs
-```
-
-When a row is a **property of the real aircraft** — a chord, a cut area, a
-component mass — and you hold the plan, *check it before accepting*. Correct
-with `nb answer <nb> <run-id> "1: 0.85"`. Rows that are **modelling choices**
-— a stand-in airfoil, a neglected fairing — are the run's to make; judge the
-cost, not the value. The run marks which is which in each row's reason.
-
-**Accepting a number you could have checked is how the taper ratio got in.**
-
-**Read the declarations as a defect report on YOUR inputs.** Every `why`
-naming something absent is the run telling you what you failed to supply:
-
-```
-why: "plan tiles 9-12 omitted; inferred from jigs G1, G2"
-```
-
-That line was the wing. The tiles holding the wing panels had been left out
-of the sheet handed to the run, it said so at the prompt, and it was read
-past -- so the airframe was reconstructed from the wing's assembly jigs. The
-habit costs nothing and catches the class of error no rule can: the thing
-you did not give it.
-Enter accepts everything, and an unanswered prompt accepts everything after it
-times out — the wait scales with batch size, but it is still a clock.
-
-Where you already know a value, pre-empt it with `--answers` so the question
-never costs a round trip at all.
-
 ## When a run goes wrong
 
 - `nb stop <nb> <run-id> "why"` — cooperative, frees a run blocked on a
@@ -514,11 +168,3 @@ never costs a round trip at all.
   or died with work on disk. Refuses one already committed.
 - `nb clean <nb> <run-id> --yes` — drops a spent run. Dry run without `--yes`,
   and it refuses a run whose chapter is dirty.
-
-## Reference
-
-- `nb/README.md` — the system and why it is shaped this way. Read before
-  arguing with it.
-- `nb/system_instruction.md` — what the run itself is told. Read to predict
-  what it will do.
-- `uv run --group nb python -m nb --help` — the commands.

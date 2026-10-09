@@ -141,6 +141,39 @@ def _report(notebook, kind, run_dir, state, q):
              f"outcome; `nb resume` if there is work on disk")
 
 
+def scan(notebook, since, was_alive=None):
+    """
+    One pass over the runs: `(scan_at, [(kind, dir, state, question), …])`.
+
+    EXTRACTED so the coordinator agent waits on the same predicate this command
+    does. A second implementation of "what makes a run my problem" is how the
+    agent and the terminal come to disagree about whether anything is waiting --
+    and the watermark rule below is subtle enough that it would happen.
+
+    `was_alive` is the caller's set, carried across passes so a run that was
+    seen running and is now gone can be told from one that was never there.
+    """
+    was_alive = set() if was_alive is None else was_alive
+    scan_at = time.time()
+    events = []
+    for d in notebook.runs():
+        if coordinator.is_coordinator(d.name):
+            continue
+        got = _event(d)
+        if not got:
+            if runstate.alive(d):
+                was_alive.add(d.name)
+            continue
+        kind, st, q = got
+        if kind == "asks":
+            was_alive.add(d.name)
+        if kind in ("asks", "died") or float(st.get("updated") or 0) > since:
+            events.append((kind, d, st, q))
+    # Questions first: they are the ones with a clock on them.
+    events.sort(key=lambda e: e[0] != "asks")
+    return scan_at, events
+
+
 def main(argv):
     if not argv:
         tell("usage: uv run --group nb python -m nb listen <notebook> "
@@ -166,24 +199,8 @@ def main(argv):
     was_alive = set()
     deadline = time.time() + timeout
     while True:
-        scan_at = time.time()
-        events = []
-        for d in notebook.runs():
-            if coordinator.is_coordinator(d.name):
-                continue
-            got = _event(d)
-            if not got:
-                if runstate.alive(d):
-                    was_alive.add(d.name)
-                continue
-            kind, st, q = got
-            if kind == "asks":
-                was_alive.add(d.name)
-            if kind in ("asks", "died") or float(st.get("updated") or 0) > since:
-                events.append((kind, d, st, q))
+        scan_at, events = scan(notebook, since, was_alive)
         if events:
-            # Questions first: they are the ones with a clock on them.
-            events.sort(key=lambda e: e[0] != "asks")
             for kind, d, st, q in events:
                 _report(notebook, kind, d, st, q)
             coordinator.touch(notebook, listened_at=scan_at)

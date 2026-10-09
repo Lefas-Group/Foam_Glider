@@ -137,10 +137,154 @@ def _dead_config():
     return out
 
 
+SHINGLE = 10
+
+
+def _shingles(text):
+    """Normalised N-word runs, for the duplication check below."""
+    words = re.sub(r"[^a-z0-9 ]+", " ", text.lower()).split()
+    return {" ".join(words[i:i + SHINGLE])
+            for i in range(max(0, len(words) - SHINGLE + 1))}
+
+
+def _doctrine_problems():
+    """
+    The coordinator doctrine has ONE copy, and the registry knows every page.
+
+    Two checks, and the second is the one that matters. `_rule_list_problems`
+    above exists because a hand-copied list went eight rules stale, and the
+    fix there was to compare the copy against the source. Here the fix is
+    stronger: there is no copy to compare. `.claude/skills/coordinate-design/`
+    and `nb/coord/` are two coordinators reading one set of pages, so a
+    sentence appearing in both means the split has started to come apart --
+    and a duplicated paragraph is how it begins every time.
+
+    Ten words, because shorter runs collide on ordinary prose ("so a run that
+    has already been") while a real duplicated sentence runs far longer.
+    """
+    from .coord import doctrine
+    bad = list(doctrine.problems())
+
+    skill = NB.parent / ".claude" / "skills" / "coordinate-design" / "SKILL.md"
+    if not skill.exists():
+        return bad
+    theirs = _shingles(skill.read_text())
+    for name in doctrine.PAGES:
+        # A PAGE THAT IS NOT THERE is already reported above, and reading it
+        # here raised FileNotFoundError straight out of `check()` -- a
+        # preflight that crashes instead of listing what is wrong is the one
+        # thing this module exists not to do.
+        if not doctrine.path(name).exists():
+            continue
+        shared = theirs & _shingles(doctrine.read(name))
+        if shared:
+            one = min(shared)
+            bad.append(f"doctrine: SKILL.md repeats {name} -- {one!r}. "
+                       f"The skill points at the pages; it does not copy them.")
+    return bad
+
+
+#: Flags the code reads that `USAGE` deliberately does not name. Each is here
+#: for a reason, and the list is short on purpose -- the check is worth nothing
+#: if the answer to every finding is to add a line to it.
+#:
+#:   --porcelain     git's, inside a subprocess. Not an `nb` flag at all.
+#:   --close-window  internal: `nb ask` passes it to the watcher it spawns.
+#:   --detach        the old spelling of `--quiet`, kept working, not advertised.
+#:   --help          handled before dispatch, and universal.
+UNDOCUMENTED_ON_PURPOSE = {"--porcelain", "--close-window", "--detach",
+                           "--help"}
+
+FLAG = re.compile(r"""["'](--[a-z][a-z0-9-]*)["']""")
+USAGE_FLAG = re.compile(r"--[a-z][a-z0-9-]*")
+
+
+def _usage_problems():
+    """
+    `USAGE` and the parsers agree about which flags exist.
+
+    THE SAME FAILURE AS THE RULE LIST, one layer out. `__main__.py`'s docstring
+    is hand-written help, and hand-written help drifts from the parser beneath
+    it silently: `nb new --target` was parsed, rendered into every brief, and
+    depended on by the coordinator doctrine, while the usage text had never
+    heard of it. Four more were the same -- `--stop`, `--model`, `--options`,
+    `--default` -- and one, `--coordinate`, ran the other way: named in the
+    usage and never actually tested for, so it worked only by falling through
+    a default.
+
+    Both directions matter. A flag the code reads and the usage omits is a
+    capability nobody finds; a flag the usage names and the code never reads is
+    one that fails in a way no error message explains.
+    """
+    main = NB / "__main__.py"
+    src = main.read_text()
+    usage_end = src.index('"""', 3)
+    documented = set(USAGE_FLAG.findall(src[:usage_end]))
+
+    parsed = set()
+    for f in [main, *sorted((NB / "cli").glob("*.py"))]:
+        text = f.read_text()
+        if f == main:
+            text = text[usage_end:]
+        parsed |= set(FLAG.findall(text))
+
+    out = []
+    for flag in sorted(parsed - documented - UNDOCUMENTED_ON_PURPOSE):
+        out.append(f"usage: {flag} is parsed and the help never mentions it")
+    for flag in sorted(documented - parsed):
+        out.append(f"usage: the help names {flag} and no parser reads it")
+    return out
+
+
+def _example_problems():
+    """
+    Every `nb <command>` quoted in the doctrine is a command that exists.
+
+    A doctrine page is read by a model that will type what it says. The worked
+    `cut(...)` script that used to live in the skill is gone with the API it
+    called, so there is little Python left to bind-check -- but the pages are
+    thick with `nb` invocations, and a renamed subcommand would leave both
+    coordinators confidently calling something that is not there.
+
+    Read out of the dispatch chain rather than a list, for the reason
+    `tools/api.py` introspects instead of quoting.
+    """
+    main = (NB / "__main__.py").read_text()
+    known = set(re.findall(r'cmd == "([a-z_]+)"', main))
+    known |= {c for grp in re.findall(r'cmd in \(([^)]*)\)', main)
+              for c in re.findall(r'"([a-z_]+)"', grp)}
+    if not known:
+        return ["usage: no subcommands found in the dispatch chain"]
+
+    pages = []
+    doc_dir = NB / "references" / "coordinator"
+    if doc_dir.is_dir():
+        pages += sorted(doc_dir.glob("*.md"))
+    skill = NB.parent / ".claude" / "skills" / "coordinate-design" / "SKILL.md"
+    if skill.exists():
+        pages.append(skill)
+
+    out = []
+    for page in pages:
+        # ANCHORED, because `uv run --group nb python -m nb ask` contains the
+        # string "nb python" and a bare `\bnb (\w+)` reports it as a missing
+        # command. The two forms that are real invocations are `-m nb <cmd>`
+        # and inline code starting `` `nb <cmd>  ``.
+        for cmd in sorted(set(re.findall(r"(?:-m nb|`nb) ([a-z_]+)",
+                                         page.read_text()))):
+            if cmd not in known:
+                out.append(f"doctrine: {page.name} says `nb {cmd}` and there "
+                           f"is no such command")
+    return out
+
+
 def check(root):
     """Return a list of failures. Empty means go."""
     notebook = Notebook(root)
     bad = []
+    bad.extend(_doctrine_problems())
+    bad.extend(_usage_problems())
+    bad.extend(_example_problems())
 
     # Rule 11, run through the contract's own check rather than reimplemented,
     # so the two can never disagree about what "byte-identical" means. It covers

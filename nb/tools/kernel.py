@@ -271,6 +271,21 @@ class Kernel:
 
     def execute(self, code, deadline_s):
         started = time.perf_counter()
+        # TELL THE CELL ITS DEADLINE. The kill is enforced out here and the
+        # code inside had no way to see it coming, so a long fit could only
+        # ever end one way: at the wall, with everything it had computed lost.
+        # Measured -- a reconstruction spent two 300 s probes on `fit_geometry`
+        # and was killed on both, then gave up on fitting and set the geometry
+        # by eye, which is the thing fitting exists to replace.
+        #
+        # ITS OWN CELL, not prepended to the model's. The namespace is the only
+        # channel into a kernel, but a line glued in front of the probe shifts
+        # every traceback line number by one -- and a model reading "line 7"
+        # about its line 6 is being lied to by the tool that is meant to be
+        # instrumenting it. A separate execute costs a millisecond and leaves
+        # the probe's own text starting at line 1.
+        self._run(f"_PROBE_DEADLINE_S = __import__('time').monotonic() + "
+                  f"{float(deadline_s)!r}", 10.0)
         out, killed = self._run(code, deadline_s)
         elapsed = time.perf_counter() - started
         if killed:

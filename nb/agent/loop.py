@@ -131,9 +131,14 @@ def _log_results(path, results):
 
 
 def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
-        on_turn=None, on_stuck=None, should_stop=None):
+        on_turn=None, on_stuck=None, should_stop=None, model=None):
     """
     Drive the loop until the model stops calling tools, or a Terminal fires.
+
+    `model` overrides the default for this loop, because the coordinator runs on
+    a different one from the runs it launches -- pro against flash, on separate
+    daily quotas. It is a parameter rather than an env var because both can be
+    live in one process: `nb coordinate` is a pro loop that spawns flash runs.
 
     Returns nothing. A stop RAISES -- `Stopped` carries the
     and the caller catches it -- so the three-tuple this used to return had a
@@ -167,7 +172,8 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
                 f"what you have: call the tool that ends this phase, or stop and "
                 f"say plainly what is still missing. Running out is the one "
                 f"outcome that produces nothing at all."}]})
-        resp = complete(contents, cfg)
+        resp = complete(contents, cfg) if model is None else complete(
+            contents, cfg, model=model)
         turn = resp.candidates[0].content
         # The record keeps the thinking -- and now what it cost. The thought
         # TEXT stored below is a summary, so counting its characters understates
