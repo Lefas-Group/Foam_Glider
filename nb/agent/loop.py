@@ -75,6 +75,10 @@ def _spoken(turn):
 # reconstructing a run, not for replaying it.
 RESULT_CAP = 4000
 
+#: How short a final reply may be before it is read as a glitch. See the
+#: no-tool-call branch in `run`.
+_ENDING_FLOOR = 120
+
 
 def _write(path, rec):
     if path is None:
@@ -161,6 +165,11 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
     # than the wall. Once, at 70%, because a countdown every turn becomes
     # wallpaper and costs cache on each append.
     warn_at = int(max_turns * 0.7)
+    # Below this, a no-tool-call reply is treated as a glitch worth one nudge
+    # rather than an ending. 120 characters is roughly a sentence: every real
+    # ending seen here -- a summary, a finding, a reason for stopping -- runs
+    # to several, and the failure that motivated it was two.
+    nudged_empty = False
     # `model_path` is the chapter's `_model.py`. Watched because the barren
     # detector cannot see this failure: `probe` is PRODUCTIVE, so a run that
     # probes sixty times in a row resets it every turn while nothing is built.
@@ -206,6 +215,35 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
 
         calls = [p.function_call for p in (turn.parts or []) if p.function_call]
         if not calls:
+            # A TURN WITH NO TOOL CALL IS NOT ALWAYS AN ENDING. It is how a
+            # model says "I am done", and for a long reply it plainly is one.
+            # It is also what a model emits when it simply glitches, and those
+            # two look identical from here.
+            #
+            # MEASURED, on `gemini-3.1-pro-preview` coordinating ft-warthog:
+            # sixteen turns in, immediately after an image came back from
+            # `read_image`, it replied with the two-token text `.jpg` and no
+            # call. The session ended there -- notebook created, photographs
+            # half-collected, nothing finished -- because this `return` could
+            # not tell a two-token hiccup from a decision.
+            #
+            # So a SHORT reply gets one nudge before it is believed. A real
+            # ending carries a summary, a finding, a reason; it does not come
+            # in under `_ENDING_FLOOR` characters. Nudged once per run, not
+            # per turn: a model that glitches twice is a model that is really
+            # finished, and re-prompting for ever is how a run burns its cap
+            # on nothing.
+            said = "".join(p.text or "" for p in (turn.parts or [])
+                           if not getattr(p, "thought", None)).strip()
+            if len(said) < _ENDING_FLOOR and not nudged_empty:
+                nudged_empty = True
+                contents.append({"role": "user", "parts": [{"text":
+                    f"That reply was {len(said)} characters and called no "
+                    f"tool, which reads as a glitch rather than an ending. "
+                    f"If you are finished, say so properly -- what you did "
+                    f"and what you found -- or call the tool that ends this "
+                    f"phase. If you are not, carry on with the next step."}]})
+                continue
             return
 
         parts, results = [], []
