@@ -12,10 +12,17 @@ A DIFFERENT MODEL FROM THE RUNS, on purpose. `config.COORD_MODEL` is pro while
 `config.MODEL` is flash, which puts them on separate daily quotas: a busy
 afternoon of runs cannot starve the thing that decides what to run next.
 
-IT RUNS IN THE FOREGROUND and holds no terminal hostage while it waits. A
-blocking tool call costs no turn and no tokens, so `wait` simply does not
+IT RUNS IN THE FOREGROUND, which is what makes it the HEADLESS entry: a cron
+job or a script has no terminal to hand a board and must not be given one.
+`nb designer` is the other door -- same session, forked into the background
+with the board in front of it -- and it calls `coordinate()` here rather than
+reimplementing any of this.
+
+A blocking tool call costs no turn and no tokens, so `wait` simply does not
 return until something happens -- which is the whole reason this is an agent
-loop rather than the polling the Claude Code skill is obliged to do.
+loop rather than the polling the Claude Code skill is obliged to do. Detached,
+that silence is indistinguishable from a hang, which is why this opens a
+`status.log` for the reserved id: `nb watch <nb> coordinator` follows it.
 
 COLD START IS THE NORMAL ENTRY. There is no transcript to resume: the
 programme's state is the manifest, the notes and the mailbox, and
@@ -36,7 +43,7 @@ from ..config import COORD_MODEL, MAX_TURNS, Notebook
 from ..coord import prefix, tools
 from ..coord.session import Coordination
 from ..process import coordinator
-from ..process.log import tell
+from ..process.log import close_log, open_log, say, tell
 
 
 def _opt(argv, flag, number=False):
@@ -113,11 +120,30 @@ def _file_transcript(session, tpath):
     return dest
 
 
-def main(argv):
-    if not argv:
-        tell('usage: uv run --group nb python -m nb coordinate <notebook> '
-             '["<what to do>"] [--max-turns N]')
-        return 2
+def coordinate(name, direction="", max_turns=MAX_TURNS, banner=True):
+    """One coordinating session, with its log closed on every exit path."""
+    try:
+        return _session(name, direction, max_turns, banner)
+    finally:
+        # FIVE WAYS OUT of the session below -- finished, stopped, turn cap,
+        # transport failure, and the silent one where the model simply stops
+        # calling tools. A log left open on any of them is a `nb watch` that
+        # never sees the end.
+        close_log()
+
+
+def _session(name, direction, max_turns, banner):
+    """
+    The session itself. -> exit code.
+
+    SEPARATE FROM `main` so `nb designer` can run it in the forked child
+    without rebuilding an argv to re-parse. The split is the same one
+    `cli/run.py` makes between its flag handling and `_execute`: argv belongs
+    to the command, the session does not.
+
+    `banner` is off in the child, where stdout is `stderr.log` and the person
+    is looking at the board instead.
+    """
     # A NOTEBOOK THAT DOES NOT EXIST YET IS THE OTHER BRANCH, not an error.
     # Setting an aircraft up is this command's job too, and the research that
     # fills the brief has to happen BEFORE `nb new` creates the directory the
@@ -125,29 +151,30 @@ def main(argv):
     # hands it one. `Notebook()` raises on a directory with no `chapters/`,
     # which is exactly the test for "not scaffolded yet".
     try:
-        notebook = Notebook(argv[0])
+        notebook = Notebook(name)
     except SystemExit:
         notebook = None
-    # THE DIRECTION IS ONE QUOTED ARGUMENT, like `nb ask`'s question, and for
-    # the reason `nb new` records: "everything that is not a flag" swept a
-    # trailing shell comment into a site heading there, and here it swept the
-    # VALUE of `--max-turns` into the direction -- `nb coordinate x "…"
-    # --max-turns 6` recorded the direction as "… 6" on the board, pinned,
-    # for ever. A flag's value is not prose.
-    direction = (argv[1] if len(argv) > 1 and not argv[1].startswith("--")
-                 else "")
-    max_turns = int(_opt(argv, "--max-turns", number=True) or MAX_TURNS)
-
     session = Coordination(notebook, direction=direction,
-                           model=COORD_MODEL, wanted=argv[0])
-    text = prefix.build(notebook, direction=direction, name=argv[0])
+                           model=COORD_MODEL, wanted=name)
+    text = prefix.build(notebook, direction=direction, name=name)
     tool_list, handlers = tools.build(session)
 
-    where = notebook.root.name if notebook else f"{argv[0]} (new)"
-    tell(f"coordinating {where} on {COORD_MODEL}")
-    if direction:
-        tell(f'  direction: "{" ".join(direction.split())[:160]}"')
-    tell(f"  board:  uv run --group nb python -m nb board {argv[0]}")
+    # ITS OWN status.log, like a run's. Detached behind `nb designer` the
+    # terminal belongs to the board, so without this the coordinator's only
+    # voice is `nb note` -- and a `wait` that blocks for twenty minutes reads
+    # exactly like a process that has died. `nb watch <nb> coordinator`
+    # follows it.
+    if notebook is not None:
+        open_log(coordinator.mailbox_for(notebook), "coordinate",
+                 direction or "(picking the programme up)")
+    where = notebook.root.name if notebook else f"{name} (new)"
+    if banner:
+        tell(f"coordinating {where} on {COORD_MODEL}")
+        if direction:
+            tell(f'  direction: "{" ".join(direction.split())[:160]}"')
+        tell(f"  board:  uv run --group nb python -m nb board {name}")
+    else:
+        say(f"coordinating {where} on {COORD_MODEL}")
 
     contents = [{"role": "user", "parts": [{"text":
         (direction or "Pick up this programme where it stands and carry it "
@@ -183,7 +210,7 @@ def main(argv):
             coordinator.note(session.notebook,
                              f"Session ended on its turn cap ({exc}).")
         return 1
-    except Exception as exc:                                # noqa: BLE001
+    except Exception as exc:
         # A DROPPED NETWORK IS NOT A CRASH HERE, and it reached the terminal as
         # a forty-line httpx traceback. `client.py` retries six times over
         # ~31 s, which is the right patience for a blip and no help at all for
@@ -204,7 +231,7 @@ def main(argv):
                          f"Session ended on a {kind}. The programme is on "
                          f"disk; restart to pick it up.")
         tell(f"  restart:  uv run --group nb python -m nb coordinate "
-             f"{argv[0]}")
+             f"{name}")
         return 1
 
     _file_transcript(session, tpath)
@@ -220,8 +247,28 @@ def main(argv):
     # nothing has checked that.
     tell("  ended without calling `finish` — no summary was written, and "
          "nothing checked whether a run is still going.")
-    tell(f"  check:  uv run --group nb python -m nb board {argv[0]}")
+    tell(f"  check:  uv run --group nb python -m nb board {name}")
     return 0
+
+
+
+def main(argv):
+    """`nb coordinate <notebook> ["<what to do>"] [--max-turns N]`."""
+    if not argv:
+        tell('usage: uv run --group nb python -m nb coordinate <notebook> '
+             '["<what to do>"] [--max-turns N]')
+        return 2
+    # THE DIRECTION IS ONE QUOTED ARGUMENT, like `nb ask`'s question, and for
+    # the reason `nb new` records: "everything that is not a flag" swept a
+    # trailing shell comment into a site heading there, and here it swept the
+    # VALUE of `--max-turns` into the direction -- `nb coordinate x "…"
+    # --max-turns 6` recorded the direction as "… 6" on the board, pinned, for
+    # ever. A flag's value is not prose.
+    direction = (argv[1] if len(argv) > 1 and not argv[1].startswith("--")
+                 else "")
+    return coordinate(argv[0], direction=direction,
+                      max_turns=int(_opt(argv, "--max-turns", number=True)
+                                    or MAX_TURNS))
 
 
 if __name__ == "__main__":

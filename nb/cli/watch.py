@@ -19,7 +19,7 @@ import sys
 import time
 
 from ..config import Notebook
-from ..process import desktop
+from ..process import coordinator, desktop
 from ..process.log import tell
 
 
@@ -293,14 +293,24 @@ def main(argv):
     notebook = Notebook(argv[0], run_id=argv[1] if len(argv) > 1
                         and not argv[1].startswith("--") else None)
     log = notebook.run / "status.log"
+    # THE COORDINATOR NEVER WRITES AN `outcome`, so `--until-done` would wait
+    # for one for ever -- it holds no lock and has no ending, by design (see
+    # `process/coordinator.py`). Its log is still worth following: detached
+    # behind `nb designer` the terminal belongs to the board, and this is the
+    # only place its turns are visible. Said plainly rather than silently
+    # ignored, because a flag that does nothing is worse than one refused.
+    until_done = "--until-done" in argv
+    if coordinator.is_coordinator(notebook.run_id) and until_done:
+        tell("  --until-done does nothing for the coordinator: it records "
+             "no outcome, having no process to end.")
+        until_done = False
     tell(f"  watching   {log}"
          f"{'' if log.exists() else '  (waiting for a run to start)'}")
     # `--close-window` IS SEPARATE FROM `--until-done` and is passed only by
     # the spawner in `nb run`. Someone who types `nb watch --until-done` in a
     # terminal of their own wants the watcher to stop, not their window to
     # vanish underneath them.
-    follow(log, from_start="--all" in argv,
-           until_done="--until-done" in argv,
+    follow(log, from_start="--all" in argv, until_done=until_done,
            close_window="--close-window" in argv)
     return 0
 

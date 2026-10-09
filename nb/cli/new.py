@@ -107,7 +107,27 @@ def main(path, title=None, subject=None, chapter=None,
          chapter_title=None, defines=None, verbose=True,
          specs=(), assumes=(), targets=()):
     root = pathlib.Path(path).resolve()
-    if root.exists() and any(root.iterdir()):
+    # SCRATCH DOES NOT COUNT, nor does an empty directory. This was
+    # `any(root.iterdir())`, which refused a directory holding nothing but the
+    # skeleton this command is about to build itself ten lines below.
+    #
+    # `nb designer` has to put the coordinator's mailbox under `_scratch/runs/`
+    # BEFORE the aircraft is scaffolded -- the board lives there and the
+    # direction is asked on the board -- and by the time `new` runs that
+    # mailbox holds a `run.json` and a `question.json`. So "empty" was not
+    # enough: the test has to know that `_scratch/` is never the user's.
+    #
+    # It is never the user's by construction. Every notebook's own `.gitignore`
+    # carries `/_scratch/*` (see GITIGNORE below), `new` creates the directory
+    # itself, and `nb clean` reclaims inside it. The guard this was written to
+    # be is intact: a file anywhere else, or a non-empty subdirectory anywhere
+    # else, is somebody's work and is still refused.
+    def _occupied(d, top=False):
+        return any(not (top and p.name == "_scratch")
+                   and (p.is_file() or _occupied(p))
+                   for p in d.iterdir())
+
+    if root.exists() and _occupied(root, top=True):
         tell(f"  {root} exists and is not empty")
         return 1
     # THE FIRST CHAPTER IS NAMED AT BIRTH, which is what removed the stub.
@@ -183,8 +203,10 @@ def main(path, title=None, subject=None, chapter=None,
         tell('  Quote it as one argument:  nb new <dir> "Radical Glider"')
         return 1
 
-    (root / "chapters").mkdir(parents=True)
-    (root / "_scratch").mkdir(parents=True)
+    # `exist_ok`, because the skeleton may already be here -- see the check
+    # at the top of this function.
+    (root / "chapters").mkdir(parents=True, exist_ok=True)
+    (root / "_scratch").mkdir(parents=True, exist_ok=True)
 
     for seed, dest in COPIED_VERBATIM:
         shutil.copy(SCAFFOLD / seed, root / dest)

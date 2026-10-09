@@ -33,6 +33,9 @@
     nb board <notebook> [--all]              N agents, one terminal
     nb answer <notebook> [run] "<value>"     reply to a waiting run
              [--by coordinator]                  …saying who decided it
+    nb designer <notebook>                   one command: the board in front,
+             [--max-turns N] [--all]         …a coordinator behind it, and the
+                                             …direction asked ON the board
     nb coordinate <notebook>                 the coordinator, as an agent:
              ["<what to do>"]                 …decides what to ask, answers
              [--max-turns N]                  …the runs, narrates to the board
@@ -277,6 +280,13 @@ def main(argv):
     if cmd == "doctrine":
         from .cli.doctrine import main as doctrine
         return doctrine(rest)
+
+    if cmd == "designer":
+        if not rest:
+            print(USAGE)
+            return 2
+        from .cli.designer import main as designer
+        return designer(rest)
 
     if cmd == "coordinate":
         if not rest:

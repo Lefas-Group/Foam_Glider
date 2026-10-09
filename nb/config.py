@@ -238,11 +238,19 @@ class Notebook:
         the clock that made it, and a directory copied or restored keeps its
         name while getting a new mtime. What `nb resume` wants is "the run I was
         just in", which is a fact about the filesystem.
+
+        THE RESERVED ID IS NOT A RUN and is excluded. `runs()` still enumerates
+        it -- `process/coordinator.py` wants that, so the board finds it for
+        free -- but it is a mailbox with no process, no lock and no status.log,
+        and `coordinator.touch()` rewrites it on every note. So it is almost
+        always the newest directory here, which made a bare `nb watch <nb>`
+        follow a file that does not exist and `nb resume <nb>` address work
+        that was never done.
         """
         d = self.scratch / "runs"
         if not d.is_dir():
             return None
-        runs = [p for p in d.iterdir() if p.is_dir()]
+        runs = [p for p in d.iterdir() if p.is_dir() and p.name != "coordinator"]
         if not runs:
             return None
         return max(runs, key=lambda p: p.stat().st_mtime).name
