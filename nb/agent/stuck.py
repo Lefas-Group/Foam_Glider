@@ -80,6 +80,25 @@ PRODUCTIVE = frozenset({
 
 BARREN_LIMIT = 8
 
+#: Turns a run may spend before `_model.py` has grown at all. A
+#: reconstruction's whole job is to write that file, and a run that has not
+#: touched it by here is not preparing to -- it is circling.
+#:
+#: MEASURED, three runs on two aircraft, none of which ever wrote a line of
+#: geometry: 54 turns reading `nb`'s lint rules; 77 turns probing, 56 of them
+#: hand-measuring pixel coordinates off a mask to derive a camera by
+#: trigonometry; 54 turns that reached for `git show` when the first door was
+#: shut. Every one burned its budget on PREPARATION.
+#:
+#: The barren detector above cannot see this, and that is the point of a
+#: second number: `probe` is in PRODUCTIVE, so a run probing sixty times in a
+#: row resets the counter on every turn and looks busy all the way to the cap.
+#: Something has to notice that nothing has been BUILT.
+#:
+#: 25 against a cap of 80, so there are still fifty-odd turns to recover in --
+#: this is a nudge at the point it is cheap to act on, not a wall.
+UNBUILT_LIMIT = 25
+
 
 def failed(out):
     """
@@ -138,10 +157,55 @@ class Detector:
     broken.
     """
 
-    def __init__(self, limit=BARREN_LIMIT):
+    def __init__(self, limit=BARREN_LIMIT, model_path=None,
+                 unbuilt_limit=UNBUILT_LIMIT):
         self.limit = limit
         self.barren = 0
         self.calls = []
+        # NOTHING BUILT YET, counted separately from nothing DONE. `probe` is
+        # productive, so a run that probes sixty times resets `barren` on
+        # every turn while `_model.py` sits at its seven-line stub.
+        self.model_path = model_path
+        self.unbuilt_limit = unbuilt_limit
+        self.turns = 0
+        self.nudged = False
+        self.start_size = self._model_size()
+
+    def _model_size(self):
+        try:
+            return self.model_path.stat().st_size if self.model_path else None
+        except OSError:
+            return None
+
+    def unbuilt(self):
+        """
+        A sentence to put to the model when it has built nothing, else None.
+
+        Once. A countdown every turn becomes wallpaper and costs the cached
+        prefix on each append -- the same reasoning `loop.py` gives for
+        warning at 70% of the turn cap exactly once.
+        """
+        self.turns += 1
+        if (self.nudged or self.model_path is None
+                or self.turns < self.unbuilt_limit):
+            return None
+        now = self._model_size()
+        if now is None or self.start_size is None or now > self.start_size:
+            return None
+        self.nudged = True
+        return (
+            f"{self.turns} turns in and `_model.py` has not changed. Nothing "
+            f"you have done so far is on disk.\n\n"
+            f"Write the aeroplane now, roughly, from the brief's dimensions "
+            f"alone -- a wing, a fuselage, the stations you are confident "
+            f"about -- and `lint` it. A crude model you can SEE over a "
+            f"photograph tells you more in one turn than any amount of "
+            f"reasoning about what it will have to satisfy, and every "
+            f"refinement afterwards is cheap because the file exists.\n\n"
+            f"Measured: three runs before this one spent 54, 77 and 54 turns "
+            f"preparing -- reading rules, deriving cameras by hand from pixel "
+            f"coordinates -- and each ended with its model still a stub and "
+            f"nothing committed. Preparation is not progress.")
 
     def turn(self, results):
         """

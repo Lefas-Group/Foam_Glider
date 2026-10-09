@@ -273,6 +273,32 @@ marketing.
 
 # Before you open the entry
 
+**WRITE THE AEROPLANE FIRST. Before you probe anything.**
+
+Your first probe should be the one that builds a crude `_model.py` out of the
+brief's dimensions alone -- a wing, a fuselage, the stations you are confident
+about -- and draws it. Not a camera fit, not a reading of the targets, not a
+plan for what the model will have to satisfy. The file, on disk, wrong in
+places.
+
+Everything after that is cheaper for it existing. An overlay tells you which
+station is wrong in one turn; `fit_geometry` can free a constant only once the
+constant has a name; the assumptions prompt has something to show the person
+holding the plan. None of that is reachable from a stub.
+
+MEASURED, three runs on two aircraft, none of which ever wrote a line of
+geometry. One spent 54 turns reading the lint rules it was about to be graded
+by. One spent 77 turns probing -- 56 of them reading pixel coordinates off a
+mask by eye and deriving a camera from them with arctan, which is precisely
+what `compare_to_photo` does properly and what the photographs page tells you
+never to do by hand. One spent 54 turns and reached for `git show` when the
+first door was shut. All three hit the turn cap with `_model.py` at its
+seven-line stub and nothing committed.
+
+They were not confused and they were not short of budget. Each was preparing,
+and preparation is not progress. If you are twenty turns in and the file has
+not changed, you are in that failure now: stop, and write the aeroplane.
+
 **DRAW THE AIRCRAFT.** The assumptions prompt lists every picture this run
 has made -- newest first, by path -- to the person who holds the plan, and it
 is the only chance they get to catch a shape error while it is still cheap,

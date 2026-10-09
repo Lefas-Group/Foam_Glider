@@ -131,7 +131,8 @@ def _log_results(path, results):
 
 
 def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
-        on_turn=None, on_stuck=None, should_stop=None, model=None):
+        on_turn=None, on_stuck=None, should_stop=None, model=None,
+        model_path=None):
     """
     Drive the loop until the model stops calling tools, or a Terminal fires.
 
@@ -160,7 +161,10 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
     # than the wall. Once, at 70%, because a countdown every turn becomes
     # wallpaper and costs cache on each append.
     warn_at = int(max_turns * 0.7)
-    detector = Detector()
+    # `model_path` is the chapter's `_model.py`. Watched because the barren
+    # detector cannot see this failure: `probe` is PRODUCTIVE, so a run that
+    # probes sixty times in a row resets it every turn while nothing is built.
+    detector = Detector(model_path=model_path)
     for n in range(max_turns):
         # Checked before spending a request, not after: the point of stopping a
         # run is to stop paying for it.
@@ -172,6 +176,11 @@ def run(contents, cfg, handlers, transcript=None, max_turns=MAX_TURNS,
                 f"what you have: call the tool that ends this phase, or stop and "
                 f"say plainly what is still missing. Running out is the one "
                 f"outcome that produces nothing at all."}]})
+        # BEFORE the request, so the nudge is in the context the model reads
+        # on this turn rather than the next one.
+        nudge = detector.unbuilt()
+        if nudge:
+            contents.append({"role": "user", "parts": [{"text": nudge}]})
         resp = complete(contents, cfg) if model is None else complete(
             contents, cfg, model=model)
         turn = resp.candidates[0].content

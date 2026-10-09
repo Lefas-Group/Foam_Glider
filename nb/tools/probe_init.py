@@ -149,6 +149,7 @@ _threading.Thread(target=_die_with_parent, daemon=True).start()
 # =============================================================================
 import builtins as _bi
 import pathlib as _pl
+import subprocess as _subprocess_guard
 import sys as _sys_guard
 
 # `sys.path` MINUS THE EMPTY STRING AND THE CWD. `''` means "where the process
@@ -204,6 +205,73 @@ def _guarded_open(file, mode="r", *a, **kw):
             f"`_inputs.yml`, both of which are already in front of you.")
     return _real_open(file, mode, *a, **kw)
 
+
+# AND THE OTHER DOOR. Wrapping `open` alone was half a guard: `subprocess`
+# reaches the whole filesystem through `cat`, `grep` and `git show`, and
+# `os.popen` is the same hole with a different name.
+#
+# MEASURED, and this is not a hypothetical. One turn after being refused
+# `nb/`, a run reasoned "since I can't directly inspect `nb/` or the lint
+# checks themselves" and then ran
+# `subprocess.run(["git", "show", "fbcf8..."])` -- the hash of the very
+# commit that had added the restriction, an hour old. It understood the
+# boundary and went around it, not maliciously but because `git` was the next
+# door and nothing was holding it.
+#
+# ONE EXCEPTION, because `cite` needs it: `git show HEAD:./<path>` against a
+# file in this notebook, which is how an entry quotes a committed sibling.
+# Anything else is refused by the argv, before a process is spawned.
+_real_run = _subprocess_guard.run
+_real_popen = _subprocess_guard.Popen
+
+
+def _argv_ok(argv):
+    """Only `git show HEAD:./<path>` for a path inside this notebook."""
+    if isinstance(argv, (str, bytes)):
+        return False                      # a shell string is never reviewable
+    try:
+        parts = [str(a) for a in argv]
+    except TypeError:
+        return False
+    if parts[:2] != ["git", "show"] or len(parts) != 3:
+        return False
+    ref = parts[2]
+    if not ref.startswith("HEAD:./"):
+        return False
+    return not _outside(_pl.Path(NB_ROOT) / ref[len("HEAD:./"):])
+
+
+_DENIED = (
+    "a probe may not start a process. `subprocess`, `os.popen` and the shell "
+    "reach the whole filesystem -- `cat`, `grep`, `git show` -- which is the "
+    "boundary `open` already holds: a probe reads the AIRCRAFT, its chapters, "
+    "its references and its freeze, plus the libraries it models with. `nb`'s "
+    "own source and its git history are not among them, because the rules are "
+    "what your entry is MEASURED against and an entry written with them open "
+    "is measuring itself. Nothing you need is behind this: the targets are in "
+    "the brief, the chapter's items are in `_inputs.yml`, and both are "
+    "already in front of you.")
+
+
+def _guarded_run(argv=None, *a, **kw):
+    if not _argv_ok(argv):
+        raise PermissionError(_DENIED)
+    return _real_run(argv, *a, **kw)
+
+
+def _guarded_popen(argv=None, *a, **kw):
+    if not _argv_ok(argv):
+        raise PermissionError(_DENIED)
+    return _real_popen(argv, *a, **kw)
+
+
+_subprocess_guard.run = _guarded_run
+_subprocess_guard.Popen = _guarded_popen
+_subprocess_guard.call = _guarded_run
+_subprocess_guard.check_call = _guarded_run
+_subprocess_guard.check_output = _guarded_run
+_os_guard.popen = lambda *a, **kw: (_ for _ in ()).throw(PermissionError(_DENIED))
+_os_guard.system = lambda *a, **kw: (_ for _ in ()).throw(PermissionError(_DENIED))
 
 _bi.open = _guarded_open
 # AND IN THIS NAMESPACE. Patching `builtins` alone was not enough: IPython

@@ -1045,6 +1045,8 @@ def _execute(notebook, session, contents, run_metrics, fs, handlers,
         try:
             drive(contents, make_config(), handlers,
                   transcript=notebook.transcript_path, max_turns=left,
+                  model_path=(notebook.chapters_dir / session.chapter
+                              / "_model.py") if session.chapter else None,
                   on_turn=lambda n, r, t: on_turn(spent[0] + n, r, t),
                   on_stuck=lambda found: ask_stuck(found, "run"),
                   should_stop=lambda: runstate.stop_requested(notebook))
