@@ -19,6 +19,12 @@ photos" is usually one viewpoint twice: one such pair measured IoU 0.87, and
 another that differed in paint, framing and apparent elevation still measured
 0.82. `reference` prints the pairwise table; keep the spread.
 
+**THREE OR FOUR FRAMES, and stop.** The spread is what you are buying, and
+four well-separated angles buy all of it; a fifth that repeats an angle
+already held costs a `read_image` to choose, an overlay to inspect tinted and
+a term in every fit, and checks nothing the other four did not. If a candidate
+does not show a direction none of the others do, leave it out.
+
 So `read_image` every candidate before adding it. You are choosing ANGLES, and
 you cannot do that from a filename.
 
