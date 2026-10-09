@@ -93,12 +93,34 @@ def mismatched_masks(notebook):
     return out
 
 
+def _alpha_cut(path):
+    """
+    True when the image carries a real cut-out in its alpha channel.
+
+    WORTH SAYING ON THE TABLE because it changes what a bad mask MEANS. A
+    store PNG that arrives already masked is ground truth, and `masks.cut`
+    uses it in preference to the model -- so a poor silhouette on one of
+    these is a bug here, not a hard photograph, and chasing it as a hard
+    photograph is how twenty minutes goes missing.
+    """
+    try:
+        from PIL import Image
+        import numpy as np
+        im = Image.open(path)
+        if "A" not in im.mode:
+            return False
+        a = np.asarray(im.convert("RGBA").split()[-1])
+        return bool((a < 250).mean() > 0.02)
+    except Exception:                                       # noqa: BLE001
+        return False
+
+
 def _report_masks(notebook, assets, photos):
     """One line per asset, size check included. -> count of unusable ones."""
     from ..tools import masks
 
     tell(f"\n    {'photograph':16s} {'photo':9s} {'mask':9s} {'area':6s} "
-         f"{'rough':6s} {'noise':6s} extent")
+         f"{'rough':6s} {'noise':6s} {'cut':5s} extent")
     bad = 0
     usable = {name for name, _, _ in photos}
     for p in assets:
@@ -131,8 +153,11 @@ def _report_masks(notebook, assets, photos):
         # A boundary that collapses under 5 px of smoothing was cut by a rule
         # that could not see the subject -- see `masks.stats`.
         rough = "ROUGH" if s["noise"] > 0.08 else f"{s['noise']:.1%}"
+        # `alpha` says the cut came from the image rather than from a model.
+        src = "alpha" if _alpha_cut(p) else ""
         tell(f"    {p.stem:16s} {photo:9s} {mask:9s} {s['area_frac']:<6.4f} "
-             f"{s['roughness']:<6.2f} {rough:6s} rows {y0}-{y1} cols {x0}-{x1}")
+             f"{s['roughness']:<6.2f} {rough:6s} {src:5s} "
+             f"rows {y0}-{y1} cols {x0}-{x1}")
     return bad
 
 

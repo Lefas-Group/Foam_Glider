@@ -25,6 +25,64 @@ already held costs a `read_image` to choose, an overlay to inspect tinted and
 a term in every fit, and checks nothing the other four did not. If a candidate
 does not show a direction none of the others do, leave it out.
 
+### PREFER A STORE PNG THAT CARRIES ITS OWN ALPHA
+
+Retailers cut their product shots, so a store `.png` often arrives already
+masked — and a vendor's own cut-out is GROUND TRUTH, better than anything a
+segmentation model infers from the flattened image. `mask` uses it in
+preference to the model whenever it is there, and `reference` marks those rows
+`alpha` in the `cut` column.
+
+Measured on the FT A-10 Warthog: its store photograph is 84% transparent, and
+against that alpha the model's own mask scored IoU 0.82, taking in **21.6%
+extra area** — most of it the enclosed gap between the port tail fin, the
+tailplane and the nacelle, which is exactly the region that defines a
+twin-boom tail. The silhouette was of a different aeroplane, and nothing in
+the numbers said so.
+
+So when a store offers the same frame as a `.png` and a `.jpg`, take the
+`.png`. The JPEG has been flattened onto white and the cut-out is gone.
+
+**And read the `cut` column when a mask looks wrong.** A poor silhouette on an
+`alpha` row is a bug in `nb`, not a hard photograph — chasing it as a hard
+photograph is how twenty minutes goes missing.
+
+### REJECT THESE BEFORE YOU FETCH THEM
+
+Four frames that cost a mask and give nothing back. Measured on the FT A-10
+Warthog, whose coordinator added three photographs that were all "from front,
+above" and one of them held in somebody's hands:
+
+1. **Anything held by a person.** A salient-object model cannot know the hand
+   is not part of the aeroplane, and there is deliberately no parameter to
+   tell it — on one store photograph every model tested kept the hand. The
+   mask is then an aeroplane-plus-hand silhouette with a perfectly clean
+   boundary, so no number catches it and every pose fitted against it is
+   wrong. Same for a stand, a bench clamp, or a hand steadying a wingtip.
+2. **A video thumbnail**, unless nothing else exists. Compressed, usually
+   captioned, often with a face or a play button composited over the
+   aircraft — all of which the mask takes in.
+3. **A frame at the same angle as one you already have.** Three photographs
+   from the front and above are ONE photograph; the second and third cost a
+   mask each and tell you nothing the first did not.
+4. **A build or assembly shot** — parts on a table, a half-skinned airframe,
+   a wing panel on its own. It is not the aeroplane.
+
+**IoU WILL NOT SAVE YOU HERE, and this is the trap.** The spread table
+compares SILHOUETTES, not cameras. Those three Warthog frames scored 0.30 to
+0.48 — comfortably "distinct" — while being the same viewpoint photographed at
+three different distances with the aircraft at three different roll angles. A
+low IoU means the outlines differ; it does not mean the cameras do.
+
+So the test is the one you apply BEFORE the number exists: **say in words where
+each camera is, and keep a frame only if that sentence differs from every
+sentence you have already written.** If two of your `.txt` descriptions open the
+same way, you have one photograph.
+
+**A frame you reject is worth saying out loud.** `source` the page and record
+why — "held by hand", "same angle as X" — so the next coordinator does not
+fetch it again.
+
 So `read_image` every candidate before adding it. You are choosing ANGLES, and
 you cannot do that from a filename.
 

@@ -124,13 +124,39 @@ def cut(notebook, name, model=MODEL):
     the chamfer to chase.
     """
     np, Image, ndimage = _np()
-    from rembg import remove
 
-    sess = _session(model)
     img_path, mask_path = _paths(notebook, name)
-    photo = Image.open(img_path).convert("RGB")
-    raw = remove(photo, session=sess, only_mask=True, post_process_mask=True)
-    m = np.asarray(raw.convert("L")) > 127
+    src = Image.open(img_path)
+
+    # A VENDOR'S OWN ALPHA IS GROUND TRUTH, and beats anything a model infers
+    # from the flattened RGB. Retailers cut their product shots, so a store
+    # PNG often arrives already masked -- and this was throwing that away with
+    # `.convert("RGB")` and then guessing at what it had just discarded.
+    #
+    # Measured on the FT A-10 Warthog `port-front-above` store photograph,
+    # which is 84.5% transparent: against the alpha the model's mask scored
+    # IoU 0.82, taking in 21.6% EXTRA area -- most of it the enclosed gap
+    # between the port tail fin, the tailplane and the nacelle, which is
+    # exactly the region that defines a twin-boom tail. The silhouette it
+    # produced was of a different aeroplane.
+    #
+    # `> 128` rather than `> 0`: a soft edge is a few pixels of partial alpha
+    # and the half-covered ones belong outside, which is where the vendor's
+    # compositor put them.
+    alpha = None
+    if "A" in src.mode:
+        a = np.asarray(src.convert("RGBA").split()[-1])
+        if (a < 250).mean() > 0.02:        # a real cut-out, not a stray channel
+            alpha = a > 128
+    if alpha is not None and alpha.any():
+        m, how = alpha, "the image's own alpha channel"
+    else:
+        from rembg import remove
+        sess = _session(model)
+        raw = remove(src.convert("RGB"), session=sess, only_mask=True,
+                     post_process_mask=True)
+        m = np.asarray(raw.convert("L")) > 127
+        how = model
     if m.any():
         lab, n = ndimage.label(m)
         if n > 1:
@@ -140,7 +166,7 @@ def cut(notebook, name, model=MODEL):
     _write(Image, np, m, mask_path)
     shot = overlay(notebook, name)
     return m, (f"{name}: {m.sum() / m.size:.4f} of frame, "
-               f"{_bbox(m) or 'EMPTY'}  [{model}]"
+               f"{_bbox(m) or 'EMPTY'}  [{how}]"
                f"\n  mask    {mask_path}"
                f"\n  overlay {shot}   <- look at this")
 

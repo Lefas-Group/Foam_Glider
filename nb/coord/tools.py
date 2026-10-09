@@ -170,7 +170,10 @@ def declarations():
               "MAXIMISE ANGULAR SPREAD: each camera position pins down only "
               "what it happens to show, and shape faults survive in exactly "
               "the directions nobody photographed. Two frames from one shoot "
-              "are ONE photograph.",
+              "are ONE photograph. REFUSE a frame held in somebody's hands "
+              "-- the segmentation model keeps the hand and no number catches "
+              "it -- a video thumbnail, a build shot, or any angle you "
+              "already have.",
               {"name": dict(S, description="A short slug, e.g. `nose-on`."),
                "file": dict(S, description="The fetched file."),
                "description": dict(S, description=(
@@ -178,7 +181,9 @@ def declarations():
                    "below and ahead, port side, undercarriage visible`. The "
                    "run reads this as fact and nothing checks it, so a frame "
                    "you call `belly` that is actually from above will be "
-                   "described wrongly in committed prose."))},
+                   "described wrongly in committed prose. If this sentence "
+                   "opens the same way as one you have already written, you "
+                   "have the same viewpoint twice -- drop it."))},
               ["name", "file", "description"]),
 
         _decl("mask",
@@ -615,8 +620,21 @@ def _direction(session, text):
     return {"direction": coordinator.direction(session.notebook, text)}
 
 
+def _scaffolded(notebook):
+    """
+    True when `nb new` has actually run here.
+
+    `Notebook()` only requires a `chapters/` directory, which `nb designer`
+    creates to give the board somewhere to live before the aircraft exists.
+    `_notebook.py` is the file `new` copies in, and rule 11 holds it
+    byte-identical to the scaffold, so its presence is the one unambiguous
+    marker that a notebook is real.
+    """
+    return notebook is not None and (notebook.root / "_notebook.py").exists()
+
+
 def _needs_notebook(session):
-    if session.notebook is None:
+    if not _scaffolded(session.notebook):
         return {"error": "there is no notebook yet. Call `new` first -- and "
                          "research the aircraft before you do, because the "
                          "brief is what `new` takes and nothing overwrites it."}
@@ -639,7 +657,19 @@ def _new(session, chapter_title, defines, spec=(), assume=(), target=()):
 
     from ..cli import new as new_mod
 
-    if session.notebook is not None:
+    # SCAFFOLDED, not merely addressable. This tested `session.notebook is
+    # not None`, which was right when the only way in was `nb coordinate` on a
+    # directory that did not exist -- and wrong the moment `nb designer`
+    # arrived, because that creates `chapters/` to host the board BEFORE any
+    # aircraft exists, and `Notebook()` accepts any root with a `chapters/`.
+    #
+    # Measured on ft-warthog: the session opened with a notebook object over an
+    # empty skeleton, `new` refused with "one aircraft", the manifest was empty
+    # so there was no chapter name either, and the coordinator escalated to the
+    # user from a dead end it could not get out of. `_notebook.py` is what
+    # `nb new` actually produces (`cli/new.py::COPIED_VERBATIM`), so it is the
+    # honest test for "has this been scaffolded".
+    if session.notebook is not None and _scaffolded(session.notebook):
         return {"error": f"this session already holds "
                          f"{session.notebook.root.name}. One aircraft."}
     # THE DIRECTORY IS NOT THE MODEL'S TO CHOOSE. It was `directory`, a tool

@@ -74,6 +74,17 @@ You cannot `new` twice. Research first; the brief is not editable afterwards.
 
 def build(notebook, direction="", name=""):
     """The system instruction: doctrine, then this notebook as it stands."""
+    # A SKELETON IS NOT AN AIRCRAFT. `nb designer` creates `chapters/` so the
+    # board has somewhere to live before anything is scaffolded, and
+    # `Notebook()` accepts any root that has one -- so this read "there is a
+    # notebook" and handed the model the steady-state pages for a directory
+    # with nothing in it. `_notebook.py` is what `nb new` produces, so its
+    # absence is the honest test. Measured on ft-warthog, where the model was
+    # given the coordinate pages, found an empty manifest, called `new`, was
+    # refused, and escalated from a dead end.
+    from ..coord.tools import _scaffolded
+    if not _scaffolded(notebook):
+        notebook = None
     # SETUP OR STEADY STATE decides which pages, and `doctrine.py` owns
     # that split so `nb doctrine` hands Claude Code the same grouping.
     who = "setup" if notebook is None else "coordinate"
