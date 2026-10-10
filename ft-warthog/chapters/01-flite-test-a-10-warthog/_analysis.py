@@ -137,3 +137,128 @@ def plot_stall_polar(stall_data, axs=None):
     fig.tight_layout()
     return fig
 
+def compute_max_level_speed(airplane, mass_props, propeller_diameter=9.0*0.0254, propeller_pitch=4.5*0.0254, kv=1180.0, voltage=14.8, altitude=0.0):
+    """
+    Compute maximum level flight speed where thrust available equals level drag.
+    """
+    atmos = asb.Atmosphere(altitude=altitude)
+    rho = float(atmos.density())
+    W = float(mass_props.mass * 9.81)
+    
+    def level_drag(V):
+        alphas = np.linspace(-3.0, 8.0, 31)
+        op = asb.OperatingPoint(atmosphere=atmos, velocity=V, alpha=alphas)
+        aero = asb.AeroBuildup(airplane=airplane, op_point=op).run()
+        L = np.array(aero["L"])
+        alpha_trim = float(np.interp(W, L, alphas))
+        op_trim = asb.OperatingPoint(atmosphere=atmos, velocity=V, alpha=alpha_trim)
+        aero_trim = asb.AeroBuildup(airplane=airplane, op_point=op_trim).run()
+        return float(aero_trim["D"][0]), alpha_trim, float(aero_trim["CL"][0]), float(aero_trim["CD"][0])
+    
+    def prop_coefs(J):
+        J_c = np.clip(J, 0.0, 0.65)
+        CT = np.maximum(0.098 - 0.045 * J_c - 0.215 * J_c**2, 0.0)
+        CP = np.maximum(0.043 + 0.015 * J_c - 0.085 * J_c**2, 0.01)
+        return CT, CP
+
+    def powertrain_thrust(V):
+        def torque_diff(rpm):
+            n = rpm / 60.0
+            J = V / (n * propeller_diameter)
+            CT, CP = prop_coefs(J)
+            Q_prop = (CP / (2 * np.pi)) * rho * (n**2) * (propeller_diameter**5)
+            E = rpm / kv
+            I = np.maximum((voltage - E) / 0.08, 0.0)
+            Q_mot = np.maximum((I - 0.8) * 60 / (kv * 2 * np.pi), 0.0)
+            return Q_mot - Q_prop
+
+        sol = so.root_scalar(torque_diff, bracket=[5000, 18000], method='brentq')
+        rpm = sol.root
+        n = rpm / 60.0
+        J = V / (n * propeller_diameter)
+        CT, CP = prop_coefs(J)
+        T_total = 2 * CT * rho * (n**2) * (propeller_diameter**4)
+        I_total = 2 * np.maximum((voltage - rpm / kv) / 0.08, 0.0)
+        P_shaft = 2 * CP * rho * (n**3) * (propeller_diameter**5)
+        return T_total, rpm, I_total, P_shaft
+    
+    def res_fn(V):
+        D, _, _, _ = level_drag(V)
+        T, _, _, _ = powertrain_thrust(V)
+        return T - D
+    
+    sol = so.root_scalar(res_fn, bracket=[15.0, 38.0], method='brentq')
+    V_max = float(sol.root)
+    D_max, alpha_max, cl_max, cd_max = level_drag(V_max)
+    T_max, rpm_max, current_max, p_shaft_max = powertrain_thrust(V_max)
+    
+    V_curve = np.linspace(8.5, 33.0, 35)
+    D_curve = []
+    T_curve = []
+    alpha_curve = []
+    for v in V_curve:
+        d, a, _, _ = level_drag(v)
+        t, _, _, _ = powertrain_thrust(v)
+        D_curve.append(d)
+        T_curve.append(t)
+        alpha_curve.append(a)
+        
+    return {
+        "V_max": V_max,
+        "thrust_drag_max": D_max,
+        "alpha_max": alpha_max,
+        "cl_max": cl_max,
+        "cd_max": cd_max,
+        "rpm_max": rpm_max,
+        "current_max": current_max,
+        "p_elec_max": current_max * voltage,
+        "p_shaft_max": p_shaft_max,
+        "voltage": voltage,
+        "V_curve": V_curve,
+        "D_curve": np.array(D_curve),
+        "T_curve": np.array(T_curve),
+        "alpha_curve": np.array(alpha_curve),
+    }
+
+def plot_speed_thrust_drag(speed_data, axs=None):
+    """
+    Plot thrust available versus level drag and power required across airspeeds.
+    """
+    if axs is None:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(8.5, 3.5))
+    else:
+        fig = axs[0].get_figure()
+        ax1, ax2 = axs
+    
+    V_c = speed_data["V_curve"]
+    D_c = speed_data["D_curve"]
+    T_c = speed_data["T_curve"]
+    
+    v_max = speed_data["V_max"]
+    td_max = speed_data["thrust_drag_max"]
+    
+    # Panel 1: Thrust and Drag vs Airspeed
+    ax1.plot(V_c, T_c, "b-", lw=2, label="Thrust available $T$")
+    ax1.plot(V_c, D_c, "r-", lw=2, label="Level drag $D$")
+    ax1.plot(v_max, td_max, "ko", markersize=6, label=f"$V_{{\\max}} = {v_max:.1f}$ m/s")
+    ax1.axvline(v_max, color="k", linestyle=":", alpha=0.5)
+    ax1.set_xlabel("Airspeed $V$ [m/s]")
+    ax1.set_ylabel("Force [N]")
+    ax1.set_title("Thrust and Drag Balance")
+    ax1.grid(True, linestyle=":", alpha=0.5)
+    ax1.legend(loc="upper right", frameon=False)
+    
+    # Panel 2: Power Required
+    P_req = D_c * V_c
+    ax2.plot(V_c, P_req, "g-", lw=2, label="Thrust power $P = D \\cdot V$")
+    ax2.plot(v_max, td_max * v_max, "ro", markersize=6, label=f"$P = {td_max*v_max:.0f}$ W")
+    ax2.set_xlabel("Airspeed $V$ [m/s]")
+    ax2.set_ylabel("Power [W]")
+    ax2.set_title("Thrust Power Required")
+    ax2.grid(True, linestyle=":", alpha=0.5)
+    ax2.legend(loc="upper left", frameon=False)
+    
+    fig.tight_layout()
+    return fig
+
+
