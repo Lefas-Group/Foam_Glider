@@ -3,256 +3,235 @@
 import aerosandbox as asb
 import aerosandbox.numpy as np
 
-##### Geometry Constants
+##### Geometry parameters
 
-# Wing (published span: 1537 mm / 60.5 in)
+# Main wing (published span = 1537 mm = 1.537 m, fixed)
 wing_span = 1.537
-wing_x_le = 0.36
-wing_root_chord = 0.27
-wing_break_y = 0.23
-wing_break_x_le = 0.36
-wing_break_chord = 0.27
-wing_tip_x_le = 0.40
-wing_tip_chord = 0.14
-wing_dihedral_deg = 5.5
-wing_tip_z = (wing_span / 2 - wing_break_y) * np.sin(np.radians(wing_dihedral_deg))
+wing_x_le = 0.392176
+wing_z = -0.02
+wing_root_chord = 0.244874
+wing_break_y = 0.26
+wing_break_chord = 0.266465
+wing_break_x_le = 0.0
+wing_tip_chord = 0.16045
+wing_tip_x_le = 0.05
+wing_tip_z = 0.035
 
-# Fuselage
-fuse_nose_x = -0.092867
-fuse_cockpit_x = 0.20
-fuse_wing_x = 0.38
-fuse_mid_x = 0.65
-fuse_tail_x = 0.92
-fuse_end_x = 1.08
+# Fuselage stations and cross-sections
+fuse_x_0 = 0.00
+fuse_w_0 = 0.04
+fuse_h_0 = 0.04
+fuse_z_0 = 0.00
 
-fuse_nose_w = 0.06
-fuse_nose_h = 0.06
-fuse_cockpit_w = 0.13
-fuse_cockpit_h = 0.16
-fuse_mid_w = 0.15
-fuse_mid_h = 0.14
-fuse_tail_w = 0.10
-fuse_tail_h = 0.09
-fuse_end_w = 0.04
-fuse_end_h = 0.03
+fuse_x_1 = 0.12
+fuse_w_1 = 0.10
+fuse_h_1 = 0.09
+fuse_z_1 = 0.00
 
-# Nacelles (twin engines mounted on aft fuselage pylons)
-nacelle_x_le = 0.62
-nacelle_length = 0.23
-nacelle_radius = 0.062
-nacelle_y = 0.135
-nacelle_z = 0.105
+fuse_x_2 = 0.248
+fuse_w_2 = 0.12
+fuse_h_2 = 0.13
+fuse_z_2 = 0.02
+
+fuse_x_3 = 0.38
+fuse_w_3 = 0.13
+fuse_h_3 = 0.16
+fuse_z_3 = 0.03
+
+fuse_x_4 = 0.55
+fuse_w_4 = 0.13
+fuse_h_4 = 0.14
+fuse_z_4 = 0.02
+
+fuse_x_5 = 0.75
+fuse_w_5 = 0.11
+fuse_h_5 = 0.12
+fuse_z_5 = 0.01
+
+fuse_x_6 = 0.95
+fuse_w_6 = 0.07
+fuse_h_6 = 0.08
+fuse_z_6 = 0.01
+
+fuse_x_7 = 1.15
+fuse_w_7 = 0.03
+fuse_h_7 = 0.04
+fuse_z_7 = 0.02
 
 # Horizontal stabilizer
-hstab_span = 0.49
-hstab_x_le = 0.92
-hstab_root_chord = 0.16
-hstab_tip_chord = 0.14
-hstab_z = 0.045
+htail_x_le = 1.00
+htail_z = 0.03
+htail_span = 0.48
+htail_root_chord = 0.16
+htail_tip_chord = 0.13
+htail_tip_x_le = 1.03
 
-# Vertical stabilizers (twin fins at H-stab tips)
-vstab_x_le = 0.90
-vstab_chord = 0.16
-vstab_z_bottom = -0.03
-vstab_z_top = 0.18
+# Twin vertical fins
+vfin_y = 0.24
+vfin_z_bottom = -0.04
+vfin_span = 0.20
+vfin_root_chord = 0.17
+vfin_tip_chord = 0.13
+vfin_x_le = 0.98
+vfin_tip_x_le = 1.02
 
-# Stand-in airfoil for flat foam board
-airfoil_flat = asb.Airfoil("naca0008")
+# Nacelles
+nacelle_x_le = 0.65
+nacelle_y = 0.13
+nacelle_z = 0.08
+nacelle_length = 0.26
+nacelle_radius = 0.055
 
-##### Geometry Definition
+# Underwing pods
+pod_x_le = 0.36
+pod_y = 0.26
+pod_z = -0.04
+pod_length = 0.14
+pod_width = 0.04
+pod_height = 0.05
 
-wing = asb.Wing(
+##### Airfoils
+airfoil_wing = asb.Airfoil("naca0008")
+airfoil_tail = asb.Airfoil("naca0008")
+
+##### Wings
+
+main_wing = asb.Wing(
     name="Main Wing",
     symmetric=True,
     xsecs=[
         asb.WingXSec(
-            xyz_le=[wing_x_le, 0, 0],
+            xyz_le=[wing_x_le, 0, wing_z],
             chord=wing_root_chord,
-            airfoil=airfoil_flat,
+            airfoil=airfoil_wing,
         ),
         asb.WingXSec(
-            xyz_le=[wing_break_x_le, wing_break_y, 0],
+            xyz_le=[wing_x_le + wing_break_x_le, wing_break_y, wing_z],
             chord=wing_break_chord,
-            airfoil=airfoil_flat,
+            airfoil=airfoil_wing,
         ),
         asb.WingXSec(
-            xyz_le=[wing_tip_x_le, wing_span / 2, wing_tip_z],
+            xyz_le=[wing_x_le + wing_tip_x_le, wing_span / 2, wing_z + wing_tip_z],
             chord=wing_tip_chord,
-            airfoil=airfoil_flat,
+            airfoil=airfoil_wing,
         ),
     ],
 )
 
-hstab = asb.Wing(
+horizontal_stabilizer = asb.Wing(
     name="Horizontal Stabilizer",
     symmetric=True,
     xsecs=[
         asb.WingXSec(
-            xyz_le=[hstab_x_le, 0, hstab_z],
-            chord=hstab_root_chord,
-            airfoil=airfoil_flat,
+            xyz_le=[htail_x_le, 0, htail_z],
+            chord=htail_root_chord,
+            airfoil=airfoil_tail,
         ),
         asb.WingXSec(
-            xyz_le=[hstab_x_le + 0.01, hstab_span / 2, hstab_z],
-            chord=hstab_tip_chord,
-            airfoil=airfoil_flat,
+            xyz_le=[htail_tip_x_le, htail_span / 2, htail_z],
+            chord=htail_tip_chord,
+            airfoil=airfoil_tail,
         ),
     ],
 )
 
-vstab = asb.Wing(
-    name="Vertical Stabilizer",
-    symmetric=True,
+vertical_fin_right = asb.Wing(
+    name="Vertical Fin Right",
+    symmetric=False,
     xsecs=[
         asb.WingXSec(
-            xyz_le=[vstab_x_le + 0.03, hstab_span / 2, vstab_z_bottom],
-            chord=vstab_chord * 0.85,
-            airfoil=airfoil_flat,
+            xyz_le=[vfin_x_le, vfin_y, vfin_z_bottom],
+            chord=vfin_root_chord,
+            airfoil=airfoil_tail,
         ),
         asb.WingXSec(
-            xyz_le=[vstab_x_le, hstab_span / 2, hstab_z],
-            chord=vstab_chord,
-            airfoil=airfoil_flat,
-        ),
-        asb.WingXSec(
-            xyz_le=[vstab_x_le + 0.02, hstab_span / 2, vstab_z_top],
-            chord=vstab_chord * 0.8,
-            airfoil=airfoil_flat,
+            xyz_le=[vfin_tip_x_le, vfin_y, vfin_z_bottom + vfin_span],
+            chord=vfin_tip_chord,
+            airfoil=airfoil_tail,
         ),
     ],
 )
 
-pylon = asb.Wing(
-    name="Nacelle Pylons",
-    symmetric=True,
+vertical_fin_left = asb.Wing(
+    name="Vertical Fin Left",
+    symmetric=False,
     xsecs=[
         asb.WingXSec(
-            xyz_le=[nacelle_x_le + 0.02, fuse_mid_w / 2, 0.02],
-            chord=nacelle_length * 0.7,
-            airfoil=airfoil_flat,
+            xyz_le=[vfin_x_le, -vfin_y, vfin_z_bottom],
+            chord=vfin_root_chord,
+            airfoil=airfoil_tail,
         ),
         asb.WingXSec(
-            xyz_le=[nacelle_x_le + 0.02, nacelle_y, nacelle_z],
-            chord=nacelle_length * 0.7,
-            airfoil=airfoil_flat,
+            xyz_le=[vfin_tip_x_le, -vfin_y, vfin_z_bottom + vfin_span],
+            chord=vfin_tip_chord,
+            airfoil=airfoil_tail,
         ),
     ],
 )
 
-fuse_shape = 4  # rounded rectangular box for folded foam board
+##### Fuselages
 
 fuselage = asb.Fuselage(
     name="Fuselage",
     xsecs=[
-        asb.FuselageXSec(
-            xyz_c=[fuse_nose_x, 0, 0],
-            width=fuse_nose_w,
-            height=fuse_nose_h,
-            shape=fuse_shape,
-        ),
-        asb.FuselageXSec(
-            xyz_c=[fuse_cockpit_x, 0, 0.03],
-            width=fuse_cockpit_w,
-            height=fuse_cockpit_h,
-            shape=fuse_shape,
-        ),
-        asb.FuselageXSec(
-            xyz_c=[fuse_wing_x, 0, 0.01],
-            width=fuse_mid_w,
-            height=fuse_mid_h,
-            shape=fuse_shape,
-        ),
-        asb.FuselageXSec(
-            xyz_c=[fuse_mid_x, 0, 0.01],
-            width=fuse_mid_w,
-            height=fuse_mid_h,
-            shape=fuse_shape,
-        ),
-        asb.FuselageXSec(
-            xyz_c=[fuse_tail_x, 0, 0.02],
-            width=fuse_tail_w,
-            height=fuse_tail_h,
-            shape=fuse_shape,
-        ),
-        asb.FuselageXSec(
-            xyz_c=[fuse_end_x, 0, 0.03],
-            width=fuse_end_w,
-            height=fuse_end_h,
-            shape=fuse_shape,
-        ),
-    ],
-)
-
-nacelle_left = asb.Fuselage(
-    name="Nacelle Left",
-    xsecs=[
-        asb.FuselageXSec(
-            xyz_c=[nacelle_x_le, -nacelle_y, nacelle_z],
-            radius=nacelle_radius * 0.95,
-        ),
-        asb.FuselageXSec(
-            xyz_c=[nacelle_x_le + nacelle_length * 0.4, -nacelle_y, nacelle_z],
-            radius=nacelle_radius,
-        ),
-        asb.FuselageXSec(
-            xyz_c=[nacelle_x_le + nacelle_length, -nacelle_y, nacelle_z],
-            radius=nacelle_radius * 0.85,
-        ),
+        asb.FuselageXSec(xyz_c=[fuse_x_0, 0, fuse_z_0], width=fuse_w_0, height=fuse_h_0, shape=4),
+        asb.FuselageXSec(xyz_c=[fuse_x_1, 0, fuse_z_1], width=fuse_w_1, height=fuse_h_1, shape=4),
+        asb.FuselageXSec(xyz_c=[fuse_x_2, 0, fuse_z_2], width=fuse_w_2, height=fuse_h_2, shape=4),
+        asb.FuselageXSec(xyz_c=[fuse_x_3, 0, fuse_z_3], width=fuse_w_3, height=fuse_h_3, shape=4),
+        asb.FuselageXSec(xyz_c=[fuse_x_4, 0, fuse_z_4], width=fuse_w_4, height=fuse_h_4, shape=4),
+        asb.FuselageXSec(xyz_c=[fuse_x_5, 0, fuse_z_5], width=fuse_w_5, height=fuse_h_5, shape=4),
+        asb.FuselageXSec(xyz_c=[fuse_x_6, 0, fuse_z_6], width=fuse_w_6, height=fuse_h_6, shape=4),
+        asb.FuselageXSec(xyz_c=[fuse_x_7, 0, fuse_z_7], width=fuse_w_7, height=fuse_h_7, shape=4),
     ],
 )
 
 nacelle_right = asb.Fuselage(
     name="Nacelle Right",
     xsecs=[
-        asb.FuselageXSec(
-            xyz_c=[nacelle_x_le, nacelle_y, nacelle_z],
-            radius=nacelle_radius * 0.95,
-        ),
-        asb.FuselageXSec(
-            xyz_c=[nacelle_x_le + nacelle_length * 0.4, nacelle_y, nacelle_z],
-            radius=nacelle_radius,
-        ),
-        asb.FuselageXSec(
-            xyz_c=[nacelle_x_le + nacelle_length, nacelle_y, nacelle_z],
-            radius=nacelle_radius * 0.85,
-        ),
+        asb.FuselageXSec(xyz_c=[nacelle_x_le, nacelle_y, nacelle_z], radius=nacelle_radius),
+        asb.FuselageXSec(xyz_c=[nacelle_x_le + nacelle_length, nacelle_y, nacelle_z], radius=nacelle_radius),
     ],
 )
 
-##### Mass Properties
+nacelle_left = asb.Fuselage(
+    name="Nacelle Left",
+    xsecs=[
+        asb.FuselageXSec(xyz_c=[nacelle_x_le, -nacelle_y, nacelle_z], radius=nacelle_radius),
+        asb.FuselageXSec(xyz_c=[nacelle_x_le + nacelle_length, -nacelle_y, nacelle_z], radius=nacelle_radius),
+    ],
+)
 
-foam_areal_density = 0.380  # kg/m^2 (Maker Foam ~300 g/m^2 plus glue, spars, tape)
+pod_right = asb.Fuselage(
+    name="Pod Right",
+    xsecs=[
+        asb.FuselageXSec(xyz_c=[pod_x_le, pod_y, pod_z], width=pod_width, height=pod_height, shape=4),
+        asb.FuselageXSec(xyz_c=[pod_x_le + pod_length, pod_y, pod_z], width=pod_width, height=pod_height, shape=4),
+    ],
+)
 
-m_wing = wing.area("wetted") * foam_areal_density
-m_fuse = fuselage.area_wetted() * foam_areal_density
-m_hstab = hstab.area("wetted") * foam_areal_density
-m_vstab = vstab.area("wetted") * foam_areal_density
-m_nacelles = (nacelle_left.area_wetted() + nacelle_right.area_wetted()) * foam_areal_density
+pod_left = asb.Fuselage(
+    name="Pod Left",
+    xsecs=[
+        asb.FuselageXSec(xyz_c=[pod_x_le, -pod_y, pod_z], width=pod_width, height=pod_height, shape=4),
+        asb.FuselageXSec(xyz_c=[pod_x_le + pod_length, -pod_y, pod_z], width=pod_width, height=pod_height, shape=4),
+    ],
+)
 
-m_motors = 0.140  # 2x 70 g Power Pack C motors
-m_escs = 0.060    # 2x 30 g ESCs
-m_servos = 0.036  # 4x 9 g micro servos
-m_rx = 0.010      # 6-ch receiver
-m_battery = 0.400 # 4S 3300 mAh LiPo (or twin 3S 2200 mAh)
-
-battery_x = 0.051 # forward nose battery bay station
-
-mass_props = sum([
-    asb.MassProperties(mass=m_wing, x_cg=wing.aerodynamic_center(chord_fraction=0.45)[0], z_cg=0.01),
-    asb.MassProperties(mass=m_fuse, x_cg=fuselage.x_centroid_projected(), z_cg=0.02),
-    asb.MassProperties(mass=m_hstab, x_cg=hstab.aerodynamic_center(chord_fraction=0.45)[0], z_cg=hstab_z),
-    asb.MassProperties(mass=m_vstab, x_cg=vstab.aerodynamic_center(chord_fraction=0.45)[0], z_cg=hstab_z),
-    asb.MassProperties(mass=m_nacelles, x_cg=nacelle_left.x_centroid_projected(), z_cg=nacelle_z),
-    asb.MassProperties(mass=m_motors, x_cg=nacelle_x_le + 0.02, z_cg=nacelle_z),
-    asb.MassProperties(mass=m_escs, x_cg=nacelle_x_le, z_cg=nacelle_z),
-    asb.MassProperties(mass=m_servos, x_cg=0.60, z_cg=0.02),
-    asb.MassProperties(mass=m_rx, x_cg=0.25, z_cg=0.02),
-    asb.MassProperties(mass=m_battery, x_cg=battery_x, z_cg=0.01),
-])
+##### Airplane
 
 airplane = asb.Airplane(
-    name="Flite Test A-10 Warthog",
-    xyz_ref=[mass_props.x_cg, 0, mass_props.z_cg],
-    wings=[wing, hstab, vstab, pylon],
-    fuselages=[fuselage, nacelle_left, nacelle_right],
+    name="FT A-10 Warthog",
+    wings=[
+        main_wing,
+        horizontal_stabilizer,
+        vertical_fin_right,
+        vertical_fin_left,
+    ],
+    fuselages=[
+        fuselage,
+        nacelle_right,
+        nacelle_left,
+        pod_right,
+        pod_left,
+    ],
 )

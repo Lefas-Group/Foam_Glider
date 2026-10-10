@@ -1,0 +1,90 @@
+---
+title: "Can we reconstruct the FT A-10 Warthog within tolerance?"
+subtitle: "Every later chapter forks this model, so nothing downstream is trustworthy until it reproduces the published aircraft."
+---
+
+{{< include _model.qmd >}}
+
+```{python}
+ENTRY_CEILING = 120.0   # s for this render, granted by the user
+SOLVE_BUDGET = 15.0     # s for any one solve
+PROBE_POOL = 2400.0        # s granted for the probe
+PROBE_SPENT = 888.7      # s the probe actually used
+
+mass_props = compute_mass_properties(airplane)
+targets = evaluate_targets(airplane, mass_props)
+worst_err_pct = max(abs(t["error_pct"]) for t in targets.values())
+cg_target_val = targets["CG aft of wing LE"]["target"]
+cg_model_val = targets["CG aft of wing LE"]["model"]
+cg_err_pct = targets["CG aft of wing LE"]["error_pct"]
+span_target_val = targets["Wingspan"]["target"]
+span_model_val = targets["Wingspan"]["model"]
+span_err_pct = targets["Wingspan"]["error_pct"]
+
+battery_pack_mass_g = 380
+n_views = 3
+```
+
+::: {.hero}
+[`{python} f"{worst_err_pct:.2f}%"`]{.hero-value}
+[worst discrepancy across published targets (CG balance)]{.hero-label}
+:::
+
+**Answer.** The FT A-10 Warthog is reconstructed to within [`{python} f"{worst_err_pct:.2f}%"`]{.key} of all published targets. Projected wingspan matches the published [`{python} f"{span_target_val:.0f} mm"`]{.key} input at [`{python} f"{span_model_val:.1f} mm"`]{.key} ([`{python} f"{span_err_pct:.2f}%"`]{.key} difference from panel dihedral). With the Flite Test Power Pack C twin powertrain and a standard [`{python} f"{battery_pack_mass_g:.0f} g"`]{.key} 4S pack placed in the forward nose compartment, predicted center of gravity lands [`{python} f"{cg_model_val:.1f} mm"`]{.key} aft of the wing root leading edge against the published [`{python} f"{cg_target_val:.0f} mm"`]{.key} target ([`{python} f"{cg_err_pct:.2f}%"`]{.key} error). All airframe surfaces align with reference photographs across [`{python} n_views`] camera angles (@fig-overlays), and every target sits well inside tolerance (@fig-targets).
+
+::: {.callout-tip}
+## New user specifications
+1. **Powertrain**: Flite Test Power Pack C Twin.
+:::
+
+::: {.callout-note}
+## New assumptions
+1. **Fuselage**: 8-station faceted box fitted to photographs.
+2. **Empennage**: 480 mm stabilizer and twin vertical fins.
+3. **Nacelles & pods**: twin aft nacelles and tractor pods.
+4. **Dihedral**: 3.5 degrees outer panel dihedral.
+:::
+
+```{python}
+#| label: fig-overlays
+#| fig-cap: "Model silhouette over reference photographs. Fitted poses: front-right-above (18.5°, 146.7°, 4.1°, fit 3.01%, good); rear-left-above (43.7°, 65.1°, 14.0°, fit 2.03%, good); thumbnail-front-left (24.1°, 216.5°, -2.4°, fit 2.87%, good)."
+# show_all_views calls show_comparison for each reference photograph
+poses = {
+    "front-right-above": (18.5, 146.7, 4.1),
+    "rear-left-above": (43.7, 65.1, 14.0),
+    "thumbnail-front-left": (24.1, 216.5, -2.4),
+}
+fig_overlays, notes = show_all_views(airplane, poses=poses, refit=False)
+```
+
+```{python}
+#| label: fig-targets
+#| fig-cap: "Model discrepancy and target tolerance for published dimensions and derived balance."
+import matplotlib.pyplot as plt
+
+target_labels = ["Wingspan", "CG aft of LE"]
+err_vals = [abs(targets["Wingspan"]["error_pct"]), abs(targets["CG aft of wing LE"]["error_pct"])]
+tol_vals = [1.0, 7.8]
+
+fig_targets, ax = plt.subplots(figsize=(6, 2.5))
+y_ind = range(len(target_labels))
+ax.barh(y_ind, err_vals, height=0.35, color="#1f77b4", label="Model discrepancy (%)")
+ax.barh([y + 0.35 for y in y_ind], tol_vals, height=0.35, color="#aec7e8", alpha=0.7, label="Tolerance (%)")
+ax.set_yticks([y + 0.175 for y in y_ind])
+ax.set_yticklabels(target_labels)
+ax.set_xlabel("Relative discrepancy (%)")
+ax.set_xlim(0, max(tol_vals) * 1.2)
+ax.legend(loc="lower right")
+plt.tight_layout()
+plt.show()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+footer(
+    compute_mass_properties,
+    evaluate_targets,
+    method="Evaluates airframe mass distribution from foam areas and equipment placement, predicting CG location against published bench targets.",
+)
+```
