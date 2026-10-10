@@ -191,6 +191,18 @@ def native_declarations():
                "name": dict(S, description="PNG filename; omit for the first")},
               ["chapter", "stem"]),
 
+        _decl("read_reference_image",
+              "A photograph of the REAL aircraft, as an image. THE ONLY WAY "
+              "TO SEE WHAT YOU ARE RECONSTRUCTING -- every other picture "
+              "tool shows you something you made. Call it FIRST, before "
+              "_model.py exists, and read the COMPONENT LIST off it: what "
+              "parts does this aircraft have, and roughly where. Proportions "
+              "and layout only -- never a dimension; the overlay and "
+              "fit_geometry supply those later. One look is enough.",
+              {"name": dict(S, description="Filename or stem; omit for the "
+                                           "first")},
+              []),
+
         _decl("read_probe_figure",
               "An image YOU just produced, from a probe -- a stitched sheet, "
               "a crop, a three-view. Save it with `fig.savefig(\"x.png\")` "
@@ -328,6 +340,8 @@ def build(session, fs):
         "read_reference": lambda name: refs.read_reference(name),
         "read_figure": lambda chapter, stem, name="": figures.read_figure(
             nb, chapter, stem, name),
+        "read_reference_image": lambda name="": figures.read_reference_image(
+            nb, name),
         "read_probe_figure": lambda name="": figures.read_probe_figure(
             nb, name),
         "ask_specified": lambda name, why, kind="specified", options="",

@@ -3,9 +3,14 @@
 library_explorer.py
 The installed AeroSandbox, exposed for discovery.
 
-Vendored from the design-notebook skill's MCP server, with the FastMCP
-transport stripped: nb imports these functions in-process, so the tool
-decorators and stdio `main()` bought nothing but an `mcp` dependency.
+THE LOGIC, AND ITS ONLY COPY. Two callers sit on top of it: `tools/api.py`
+imports these functions in-process for the run agent, and
+`library_explorer_server.py` beside this file serves the same five over stdio
+to a client that speaks MCP. The server was the original -- this began as a
+vendored copy of it from the design-notebook skill, with the FastMCP transport
+stripped because `nb` only ever called in-process. That skill is gone, the copy
+is the source, and the server is a twelve-line wrapper that restates no
+signature.
 
 STRIPPING THE TRANSPORT ORPHANED TWO OF THEM. `api.py` wired `search`,
 `get_docstring` and `get_methods`, and `list_classes`/`list_functions` -- the
@@ -13,7 +18,7 @@ BROWSE half -- were simply never given a tool, so 46 classes and 291 functions
 across 35 areas sat unreachable while the agent was being told to ask what
 already exists. They answer the question you have BEFORE you know what to
 search for, which is the one that precedes reimplementing `Wing.area()`.
-`api_list` exposes both now.
+`api_list` exposes both now, and so does the server.
 
 The question this exists to answer is "does aerosandbox already have this?",
 asked before any geometry or aero code gets written. It is answered by walking

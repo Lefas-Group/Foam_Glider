@@ -681,9 +681,9 @@ def targets_unreported(notebook, entry_path, targets):
 #                                                      the stab is the cause"
 #     after it is accepted   a miss is a REGRESSION -- something drifted
 #
-# `nb.corpus` already solves exactly this shape for lint: it records the
-# expected count per notebook and fails when one moves, requiring the
-# baseline to be updated in the same commit that justifies it. So: no
+# The retired frozen-corpus sweep solved exactly this shape for lint: it
+# recorded the expected count per notebook and failed when one moved, requiring
+# the baseline to be updated in the same commit that justifies it. So: no
 # baseline means a miss is a finding; a baseline means a WORSENING is a
 # regression.
 #
@@ -739,7 +739,7 @@ def targets_drifted(notebook, errors):
         return ""
     return ("target(s) worse than the recorded baseline: " + "; ".join(worse)
             + f". Either the change is wrong, or {BASELINE} needs updating in "
-              "the same commit that justifies it -- the way nb.corpus works.")
+              "the same commit that justifies it.")
 
 
 #: What DRAWS a comparison against a photograph, as opposed to a drawing of

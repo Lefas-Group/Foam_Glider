@@ -38,7 +38,7 @@ export GEMINI_API_KEY=...        # aistudio.google.com/apikey
 Then check the whole lot at once, which is faster than finding out mid-run:
 
 ```bash
-uv run --group nb python -m nb.preflight mustang-mkr2
+uv run --group nb python -m nb.preflight <notebook>
 ```
 
 It reports every missing binary, an unset key, and anything wrong with the
@@ -66,12 +66,12 @@ Several runs go at once, one per chapter. See
 ## `nb open` — where you sit
 
 ```bash
-uv run --group nb python -m nb open RADICAL-GLIDER
+uv run --group nb python -m nb open <notebook>
 ```
 
 The board opens in its own window and the site opens in a browser; the page
 holds a connection, so one tab stays current for a whole programme and a
-committed entry brings the tab to it. `nb board RADICAL-GLIDER` is the board
+committed entry brings the tab to it. `nb board <notebook>` is the board
 alone, on the terminal you are already in.
 
 The programme as a conversation: your direction, then every question an agent
@@ -85,11 +85,11 @@ reaches them from any terminal.
 ## `nb` — one question, one entry
 
 ```bash
-uv run --group nb python -m nb ask glider-notebook \
-  --chapter 04-thinner-foam "How much does 3 mm foam cost in sink rate?"
+uv run --group nb python -m nb ask <notebook> \
+  --chapter NN-name "How much does 3 mm foam cost in sink rate?"
 ```
 
-Probes the chapter's model, writes the entry, lints it against a 43-rule
+Probes the chapter's model, writes the entry, lints it against a 49-rule
 contract, renders it, and commits — about five minutes. It stops only for a new
 chapter or a refactor, both of which later entries would be built on.
 
@@ -107,8 +107,8 @@ The brief carries those as `--target` rows with a tolerance each, and one
 command converges the vehicle onto them:
 
 ```bash
-uv run --group nb python -m nb reconstruct mustang-mkr2 \
-  --chapter 01-airframe-reconstruction
+uv run --group nb python -m nb reconstruct <notebook> \
+  --chapter NN-name
 ```
 
 One entry comes out, reporting every target against its tolerance with the
@@ -122,44 +122,18 @@ dimension you do not give it, it supplies from memory, and in the finished
 entry that looks exactly like one you measured. See `nb/README.md` for what
 happened the one time nobody did this.
 
-## `tools/` — the pose-fitting bench
-
-Hand-driven, outside `nb`, and not part of the agent loop. The question it
-answers is *how wrong is the reconstruction*, from a photograph rather than from
-a spec sheet.
-
-`tools/pose_fit.py` is the reusable half: fit a camera pose to NAMED landmark
-correspondences — "that is the port wingtip, about there" — and each landmark's
-residual afterwards is model error in pixels rather than pose and model error
-mixed together, which is all a silhouette-area overlay can tell you. It knows
-nothing about any particular aircraft; `landmarks()` walks whatever wings and
-fuselages an `asb.Airplane` has. The rest of the directory is one-shot scripts
-against specific photographs, with their paths hard-coded, kept for the record.
-
 ## The notebooks
 
 ```bash
-uv run quarto preview mustang-mkr2 --port 4321
+uv run quarto preview <notebook> --port 4321
 ```
 
 Each `_freeze/` is committed, so a fresh clone renders without re-solving
 anything.
 
-- **`mustang-mkr2`** — live, and where the work is. FT Mighty Mini Mustang
-  MKR2, reconstructed from the plan to published tolerance.
-- **`RADICAL-GLIDER`** — the FliteTest X-Wing in flat-plate foam. Seven
-  chapters, the longest chain here.
-- **`glider-notebook`** — a 300 mm-span foam glider, six chapters.
-- **`optimised-glider-notebook`**, **`aircraft-notebook`** — frozen. Written by
-  the older skill, kept as the regression corpus `nb` calibrates its lint rules
-  against, so their contents are deliberately not updated.
-- **`discus-2c-notebook`** — rendered output only. The source was not kept; the
-  site is in the repo because the pages are still worth reading.
-
-## `design-notebook` — superseded
-
-The first attempt: a skill that had Claude write the entries itself. `nb` does
-that job now, and does it the same way for every run. The skill is still in
-`.claude/skills/design-notebook/` because the two frozen notebooks were written
-by it — but nothing in `nb` loads it or reads from it. The vendored copies it
-used to depend on are gone; `nb/contract/` is the only lint there is.
+**Every top-level directory with a `chapters/` is a notebook**, and that is the
+whole of the convention — there is no register to keep in step. Each one's
+`index.qmd` is its front page: the brief it is held to, and the diagram of how
+its chapters fork one another. `_inputs.yml` beside it is the brief itself,
+written by a person, and the fastest way to see what an aircraft is being asked
+to be. Notebooks come and go as programmes finish, so they are not listed here.

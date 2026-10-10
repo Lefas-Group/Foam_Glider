@@ -278,6 +278,50 @@ def _example_problems():
     return out
 
 
+def _import_problems():
+    """
+    Every module in `nb` imports. Two lines, and it catches what nothing else
+    does.
+
+    MOVED HERE FROM `nb.corpus`, which was deleted when the lint-calibration
+    corpus it was built around stopped existing: two of its three frozen
+    notebooks are gone and the rules those counts calibrated are settled. The
+    sweep was the one part of that file with nothing to do with notebooks or
+    rules, and it earns its place on a measurement -- a preflight run imports
+    26 of the 81 modules here, so 55 were covered by no check at all,
+    including the whole of `nb.coord`, `process/mailbox.py` and `cli/watch.py`.
+    A syntax error in any of them surfaced only when somebody ran that command
+    by hand. It happened twice in one session: a heredoc edit ran off the end
+    of a string literal in `new.py` and was found several commits later.
+
+    With `tests/` gone this is the only automated proof that `nb`'s own code
+    still loads.
+    """
+    import importlib
+    import pkgutil
+
+    out = []
+    for mod in pkgutil.walk_packages([str(NB)], "nb."):
+        # NOT A MODULE, despite living here. `nb.tools.probe_init` is the
+        # source text `kernel.py` sends as a probe kernel's first cell: it
+        # execs the chapter into whatever namespace it lands in and reads
+        # $NB_ROOT to know which one. Importing it runs that at import time,
+        # in a process where neither is true.
+        #
+        # It is a real file rather than a string literal in `kernel.py` so that
+        # it is linted and syntax-checked like everything else -- which this
+        # loop would otherwise be the one thing to refuse. Skipped by name
+        # because the alternative, a try/except around the env read, would make
+        # a kernel that never loaded its chapter look healthy.
+        if mod.name == "nb.tools.probe_init":
+            continue
+        try:
+            importlib.import_module(mod.name)
+        except Exception as e:                       # noqa: BLE001 -- report all
+            out.append(f"import failed: {mod.name}: {type(e).__name__}: {e}")
+    return out
+
+
 def check(root):
     """Return a list of failures. Empty means go."""
     notebook = Notebook(root)
@@ -285,6 +329,12 @@ def check(root):
     bad.extend(_doctrine_problems())
     bad.extend(_usage_problems())
     bad.extend(_example_problems())
+    # ONE MORE ENTRY IN `bad`, not an early return. `corpus` reported broken
+    # imports first and bailed before anything else ran, on the grounds that
+    # nothing downstream could be trusted. Here every other check is already
+    # independent of it -- they read text off disk -- so a failed import reads
+    # like any other failure, and a reader gets the whole list in one pass.
+    bad.extend(_import_problems())
 
     # Rule 11, run through the contract's own check rather than reimplemented,
     # so the two can never disagree about what "byte-identical" means. It covers

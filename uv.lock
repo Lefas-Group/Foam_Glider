@@ -570,9 +570,6 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
-mcp = [
-    { name = "mcp" },
-]
 nb = [
     { name = "cma" },
     { name = "google-genai" },
@@ -591,7 +588,6 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-mcp = [{ name = "mcp", specifier = ">=1.2,<2" }]
 nb = [
     { name = "cma", specifier = ">=4" },
     { name = "google-genai", specifier = ">=2.23" },

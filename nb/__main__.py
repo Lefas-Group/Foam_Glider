@@ -55,6 +55,8 @@
     nb stop  <notebook> [run] ["why"]        ask a run to stop, and record it
     nb watch <notebook> [run]                follow the detail, live
              [--all] [--until-done]           …from the top; …until it ends
+    nb sync  [notebook ...] [--force]        push nb/scaffold into the
+                                             notebooks that track it (rule 11)
     nb clean <notebook> [run] [--keep N]     drop spent run directories
              [--yes]                          …a named run, or all but the last N
 
@@ -325,6 +327,10 @@ def main(argv):
             return 2
         from .cli.stop import main as stop
         return stop(rest)
+
+    if cmd == "sync":
+        from .cli.sync import main as sync
+        return sync(rest)
 
     if cmd == "clean":
         if not rest:

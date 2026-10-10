@@ -1496,12 +1496,16 @@ def _component_residuals(airplane, mask, params, centre, work=220):
     off an overlay is the step that does not happen, and the run then does not
     call the fitter at all.
 
-    SUMMED, not averaged, which is where this differs from `fit_geometry`'s
-    own `_score(per_part=True)`. That one compares a component against
-    ITSELF before and after, so a per-pixel mean is the right statistic.
-    Here one total is being apportioned, so a component's share has to scale
-    with how much outline it owns -- averaging makes a wingtip rail with
-    twenty bad pixels rank beside a fuselage with two thousand.
+    SUMMED, not averaged. One total is being apportioned, so a component's
+    share has to scale with how much outline it owns -- averaging makes a
+    wingtip rail with twenty bad pixels rank beside a fuselage with two
+    thousand.
+
+    THE ONLY PER-COMPONENT NUMBER IN THE FILE. `fit_geometry` used to build
+    a second one from a `per_part=True` branch of its own `_score`; nothing
+    ever read it, and it carried the own-edge bug this function had until
+    2026-10-10. It is gone, so there is one answer to "which component is
+    wrong" and it is this one.
 
     MODEL-TO-PHOTO ONLY. The symmetric cost `_fit_pose` minimises also runs
     photo-to-model, which cannot be attributed: a stretch of photograph
@@ -1942,7 +1946,7 @@ def compare_to_photo(airplane, name, pose=None, fill=0.22, refit=None):
     for i in _depth_order(parts, params, centre):
         m = _raster(parts[i][0], parts[i][1], params, (W, H), centre)
         col = _np.array(_PART_COLOURS[i % len(_PART_COLOURS)], float)
-        vis, hid = m & ~covered, m & covered
+        vis = m & ~covered
         if vis.any():
             out[vis] = (1 - fill)*out[vis] + fill*col
         edge = _nd.binary_dilation(m & ~_nd.binary_erosion(m), _np.ones((2, 2)))
@@ -2155,37 +2159,7 @@ def show_all_views(airplane, poses=None, fill=0.22, refit=None, width=5.0):
     return fig, notes
 
 
-def with_control_surface(airplane, wing_name, name, deflection_deg):
-    """
-    A copy of `airplane` with a control surface on one wing. -> Airplane
-
-    USE THIS INSTEAD OF REBUILDING `asb.Airplane`. Deflecting a surface
-    tempts you to reassemble the aeroplane, and reassembling it means
-    restating every component -- at which point the tailplane's chords and
-    stations get retyped as literals in `_analysis.py` and quietly stop
-    tracking `_model.py`. That happened here: an entry's trim analysis ran on
-    a hand-copied stabiliser, so any correction to the real one would never
-    have reached it.
-
-    This never names a dimension. Every component, including any added
-    later, comes along untouched, and the source airplane is not modified.
-    """
-    import copy as _copy
-    out = _copy.deepcopy(airplane)
-    cs = asb.ControlSurface(name=name, deflection=deflection_deg)
-    hit = False
-    for w in out.wings:
-        if w.name == wing_name:
-            for x in w.xsecs:
-                x.control_surfaces = [cs]
-            hit = True
-    if not hit:
-        have = ", ".join(w.name for w in out.wings)
-        raise KeyError(f"no wing named {wing_name!r}; have: {have}")
-    return out
-
-
-def completeness(airplane, name, pose=None):
+def completeness(airplane, name, pose=None, refit=None):
     """
     What is in the photograph that no component covers? -> (frac, note)
 
@@ -2229,9 +2203,21 @@ def completeness(airplane, name, pose=None):
         30 deg out in azimuth      7.21%       33.4%
         mirrored, from below       6.89%       44.0%
 
-    So this refuses to report when the pose is DOUBTFUL. Pass `pose=` to
-    reuse a pose you have already found with `compare_to_photo`, which is
-    cheaper than fitting again and cannot land somewhere different.
+    So this refuses to report when the pose is DOUBTFUL.
+
+    PASS `pose=` AND `refit=False` to reuse a camera `compare_to_photo` has
+    already converged on. `refit` means exactly what it means there -- one
+    rule, not two -- so `refit=False` pins the angles and finds only scale,
+    translation and distance, and the reading costs a few seconds instead of
+    tens.
+
+    THE DOCSTRING USED TO PROMISE THAT FOR `pose=` ALONE, and was wrong
+    twice over: "cheaper than fitting again and cannot land somewhere
+    different". A bare `pose=` still runs the full search, merely narrowed
+    to +/-25 deg around what you passed -- so it is only somewhat cheaper,
+    and it can and does land up to 25 deg away in every angle. A reading
+    taken at a camera 25 deg from the one you looked at is a reading of a
+    different picture. `refit=False` is what makes the old promise true.
     """
     import numpy as _np
     from scipy import ndimage as _nd
@@ -2252,7 +2238,16 @@ def completeness(airplane, name, pose=None):
     if warm is None and _IN_PROBE:
         warm = _pose_remembered(name, airplane)
 
-    params, resid, centre, railed = _fit_pose(cheap, mask, pose=warm)
+    # SAME RULE AS `compare_to_photo`: pin at render, fit in a probe, unless
+    # the caller said which. A reading is taken AT a camera; this is the one
+    # place in the file where that camera is almost always borrowed from an
+    # overlay the caller just looked at, which is exactly when pinning is
+    # both cheapest and most honest.
+    pin = (not _IN_PROBE) if refit is None else (not refit)
+    pin = bool(pin) and warm is not None
+
+    params, resid, centre, railed = _fit_pose(cheap, mask, pose=warm,
+                                              pinned=pin)
     scale_px = float(_np.sqrt(mask.sum()))
     pose_pct = 100.0*resid/scale_px
 
@@ -2619,12 +2614,12 @@ def _fit_residual_pct(airplane, name, pose):
 class _FitResult:
     """What `fit_geometry` returns: values the agent reads, evidence it acts on."""
     def __init__(self, free, values, spread, verdict, before, after,
-                 per_component, railed, seconds, seeds, model_path, start=None,
+                 railed, seconds, seeds, model_path, start=None,
                  cut_short=0, short_by=()):
         self.free, self.values, self.spread = free, values, spread
         self.start = start or {}
         self.verdict, self.before, self.after = verdict, before, after
-        self.per_component, self.railed = per_component, railed
+        self.railed = railed
         self.seconds, self.seeds, self._model_path = seconds, seeds, model_path
         # How many seeds ran out of probe time instead of converging. Reported
         # because a fit that was cut short is EVIDENCE OF LESS than one that
@@ -2823,8 +2818,7 @@ class _FitResult:
                  + ", ".join(skipped) if skipped else ""))
 
 
-def fit_geometry(free, reliability="normal", views=None, poses=None,
-                 _chapter=None):
+def fit_geometry(free, views=None, poses=None, _chapter=None):
     """
     Fit named `_model.py` constants to every photograph at once. -> _FitResult
 
@@ -2850,10 +2844,25 @@ def fit_geometry(free, reliability="normal", views=None, poses=None,
                   "belly":  (36.0, 118.2, 19.7)})
 
     WHAT IT COSTS, because a call nobody can price is a call nobody makes.
-    `reliability` buys seeds -- `quick` 2, `normal` 3, `careful` 5 -- and each
-    seed re-fits the geometry against EVERY view, so cost goes as seeds x
-    views x free parameters. Budget a probe accordingly, and read `.seconds`
-    off the result: it records what the run actually took.
+    THREE SEEDS, ALWAYS, and that is not a knob. Each seed re-fits the
+    geometry against EVERY view, so cost goes as 3 x views x free
+    parameters: budget a probe accordingly and read `.seconds` off the
+    result, which records what the run actually took.
+
+    There used to be a `reliability` argument buying 2, 3 or 5 seeds.
+    Measured across every run on disk: `quick` (2) three times, `normal`
+    three times by default, `careful` (5) NEVER. A caller under budget
+    pressure picks the cheapest, and the cheapest feeds the one check that
+    says whether a fitted value is real -- the cross-seed spread against
+    `SPREAD_LIMIT` -- the smallest sample it can be computed from. A knob
+    whose cheap setting quietly weakens the verdict is a knob that only ever
+    gets turned down.
+
+    Cost was the real reason it was reached for, and cost is already handled
+    better elsewhere: the wall-clock slice below bounds the whole fit and
+    returns the best found rather than being killed, and `cut_short` says
+    how many seeds ran out of time instead of converging. Those report the
+    truth; two seeds just hid it.
 
     `poses` SEEDS THE CAMERA, one entry per view, `(elev, azim)` or
     `(elev, azim, roll)` -- the three numbers `compare_to_photo` prints in its
@@ -2889,7 +2898,7 @@ def fit_geometry(free, reliability="normal", views=None, poses=None,
     from scipy import ndimage as _nd
     from PIL import Image as _Image
     t0 = _time.time()
-    seeds = {"quick": 2, "normal": 3, "careful": 5}[reliability]
+    seeds = 3
 
     root = _pathlib.Path(_os.environ.get("NB_ROOT", "."))
     chap = _pathlib.Path(_chapter) if _chapter else _pathlib.Path(".")
@@ -3055,31 +3064,38 @@ def fit_geometry(free, reliability="normal", views=None, poses=None,
         return 0.5*(d["dt"][me].mean()
                     + _nd.distance_transform_edt(~me)[d["te"]].mean())/sc
 
-    def _score(x, per_part=False):
-        """-> (mean normalised %, {view: %}, {component: %})"""
+    def _score(x):
+        """-> (mean normalised %, {view: %})
+
+        NO PER-COMPONENT BREAKDOWN. There was one, built by a `per_part=True`
+        branch here and two extra calls below, and NOTHING EVER READ IT: it
+        reached `_FitResult.per_component` and stopped -- no `__str__` branch
+        printed it, no entry cited it, nothing in `nb` touched it. The two
+        calls rasterised every component across every view, twice, inside the
+        function most often killed on its budget.
+
+        It was also WRONG in the same way `_component_residuals` was before
+        2026-10-10: it scored each component's OWN edge against the mask
+        distance transform, so a surface buried inside the body -- which has
+        no outline on the silhouette the cost actually minimises -- collected
+        a large distance for doing what an interior surface is meant to do.
+        Deleting it removes the bug and the compute together.
+
+        `_component_residuals` is the function for this question, it is
+        attributed on the union silhouette, and `compare_to_photo` already
+        puts its answer in every note.
+        """
         try:
             ap = _build(x[:NG])
         except Exception:
-            return 1e3, {}, {}
+            return 1e3, {}
         parts = _parts_of(ap, resolution=_FIT_RESOLUTION)
         centre = _np.vstack([p for p, _ in parts]).mean(axis=0)
-        cn = [c.name for c in list(ap.wings) + list(ap.fuselages)]
-        per_view, comp = {}, {}
+        per_view = {}
         for i, v in enumerate(V):
             p7 = x[NG + 7*i: NG + 7*i + 7]
-            r = _view_cost(parts, centre, v, p7)
-            per_view[v] = 100.0*r/V[v]["nrm"]
-            if per_part:
-                d = V[v]; sc = d["sc"]
-                pp = (p7[0], p7[1], p7[2], abs(p7[3])*sc, p7[4]*sc, p7[5]*sc,
-                      0.4 + 19.6/(1.0 + _np.exp(-p7[6])))
-                for j, (pts, faces) in enumerate(parts):
-                    m = _raster(pts, faces, pp, (d["tw"], d["th"]), centre)
-                    e = m & ~_nd.binary_erosion(m)
-                    if e.any():
-                        comp[cn[j]] = comp.get(cn[j], 0.0) + \
-                            100.0*float(d["dt"][e].mean())/sc/d["nrm"]
-        return float(_np.mean(list(per_view.values()))), per_view, comp
+            per_view[v] = 100.0*_view_cost(parts, centre, v, p7)/V[v]["nrm"]
+        return float(_np.mean(list(per_view.values()))), per_view
 
     def obj(u):
         return _score(_real(u))[0]
@@ -3116,7 +3132,7 @@ def fit_geometry(free, reliability="normal", views=None, poses=None,
     _es0.optimize(_obj_pose_only)
     X0b = X0.copy()
     X0b[NG:] = _real(_np.concatenate([u0[:NG], _es0.result.xbest]))[NG:]
-    base_m, base_view, base_comp = _score(X0b, per_part=True)
+    _, base_view = _score(X0b)
     results, cut_short, short_by = [], 0, []
     for sd in range(1, seeds + 1):
         _o = {"bounds": [0, 1], "popsize": 18, "maxiter": 350,
@@ -3196,12 +3212,10 @@ def fit_geometry(free, reliability="normal", views=None, poses=None,
                  < 0.05*(ghi[i]-glo[i])]
 
     best = R[_best_i]
-    fin_m, fin_view, fin_comp = _score(best, per_part=True)
-    per_component = {c: fin_comp.get(c, 0.0) - base_comp.get(c, 0.0)
-                     for c in base_comp}
+    _, fin_view = _score(best)
 
     res = _FitResult(free, values, spread, verdict, base_view, fin_view,
-                     per_component, railed, _time.time()-t0, seeds, model_path,
+                     railed, _time.time()-t0, seeds, model_path,
                      cut_short=cut_short, short_by=short_by,
                      start={k: float(v) for k, v in zip(names, start)})
     # EVERY SEED'S ANSWER, kept. Reporting only a summary makes a later

@@ -61,11 +61,13 @@ def _notebook_drift(root):
 
     IT USED TO BE JUSTIFIED BY PROPAGATION as well -- "an improvement to
     footer() shows up as a problem in every notebook that has not taken it" --
-    and that argument is now about a set of size one. `RADICAL-GLIDER` is the
-    only notebook `nb` drives; the other three are the design-notebook skill's or
-    frozen corpus, and they drift on purpose. So the two reasons above are the
-    whole of it, and both are about a SINGLE notebook: it must render without
-    `nb` installed, and freeze must be able to see edits to the file.
+    and that argument used to be about a set of size one, when `nb` drove one
+    notebook and the rest belonged to the superseded design-notebook skill or
+    were frozen corpus. That skill and its notebooks are gone and `nb` now
+    drives every notebook here, so propagation is live again and this
+    paragraph no longer settles the question on its own. The two reasons above
+    stand by themselves regardless: the file must render without `nb`
+    installed, and freeze must be able to see edits to it.
 
     Byte equality is still the right test because nothing in the file is
     project-specific; any difference is either an un-propagated improvement or an
@@ -1462,8 +1464,9 @@ def _input_item_budget(root, chapters, entries):
 
     The budget used to be counted in `check()`, over callouts found in the page
     source. Generated callouts are not in the source, so an index's items
-    stopped being counted at all the moment they moved -- a rule going quiet
-    because its input moved is the failure `nb.corpus` exists to catch.
+    stopped being counted at all the moment they moved. A rule going quiet
+    because its input moved is the failure the frozen-corpus counts existed to
+    catch; they are retired, so this one is on a reader now.
     """
     out = []
     pairs = [(root / "_inputs.yml", notebook_items(root))]

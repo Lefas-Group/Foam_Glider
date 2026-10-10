@@ -75,7 +75,19 @@ FREEZE_STALE_RULES = frozenset({12, 40})
 # Blocking a run on a repair it cannot make is the defect. The finding still
 # travels -- as a warning, named as the coordinator's -- so it is not lost,
 # it is addressed to whoever can act on it.
-NOT_THE_RUNS_TO_FIX = frozenset({"_inputs.yml", "_quarto.yml", "index.qmd"})
+#
+# `_notebook.py` IS THE WORST OF THEM and was the last added. Rule 11 pins it
+# byte-identical to `nb/scaffold/_notebook.py`, and a run can do nothing at
+# all about a difference: the file tools are rooted at `chapters/`, the probe
+# write guard refuses it, and the seed it would have to copy from lives under
+# `nb/`, which the probe read guard refuses on purpose. So the finding is
+# blocking, unactionable, and arrives every single time the seed is improved
+# -- which is what maintaining the seed consists of. Observed on
+# `glider-notebook` the moment this round's edits landed.
+#
+# It is the coordinator's, and the fix is one command: `nb sync`.
+NOT_THE_RUNS_TO_FIX = frozenset({"_inputs.yml", "_quarto.yml", "index.qmd",
+                                 "_notebook.py"})
 
 
 def _problems(root, chapters, pre_render=True):
@@ -106,10 +118,13 @@ def _problems(root, chapters, pre_render=True):
         # instead of trying to satisfy it.
         if (where is not None and where.name in NOT_THE_RUNS_TO_FIX
                 and where.parent == root):
+            how = ("  Run `nb sync` -- it is one command and it is the "
+                   "coordinator's."
+                   if where.name == "_notebook.py" else
+                   "  Say so in your answer so the coordinator can fix it.")
             warnings.append((rule, (
                 f"{label}{msg}  (warning) — this is the NOTEBOOK's file, not "
-                f"your chapter's, and not yours to edit. Say so in your "
-                f"answer so the coordinator can fix it.")))
+                f"your chapter's, and not yours to edit.{how}")))
             continue
         (warnings if "(warning)" in msg else blocking).append(
             (rule, f"{label}{msg}"))

@@ -12,9 +12,6 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
-# Tooling, not notebook runtime -- the library-explorer MCP server that the
-# design-notebook skill uses to look up AeroSandbox APIs. Kept out of the main
-# dependencies so `uv sync` for the notebook alone stays lean.
 # The `nb` agent (nb/). Kept in its own group so `uv sync` for the notebook
 # alone stays lean -- rendering a notebook needs none of this.
 [dependency-groups]
@@ -23,7 +20,11 @@ nb = [
     # include_thoughts/thinking_budget and the attribute is simply absent.
     "google-genai>=2.23",
     "pydantic>=2.11",
-    # MCP filesystem server client. Pinned <2 to match the existing group.
+    # Two users now, which is why this moved into the one group: `mcp_fs`
+    # is a CLIENT of the npx filesystem server, and
+    # `tools/library_explorer_server.py` is a SERVER of our own. Pinned <2
+    # because the server builds on `mcp.server.fastmcp.FastMCP`, which 2.x
+    # renamed to MCPServer.
     "mcp>=1.2,<2",
     # The one dependency on the READING side: `nb board` and `nb watch`.
     # Hand-rolled ANSI was tried and shipped an invisible bug -- `\x1b[2m` is
@@ -53,6 +54,3 @@ nb = [
     # and weights.
     "rembg[cpu]>=2.0.60",
 ]
-# Pinned to 1.x: the vendored server uses mcp.server.fastmcp.FastMCP,
-# which 2.x renamed to MCPServer.
-mcp = ["mcp>=1.2,<2"]

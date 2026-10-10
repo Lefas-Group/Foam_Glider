@@ -68,7 +68,9 @@ def is_entry(handle):
 # corpus notebooks. Matching only the new wording made rule 17 find nothing and
 # skip its check on six entries, so a frozen notebook silently LOST six
 # problems: a rule that stops applying looks exactly like a notebook that got
-# better. `nb.corpus` is what caught it.
+# better. The frozen-corpus sweep is what caught it, before that corpus and
+# its notebooks were retired -- the finding stands; nothing watches for its
+# recurrence now.
 RUNTIME_SECONDS = re.compile(r"(?:Executed|Rendered) in ([\d.]+) s")
 
 RUNTIME_SOLVES = re.compile(r"· (\d+) aero solve")
@@ -228,8 +230,10 @@ MAX_JUSTIFICATION, MAX_METHOD_SUMMARY = 40, 60
 
 
 # WHERE RULES 45 AND 46 START. Both postdate every entry on disk: applied to
-# all of them they would add ~150 findings across the three pinned baselines in
-# `nb.corpus`, which is how the signal that baseline exists for gets buried. An
+# all of them they would have added ~150 findings across the three notebooks
+# then pinned as frozen corpus, which is how the signal a baseline exists for
+# gets buried. That corpus is gone and the cut-in stays, because the reason was
+# never the baseline -- it is that an older entry is not a gap to backfill. An
 # entry's stem IS its date, so the cut-in is one string compare -- and an entry
 # is written once and left alone, so an older one is not a gap to backfill.
 SUMMARY_FROM = "2026-10-08"

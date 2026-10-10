@@ -119,10 +119,14 @@ def read_figure(notebook, chapter, stem, name=""):
 # had no sheet guessed 250 mm for an aircraft 1.21x larger -- about 10% out,
 # on a number that sets tail volume and therefore the static margin.
 #
-# SO THIS TOOL IS FOR THE FIRST LOOK ONLY. `read_figure` above reads the
-# freeze, so a run cannot see an arbitrary image mid-probe; one call here
-# orients it -- which part is where -- and everything quantitative after that
-# is numpy. The brief says so.
+# SO `read_reference_image` IS FOR THE FIRST LOOK ONLY. `read_figure` above
+# reads the freeze, so a run cannot see an arbitrary image mid-probe; one call
+# there orients it -- which part is where -- and everything quantitative after
+# that is numpy. The brief says so.
+#
+# That tool is at the bottom of this file. This comment outlived its deletion
+# by five days and pointed at nothing; the deletion was the accident, not the
+# reasoning.
 REFERENCE_DIR = "_reference"
 _SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
 _MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
@@ -249,6 +253,70 @@ def reference_listing(notebook):
                     "NO MASK beside it, so nothing can be fitted against it.")
         out.append(f"  - {p.name}\n      {detail}\n      -> {rule}")
     return "\n".join(out)
+
+
+def read_reference_image(notebook, name=""):
+    """
+    One reference photograph, as bytes for the loop to make an inline part.
+
+    THE RUN'S ONLY WAY TO SEE THE AIRCRAFT. Everything else it can look at
+    is something it made: `read_figure` globs the freeze, so a figure has to
+    be rendered first, and `read_probe_figure` reads the run directory, so a
+    probe has to have drawn it. `compare_to_photo` reaches `_reference/` but
+    draws the MODEL over the photograph, which requires the model to exist.
+    Without this there is no point in a reconstruction at which the subject
+    can be looked at before it is built.
+
+    MEASURED, FT A-10 Warthog, 2026-10-10. Turn 2, with no way to look:
+
+        "Let's break down the geometry into its components: the wing,
+         fuselage, nacelles, horizontal stabilizer, and twin vertical
+         stabilizers. THE REAL A-10 has a constant-chord center wing
+         section... the other values will be based on estimates from the
+         REAL A-10."
+
+    It listed the components of the jet it remembered, not of the foam
+    aircraft in the photographs, and built a nacelle pylon that appears in
+    none of them -- as a lifting surface, carrying area and lift into two
+    later entries. A wrong COMPONENT LIST is the one error `fit_geometry`
+    cannot repair: it moves named constants and can neither delete a surface
+    nor invent one. So the list has to come from the photograph, and the
+    photograph has to be reachable before the model exists.
+
+    THIS FUNCTION EXISTED AND WAS DELETED by 78bef1a, a forty-file sweep
+    that landed `compare_to_photo` and cleared a dozen scratch scripts under
+    the message "READNE update". The comment that justifies it survived the
+    deletion and sat orphaned above `REFERENCE_DIR` for five days: "SO THIS
+    TOOL IS FOR THE FIRST LOOK ONLY... one call here orients it -- which
+    part is where -- and everything quantitative after that is numpy." That
+    reasoning was never withdrawn; only the code was.
+
+    ONE LOOK, FOR TOPOLOGY. `KINDS["photo"]` already states the rule the
+    brief repeats -- proportions and layout only, no dimension off a
+    photograph. What this answers is "what parts does it have, and roughly
+    where", which is exactly what vision is reliable for and exactly what
+    the model needs before its first line.
+
+    Masks are not reachable: `reference_paths` excludes them, because a run
+    looking at a white blob learns nothing and the mask is an input to the
+    fit rather than a picture of the aircraft.
+    """
+    paths = reference_paths(notebook)
+    if not paths:
+        return {"error": f"no {REFERENCE_DIR}/ images in {notebook.root.name}. "
+                         f"This notebook has no photographs, so nothing can "
+                         f"check the shape -- build from the brief, declare "
+                         f"what you supply, and say the shape is unverified."}
+    if name:
+        hit = [p for p in paths if p.name == name or p.stem == name]
+        if not hit:
+            return {"error": f"no reference image {name!r}. Available:\n"
+                             + reference_listing(notebook)}
+        paths = hit
+    p = paths[0]
+    return {"_image": p.read_bytes(),
+            "mime_type": _MIME.get(p.suffix.lower(), "image/png"),
+            "name": p.name}
 
 
 

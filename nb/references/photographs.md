@@ -63,7 +63,34 @@ perturbations that did return were **8.89 %** and **4.79 %**.
 
 You can still tell the two apart by LOOKING: every component displaced in the
 same direction is a pose error, one component wrong while the others sit
-right is a shape error.
+right is a shape error. Do not start moving geometry until the outline as a
+whole lands on the subject.
+
+### What you may conclude from an overlay
+
+**PROPORTIONS, NEVER ABSOLUTES.** A two-degree pose error moves points by 6 mm
+on average and 11 mm at worst — the size of the discrepancies you are looking
+for. So *"the tailplane chord is 1.4× what it should be relative to the wing"*
+is sound and *"the tailplane is 12.7 mm too long"* is not. Absolute dimensions
+come from the brief, never from an overlay.
+
+**A PHOTOGRAPH IS NOT A TARGET.** Fix what is structurally wrong — a part
+missing, a fuselage section that should be a box and is an ellipse, a canopy
+smoothed into the loft — declare what you inferred, and leave the rest. A model
+tuned until the overlay looks right has been fitted to the thing it was meant
+to be checked against. That is why no function here returns a score.
+
+**DO NOT CITE AN OVERLAY THE NOTE HEDGED.** `POSE HEDGED`, `POSE DISPUTED` and
+`Pose: DOUBTFUL` are the tool saying it does not have the evidence. An entry
+claiming the overlay *confirms* the shape over one of those is claiming
+evidence it was told it did not have. Spend one more fit, or say in the entry
+what the note said.
+
+**THE ENTRY SHOWS THE VERDICT, NOT ONLY THE PICTURE.** Bind the note in the
+figure cell — `note = show_comparison(airplane, "VIEW", pose=…)` — and put what
+it says on the page: the residual, and the pose. A bare call discards it and
+leaves the reader an overlay with no way to know whether it can be read. Rule
+45 warns about this.
 
 ### What each call costs, so you can stop timing them
 
@@ -103,7 +130,7 @@ were killed on a budget nobody could size yet.
 
 ## The one that FITS GEOMETRY
 
-    fit_geometry(free, reliability="normal", views=None, poses=None) -> _FitResult
+    fit_geometry(free, views=None, poses=None) -> _FitResult
 
 This is how geometry is obtained, and it is what a residual stuck above ~1.2%
 is asking for. `free` maps a module-level `_model.py` constant to
@@ -128,16 +155,50 @@ fix is to promote those literals to named constants at the top of
 `poses` SEEDS each view's camera from a note you have already read, so the
 fit cannot settle in a different basin from the picture the free set was
 chosen off. A seed is not a setting: elevation and azimuth are still
-searched ±25°, and a wrong seed comes back with a worse printed residual
-rather than being believed.
+searched ±25°. The seed residual is printed per view, so a bad seed comes
+back as a worse number rather than being believed.
+
+**NEVER TYPE A FITTED NUMBER YOURSELF.** `apply()` writes them into
+`_model.py` and prints each old → new, which is how the number in the model
+stays the number the fit produced. A run once wrote `width=0.185` six lines
+after measuring 282 mm, and then declared the 185.
+
+Read the spread beside each value: CONSISTENT means the photographs constrain
+that dimension, SCATTERED means they do not and it stays a declared guess.
+
+**Refit only for a structural reason** — a parameter on a bound, a SCATTERED
+parameter to drop, a component the census named. Refitting because you would
+like a better number is the one thing this machinery exists to prevent.
 
 Not yours to choose: every reference with a mask is used; each view is
 normalised by `sqrt(mask area)` before the views are combined; the views
-combine by MEAN; several seeds run.
+combine by MEAN; three seeds run.
 
 **Never free a published dimension.** Span and length are the scale
 reference, and freeing span makes the fit degenerate against camera
 distance.
+
+### What a fit costs, and how to budget it
+
+**This is the expensive call. Budget it in minutes, not tens of seconds.**
+Cost goes as `3 seeds × views × free parameters`. Measured, one free
+parameter over three views: a 200 s probe spent 195 s and reported **all
+three seeds cut short at ~22% of their search**, wanting about 220 s each —
+so roughly 650 s to converge. An older measurement on one view put a single
+parameter at 334–385 s.
+
+Ask for the budget up front. A fit that is killed loses everything it
+computed; a fit that is merely cut short returns its best and SAYS SO:
+
+    >>> 3 of 3 seeds RAN OUT OF PROBE TIME rather than converging.
+    >>> The worst managed 76 of 350 iterations -- 22% of the search.
+    >>> These values are a best-so-far, and the spread above is not
+    >>> evidence that anything is pinned.
+
+**Read that warning when it appears.** A cut-short spread is not a
+consistency check — seeds that never finished cannot agree or disagree — so
+a value under it is still a guess, however tight the millimetres look. Free
+fewer constants, or ask for more pool.
 
 ## Coverage
 

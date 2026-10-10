@@ -1,6 +1,6 @@
-# `nb` — the design-notebook agent
+# `nb` — the notebook agent
 
-Turns a design question into a Quarto lab-notebook entry that passes a 43-rule
+Turns a design question into a Quarto lab-notebook entry that passes a 49-rule
 lint contract, renders, and is checked against its own output before it commits.
 
 ---
@@ -24,7 +24,7 @@ uv sync --group nb
 export GEMINI_API_KEY="…"          # https://aistudio.google.com/apikey
 
 # 3. prove it, before spending anything
-uv run --group nb python -m nb.preflight glider-notebook
+uv run --group nb python -m nb.preflight <notebook>
 ```
 
 That last command is the whole of setup verification. It checks every binary,
@@ -38,7 +38,7 @@ relative to the repo root.
 ## Running it
 
 ```bash
-uv run --group nb python -m nb ask glider-notebook \
+uv run --group nb python -m nb ask <notebook> \
   --chapter 01-foam-glider "How heavy is the wing alone?"
 
 # a new aircraft, named once, at creation. The title is the directory name.
@@ -50,8 +50,8 @@ uv run --group nb python -m nb new paper-dart \
 
 # an aircraft that already exists: converge the vehicle onto its published
 # numbers, once, before any question is asked of it.
-uv run --group nb python -m nb reconstruct mustang-mkr2 \
-  --chapter 01-airframe-reconstruction
+uv run --group nb python -m nb reconstruct <notebook> \
+  --chapter NN-name
 ```
 
 That is the whole system. It probes the aircraft model, opens an entry, writes
@@ -65,11 +65,11 @@ decision on, then to confirm the assumptions it made. Ctrl-C leaves the board;
 the run carries on without it.
 
 ```
-uv run --group nb python -m nb open   glider-notebook   # board in a window, site in a tab
-uv run --group nb python -m nb board  glider-notebook   # re-attach, any terminal
-uv run --group nb python -m nb watch  glider-notebook   # the detail, live
-uv run --group nb python -m nb answer glider-notebook "0.12"
-uv run --group nb python -m nb stop   glider-notebook
+uv run --group nb python -m nb open   <notebook>   # board in a window, site in a tab
+uv run --group nb python -m nb board  <notebook>   # re-attach, any terminal
+uv run --group nb python -m nb watch  <notebook>   # the detail, live
+uv run --group nb python -m nb answer <notebook> "0.12"
+uv run --group nb python -m nb stop   <notebook>
 ```
 
 `nb ask` also opens a **watcher window per run** — the transcript from its
@@ -82,15 +82,15 @@ run detachable and lets the board, `tail` and a coordinator read the same
 **Skip the questions** when you already know the answers:
 
 ```bash
-uv run --group nb python -m nb ask glider-notebook "<q>" \
-    --pool 180 --ceiling 300 --chapter 04-thinner-foam --quiet
+uv run --group nb python -m nb ask <notebook> "<q>" \
+    --pool 180 --ceiling 300 --chapter NN-name --quiet
 ```
 
 **Read the result.** The finished entry prints to the terminal with its real
 numbers, and the site is rebuilt:
 
 ```bash
-open glider-notebook/_site/index.html
+open <notebook>/_site/index.html
 ```
 
 ### Every command
@@ -112,6 +112,8 @@ uv run --group nb python -m nb listen <notebook>             # block until a run
 uv run --group nb python -m nb watch  <notebook> [run]       # follow the detail
 uv run --group nb python -m nb stop   <notebook> [run]       # ask a run to stop
 uv run --group nb python -m nb clean  <notebook> [run] [--keep N] [--yes]
+uv run --group nb python -m nb sync   [notebook …] [--force] # after editing
+                                                             # nb/scaffold (rule 11)
 uv run --group nb python -m nb view   <notebook> [--force]   # build the site
 uv run --group nb python -m nb eval   <notebook>             # runs, by model
 
@@ -215,8 +217,8 @@ closing gate is "targets met" rather than "lint clean".
 So it is a third BRIEF into the same machinery, not a second system:
 
 ```bash
-uv run --group nb python -m nb reconstruct mustang-mkr2 \
-  --chapter 01-airframe-reconstruction
+uv run --group nb python -m nb reconstruct <notebook> \
+  --chapter NN-name
 ```
 
 It takes no question, because the question is always *can we reconstruct this
@@ -351,7 +353,7 @@ from — they are different kinds of number and were being shown identically.
 Supply them and the questions do not get asked:
 
 ```bash
-uv run --group nb python -m nb ask glider-notebook "<q>" --pool 180 --ceiling 300
+uv run --group nb python -m nb ask <notebook> "<q>" --pool 180 --ceiling 300
 ```
 
 `--ceiling` overrides the answer, never the source of the default: the number a
@@ -398,9 +400,9 @@ pre-answered.
 ## Several at once
 
 ```bash
-uv run --group nb python -m nb ask glider-notebook "<question A>" --quiet
-uv run --group nb python -m nb ask glider-notebook "<question B>" --quiet
-uv run --group nb python -m nb board glider-notebook
+uv run --group nb python -m nb ask <notebook> "<question A>" --quiet
+uv run --group nb python -m nb ask <notebook> "<question B>" --quiet
+uv run --group nb python -m nb board <notebook>
 ```
 
 **Do not add `&`.** `--quiet` prints the run id and the `watch` line, then
@@ -489,7 +491,7 @@ detector missed something — worth opening, not shrugging at.
 ## The shape of a notebook
 
 ```
-mustang-mkr2/
+<notebook>/
   index.qmd               the front page: the aircraft's brief, and the lineage diagram
   _inputs.yml             THE BRIEF. specified / targets / assumed. Written by a PERSON
   _notebook.py            the shared runtime — footer(), cite(), chapter_inputs()
@@ -572,27 +574,33 @@ not the call.
 
 ## Testing a change
 
-Two sweeps, and they answer different questions.
+```bash
+uv run --group nb python -m nb.preflight <notebook>
+```
 
-`python -m nb.corpus` lints the three stable notebooks — `glider-notebook`,
-`aircraft-notebook`, `optimised-glider-notebook` — against recorded COUNTS,
-and imports every module to prove it imports. Every rule here was calibrated with
-that sweep; by hand it got the wrong answer twice. A change that moves the counts
-updates them in the same commit, with the reason.
+That is the automated half, and it is cheaper than finding out mid-run. It
+checks the invariants no agent can repair — the doctrine registry, `USAGE`
+against the dispatch chain, every `nb <cmd>` a doctrine page quotes, rule 11's
+byte-equality on `_notebook.py`, the binaries, the key — and it **imports every
+module in `nb`** to prove the package still loads. That last one is two lines
+and catches what nothing else does: a syntax error in a module no command
+happens to reach surfaces commits later otherwise, which has happened.
 
-`python tests/characterize.py --check` compares the FINDINGS themselves — every
-`(rule, file, message)` — against `tests/baseline/`. Counts are right for
-calibrating a rule and wrong for restructuring, because two findings can swap
-places and leave the count alone. Add `--strict` to also require that every
-finding names its own rule; that fails today by design, and the day it passes is
-the day the attribution work is done. `tests/baseline/CHANGELOG.md` records every
-deliberate move.
+The other half is running the thing. `nb ask` and `nb reconstruct` against a
+real notebook test more than any sweep does, because they exercise the model,
+the kernel, the render and the commit together.
 
-Neither covers the LIVE notebooks — `RADICAL-GLIDER`, `mustang-mkr2`,
-`glider-notebook`. Each gains an entry whenever a run
-commits one, so their findings move for reasons that have nothing to do with a
-code change. They are covered by actually running `nb ask` and `nb reconstruct`
-against them, which tests more than lint does.
+**There are no recorded lint counts any more.** There used to be two sweeps
+here: a corpus of frozen notebooks linted against expected counts, and a
+characterization check comparing every `(rule, file, message)` against a stored
+baseline. Both were for CALIBRATING the contract — a new rule firing eight more
+times in a notebook nobody is editing is a rule with a false-positive problem,
+and that signal is only visible against a baseline. The contract is settled at
+49 rules, every one with a recorded reason, and the frozen notebooks those
+counts were measured on have been deleted. If rule work restarts, this comes
+back as a decision about what to freeze — a live notebook cannot serve, because
+it gains an entry whenever a run commits one and its counts move for reasons
+that have nothing to do with a code change.
 
 ## The version before this one
 

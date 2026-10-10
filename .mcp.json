@@ -6,9 +6,10 @@
       "args": [
         "run",
         "--group",
-        "mcp",
+        "nb",
         "python",
-        ".claude/skills/design-notebook/mcp_servers/library_explorer/library_explorer_server.py"
+        "-m",
+        "nb.tools.library_explorer_server"
       ],
       "env": {
         "PYTHONUNBUFFERED": "1"

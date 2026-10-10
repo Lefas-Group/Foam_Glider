@@ -42,8 +42,8 @@ if not _os.environ.get("NB_ROOT") or not _os.environ.get("NB_CHAPTER"):
         "not an importable module: it execs a chapter into whatever namespace "
         "it lands in, and reads $NB_ROOT and $NB_CHAPTER to know which. "
         "`kernel.py` sets both when it starts a kernel. Nothing else should run "
-        "this file -- `nb.corpus`'s import sweep skips it by name for exactly "
-        "this reason."
+        "this file -- `nb.preflight`'s import sweep skips it by name for "
+        "exactly this reason."
     )
 
 NB_ROOT = _pathlib.Path(_os.environ["NB_ROOT"])

@@ -40,20 +40,18 @@ optimised-glider-notebook/.quarto/
 # And `**/` because a slash anywhere but the end anchors a pattern to this
 # file's directory -- `_scratch/*` would match only at the repo root.
 **/_scratch/*
-# ...except `_probe_base.py` in the two notebooks the design-notebook SKILL
-# owns. It was every notebook's, and the negation was global: rule 11 required
-# the file and preflight refused to start without it, so ignoring it left no
-# notebook reproducible from git -- a fresh clone could not run anything until
-# somebody restored it by hand. Found by checking out an old commit and watching
-# it fail.
+# NO NEGATIONS HERE ANY MORE, and the reason they existed is worth keeping.
+# `_scratch/_probe_base.py` was every notebook's chapter loader, and ignoring it
+# globally left no notebook reproducible from git -- rule 11 required the file
+# and preflight refused to start without it, so a fresh clone could not run
+# anything until somebody restored it by hand. Found by checking out an old
+# commit and watching it fail. The two notebooks re-included here belonged to
+# the design-notebook skill, which owned its own copy and its own rule 11.
 #
-# `nb` no longer uses it at all: probes run in a kernel `nb` starts and the
-# chapter loader is `nb/tools/probe_init.py`, which ships with `nb`. The skill
-# still has its own copy and its own rule 11 checking for this one, so the
-# notebooks it lints keep theirs, listed rather than matched by a pattern --
-# RADICAL-GLIDER is `nb`'s and must NOT get one back.
-!glider-notebook/_scratch/_probe_base.py
-!optimised-glider-notebook/_scratch/_probe_base.py
+# That skill and both of its notebooks are gone. `nb` never used the file:
+# probes run in a kernel `nb` starts and the chapter loader is
+# `nb/tools/probe_init.py`, which ships with `nb`. So nothing needs re-including
+# -- and nothing should get one back.
 
 # macOS
 .DS_Store

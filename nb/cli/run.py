@@ -472,21 +472,27 @@ def _aircraft_visual_brief(notebook):
     if not photos:
         return "  * a three-view of what you built;"
     names = [n for n, _, _ in photos]
-    panels = "\n".join(
-        '        show_comparison(airplane, "%s", ax=axes[%d])' % (n, i)
-        for i, n in enumerate(names))
+    poses = ",\n                 ".join(
+        '"%s": (elev, azim, roll)' % n for n in names)
     return """  * the model drawn over EVERY reference photograph -- %d of
     them (%s) -- as ONE figure with one panel each, so it stays a single
-    visual under rule 14:
+    visual under rule 14. `show_all_views` builds it in one call:
 
-%s
+        fig, notes = show_all_views(airplane, poses={
+                 %s})
 
-    Each call returns that view's pose note; put all of them in the caption,
+    NAME EVERY POSE, with the three numbers each `compare_to_photo` note
+    printed. At render there is no probe history to fall back on, a pose in
+    the source is one a reader can see and a later run can argue with, and a
+    named pose is PINNED -- the panel costs seconds rather than tens of
+    them against the ceiling.
+
+    `notes` is a dict of that view's verdict; put them all in the caption,
     so a reader knows each camera was fitted and not chosen. A view whose
     pose comes back DOUBTFUL still gets its panel, captioned as doubtful --
     dropping it hides the view the model fits worst, which is the one worth
     seeing. Only if NO view fits do you fall back to a three-view;""" % (
-        len(names), ", ".join('"%s"' % n for n in names), panels)
+        len(names), ", ".join('"%s"' % n for n in names), poses)
 
 
 def _targets_brief(notebook):
@@ -579,7 +585,7 @@ itself, which is the failure every paragraph above is about."""]
 
 def _reference_brief(notebook):
     """
-    What is in `_reference/`, and how to use it.
+    What is in `_reference/` -- the notebook-specific half, and only that.
 
     ONE KIND OF ASSET: a photograph, with a mask beside it. It is never
     measured -- it is compared against, by drawing the model over it. The
@@ -587,12 +593,33 @@ def _reference_brief(notebook):
     coordinator's job: the figures it PRINTS arrive in the brief above, and
     measuring the drawing is a step neither party does well.
 
-    THE COMPARISON IS THE POINT of this section. A reconstruction can
-    reproduce every published figure to a fraction of a percent and still be
-    the wrong shape: one did, to 0.40%, while missing its power pod entirely
-    and lofting a smooth pod where the real aircraft is a slab-sided box.
-    Both faults were obvious the instant the model was drawn over a
-    photograph, and invisible to every number in the entry.
+    THE PROCEDURE USED TO LIVE HERE TOO, and the copy went stale. This
+    function held about 160 lines duplicating `references/photographs.md`,
+    and by 2026-10-10 the two disagreed in three ways that cost real turns:
+
+      * it documented `completeness(airplane, "VIEW", hint=...)` and
+        `show_comparison(..., hint=...)`. THERE IS NO `hint` PARAMETER --
+        it was renamed `pose` because "hint" read as a free suggestion when
+        it actually narrows the search. The documented call raised
+        `TypeError` on turn 5 of the FT A-10 Warthog run, taking the rest of
+        that probe's work with it.
+      * it priced a cold pose fit at `budget_s=45`. Measured: 41-78 s, so
+        the advice gets the probe killed.
+      * it told the run to carry a pose forward with `hint=` a second time,
+        in the paragraph after the one that crashed.
+
+    Its `fit_geometry` costing -- "334-385 s for ONE free parameter over one
+    view" -- is NOT in that list and is not stale; a bounded three-view fit
+    measured 195 s here and reported all three seeds cut short, wanting
+    about 220 s each. Cost is the one thing that block had right, and
+    `photographs.md` now carries it.
+
+    The first two were not wrong when written. They went wrong when the code
+    moved and only one copy followed. So the procedure now has ONE home, in
+    `photographs.md`, which is also where the measured evidence for each
+    rule already lives -- and this function is reduced to the half that is
+    genuinely about THIS notebook and cannot live in a static page: which
+    photographs exist, which have masks, and whether there are any at all.
     """
     from ..tools import figures
     listing = figures.reference_listing(notebook)
@@ -608,155 +635,28 @@ def _reference_brief(notebook):
     photos = figures.reference_photos(notebook)
     if photos:
         usable = ", ".join('"%s"' % n for n, _, _ in photos)
-        compare = """
-# Check the shape against a photograph
+        how = """
+These are the only pictures of the aircraft you are reconstructing, and
+`read_reference_image` is the only way to see one. Usable with a mask, so
+the model can be drawn over them: %s.
 
-`compare_to_photo` is already in scope -- it lives in `_notebook.py`, which
-every probe loads. Build the model, then:
-
-    rgb, note = compare_to_photo(airplane, "%s")
-    Image.fromarray(rgb).save("check.png")
-    print(note)
-
-then `read_probe_figure("check.png")` AND LOOK AT IT. Usable photographs:
-%s.
+**HOW TO USE THEM IS ONE READ: `read_reference("photographs")`.** The pose
+note and what each verdict means, what a fit costs so you need not time one,
+`completeness` and its three component states, `fit_geometry`, and what may
+and may not be concluded from an overlay. Read it before your first overlay.
+Everything in it was measured on a real run; none of it is in this prompt,
+on purpose -- a procedure duplicated in two places is a procedure that will
+disagree with itself.
 
 **READ THE DOCSTRING, NOT THE SOURCE.** `print(compare_to_photo.__doc__)`,
-and the same for `completeness` and `fit_geometry`: the contract, the
-failures each guard was written for and what to do about a bad result are
-all in there. `inspect.getsource` on these cost one run 24 of its 90 turns,
-printed in 2000-character chunks, and told it nothing the docstrings do not.
-`nb/` itself is outside the sandbox on purpose -- do not go looking for it.
-
-**WHAT THESE COST, so you can budget them.** A cold pose fit is one CMA
-search: give it `budget_s=45`. A hinted one is cheaper and lands in the
-basin you chose. `completeness` fits a pose too -- pass the one you have.
-`fit_geometry` is the expensive one: measured at 334-385 s for ONE free
-parameter over one view, two seeds, so budget it in minutes and ask for more
-pool rather than discovering the kill. CARRY THE POSE FORWARD: the camera
-does not move when the geometry does, so `hint=` the pose you found into the
-next overlay and pass `poses={"view": (elev, azim, roll)}` into
-`fit_geometry`. A fit seeded from the overlay you actually looked at is
-answering about the same camera the picture showed you.
-
-## Before you fit anything: is the model COMPLETE?
-
-    frac, note = completeness(airplane, "VIEW", hint=the_pose_you_found)
-    print(note)
-
-It names the regions of the photograph that no component covers. A
-reconstruction once reproduced eight published figures to 0.40%% while
-missing its power pod entirely, and no target table can catch that. Fix what
-it names before fitting geometry: fitting against a silhouette containing
-something the model lacks fits the model to that thing.
-
-There is NO pass mark, on purpose. A sound model at a correct pose still
-showed 17.5%% uncovered -- mostly thin slivers along edges -- so any fixed
-gate would reject good work. Look at the regions instead: a compact blob is
-a component you have not built, a sliver along an edge is one you have.
-
-It refuses to answer when the pose is DOUBTFUL, because an ill-posed model
-leaves most of the aircraft uncovered and then everything looks missing.
-Pass the pose you already found.
-
-A component the real aircraft has but the AERO model must not have -- a
-propeller, whose drag the propulsion model already counts -- goes behind a
-build flag, so the silhouette can carry it and the aerodynamics cannot:
-
-    def build(props: bool = False) -> asb.Airplane: ...
-    airplane         = build()            # what flies
-    airplane_for_fit = build(props=True)  # what the camera sees
-
-## Fitting dimensions the brief does not publish
-
-Published figures are INPUTS -- never fit span, length, or anything else the
-brief states. Everything you would otherwise invent can be fitted instead:
-
-    fit = fit_geometry(free={
-        "chord_outb": (0.12, 0.34, "the outer trailing edge sits aft of the model's"),
-    }, poses={"VIEW": (elev, azim, roll)})
-    print(fit)        # values, cross-seed spread, a verdict per parameter
-    fit.apply()       # writes the CONSISTENT ones into _model.py
-
-**PASS THE POSES YOU ALREADY FOUND.** `poses` takes the three camera numbers
-from each `compare_to_photo` note, per view. The geometry about to be fitted
-moves millimetres and the camera does not move at all, so a fresh cold search
-is work you have already paid for -- and it can land in a different basin from
-the overlay you read the free set off, which leaves the fit and the picture
-talking about two different cameras. The seed is only a seed: elevation and
-azimuth are searched +/-25 deg around it and the mask still sets everything
-else. The seed residual for every view is printed, so a hint that was wrong
-shows up as a worse number instead of being believed.
-
-Every free parameter needs a written reason, because a parameter freed
-because a finding pointed at it is evidence and one freed because it moved
-the number is not. It runs several seeds and reports the spread: CONSISTENT
-means the photographs constrain that dimension, SCATTERED means they do not
-and it stays a declared guess. **Never type a fitted number yourself** --
-`apply()` writes them, which is how the number in the model stays the number
-the fit produced.
-
-Refit only for a structural reason -- a parameter on a bound, a SCATTERED
-parameter to drop, a component the completeness check named. Refitting
-because you would like a better number is the one thing this machinery is
-built to prevent.
-
-It fits the camera itself, by chamfer distance, and draws each component in
-its own colour: filled where it faces you, solid on its outline, faint where
-it sits behind something else. There is no score, on purpose -- a number
-here is a number you would optimise, and what it measures is not fidelity.
-
-**READ `note` FIRST.** DOUBTFUL means the outline is not tracking the
-aircraft and the picture means nothing -- reseed, or report the photograph
-as unusable.
-
-**AND DO NOT CITE AN OVERLAY THE NOTE HEDGED.** "Not the best basin this
-photograph has" is the tool telling you another seed does better, and an
-entry that says the overlay CONFIRMS the shape while the note says that is
-claiming evidence it was told it did not have. Either spend one more fit
-from a different seed, or say in the entry what the note said.
-
-**TELL A POSE ERROR FROM A SHAPE ERROR,** because they look alike and only
-one of them is yours to fix. Every component displaced the same way -- the
-whole outline rotated, or sitting high, or slid left -- is the CAMERA, and
-you reseed it. One component wrong while the others sit on the aircraft is
-the MODEL, and you edit it. Do not start moving geometry until the outline
-as a whole lands on the subject.
-
-To reseed, pass `hint=(elev, azim)` or `hint=(elev, azim, roll)` -- the
-note gives you all three to adjust from. Do it whenever the overlay looks
-displaced, not only when the note says DOUBTFUL: a fit can be the best one
-available and still be worth a second seed. The hint only says where to
-look; the photograph still decides, and a hint that does not fit comes back
-DOUBTFUL rather than being accepted.
-
-**THE ENTRY SHOWS THE VERDICT, NOT ONLY THE PICTURE.** Bind the note in the
-figure cell -- `note = show_comparison(airplane, "VIEW", hint=...)` -- and
-put what it says on the page: the residual as a number, and the pose. A bare
-`show_comparison(...)` discards it, the echo is off, and a reader is left
-with an overlay and no way to know whether it can be read. Rule 45 warns.
-
-**FIX WHAT YOU SEE, IN `_model.py`.** The errors worth finding are
-structural and obvious once drawn: a part missing altogether, a fuselage
-section that should be a box and is an ellipse, a canopy smoothed into the
-loft. Write those directly and `declare_input` each one.
-
-**PROPORTIONS, NEVER ABSOLUTES.** A two-degree pose error moves points by
-6 mm on average and 11 mm at worst, which is the size of the discrepancies
-you are looking for. So "the tailplane chord is 1.4x what it should be
-relative to the wing" is sound, and "the tailplane is 12.7 mm too long" is
-not. Absolute dimensions come from the brief or from a plan, never from an
-overlay.
-
-**A PHOTOGRAPH IS NOT A TARGET.** Do not adjust geometry until the overlay
-looks right. Fix what is structurally wrong, declare what you inferred, and
-leave the rest -- a model tuned to a picture has been fitted to the thing it
-was meant to be checked against.
-""" % (photos[0][0], usable)
+and the same for `completeness`, `ablate` and `fit_geometry`. The contract,
+the failures each guard was written for, and what to do about a bad result
+are all in there. `inspect.getsource` on these cost one run 24 of its 90
+turns, printed in 2000-character chunks, and told it nothing the docstrings
+do not.
+""" % usable
     else:
-        compare = """
-# No photograph can be compared against
-
+        how = """
 `_reference/` holds no photograph with a mask beside it, so there is nothing
 to draw the model over. Say in the entry that the shape is unverified and
 only the published targets were checked.
@@ -774,7 +674,7 @@ right one is. Anything neither supplies, you supply yourself -- and every
 one of those is a `declare_input` with `source='guessed'`, which is what
 puts it in front of someone who can go and check it.
 
-""" % (listing, compare)
+""" % (listing, how)
 
 
 def reconstruct(notebook_path, chapter=None, pool=None, ceiling=None,

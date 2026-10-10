@@ -48,7 +48,7 @@ import re
 #
 # 36 IS ABSENT ON PURPOSE. It checked `_categories.yml`, and the categories
 # system was retired; the number is not reused, because rule numbers appear in
-# commit messages, in `corpus.py`'s recorded counts and in the references.
+# commit messages and in the references.
 # THE FAILURE BEHIND EACH RULE. One home, beside the numbers.
 #
 # It used to be `references/why.md`, a model-facing document reachable through
@@ -234,7 +234,7 @@ def unexplained():
     # right while every check lived in lint.py -- and would have silently
     # started reporting seventeen false gaps the moment this table moved out of
     # that file, which it just did. Worse, it returns [] on OSError, so a broken
-    # version reports "no gaps" and `corpus.py` believes it.
+    # version reports "no gaps" and a caller believes it.
     documented = set(WHY)
     from ..config import NB
     for f in sorted(NB.rglob("*.py")):
