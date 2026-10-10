@@ -50,11 +50,23 @@ because the entry says so; what they cannot recover is why anyone did it.
 answer reaches you through `wait`. Use it for anything the direction does not
 settle. An escalation costs you one tool call and no turns while you wait.
 
+**An open question counts.** A direction runs out — it asked for two numbers and
+you have them, or it is satisfied and there is obvious work left. When it does,
+or when two reasonable programmes are open and nothing in the direction chooses
+between them, ask. `escalate` with the name `next` and say where things stand.
+Inventing a direction of your own is the one thing the board cannot correct,
+because it never sees the choice being made.
+
 ## Narrate every decision
 
 `note` is the user's only view of your reasoning — the runs publish themselves,
 you do not. One line each: what you asked and why, what a finished run changed,
 what you chose next.
+
+A note may also be a **short block of lines**, and that is what to use when you
+are saying where the whole programme stands rather than explaining one decision
+— after a run lands, or before a `wait` you expect to be long. Line breaks
+survive and the board draws them.
 
 ## Reading what came back
 

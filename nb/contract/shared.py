@@ -520,6 +520,49 @@ def words(text):
     return len(t.split())
 
 
+#: A leading `**Label**:` on an input item -- the handle, not the content.
+_ITEM_LABEL = re.compile(r"^\s*\*\*[^*]{1,24}\*\*\s*:\s*")
+
+
+def item_words(text):
+    """
+    Rule 8's count for ONE INPUT ITEM: the label does not count. -> int
+
+    Items are written `**CG**: 64 mm (2.5 in) aft of wing LE.` and the bold
+    lead is a HANDLE -- the same thing the yaml key already is -- not prose.
+    Charging the budget for it taxes the one habit that makes a callout
+    readable, and it taxes it at three words out of ten:
+
+        **CG**: 64 mm (2.5 in) back from the leading edge.   11  over
+                64 mm (2.5 in) back from the leading edge.    8  fine
+
+    Rule 8 exists to stop an item carrying the ARGUMENT for a value -- "record
+    the input, not the argument for it". A label is not an argument, and
+    neither is the `(2.5 in)` beside it, which is the manufacturer's own
+    figure in the manufacturer's own units.
+
+    MEASURED, on the FT A-10 Warthog, 2026-10-10, and this is why the rule
+    moved rather than the brief. The line above sat in the NOTEBOOK's
+    `_inputs.yml` -- the brief, written by a person before the run started.
+    Lint reported it to the run, which could not edit it with any tool it
+    had, so it spent nine turns on the rule: reading the file, splitting the
+    sentence to count words by hand, trying to read this function's source
+    (refused), and finally reaching around the file tools with a raw
+    `open(..., "w")` to rewrite somebody else's sentence into nine words.
+    Lint went clean. A rule that is cheaper to vandalise than to satisfy is
+    pointing at the wrong thing.
+
+    THE PARENTHETICAL STILL COUNTS. Exempting every `(...)` would exempt
+    "(estimated from the build video)", which is exactly the argument the
+    rule is for. Ten words after the label is ample for a value and its
+    units.
+
+    Only a SHORT bold lead is treated as a label -- 24 characters -- so a
+    sentence in bold is still prose and still counted.
+    """
+    return words(_ITEM_LABEL.sub("", text))
+
+
 
 def callouts_of(text):
     """(title, body) for each ::: callout block, however it is fenced."""

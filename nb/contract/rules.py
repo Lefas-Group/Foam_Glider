@@ -37,7 +37,8 @@ from .shared import (
     _code_only, _computes_nothing, _defs_of, _departure_targets, tables_in,
     _helper_usage, _label, _one_drift, _plausible_parent, _rendered_numbers,
     _visuals_of, body_prose, callouts_of, code_of, declared_items,
-    entry_calls, entry_cells, fixed_count_solves, limits_of, notebook_items,
+    entry_calls, entry_cells, fixed_count_solves, item_words, limits_of,
+    notebook_items,
     prose_of, read_fork, read_inputs, rendered_by_footer, words,
     MAX_JUSTIFICATION, MAX_METHOD_SUMMARY, after_cut_in, method_summary,
     subtitle_of,
@@ -1471,7 +1472,8 @@ def _input_item_budget(root, chapters, entries):
               if any(e.parent.name == c for e in entries) and read_inputs(root, c)]
     for where, items in pairs:
         for kind, text in items:
-            n = words(text)
+            # `item_words`, not `words`: the bold handle is not prose.
+            n = item_words(text)
             if n > MAX_CALLOUT_ITEM:
                 out.append((where, (
                     f"{kind} item is {n} words, over {MAX_CALLOUT_ITEM} — "
@@ -1866,7 +1868,7 @@ def _callout_item_budget(pages):
                 continue
             for item in re.findall(r"^\s*\d+\.\s+(.*(?:\n(?!\s*\d+\.).*)*)",
                                    body, re.M):
-                n = words(item)
+                n = item_words(item)
                 if n > MAX_CALLOUT_ITEM:
                     problems.append(
                         (f, f"{title} item is {n} words, over "

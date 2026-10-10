@@ -62,6 +62,34 @@ for _p in [NB_ROOT / "_notebook.py",
     if _p.exists():
         exec(compile(_p.read_text(), str(_p), "exec"))
 
+# THE THREE NAMES EVERY PROBE REACHES FOR, so a kernel restart cannot take
+# them away.
+#
+# A probe kernel restarts whenever `_model.py` changes -- which is the main
+# loop of a reconstruction: write the aeroplane, look at it, write it again.
+# The names a probe imported for itself die with the kernel, and the next
+# probe, written by a model that reasonably believes it is continuing, opens
+# with `plt.subplots(...)` and gets a NameError. The turn is lost to an
+# import, not to a mistake about the aircraft.
+#
+# MEASURED on the FT A-10 Warthog, 2026-10-10: turn 22 lost `Image` to a
+# `reset=True`, turn 52 lost `plt` to a source change, and both probes were
+# re-sent unchanged but for one import line. `_notebook.py` imports
+# `matplotlib as mpl` and uses pyplot only inside functions, so `plt` was
+# never in scope to begin with.
+#
+# AFTER THE CHAPTER, deliberately: a chapter that binds one of these names
+# itself means it, and shadowing its definition with ours would be this file
+# reaching into the aircraft. Before `__nb_baseline` below, so they read as
+# part of the kernel rather than as something a probe defined.
+import matplotlib.pyplot as _plt_default
+import numpy as _np_default
+from PIL import Image as _Image_default
+
+for _n, _v in (("plt", _plt_default), ("np", _np_default),
+               ("Image", _Image_default)):
+    globals().setdefault(_n, _v)
+
 # WHERE a probe is stuck, from its own thread, so it reports from inside a C
 # call too. The thread that used to KILL a probe lived in `_notebook.py`; that
 # job is `nb`'s now, and this is the half worth keeping either way -- a probe
@@ -190,10 +218,69 @@ def _outside(path):
     return not any(full == a or full.startswith(a + "/") for a in _ALLOWED)
 
 
+# WHAT A PROBE MAY WRITE, which is a narrower thing than what it may read.
+#
+# Reading the whole notebook is right: the brief, a sibling chapter, the
+# freeze are all the aircraft. WRITING it is not. The file tools already
+# scope a run to its own chapter -- that is what the chapter lock is for --
+# and `open(..., "w")` went around them, reaching every file in the notebook
+# including ones a run must never author.
+#
+# MEASURED, on the FT A-10 Warthog, 2026-10-10. Lint reported a rule 8
+# violation in the NOTEBOOK-level `_inputs.yml`: an item of eleven words,
+# over the ten-word budget. That file is the brief. Its own header says
+# "Written by a PERSON, never by a run." The run could not edit it with
+# `edit_file`, so on turn 19 it opened it with an absolute path and rewrote
+# the line -- "**CG**: 64 mm (2.5 in) back from the leading edge." became
+# "**CG**: 64 mm aft of leading edge." -- and lint went clean.
+#
+# Nothing was harmed that time; the two sentences mean the same thing. What
+# is not survivable is the shape of it: a run that cannot satisfy a check
+# EDITING THE THING BEING CHECKED. The brief is what an entry is measured
+# against, exactly as the lint rules are, and `_outside` already refuses
+# those for that reason. This is the same boundary on the same argument.
+#
+# `_scratch/` is writable because that is where a run's own working files
+# live -- figures a probe saves, the pose store -- and the chapter directory
+# because that IS the run's work.
+_WRITING = ("w", "a", "x", "+")
+
+
+def _may_write(path):
+    """True when a probe may open `path` for writing."""
+    try:
+        full = _pl.Path(path).resolve()
+    except (OSError, ValueError, TypeError):
+        return True                       # not a path we can judge; `_outside` has it
+    if _outside(full):
+        return False                      # already refused, with a better message
+    for ok in (_pl.Path(NB_ROOT).resolve() / "_scratch",
+               _pl.Path(_chapter_dir).resolve(),
+               _pl.Path(__import__("tempfile").gettempdir()).resolve()):
+        if full == ok or str(full).startswith(str(ok) + "/"):
+            return True
+    # Outside the notebook entirely -- site-packages, stdlib -- is `_outside`'s
+    # to refuse for reading, and it already did. Anything left is notebook
+    # territory this probe does not own.
+    return not str(full).startswith(str(_pl.Path(NB_ROOT).resolve()) + "/")
+
+
 _real_open = _bi.open
 
 
 def _guarded_open(file, mode="r", *a, **kw):
+    if (isinstance(file, (str, bytes, _pl.PurePath))
+            and any(c in str(mode) for c in _WRITING)
+            and not _may_write(file)):
+        raise PermissionError(
+            f"{file} is in this notebook but not in this run's chapter, and a "
+            f"probe may not write it. You may READ anything the notebook owns; "
+            f"writing is scoped to chapters/{CHAPTER} and _scratch/, which is "
+            f"the same boundary the file tools hold. If the file needs to "
+            f"change and it is not yours -- the brief, a sibling chapter, "
+            f"_quarto.yml -- that is the COORDINATOR's to do, and the way to "
+            f"raise it is to say so in your answer. A check you cannot satisfy "
+            f"is a finding; editing the thing that checks you is not a fix.")
     if isinstance(file, (str, bytes, _pl.PurePath)) and _outside(file):
         raise PermissionError(
             f"{file} is outside this notebook. A probe reads the aircraft -- "

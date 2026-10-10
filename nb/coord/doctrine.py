@@ -41,11 +41,21 @@ PAGES = {
         "Writing a brief, and every time you judge whether a figure is an "
         "input or something the geometry must produce.",
         ("setup", "coordinate")),
+    # BOTH AUDIENCES NOW. It was `setup` only, on the reasonable view that
+    # photographs are collected once and then done with. They are not: the
+    # assumptions prompt puts the overlays a run has drawn in front of the
+    # coordinator, and judging them is a `coordinate` act using exactly this
+    # page's eye. Measured on the FT A-10 Warthog, 2026-10-10 -- the prompt
+    # listed four overlays including the three-panel one, and the
+    # coordinator's reasoning for accepting ran entirely on whether 400 g
+    # was a plausible battery. It never opened an image. This page says "the
+    # overlay is the only real check" and was not in front of it.
     "reference-photographs.md": (
         "Choosing, cutting and checking reference photographs",
-        "Collecting photographs, and any time a mask changes. Angular "
+        "Collecting photographs, any time a mask changes, and before "
+        "answering an assumptions prompt that lists overlays. Angular "
         "spread, and why the overlay is the only real check.",
-        ("setup",)),
+        ("setup", "coordinate")),
     "judging-a-run.md": (
         "Judging what a run asks you",
         "Every question a run puts to you: the kinds, the reply syntax, "

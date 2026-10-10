@@ -217,6 +217,32 @@ class Mailbox:
             f"  Answer it and resume with `nb resume {self.notebook.root.name}`.")
 
 
+#: Quote characters a model reaches for when it means "nothing".
+_QUOTES = "\"'\u2018\u2019\u201c\u201d`"
+
+
+def blank(value):
+    """
+    True for an answer that MEANS empty, whatever it is spelled as.
+
+    A blank is the commonest answer there is: "" accepts an assumption as
+    stated and keeps every inherited item. But a model does not always type
+    nothing to say nothing -- observed on ft-warthog, an entry render budget
+    was accepted with the two characters `""`, which is not blank by any test,
+    so the record kept the quote marks and the board drew a box containing
+    them.
+
+    Only a value made ENTIRELY of quote marks and whitespace counts. One that
+    merely opens and closes with a quote is a quotation and is left alone.
+
+    HERE because both ends need the same test: the writer normalises before
+    recording (`coord/tools.py::_answer`) and the reader has records already on
+    disk to render (`cli/board.py`). Two spellings of "is this an acceptance?"
+    would drift.
+    """
+    return not str(value).strip(_QUOTES + " \t\r\n")
+
+
 def answer(notebook, value, by="user", replying_to=None):
     """
     Write the reply for whichever run this notebook points at.

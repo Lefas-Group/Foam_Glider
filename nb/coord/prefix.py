@@ -136,8 +136,13 @@ def build(notebook, direction="", name=""):
                if answered else
                "No reply yet. `wait` blocks for it, and costs nothing.\n"))
     if notes:
-        lines = "\n".join(f"- {n.get('kind', 'note')}: {n.get('text', '')}"
-                          for n in notes)
+        # A NOTE MAY BE SEVERAL LINES now that it can be a summary of where
+        # the programme stands, so continuations are indented to stay inside
+        # their bullet -- flush left they read as the end of the list.
+        lines = "\n".join(
+            "- {}: {}".format(n.get("kind", "note"),
+                              str(n.get("text", "")).replace("\n", "\n  "))
+            for n in notes)
         parts.append("## Your most recent notes, from earlier sessions\n\n"
                      + lines + "\n")
     parts.append(TAIL)

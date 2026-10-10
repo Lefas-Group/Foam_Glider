@@ -188,8 +188,20 @@ message, never into the entry.
 directory with `{chapter}` loaded and writes nothing here. {left} s of pool left.
 
 Today is {today}. Call `lint` with chapter `{chapter}` and fix what it reports;
-each message names its own fix. Stop when it is clean — rendering and committing
-are handled after you finish.
+each message names its own fix.
+
+STOP WHEN LINT IS CLEAN AND YOU HAVE LOOKED AT YOUR FIGURES. That is the whole
+gate, and both halves are reached by rendering the ONE entry and calling
+`read_figure` on what it drew. After that there is nothing left for you to do:
+the chapter index, the front page and the commit are all done for you once you
+finish, and a whole-notebook `render` of your own re-serves them from cache and
+tells you nothing. Nor does linting a chapter you have not edited since the
+last call — it is the same answer and it costs a turn to hear it again.
+
+A lint finding in a NOTEBOOK-level file — `_inputs.yml`, `_quarto.yml`,
+`index.qmd` — arrives as a warning and is not yours to fix. You have no tool
+that reaches those files and must not reach around one. Name it in your final
+message so the coordinator can act on it, and carry on.
 """
 
 
@@ -318,6 +330,32 @@ and wing loading with a completely wrong fuselage. That has happened here --
 a reconstruction passed its mass checks as a smooth pod where the real
 aircraft is a slab-sided foam box. So the picture comes first, and the
 numbers after.
+
+**EVERY COMPONENT YOU BUILD MUST BE IN A PHOTOGRAPH.** Before you open the
+entry, run `completeness` on each view and read the two lists it prints
+beside the gaps: what you drew OUTSIDE the photograph, and what the
+silhouette CANNOT SEE because it sits inside the body. A component named in
+either list, in every view, is one the photographs do not justify. Delete it,
+or keep it and `declare_input` what does justify it -- those are the two
+honest endings and silence is not a third.
+
+An unseen component is the quieter failure and the one that survives. It
+costs nothing in the overlay, because it draws nothing; it costs mass, area
+and -- if you built it as an `asb.Wing` -- LIFT, in every entry that comes
+after. Measured here: an A-10 reconstruction carried a 160 x 104 mm plate
+between fuselage and nacelle, invisible in all three photographs, as a
+lifting surface. It passed the overlay, the assumptions prompt and two
+performance questions built on top of it.
+
+`ablate(airplane, "<name>")` answers "would the silhouettes rather not have
+this?" in one probe, at a fixed camera, without editing anything.
+
+**The residual carriers in a pose note are a WORK LIST.** "Error sits on:
+Fuselage 23%, Main Wing 23%" names the components whose constants
+`fit_geometry` should free next, in that order. It is not a footnote on a
+number you have already accepted. A reconstruction that reads that line,
+frees ONE constant somewhere else, and writes the entry has used the
+photographs to confirm the model rather than to obtain it.
 
 **Write `_model.py` so the photographs can ARGUE with it.** Every dimension
 a silhouette could have an opinion about -- a station, a chord, a sweep, a

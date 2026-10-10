@@ -65,6 +65,42 @@ You can still tell the two apart by LOOKING: every component displaced in the
 same direction is a pose error, one component wrong while the others sit
 right is a shape error.
 
+### What each call costs, so you can stop timing them
+
+Measured on the FT A-10 Warthog's three views, one machine, one model:
+
+    compare_to_photo(ap, v)                       cold     41-78 s
+    compare_to_photo(ap, v, pose=p)               fitted   10-46 s
+    compare_to_photo(ap, v, pose=p, refit=False)  pinned     3-4 s
+
+`refit=False` PINS the camera: the angles are taken as given and only scale,
+translation and distance are found. The residual lands within 0.01–0.32 pp of
+the fitted one at a pose that had already converged, and the note says **POSE
+PINNED** so nobody reads an assertion as a measurement.
+
+Use it to REDRAW a camera you have already converged on and printed — which is
+most of the overlays a build loop draws. Fit once per view per shape; pin for
+everything after. **A render with a `pose=` pins automatically**, so an entry
+pays seconds rather than the ~25 s a panel used to add to `ENTRY_CEILING`.
+
+Do not time these yourself. A run spent four turns measuring exactly the table
+above, and the numbers are here so that it is one read instead.
+
+### The panel, in one call
+
+    fig, notes = show_all_views(airplane)                 # probe
+    fig, notes = show_all_views(airplane, poses={...})    # entry
+
+Every reference view, side by side, with the notes. In a probe the poses this
+run already found are reused; **an entry should name them all**, because at
+render there is no probe history and a pose written in the entry is one a
+reader can see and a later run can argue with.
+
+Nine turns and ~400 s of one reconstruction went into hand-building this
+figure — `plt.subplots(1, 3)`, three calls, `tight_layout`, `savefig` —
+rewritten four times after a kernel restart took `plt` away and two probes
+were killed on a budget nobody could size yet.
+
 ## The one that FITS GEOMETRY
 
     fit_geometry(free, reliability="normal", views=None, poses=None) -> _FitResult
@@ -110,3 +146,83 @@ distance.
 What fraction of the photograph's mask the model covers, and what it covers
 outside it. A whole component missing from the model shows here as mask the
 model never reaches.
+
+It sorts every component you built into three states, and they want three
+different things from you:
+
+| state | what the note says | what it means |
+|---|---|---|
+| supported | nothing | its silhouette is on the mask; the photographs agree with it |
+| outside | `OUTSIDE THE PHOTOGRAPH: <name>` | it is drawing where the aircraft is not — too big, misplaced, or not real |
+| unseen | `THE SILHOUETTE CANNOT SEE: <name>` | it is inside the body from this camera; no overlay can argue with it at all |
+
+**UNSEEN IS NOT SUPPORTED.** A component buried inside the body contributes
+no outline, so a good fit does not confirm it and a bad one does not refute
+it — and it is still carrying mass, area and lift. If a component is unseen in
+*every* view, the photographs are not what justifies it: either something else
+does and `declare_input` says so, or you are modelling a part nobody can check.
+
+**Do not free an unseen component's constants.** `fit_geometry` moves the
+residual through the outline, and there is no outline. Measured on the FT A-10
+Warthog: its `Nacelle Pylons` drew 3–7 % of the model's outer silhouette and
+the pose note charged it 14–20 % of the residual — second or third on every
+view, above the tailplane and the fins. That was the note's fault and is fixed;
+the shares are now attributed on the union silhouette, so a buried component
+scores ~0 %. If you are reading an older entry that freed constants on such a
+hint, that fit could not have moved anything.
+
+### Is it earning its place?
+
+    ablate(airplane, "Nacelle Pylons", poses={...})
+
+The residual for every view **with** the component and **without** it, both at
+the same pinned camera. One probe, and it edits nothing.
+
+**It gives no verdict on a component the silhouette cannot see**, and that
+restriction is the most important thing it knows. A buried part can move the
+residual by contributing *area* — closing a gap in the union outline — which is
+indistinguishable, in the number, from contributing correct *shape*.
+
+The Warthog's pylon is the case this was written for:
+
+    front-right-above   2.36%  ->  3.88%   worse without  (draws 3% of its outline)
+         removing it opens silhouette against: Fuselage, Nacelle Left, …
+    rear-left-above     2.83%  ->  2.63%   better without (draws 5% of its outline)
+    thumbnail-front-left 1.83% ->  2.07%   worse without  (draws 7% of its outline)
+
+Two views got **worse** without it, which reads as "the photographs want this
+part" and is not what it means. The pylon spans the gap between fuselage and
+nacelle; delete it and a hole opens that the real aircraft does not have,
+because **the fault is next door** — a fuselage too narrow, or nacelles too far
+outboard. The plate was patching a neighbour's error, and the chamfer cannot
+tell you so: it just sees the hole close.
+
+So read the line underneath instead. **`removing it opens silhouette against:
+Fuselage` in every view is the finding** — free the fuselage's constants, not
+the pylon's. It is the same move `completeness` makes for a gap in the mask ("a
+gap TOUCHING a component means that component is too small"), in the other
+direction.
+
+For a component that *does* draw real outline, the three outcomes read as you
+would expect: better without it in every view, the silhouettes do not want it;
+worse in every view, the photographs are holding it in place — though still
+check what the hole runs against; mixed, usually real and the wrong size.
+
+Whether an invisible component belongs at all is a question for the build
+documentation, not for the overlay. The photographs have no opinion.
+
+### Changing the component list after a fit
+
+Adding or deleting a component **invalidates the pose and every fitted
+constant**. Both were found with the old component list, and the camera
+absorbed some of that component's error; reusing either afterwards measures the
+part you removed. The order is:
+
+1. edit `_model.py`
+2. refit the poses **cold** — do not pass the old ones, do not reuse the store
+3. `fit_geometry` again on the constants the new notes point at
+4. report the residual before and after, per view
+
+That is an entry's worth of work with a table as its answer — "Does the model
+need the nacelle pylon?" — not a silent patch to a model other entries already
+rest on.

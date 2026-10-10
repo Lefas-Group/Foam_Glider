@@ -155,10 +155,10 @@ uv run --group nb python -m nb direction <nb> "<what the user asked for>"
 ```
 
 **Before the first `nb ask`**, so nothing in the programme predates the reason
-for it. The board pins it above the table and starts the conversation there:
-work done under a previous direction stays on the record but is not replayed.
-Record a new one when the user changes what they are after — that is what
-marks the pivot.
+for it. The board heads the conversation with it — pinned in its own box, or as
+the user's own message when they typed it there — and work done under a previous
+direction stays on the record but is not replayed. Record a new one when the
+user changes what they are after; that is what marks the pivot.
 
 ## When a run goes wrong
 

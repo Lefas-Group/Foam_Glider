@@ -58,6 +58,25 @@ from ..process.log import say
 # before every commit, and `check.py` runs the full rule set POST-render.
 FREEZE_STALE_RULES = frozenset({12, 40})
 
+# FILES A RUN MAY NOT WRITE, by name, at the notebook root. A finding in one
+# of these is real and someone must fix it -- but not the run, which has no
+# tool that reaches them and must not have one: `_inputs.yml` is the brief
+# an entry is MEASURED against, and `_quarto.yml` is the project.
+#
+# MEASURED on the FT A-10 Warthog, 2026-10-10. Lint returned a rule 8
+# violation in the notebook's `_inputs.yml` -- a brief item of eleven words
+# against a ten-word budget, written by a person before the run started.
+# The run spent NINE TURNS on it: reading the file, splitting the sentence
+# to count words, trying to read the rule's own source to find the budget
+# (refused), and finally reaching around `edit_file` with a raw
+# `open(..., "w")` to rewrite someone else's sentence. Lint then went clean,
+# which is the worst part: the loop closed.
+#
+# Blocking a run on a repair it cannot make is the defect. The finding still
+# travels -- as a warning, named as the coordinator's -- so it is not lost,
+# it is addressed to whoever can act on it.
+NOT_THE_RUNS_TO_FIX = frozenset({"_inputs.yml", "_quarto.yml", "index.qmd"})
+
 
 def _problems(root, chapters, pre_render=True):
     """
@@ -80,6 +99,18 @@ def _problems(root, chapters, pre_render=True):
         if pre_render and rule in FREEZE_STALE_RULES:
             continue
         label = "" if where is None else f"{where.name}: "
+        # NOT BLOCKING ON SOMEBODY ELSE'S FILE. `where` is the path the rule
+        # found it in; at the notebook root, these belong to the person who
+        # wrote the brief. Demoted rather than dropped -- see
+        # `NOT_THE_RUNS_TO_FIX` -- and relabelled so the run passes it on
+        # instead of trying to satisfy it.
+        if (where is not None and where.name in NOT_THE_RUNS_TO_FIX
+                and where.parent == root):
+            warnings.append((rule, (
+                f"{label}{msg}  (warning) — this is the NOTEBOOK's file, not "
+                f"your chapter's, and not yours to edit. Say so in your "
+                f"answer so the coordinator can fix it.")))
+            continue
         (warnings if "(warning)" in msg else blocking).append(
             (rule, f"{label}{msg}"))
     return blocking, warnings

@@ -1222,7 +1222,8 @@ def _rails(v, lo, hi):
             and min(abs(x_ - l_), abs(x_ - h_)) < 0.02*(h_ - l_)]
 
 
-def _fit_pose(parts, mask, pose=None, work=220, seed=1, budget=None):
+def _fit_pose(parts, mask, pose=None, work=220, seed=1, budget=None,
+              pinned=False):
     """
     Camera pose by symmetric chamfer distance between outlines.
 
@@ -1244,11 +1245,36 @@ def _fit_pose(parts, mask, pose=None, work=220, seed=1, budget=None):
     a second OPINION. It was fixed at 1, so re-running a cold fit returned a
     bit-identical answer and "try another seed" was advice no caller could
     act on. `compare_to_photo` now varies it to confirm its own result.
+
+    `pinned` TAKES THE ANGLES AS GIVEN and searches only what is left: scale,
+    the two translations and perspective distance. A `pose` otherwise NARROWS
+    the search to +/-25 deg and still pays a full 7-DOF descent, which is the
+    same ~10 s whether the caller knows the camera or is guessing at it.
+
+    Measured on the FT A-10 Warthog, 2026-10-10: a reconstruction spent 703 s
+    of its 819 s probe pool on camera fits, 22 of its 44 probes, and ran
+    `fit_geometry` ONCE on ONE constant. Most of those fits re-derived a
+    camera the previous probe had already printed -- the notes came back
+    within a tenth of a degree of each other -- because there was no way to
+    say "this one, do not look again". Pinned is that way.
+
+    IT IS NOT A FIT AND MUST NOT READ AS ONE. Four free parameters cannot
+    disagree with an asserted camera; they can only place it. So a pinned
+    result is never confirmed, never cached as though it had been searched,
+    and says POSE PINNED in the note.
     """
     import numpy as _np
     from scipy.optimize import minimize as _minimize
     from scipy import ndimage as _nd
     from PIL import Image as _Image
+
+    # A PIN WITH NOTHING TO PIN TO is a cold search wearing the word, and it
+    # would report POSE PINNED over a camera nobody asserted. Refused here
+    # rather than ignored, because the note is what a reader trusts.
+    if pinned and pose is None:
+        raise ValueError(
+            "pinned=True needs a pose to pin to. Pass pose=(elev, azim, roll) "
+            "from a note you have already read, or drop pinned and let it fit.")
 
     h, w = mask.shape
     sc = work / max(h, w)
@@ -1349,24 +1375,49 @@ def _fit_pose(parts, mask, pose=None, work=220, seed=1, budget=None):
         # worse than refused.
         if len(pose) > 2:
             lo[2], hi[2] = float(pose[2])-25, float(pose[2])+25
+    # WHICH PARAMETERS THE DESCENT MAY TOUCH. Everything, or -- pinned -- only
+    # the four that place an asserted camera: scale, the two translations and
+    # perspective distance. The frozen entries come from `start`, which for a
+    # `pose` is built out of that pose above, so the angles the caller named
+    # are carried through untouched rather than re-found.
+    _free = _np.array((3, 4, 5, 6) if pinned else (0, 1, 2, 3, 4, 5, 6), int)
+
     def _descend(lo, hi, start, secs=None):
         """
-        One CMA descent inside [lo, hi]. -> (params7, cost)
+        One CMA descent inside [lo, hi], over `_free`. -> (params7, cost)
 
         `secs` bounds its wall clock, so it returns its best-so-far instead of
         being killed with the run's work inside it. None outside a probe, where
         there is no deadline and nothing should be truncated on account of one.
         """
-        x0 = _np.clip(_np.array(start, float),
-                      lo + 1e-6*(hi-lo), hi - 1e-6*(hi-lo))
-        def _u(x):   return (x - lo)/(hi - lo)
-        def _x(u):   return lo + _np.clip(u, 0, 1)*(hi - lo)
+        full = _np.clip(_np.array(start, float),
+                        lo + 1e-6*(hi-lo), hi - 1e-6*(hi-lo))
+        l_, h_ = lo[_free], hi[_free]
+        def _x(u):
+            out = full.copy()
+            out[_free] = l_ + _np.clip(u, 0, 1)*(h_ - l_)
+            return out
+        u0 = (full[_free] - l_)/(h_ - l_)
         opts = {"bounds": [0, 1], "popsize": 18, "maxiter": 400,
                 "tolfun": 2e-2, "tolfunhist": 2e-3, "verbose": -9,
                 "seed": seed}
+        if pinned:
+            # A SMALLER PROBLEM WANTS A SMALLER SEARCH. Scale, the two
+            # translations and distance are near-convex once the angles are
+            # fixed -- the bounding-box seed is already close and there are
+            # no mirror basins left to escape, because the mirrors live in
+            # the angles. The 7-DOF settings spend their population exploring
+            # a landscape that is no longer there.
+            #
+            # Measured on the FT A-10 Warthog's three views: at popsize 18 /
+            # maxiter 400 a pinned fit took 5.0-9.5 s against 10-46 s
+            # searched, which is the right direction and nowhere near the
+            # ~1 s a redraw should cost. The residuals it returns are
+            # unchanged to a few hundredths of a point.
+            opts.update(popsize=8, maxiter=120, tolfun=5e-2, tolfunhist=5e-3)
         if secs is not None:
             opts["timeout"] = max(2.0, float(secs))
-        es = _cma.CMAEvolutionStrategy(_u(x0), 0.25, opts)
+        es = _cma.CMAEvolutionStrategy(u0, 0.25, opts)
         es.optimize(lambda u: cost(_x(_np.asarray(u))))
         return _x(es.result.xbest), es.result.fbest
 
@@ -1425,7 +1476,14 @@ def _fit_pose(parts, mask, pose=None, work=220, seed=1, budget=None):
     # distance railed at the sigmoid ceiling -- effectively orthographic,
     # which _project's own docstring warns against -- and nothing said so.
     # Azimuth is exempt; `_rails` says why.
+    # ONLY WHAT WAS SEARCHED CAN RAIL. A pinned angle sits where the caller
+    # put it, and the +/-25 window around it is never entered -- so measuring
+    # its distance to a bound it was not free to reach would report the
+    # ASSERTION as a failed fit. Scale, translation and distance still rail
+    # and still matter: those four are what a pin leaves to be found.
     railed = _rails(v, lo, hi)
+    if pinned:
+        railed = [n for n in railed if n in ("scale", "tx", "ty", "distance")]
     return (e, a % 360, ro, s/sc, tx/sc, ty/sc, d), val/sc, centre, railed
 
 
@@ -1449,6 +1507,30 @@ def _component_residuals(airplane, mask, params, centre, work=220):
     photo-to-model, which cannot be attributed: a stretch of photograph
     outline that no component reaches belongs to whichever is MISSING, and
     naming one would be a guess. `completeness` is the tool for that half.
+
+    ON THE OUTER SILHOUETTE, which is the outline the fit actually
+    minimises. This used to score each component's OWN outline against the
+    mask edge, and that is a different quantity: a surface buried inside the
+    body -- a pylon between fuselage and nacelle, a spar, a fin in the
+    shadow of a nacelle -- has its whole outline deep in the mask interior,
+    far from the edge, and so collected a large distance for doing exactly
+    what an interior surface is supposed to do.
+
+    Measured on the FT A-10 Warthog, 2026-10-10. `Nacelle Pylons` contributes
+    3-7% of the model's outer outline across the three views and was charged
+    14-20% of the residual -- second or third on every view, above the
+    tailplane and the fins. The entry's note duly told the run to "free the
+    constants those point at". Freeing them could not have moved the
+    residual by construction: the chamfer never sees that outline. A
+    diagnostic that points the fitter at a component it cannot act through
+    is worse than no diagnostic, because the fit comes back having changed
+    nothing and the run believes the shape is settled.
+
+    So an edge pixel counts for a component only where it lies on the union
+    silhouette. A component contributing no outline now scores ~0%, which is
+    the true statement about what it can do to this number -- and
+    `completeness` says the other true thing about it, that the photographs
+    cannot see it at all.
     """
     import numpy as _np
     from scipy import ndimage as _nd
@@ -1466,12 +1548,24 @@ def _component_residuals(airplane, mask, params, centre, work=220):
     names = [c.name for c in list(airplane.wings) + list(airplane.fuselages)]
     parts = _parts_of(airplane, resolution=_FIT_RESOLUTION)
 
+    # THE UNION FIRST, because its edge is the only outline the cost knows.
+    # `_fit_pose` rasterises every component, ORs them, and takes one edge
+    # off the result; matching that here is what makes these shares add up
+    # to the number they are apportioning.
+    rast = [_raster(pts, faces, p, (tw, th), centre) for pts, faces in parts]
+    union = _np.zeros((th, tw), bool)
+    for m in rast:
+        union |= m
+    outer = union & ~_nd.binary_erosion(union)
+
     share = {}
-    for name, (pts, faces) in zip(names, parts):
-        m = _raster(pts, faces, p, (tw, th), centre)
-        edge = m & ~_nd.binary_erosion(m)
-        if edge.any():
-            share[name] = share.get(name, 0.0) + float(dt[edge].sum())
+    for name, m in zip(names, rast):
+        # OWNED, not merely touched: dilate by one so a component whose
+        # boundary sits a pixel inside the union edge -- rasterisation makes
+        # that common where two parts meet -- still claims its own outline.
+        own = outer & _nd.binary_dilation(m, _np.ones((3, 3)))
+        if own.any():
+            share[name] = share.get(name, 0.0) + float(dt[own].sum())
     total = sum(share.values())
     if not total:
         return {}
@@ -1495,9 +1589,96 @@ _POSE_DOUBTFUL = 0.040
 #: what anyone did about it.
 _POSE_AGREE = 0.0025
 
-#: Last converged pose per (view, geometry), within one probe kernel. Never
-#: consulted at render: see `compare_to_photo`.
+#: Last converged pose per (view, geometry). Never consulted at render: see
+#: `compare_to_photo`. Backed by `_scratch/poses.json` so it OUTLIVES THE
+#: KERNEL -- see `_pose_remembered`.
 _POSE_CACHE = {}
+
+
+def reference_views():
+    """Every reference photograph that has a mask, in a stable order. -> [str]
+
+    A VIEW IS A MASK, not a photograph: `_reference/` holds the originals too,
+    and one without a cut mask is a picture nothing can be fitted against.
+    `fit_geometry` has selected on `*.mask.png` since it was written and
+    `show_all_views` needs the same list; two globs agreeing by hand is one
+    that will disagree the first time the suffix changes.
+    """
+    root = _pathlib.Path(_os.environ.get("NB_ROOT", "."))
+    return sorted(p.name[:-len(".mask.png")]
+                  for p in (root / "_reference").glob("*.mask.png"))
+
+
+def _pose_store():
+    """Where remembered poses live, or None when there is nowhere. -> Path"""
+    root = _os.environ.get("NB_ROOT")
+    return _pathlib.Path(root) / "_scratch" / "poses.json" if root else None
+
+
+def _pose_remembered(name, airplane):
+    """
+    The last converged pose for this view and this geometry. -> pose3 or None
+
+    IT HAS TO SURVIVE THE KERNEL, and in memory it did not. Every
+    `write_file` to `_model.py` restarts the probe kernel -- the chapter is
+    re-exec'd so the model is the one on disk -- and the dict went with it.
+    The build loop is WRITE, LOOK, WRITE, so the cache was empty at exactly
+    the moment it was wanted, and the next overlay paid a cold 72-seed screen
+    to re-find a camera the previous probe had printed in full.
+
+    Measured on the FT A-10 Warthog, 2026-10-10: five model writes, and 703 s
+    of an 819 s probe pool spent fitting cameras.
+
+    KEYED ON THE GEOMETRY, not just the view. `_geometry_fingerprint` carries
+    the component count and the bounding box, so a pose is dropped the moment
+    the aircraft changes structurally -- a component added or removed, a span
+    moved -- while surviving the millimetre station edits a fit makes. That
+    is the property that makes reuse safe rather than merely cheap, and it is
+    why the key must not be loosened to the view alone.
+
+    A corrupt or unreadable store is a MISS, never an error: the only cost of
+    not remembering is the search that used to run every time.
+    """
+    key = f"{name}|{_geometry_fingerprint(airplane)}"
+    if key in _POSE_CACHE:
+        return _POSE_CACHE[key]
+    p = _pose_store()
+    if p is None or not p.exists():
+        return None
+    try:
+        import json as _json
+        got = _json.loads(p.read_text()).get(key)
+        return tuple(got) if got else None
+    except Exception:                                        # noqa: BLE001
+        return None
+
+
+def _pose_remember(name, airplane, pose3):
+    """Record a converged pose, in memory and on disk. Never raises."""
+    key = f"{name}|{_geometry_fingerprint(airplane)}"
+    _POSE_CACHE[key] = tuple(float(x) for x in pose3)
+    p = _pose_store()
+    if p is None:
+        return
+    try:
+        import json as _json
+        p.parent.mkdir(parents=True, exist_ok=True)
+        held = {}
+        if p.exists():
+            held = _json.loads(p.read_text())
+        held[key] = list(_POSE_CACHE[key])
+        # BOUNDED. One entry per (view, geometry) and the geometry moves on
+        # every fit, so an unpruned file grows for the life of the notebook.
+        # Newest 64 is several views across many edits and still a small read.
+        if len(held) > 64:
+            held = dict(list(held.items())[-64:])
+        p.write_text(_json.dumps(held, indent=1))
+    except Exception:                               # noqa: BLE001, S110
+        # NOTHING TO REPORT AND NOWHERE TO REPORT IT. This runs inside a
+        # probe's overlay call; a warning here would land in the middle of a
+        # note the model reads as measurement. The only consequence of a
+        # failed write is the next probe paying the search again.
+        pass
 
 
 def _geometry_fingerprint(airplane):
@@ -1593,7 +1774,7 @@ def _described_side(name):
     return -1 if below > above else +1
 
 
-def compare_to_photo(airplane, name, pose=None, fill=0.22):
+def compare_to_photo(airplane, name, pose=None, fill=0.22, refit=None):
     """
     Draw the model over a photograph of the real aircraft. -> (rgb, note)
 
@@ -1629,6 +1810,33 @@ def compare_to_photo(airplane, name, pose=None, fill=0.22):
     is re-implementing that loop, badly: the run this was written for wrote
     a 3x3 grid, had both probes killed on budget, and got two numbers worse
     than the one it started from.
+
+    `refit=False` PINS the pose instead of searching around it: the angles
+    are taken as given and only scale, translation and distance are found.
+    Use it to REDRAW a camera an earlier probe already converged on and
+    printed -- which is most of the overlays a build loop draws.
+
+    Measured on the FT A-10 Warthog's three views, same machine, same model:
+
+      compare_to_photo(airplane, v)                    cold    41-78 s
+      compare_to_photo(airplane, v, pose=p)            fitted  10-46 s
+      compare_to_photo(airplane, v, pose=p, refit=False)  pinned  3-4 s
+
+    and the pinned residuals land within 0.01-0.32 pp of the fitted ones at
+    a pose that had already converged. It is three to ten times cheaper, not
+    free: the cost is dominated by rasterising the model once per trial, and
+    pinning removes trials rather than rasters.
+
+    DEFAULT: fit in a probe, PIN AT RENDER. An entry passes the pose it
+    justified in a probe, and at render the job is to redraw that camera, not
+    to look for it again -- so a render with a `pose` pins unless told
+    otherwise. That makes the committed figure reproducible, which is what
+    rule 12 is for, and takes the overlay's ~25 s surcharge off ENTRY_CEILING.
+    `refit=True` forces the search anywhere, including at render.
+
+    A PINNED RESULT IS NOT EVIDENCE THE CAMERA IS RIGHT. Four free parameters
+    cannot argue with an asserted angle; they can only place it. So a pinned
+    overlay is never confirmed, never cached, and never reports CONVERGED.
     """
     import numpy as _np
     from PIL import Image as _Image
@@ -1652,9 +1860,19 @@ def compare_to_photo(airplane, name, pose=None, fill=0.22):
     # is the property rule 12 exists to protect.
     warm = pose
     if warm is None and _IN_PROBE:
-        warm = _POSE_CACHE.get((name, _geometry_fingerprint(airplane)))
+        warm = _pose_remembered(name, airplane)
 
-    params, resid, centre, railed = _fit_pose(cheap, mask, pose=warm)
+    # PIN AT RENDER, FIT IN A PROBE, unless the caller said which. The entry
+    # passing `pose=` has already justified that camera in a probe; redrawing
+    # it is not an occasion to search again, and a search that lands somewhere
+    # else makes the committed figure depend on the optimiser rather than on
+    # the file. `refit=True` overrides, and a render with no pose has nothing
+    # to pin to and fits as it always did.
+    pin = (not _IN_PROBE) if refit is None else (not refit)
+    pin = bool(pin) and warm is not None
+
+    params, resid, centre, railed = _fit_pose(cheap, mask, pose=warm,
+                                              pinned=pin)
     scale_px = float(_np.sqrt(mask.sum()))
 
     # CONFIRM THE RESULT RATHER THAN ASK THE CALLER TO. Above 1.2% this used
@@ -1672,8 +1890,14 @@ def compare_to_photo(airplane, name, pose=None, fill=0.22):
     # a different CMA seed, ~20 s, against the 75 s the caller spent failing.
     # Probe-side only -- at render the entry has pinned its pose and the
     # figure just redraws it, so ENTRY_CEILING is unmoved.
+    # NOT AFTER A PIN. The confirm fit asks "would an independent search land
+    # here?", and the answer is interesting only when a search ran. Pinned,
+    # the angles came from the caller, so a cold reseed is not confirming the
+    # result -- it is doing the 10 s of work the pin was asked to skip, and
+    # then reporting a verdict about a fit that did not happen.
     confirmed = None
-    if (_IN_PROBE and not railed and resid <= _POSE_DOUBTFUL * scale_px
+    if (_IN_PROBE and not pin and not railed
+            and resid <= _POSE_DOUBTFUL * scale_px
             and resid > 0.012 * scale_px):
         # THE CONFIRM FIT IS COLD, ALWAYS, and that is the point of it. Run
         # from the same `pose` it would be narrowed to the same +/-25 deg
@@ -1706,8 +1930,12 @@ def compare_to_photo(airplane, name, pose=None, fill=0.22):
         else:
             confirmed = ("stands", gap, 100.0*r2/scale_px)
 
-    if _IN_PROBE and not railed:
-        _POSE_CACHE[(name, _geometry_fingerprint(airplane))] = params[:3]
+    # ONLY A SEARCH IS WORTH REMEMBERING. A pinned result's angles are the
+    # caller's, so storing them would let an assertion made once come back as
+    # a remembered "converged" pose on a later probe that asserted nothing --
+    # the caller's guess laundered into a measurement.
+    if _IN_PROBE and not railed and not pin:
+        _pose_remember(name, airplane, params[:3])
 
     out = photo.copy()
     covered = _np.zeros((H, W), bool)
@@ -1776,6 +2004,17 @@ def compare_to_photo(airplane, name, pose=None, fill=0.22):
         note += ("POSE NOT CONVERGED: " + ", ".join(railed) +
                  " sat on a bound. Read nothing from this overlay. ")
     note += f"Fit: {pct:.2f}% of sqrt(mask area). "
+    # SAY WHEN THE ANGLES WERE NOT SEARCHED. Every other line of this note
+    # reports what a fit FOUND, and a pinned overlay's angles were found by
+    # whoever typed them. Without this the reader has a residual, a camera
+    # and no way to tell that two of those three were an input -- which is
+    # how an assertion comes to be quoted as a measurement.
+    if pin:
+        note += ("POSE PINNED — the angles are the ones you passed, not "
+                 "searched; only scale, translation and distance were fitted. "
+                 "The residual still measures SHAPE against this camera, but "
+                 "it is not evidence the camera is right. Drop refit=False to "
+                 "let it look. ")
     # NO "Pose: good" AFTER A RAILED FIT. The two used to print together --
     # "Read nothing from this overlay. ... Pose: good." -- because `ok` only
     # ever tested the DOUBTFUL gate. A verdict that contradicts the warning
@@ -1811,6 +2050,13 @@ def compare_to_photo(airplane, name, pose=None, fill=0.22):
                     f"({confirmed[2]:.2f}% against {pct:.2f}%), so this is the "
                     f"better of two independent searches and nothing found a "
                     f"lower basin. The {pct:.2f}% is most likely SHAPE.")
+        elif pin:
+            # PINNED, so there is nothing to hedge ABOUT: no search ran and
+            # the line above already said the angles were given. What is
+            # still worth saying is the half a pin does not weaken -- the
+            # component breakdown below is measured against this camera and
+            # is what `fit_geometry` acts on.
+            lead = (f" The {pct:.2f}% is shape against the camera you pinned.")
         else:
             # No confirm fit ran -- a render, or a seed that disagreed. The
             # residual is still above the line, and that still means a reader
@@ -1840,21 +2086,73 @@ def compare_to_photo(airplane, name, pose=None, fill=0.22):
     return out.astype(_np.uint8), note
 
 
-def show_comparison(airplane, name, pose=None, fill=0.22, ax=None):
+def show_comparison(airplane, name, pose=None, fill=0.22, ax=None,
+                    refit=None):
     """`compare_to_photo` onto matplotlib axes, for an entry. -> the note.
 
     PIN THE CAMERA HERE. An entry re-runs this at render, so passing the
     `pose` the probe converged on is what makes the committed figure redraw
     the same way every time. Without it the render refits cold, which costs
     the ceiling ~25 s a panel and can land somewhere else.
+
+    A `pose` AT RENDER IS NOW PINNED by default -- the angles are taken as
+    given and only scale, translation and distance are found, so a panel
+    costs a few seconds instead of twenty-five and redraws identically every
+    time. Pass `refit=True` to make the render search anyway, or
+    `refit=False` in a probe to get the same cheap redraw there.
     """
     import matplotlib.pyplot as _plt
-    rgb, note = compare_to_photo(airplane, name, pose=pose, fill=fill)
+    rgb, note = compare_to_photo(airplane, name, pose=pose, fill=fill,
+                                 refit=refit)
     if ax is None:
         _, ax = _plt.subplots(figsize=(7.0, 7.0*rgb.shape[0]/rgb.shape[1]))
     ax.imshow(rgb)
     ax.set_axis_off()
     return note
+
+
+def show_all_views(airplane, poses=None, fill=0.22, refit=None, width=5.0):
+    """
+    Every reference view in one row of panels. -> (fig, {view: note})
+
+    THE PANEL AN ENTRY ACTUALLY WANTS, built once here instead of in every
+    probe that wants to look at the aircraft. Measured on the FT A-10
+    Warthog, 2026-10-10: nine of the run's turns and about 400 s went into
+    hand-assembling this figure -- `plt.subplots(1, 3)`, three
+    `show_comparison` calls, `tight_layout`, `savefig` -- written out four
+    times because the first lost `plt` to a kernel restart, the next two were
+    killed on a budget nobody could size yet, and one more existed only to
+    time a single panel. None of that is about the aeroplane.
+
+    `poses` maps a view name to the camera it converged on. Views it does not
+    name fall back to what this run already found for them, so in a probe the
+    usual call is `show_all_views(airplane)` and it costs nothing to type.
+    AN ENTRY SHOULD NAME THEM ALL: at render there is no probe history to
+    fall back on, and a pose in the entry's source is the camera a reader can
+    see and a later run can argue with.
+
+    `refit` is `compare_to_photo`'s, with its default: pinned at render where
+    a pose is known, searched in a probe. `width` is inches per panel.
+    """
+    import matplotlib.pyplot as _plt
+    poses = dict(poses or {})
+    names = reference_views()
+    if not names:
+        raise FileNotFoundError(
+            "no reference photographs with masks in _reference/. "
+            "The coordinator adds them with `nb reference`.")
+    # ONE ROW. Views are compared against each other, and a reader does that
+    # by scanning along them -- a grid makes two of them neighbours and the
+    # rest strangers.
+    fig, axes = _plt.subplots(1, len(names),
+                              figsize=(width*len(names), width))
+    axes = [axes] if len(names) == 1 else list(axes)
+    notes = {}
+    for ax, nm in zip(axes, names):
+        notes[nm] = show_comparison(airplane, nm, pose=poses.get(nm),
+                                    fill=fill, ax=ax, refit=refit)
+    fig.tight_layout()
+    return fig, notes
 
 
 def with_control_surface(airplane, wing_name, name, deflection_deg):
@@ -1902,6 +2200,26 @@ def completeness(airplane, name, pose=None):
     whether each is a component you have not built or a sliver along an
     edge you have.
 
+    AND IT NAMES WHAT YOU BUILT THAT IS NOT THERE. The two directions are
+    different faults with different remedies -- mask the model never reaches
+    is a component MISSING, model outside the mask is one that should not
+    exist, or is far too big -- and only the first was ever attributed. The
+    second was a bare percentage, which is a number nobody can act on.
+
+    Measured on the FT A-10 Warthog, 2026-10-10. Its model carried a
+    `Nacelle Pylons` surface: a 160 x 104 mm canted plate between fuselage
+    and nacelle, barely visible in any of the three photographs, and a
+    LIFTING SURFACE in the VLM. The note said "8.0% of the model falls
+    outside it" and named no component; the pose note put 20% of the
+    residual on the pylons and that read as a shape to fit rather than a
+    part to delete. It survived the entry, the assumptions prompt and two
+    performance questions built on top of it.
+
+    So a component whose own silhouette lands mostly off-mask is NAMED here.
+    No threshold decides anything -- see the pass-mark note above, which
+    applies with full force to this half too. The support fraction is
+    printed beside the name and the reader decides.
+
     THE POSE DECIDES WHETHER THE NUMBER MEANS ANYTHING. An ill-posed model
     leaves most of the aircraft uncovered and every region looks missing.
     Measured on the same model and photograph:
@@ -1932,7 +2250,7 @@ def completeness(airplane, name, pose=None):
     # is the property rule 12 exists to protect.
     warm = pose
     if warm is None and _IN_PROBE:
-        warm = _POSE_CACHE.get((name, _geometry_fingerprint(airplane)))
+        warm = _pose_remembered(name, airplane)
 
     params, resid, centre, railed = _fit_pose(cheap, mask, pose=warm)
     scale_px = float(_np.sqrt(mask.sum()))
@@ -1982,7 +2300,6 @@ def completeness(airplane, name, pose=None):
     # against the previous call on the same view.
     _hist = globals().setdefault("_COMPLETENESS_LAST", {})
     prev = _hist.get(name)
-    _hist[name] = (frac, xfrac)
     delta = ""
     if prev is not None:
         d_in, d_out = 100*(frac-prev[0]), 100*(xfrac-prev[1])
@@ -1994,6 +2311,80 @@ def completeness(airplane, name, pose=None):
     head = (f"{name} — pose {pose_pct:.2f}% (good), slack {slack} px. "
             f"{100*frac:.1f}% of the mask uncovered; "
             f"{100*xfrac:.1f}% of the model falls outside it. " + delta)
+
+    # WHOSE EXCESS IT IS. Unlike a gap, this needs no nearest-neighbour
+    # guess: the pixels are the model's, so the component that drew them is
+    # known exactly. Support is measured per component against its OWN area,
+    # because share-of-total hides the case that matters -- a small part
+    # entirely in the wrong place contributes little to the total and is
+    # still entirely wrong.
+    support, visible = {}, {}
+    outer = covered & ~_nd.binary_erosion(covered)
+    grown = _nd.binary_dilation(outer, _np.ones((3, 3)))
+    for nm, m in zip(cn, per):
+        area = float(m.sum())
+        support[nm] = float((m & mask_near).sum())/area if area else 1.0
+        # AND WHETHER THE PHOTOGRAPH CAN SEE IT AT ALL. A component buried
+        # inside the body contributes no outline, so no overlay and no
+        # residual can say anything about it -- not that it is right, and
+        # not that it is wrong. That is a THIRD state beside covered and
+        # uncovered, and conflating it with "supported" is how a surface
+        # nobody can check comes to look checked.
+        edge = m & ~_nd.binary_erosion(m)
+        visible[nm] = (float((edge & grown).sum())/float(edge.sum())
+                       if edge.any() else 0.0)
+    # NAMED, NOT GATED. 0.5 is not a pass mark and nothing is refused on it;
+    # it is the point at which "most of this component is off the
+    # photograph" becomes a true sentence, which is all the note claims.
+    unsupported = sorted((s, nm) for nm, s in support.items() if s < 0.5)
+    # WHAT THE LAST EDIT DID TO THE VERDICT, which is the fact an ablation
+    # is asking for: a component that was named and is not any more, or the
+    # reverse. Levels are noisy between calls and names are not.
+    was = set((prev[2] if prev is not None and len(prev) > 2 else ()) or ())
+    now = {nm for _, nm in unsupported}
+    _hist[name] = (frac, xfrac, tuple(sorted(now)))
+    head += " "
+    if prev is not None and was != now:
+        came, gone = sorted(now - was), sorted(was - now)
+        if came:
+            head += "Newly outside the photograph: " + ", ".join(came) + ". "
+        if gone:
+            head += "No longer outside it: " + ", ".join(gone) + ". "
+    if unsupported:
+        head += ("OUTSIDE THE PHOTOGRAPH: "
+                 + "; ".join(f"{nm} — {100*(1-s):.0f}% of its own silhouette "
+                             f"falls off-mask here" for s, nm in unsupported)
+                 + ". A component mostly outside the mask in EVERY view is "
+                   "one the photographs do not show: delete it, or keep it "
+                   "and declare_input why it is there. In one view only, it "
+                   "is placed or sized wrong rather than imaginary — check "
+                   "the others before cutting. ")
+    elif xfrac > 0:
+        thin = min(support.values())
+        head += (f"Every component is mostly on the mask (least supported: "
+                 f"{100*thin:.0f}%), so the {100*xfrac:.1f}% outside is edge "
+                 f"and oversize, not a part that should not exist. ")
+
+    # THE THIRD STATE. 0.10 is not a pass mark either: below about a tenth
+    # of its own outline on the silhouette, a component is drawing almost
+    # nothing a camera could photograph, and every sentence this function
+    # and `compare_to_photo` emit about it is empty.
+    unseen = sorted((v_, nm) for nm, v_ in visible.items() if v_ < 0.10)
+    if unseen:
+        head += ("THE SILHOUETTE CANNOT SEE: "
+                 + "; ".join(f"{nm} ({100*v_:.0f}% of its outline is on the "
+                             f"outside of the model)" for v_, nm in unseen)
+                 + ". These are inside the body from this camera, so no "
+                   "overlay and no residual can argue with them either way "
+                   "— they are not confirmed by a good fit and not refuted "
+                   "by a bad one. If a component is unseen in EVERY view, "
+                   "the photographs are not what justifies it: either it "
+                   "earns its place some other way and declare_input says "
+                   "so, or it is carrying mass and lift for a part nobody "
+                   "can check. Do not free its constants — fit_geometry "
+                   "cannot move a residual through an outline that is not "
+                   "there. ")
+
     if n == 0:
         return frac, head + "Nothing uncovered."
 
@@ -2020,6 +2411,209 @@ def completeness(airplane, name, pose=None):
         "misplaced; a gap FAR from every component means one is missing "
         "entirely. A propeller belongs behind a build flag — in the "
         "silhouette, never in the aerodynamics.")
+
+
+def ablate(airplane, component, poses=None):
+    """
+    Does the aircraft fit the photographs BETTER without this part? -> note
+
+    THE QUESTION A NAMED COMPONENT RAISES. `completeness` says a part is
+    mostly off the mask; this says what deleting it would do, across every
+    view, before anyone edits `_model.py`. One probe instead of an
+    edit-refit-reread cycle whose first step changes the file.
+
+    Measured on the FT A-10 Warthog, 2026-10-10: its `Nacelle Pylons` was
+    carrying 20% of the front-right residual and is barely in any
+    photograph. Nothing in the kernel could answer "is it helping?", so the
+    only way to find out was to delete it and see -- which is a destructive
+    experiment run on the file the entry is about to be written from.
+
+    THE POSE MUST NOT MOVE. Both arms are measured at the SAME camera, which
+    is why `poses` is worth passing: refitting between arms lets the camera
+    absorb some of the difference and the comparison stops being about the
+    component. Pinned for the same reason, and because two cheap arms make
+    it a question anyone will ask twice.
+
+    IT REFUSES A VERDICT ON A COMPONENT THE SILHOUETTE CANNOT SEE, and that
+    restriction is most of what this function knows. A buried part changes
+    the residual by contributing AREA -- closing a gap in the union -- which
+    looks identical to contributing correct SHAPE and means something else
+    entirely. See the comment on the verdict below for the measurement that
+    forced this.
+
+    IT DOES NOT EDIT ANYTHING. The reading is what you act on; the deletion
+    is yours to make, and after it BOTH the pose and any fitted constant are
+    stale -- they were found with the component present and partly absorbed
+    its error. Refit the poses cold, then refit the constants, then report
+    the before and after. An ablation is an entry, not a patch.
+    """
+    import copy as _copy
+    poses = dict(poses or {})
+    names = [c.name for c in list(airplane.wings) + list(airplane.fuselages)]
+    if component not in names:
+        raise ValueError(f"no component named {component!r}. "
+                         f"This aircraft has: {', '.join(names)}.")
+
+    # A SHALLOW COPY OF THE LISTS, not of the aircraft. `_parts_of` meshes
+    # whatever it is handed and never mutates it, so the components can be
+    # shared; what must not be shared is the list the name is dropped from.
+    without = _copy.copy(airplane)
+    without.wings = [w for w in airplane.wings if w.name != component]
+    without.fuselages = [f for f in airplane.fuselages if f.name != component]
+
+    rows = []
+    for v in reference_views():
+        p = poses.get(v) or _pose_remembered(v, airplane)
+        if p is None:
+            # NO CAMERA FOR THIS VIEW YET, so find one -- once, and keep it
+            # for both arms. An ablation with a different camera per arm is
+            # not an ablation.
+            compare_to_photo(airplane, v)
+            p = _pose_remembered(v, airplane)
+        a = _fit_residual_pct(airplane, v, p)
+        b = _fit_residual_pct(without, v, p)
+        rows.append((v, a, b, *_ablation_detail(airplane, without,
+                                                component, v, p)))
+
+    out = [(f"ablate {component!r} — residual with, then without, "
+            f"at a pinned camera:")]
+    for v, a, b, vis, opened in rows:
+        # 0.05 pp IS THE DEAD BAND, not a tolerance to tune. Two residuals
+        # computed at the same camera on the same mask differ only by the
+        # rasterisation, so anything smaller is the same number twice.
+        verdict = ("better without" if b < a - 0.05 else
+                   "worse without" if b > a + 0.05 else "no difference")
+        out.append(f"  {v:<28} {a:6.2f}%  ->  {b:6.2f}%   {verdict}"
+                   f"   (draws {100*vis:.0f}% of its own outline)")
+        if opened:
+            out.append("       removing it opens silhouette against: "
+                       + ", ".join(opened))
+
+    worse = sum(1 for _, a, b, _, _ in rows if b > a + 0.05)
+    better = sum(1 for _, a, b, _, _ in rows if b < a - 0.05)
+    seen = [v for v, _, _, vis, _ in rows if vis >= 0.10]
+
+    # THE RESIDUAL IS ONLY EVIDENCE ABOUT A COMPONENT THE CAMERA CAN SEE.
+    #
+    # This is the correction that matters, and the first version of this
+    # function got it wrong. It reported "worse without it" as "the
+    # photographs are holding this component in place; it is mis-sized
+    # rather than imaginary". That inference does not follow, and on the
+    # case this was written for it was false.
+    #
+    # MEASURED, FT A-10 Warthog, 2026-10-10. `Nacelle Pylons` draws 3-7% of
+    # the model's outer outline -- the camera barely sees its edge -- and
+    # removing it still made two views WORSE, 2.36% -> 3.88% on one. Both
+    # facts are true because the pylon contributes AREA, not OUTLINE: it
+    # spans the gap between fuselage and nacelle and keeps the union
+    # silhouette connected. Delete it and a hole opens that the real
+    # aircraft does not have, because the real fault is next door -- a
+    # fuselage too narrow, or nacelles too far outboard. The plate was
+    # PATCHING A NEIGHBOUR'S ERROR, and the chamfer cannot say so: it sees
+    # the hole close and reports an improvement.
+    #
+    # So a part the silhouette cannot see gets no verdict here. The delta is
+    # still printed, because it is a fact, and it is labelled as what it is.
+    if not seen:
+        out.append(
+            f"NO VERDICT: {component!r} draws almost none of the model's "
+            f"outer outline in ANY view, so the photographs have no opinion "
+            f"about it and these deltas are not evidence either way. A part "
+            f"that is invisible and still changes the residual is "
+            f"contributing AREA, not shape -- it is filling a gap, and the "
+            f"gap is usually a neighbour being the wrong size. Look at what "
+            f"the opened silhouette runs against, above, and suspect those. "
+            f"Whether this component belongs is a question for the build "
+            f"documentation, not for the overlay.")
+    elif better and not worse:
+        out.append(
+            f"Better without it in {better} view(s), worse in none, and it "
+            f"draws real outline — the silhouettes do not want this "
+            f"component.")
+    elif worse and not better:
+        out.append(
+            f"Worse without it in {worse} view(s), and it draws real "
+            f"outline, so the photographs are holding it in place. CHECK "
+            f"WHAT THE HOLE RUNS AGAINST before concluding it is correct: a "
+            f"part that only ever opens a gap against one neighbour may be "
+            f"standing in for that neighbour being too small.")
+    else:
+        out.append(
+            f"Better without it in {better} view(s), worse in {worse}. "
+            f"Mixed on a component that draws real outline usually means it "
+            f"is real and the wrong size. Look at the views that disagree.")
+
+    out.append(
+        "Nothing was edited. If you do remove it, BOTH the poses and every "
+        "fitted constant are stale -- they were found with it present and "
+        "absorbed part of its error -- so refit the poses cold, then the "
+        "constants, then report before and after. That is an entry.")
+    return "\n".join(out)
+
+
+def _ablation_detail(airplane, without, component, name, pose):
+    """
+    What the component draws, and what its removal exposes. -> (vis, [names])
+
+    `vis` is the fraction of the component's own outline that lies on the
+    model's OUTER silhouette -- the same measure `completeness` reports as
+    "THE SILHOUETTE CANNOT SEE", and the one that decides whether the
+    residual delta means anything.
+
+    The names are the components the newly-exposed silhouette runs against.
+    THIS IS THE DIAGNOSIS, not decoration: a part whose removal opens an
+    edge against the fuselage was covering for the fuselage, and the fit
+    that should follow frees the fuselage's constants rather than this
+    part's. `completeness` makes the same move for a gap in the mask -- "a
+    gap TOUCHING a component means that component is too small" -- and this
+    is that sentence for the other direction.
+    """
+    import numpy as _np
+    from scipy import ndimage as _nd
+    _, mask = _reference_image(name)
+    H, W = mask.shape
+    parts = _parts_of(airplane)
+    names = [c.name for c in list(airplane.wings) + list(airplane.fuselages)]
+    cheap = _parts_of(airplane, resolution=_FIT_RESOLUTION)
+    params, _, centre, _ = _fit_pose(cheap, mask, pose=pose, pinned=True)
+
+    per = {n: _raster(p_, f_, params, (W, H), centre)
+           for n, (p_, f_) in zip(names, parts)}
+    union = _np.zeros((H, W), bool)
+    for m in per.values():
+        union |= m
+    outer = union & ~_nd.binary_erosion(union)
+
+    mine = per.get(component)
+    if mine is None or not mine.any():
+        return 0.0, []
+    edge = mine & ~_nd.binary_erosion(mine)
+    vis = (float((edge & _nd.binary_dilation(outer, _np.ones((3, 3)))).sum())
+           / float(edge.sum()) if edge.any() else 0.0)
+
+    # The silhouette the REMOVAL creates: edge that is new, and not simply
+    # the component's own former boundary showing through.
+    rest = _np.zeros((H, W), bool)
+    for n, m in per.items():
+        if n != component:
+            rest |= m
+    new_edge = (rest & ~_nd.binary_erosion(rest)) & ~_nd.binary_dilation(
+        outer, _np.ones((3, 3)))
+    if not new_edge.any():
+        return vis, []
+    near = _nd.binary_dilation(new_edge, _np.ones((5, 5)))
+    touched = [n for n, m in per.items()
+               if n != component and (m & near).sum() > 0.02*new_edge.sum()]
+    return vis, sorted(touched)
+
+
+def _fit_residual_pct(airplane, name, pose):
+    """One view's residual at a FIXED camera, as % of sqrt(mask area)."""
+    import numpy as _np
+    _, mask = _reference_image(name)
+    cheap = _parts_of(airplane, resolution=_FIT_RESOLUTION)
+    _, resid, _, _ = _fit_pose(cheap, mask, pose=pose, pinned=True)
+    return 100.0*resid/float(_np.sqrt(mask.sum()))
 
 
 class _FitResult:
@@ -2182,15 +2776,42 @@ class _FitResult:
         run came to write `width=0.185` six lines after measuring 282 mm, and
         then declare the 185. This edits the file, so the number in the model
         is the number the fit produced, by construction.
+
+        IT PRINTS WHAT IT WROTE, old value beside new, rather than only
+        returning it. Returning was enough in principle and not in practice:
+        on the FT A-10 Warthog a run wrapped the call as
+
+            try:
+                fit.apply()
+                print("fit applied successfully")
+
+        which discards the report and replaces it with a sentence that knows
+        nothing. Three turns then went on establishing by hand what the
+        return value had already said -- grepping the model file from a
+        probe (wrong cwd, FileNotFoundError), reading it with a file tool,
+        and printing the constant. A result a caller can swallow is one that
+        will be, so this one goes to stdout on its way past.
         """
         src = self._model_path.read_text()
         n = 0
+        wrote = []
         for k, v in self.consistent.items():
+            # The OLD value, read before the substitution that replaces it.
+            was = re.search(rf"(?m)^{re.escape(k)}\s*=\s*([-\d.eE+]+)", src)
+            new = round(float(v), 6)
             src, c = re.subn(rf"(?m)^({re.escape(k)}\s*=\s*)[-\d.eE+]+",
-                              lambda m: m.group(1) + repr(round(float(v), 6)),
+                              lambda m: m.group(1) + repr(new),
                               src)
             n += c
+            if c:
+                wrote.append((k, float(was.group(1)) if was else None, new))
         self._model_path.write_text(src)
+        if wrote:
+            print(f"fit.apply() -> {self._model_path.name}")
+            for k, was_v, new in wrote:
+                shift = ("" if was_v is None
+                         else f"   ({1000*(new - was_v):+.1f} mm)")
+                print(f"  {k:<28} {was_v!r:>12} -> {new!r}{shift}")
         kept = set(self.consistent)
         skipped = [k for k in self.free if k not in kept]
         ref = getattr(self, "span_ref", None)
@@ -2342,8 +2963,7 @@ def fit_geometry(free, reliability="normal", views=None, poses=None,
     NG = len(names)
 
     if views is None:
-        views = sorted(p.name[:-len(".mask.png")]
-                       for p in (root / "_reference").glob("*.mask.png"))
+        views = reference_views()
 
     # GEOMETRY AND POSE ARE SOLVED TOGETHER, IN ONE SEARCH. Fitting the pose
     # inside each geometry evaluation is the obvious shape and it is

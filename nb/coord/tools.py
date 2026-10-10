@@ -280,10 +280,12 @@ def declarations():
               {}),
 
         _decl("note",
-              "One line of your reasoning, for the board. The runs publish "
-              "themselves; you do not, so this is the user's only view of why "
-              "you did what you did. Note what you asked and why, what a "
-              "finished run changed, and what you chose next.",
+              "Your reasoning, for the board. The runs publish themselves; "
+              "you do not, so this is the user's only view of why you did "
+              "what you did. One line for a decision -- what you asked and "
+              "why, what a finished run changed, what you chose next. A SHORT "
+              "BLOCK of lines when you are saying where the whole programme "
+              "stands: line breaks survive and the board draws them.",
               {"text": S}, ["text"]),
 
         _decl("escalate",
@@ -291,10 +293,18 @@ def declarations():
               "sitting. Returns at once; the answer arrives through `wait`. "
               "Use this for anything the user's direction does not settle -- "
               "above all a Specified input, which is one where a different "
-              "answer changes WHAT IS BEING BUILT. Never guess one of those.",
-              {"name": dict(S, description="The quantity or decision, short."),
+              "answer changes WHAT IS BEING BUILT. Never guess one of those. "
+              "AN OPEN QUESTION COUNTS: when the direction has run out, or "
+              "you can see two reasonable programmes and nothing chooses "
+              "between them, ask what they want next rather than inventing a "
+              "direction of your own.",
+              {"name": dict(S, description=(
+                  "A short slug for what you are asking about -- a quantity, "
+                  "a decision, or `next` when you are asking where to go.")),
                "prompt": dict(S, description="The question, in the user's terms."),
-               "why": dict(S, description="Why the run is stuck without it.")},
+               "why": dict(S, description=(
+                   "Why you cannot settle it yourself -- which run is stuck, "
+                   "or what the direction leaves open."))},
               ["name", "prompt"]),
 
         _decl("stop",
@@ -478,10 +488,15 @@ def _answer(session, run, value, by="coordinator"):
     if not coordinator.is_coordinator(run) and runstate.alive(d) is False:
         return {"error": f"run {run} is not running -- its question outlived "
                          f"it. Nothing would read the answer."}
-    mailbox.answer(Notebook(nb.root, run_id=run), str(value),
+    # NORMALISED BEFORE IT IS RECORDED, not on the way out of the board. The
+    # record is what `run.json` keeps for ever and what the agent reads as its
+    # answer; a `""` left in it is a two-character answer to a question that
+    # was being accepted as it stood.
+    value = "" if mailbox.blank(value) else str(value)
+    mailbox.answer(Notebook(nb.root, run_id=run), value,
                    by=(by or "coordinator"), replying_to=q.get("asked_at"))
     session.acted(run)
-    return {"answered": q.get("name"), "run": run, "value": str(value),
+    return {"answered": q.get("name"), "run": run, "value": value,
             "by": by or "coordinator"}
 
 

@@ -27,6 +27,7 @@ import json
 from .client import complete, usage
 from ..config import MAX_TURNS
 from ..process.log import thought
+from ..text import head
 from .stuck import Detector
 
 
@@ -70,9 +71,21 @@ def _spoken(turn):
     return types.Content(role=turn.role, parts=keep)
 
 
-# One tool result, capped. A probe already truncates itself to TRUNCATE before
-# it is returned, so this is the belt to that braces -- and the record is for
-# reconstructing a run, not for replaying it.
+# One tool result, capped IN THE RECORD ONLY -- the model is sent the whole
+# thing, see the `from_function_response` calls in `run`. A probe already
+# truncates itself to TRUNCATE before it is returned, so this is the belt to
+# that braces, and the record is for reconstructing a run, not replaying it.
+#
+# IT HAS TO SAY THAT IT CUT. This used to be a bare slice, so a long result
+# ended mid-sentence in `transcript.jsonl` with nothing marking the join.
+# Measured, on the ft-warthog audit, 2026-10-10: `read_reference("photographs")`
+# returns 5,241 chars and the transcript held the first 4,000, stopping inside
+# the word "xyz_c". Reading the file back, the only available conclusion was
+# that the model had been served a truncated reference and never received the
+# `completeness` section -- a delivery bug that does not exist. An hour went
+# into a fix for it. The transcript is the ONLY artefact a finished run can be
+# audited from; one that abbreviates silently does not merely lose detail, it
+# manufactures findings.
 RESULT_CAP = 4000
 
 #: How short a final reply may be before it is read as a glitch. See the
@@ -129,7 +142,7 @@ def _log_results(path, results):
         elif isinstance(result, dict):
             body = {k: v for k, v in result.items() if k != "_image"}
         else:
-            body = {"result": str(result)[:RESULT_CAP]}
+            body = {"result": head(str(result), RESULT_CAP)}
         out.append({"name": call.name, "response": body})
     _write(path, {"role": "tool", "results": out})
 

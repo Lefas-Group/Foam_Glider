@@ -1,0 +1,20 @@
+# THE BRIEF for the aircraft. True of the whole aircraft, inherited by every
+# chapter and every entry, and never superseded: a fork that departs from one
+# of these is not a fork, it is a different aircraft and so a different
+# notebook. Written by a PERSON, never by a run.
+#
+# Rendered into index.qmd. Same format as a chapter's `_inputs.yml`:
+# `- <id>: <text>`, ten words each.
+#
+# The test for what belongs here rather than in the first chapter: IF THIS
+# CHANGED, WOULD IT STILL BE THE SAME AEROPLANE? A 300 mm span, no. Foam 5 mm
+# — yes, that is the same project at a different thickness, so it is a chapter.
+specified:
+  - wingspan-1537-mm: "**Wingspan**: 1537 mm (60.5 in)."
+targets:
+  - cg-64-mm: "**CG**: 64 mm (2.5 in) aft of wing LE."
+assumed:
+  - airfoil-flat-foam: "**Airfoil**: flat foam plate, a declared stand-in."
+  - planform-is-fitted: "**Planform** is fitted to photographs, not measured."
+  - mass-wing-area: "**Mass**: Wing area and dry mass are not published."
+  - materials-built-from: "**Materials**: Built from Flite Test Maker Foam (~300 g/m²)."

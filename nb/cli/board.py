@@ -172,8 +172,9 @@ def _question_panel(run):
     # `--answers` and what `nb answer` reports, so it has to stay visible --
     # and with a real question on the first line, "asks" was saying nothing.
     where = run.get("chapter") or run["run"]
-    return Panel("\n".join(body), title=f"{escape(where)} · {escape(q.get('name',''))}",
-                 border_style="yellow")
+    return Panel("\n".join(body),
+                 title=f"{escape(where)} · {escape(q.get('name', ''))}",
+                 title_align="left", border_style="yellow")
 
 
 # What an ending looks like. `committed` is the one worth reading in full; the
@@ -285,6 +286,18 @@ AGENT, COORD, USER = "left", "center", "right"
 COORD_COLOUR, USER_COLOUR = "grey50", "cyan"
 
 
+def _side_of(run):
+    """
+    Which side a question belongs on: its AUTHOR's.
+
+    Every box here is placed by who spoke -- left for the agents, centre for
+    the coordinator, right for you -- and a PENDING question was the one thing
+    that ignored it, so an escalation the coordinator had written to the
+    person appeared in the agents' column.
+    """
+    return COORD if coordinator.is_coordinator(run.get("run")) else AGENT
+
+
 def _place(console, panel, side):
     """Put a panel on its author's side, at a width that leaves the gap visible."""
     from rich.align import Align
@@ -370,16 +383,33 @@ def _gate_panel(run, got):
     question's `why` all along and now keeps its `prompt` too, so the box that
     prompted a decision can sit next to it.
     """
-    body = (got.get("prompt")
-            or WAS_ASKED.get(got.get("kind"))
-            or f"What is the {got.get('name', '')}?")
+    body = got.get("prompt") or WAS_ASKED.get(got.get("kind")) or ""
     why = (got.get("why") or "").strip()
+    # AN OLDER ESCALATION KEPT ITS QUESTION IN `why`, with `prompt` unset --
+    # `coordinator.reply` wrote it there until it was brought into line with
+    # a run's record. Promoting it is what stops those reading as a generic
+    # "What is the direction?" over the real question.
+    if not body:
+        body, why = why, ""
+    if not body:
+        body = f"What is the {got.get('name', '')}?"
     if why and why != body:
         body = f"{body}\n\n{why}"
     # The clock on the QUESTION is when it was put, not when it was answered.
-    return _panel(run.get("chapter") or run.get("run", "?"),
-                  got.get("name", ""), body, "yellow",
-                  got.get("asked_at") or got.get("at"))
+    panel = _panel(run.get("chapter") or run.get("run", "?"),
+                   got.get("name", ""), body, "yellow",
+                   got.get("asked_at") or got.get("at"))
+    # AN ACCEPTANCE IS NOT A SEPARATE EVENT. A blank answer takes the question
+    # as it stands, and drawing a second box to say so cost four lines and a
+    # border to carry two words -- which is how an accepted render budget came
+    # to appear as an empty panel. `_events` suppresses the paired `qa` and
+    # the answer arrives here instead, under the question it settles.
+    if mailbox.blank(got.get("value")):
+        who = got.get("source") or "user"
+        panel.subtitle = (f"[dim]accepted as stated  \u00b7  {who}  \u00b7  "
+                          f"{_stamp(got.get('at'))}[/dim]")
+        panel.subtitle_align = "right"
+    return panel
 
 
 def _qa_panel(run, got, replay=False):
@@ -394,7 +424,8 @@ def _qa_panel(run, got, replay=False):
     every question and its answer, with the source, to `run.json` all along.
     """
     where = run.get("chapter") or run.get("run", "?")
-    value = (got.get("value") or "").strip()
+    value = "" if mailbox.blank(got.get("value")) else (
+        got.get("value") or "").strip()
     # REPLAYED ANSWERS ARE CAPPED. A reply can be a paragraph -- refusing a
     # fork and saying why, correcting an assumption with the reasoning -- which
     # is right to see as you type it and is history you have already read when
@@ -410,9 +441,13 @@ def _qa_panel(run, got, replay=False):
     # above names it; saying it again pushed the source and the clock off the
     # end of the title and into the border.
     del where
+    # THE SOURCE ONLY WHEN IT IS NOT THE AUTHOR. `source: "coordinator"` is
+    # the common case and the box is already titled `coordinator`, so naming
+    # it again read as "coordinator · ENTRY RENDER BUDGET · coordinator".
     return _panel("you" if mine else "coordinator",
                   got.get("name", "")
-                  + ("" if mine or src in ("", "user") else f"  \u00b7  {src}"),
+                  + ("" if mine or src in ("", "user", "coordinator")
+                     else f"  \u00b7  {src}"),
                   value or "accepted as stated",
                   USER_COLOUR if mine else COORD_COLOUR, got.get("at"))
 
@@ -457,24 +492,69 @@ def _status(runs):
     it is what `nb answer` takes.
     """
     from rich.text import Text
-    live = [r for r in runs
-            if not _ended(r) and not coordinator.is_coordinator(r["run"])]
+    live = [r for r in runs if not _ended(r)]
+    # THE COORDINATOR IS A WORKING AGENT and used to be filtered out of here,
+    # which under `nb designer` meant the board read `nothing running` for the
+    # whole of a programme -- the runs it launches are intermittent and it is
+    # the thing that is always going. It is sorted FIRST because it outlives
+    # every run under it, so its line does not move about as runs come and go.
+    live.sort(key=lambda r: not coordinator.is_coordinator(r["run"]))
     if not live:
         return Text("  nothing running", style="grey50")
     out = Text()
     for n, r in enumerate(live):
         if n:
             out.append("\n")
+        mine = coordinator.is_coordinator(r["run"])
         waiting = bool(r.get("question"))
-        out.append("  \u25cf ", style="yellow" if waiting else "green")
+        colour = COORD_COLOUR if mine and not waiting else (
+            "yellow" if waiting else "green")
+        out.append("  \u25cf ", style=colour)
         out.append(f"{r.get('run', '?')}  ", style="grey50")
-        out.append(f"{r.get('chapter') or '\u2014'}  ")
+        # A run is doing a chapter; the coordinator is doing the PROGRAMME, and
+        # has no chapter of its own. Printing the `\u2014` an absent chapter
+        # gets said it had nothing to do.
+        out.append(f"{r.get('chapter') or ('programme' if mine else '\u2014')}  ")
         out.append(f"turn {r.get('turn', 0)}  ", style="grey50")
         out.append(_elapsed(time.time() - (r.get("updated") or time.time())),
                    style="grey50")
         if waiting:
             out.append("   waiting", style="yellow")
     return out
+
+
+def _spoken_direction(runs, current):
+    """
+    The user's own message that set this direction, if they typed one here.
+
+    A DIRECTION IS USUALLY AN ANSWER. Under `nb designer` the board asks for it
+    like any other question and `coordinator.reply` records what was typed in
+    the reserved id's `answered` list, `source: "user"` -- so the words are
+    already on the record with the time the person wrote them. The pinned
+    DIRECTION box was a second, authorless copy of that message, and the
+    original was invisible: `_direction` writes its note AFTER the answer
+    lands, so the epoch test threw the user's own sentence away as belonging
+    to an earlier programme and counted it among the events "not replayed".
+
+    Returns None when the direction did not come from the board -- `nb
+    coordinate <nb> "..."` carries it on the command line and `nb direction`
+    sets it outright. There is no message to show in those cases and the
+    pinned box is still the only way to say what is in force.
+    """
+    if not current:
+        return None
+    want = " ".join(str(current.get("text", "")).split())
+    if not want:
+        return None
+    found = None
+    for r in runs or ():
+        if not coordinator.is_coordinator(r.get("run")):
+            continue
+        for got in r.get("answered") or []:
+            if (got.get("source") == "user"
+                    and " ".join(str(got.get("value", "")).split()) == want):
+                found = got                # the latest, if it was said twice
+    return found
 
 
 def _direction_panel(got):
@@ -494,21 +574,46 @@ def _events(notebook, only=None, runs=None):
     can print what it has not printed before without re-printing what it has.
     """
     out = []
+    scanned = _runs(notebook, only) if runs is None else runs
     # THE NEWEST DIRECTION BOUNDS THE CONVERSATION. Work done under a previous
     # one belongs to a previous programme: still on the record, not replayed
     # into a screen opened to watch this one. What is dropped is counted and
     # said, so nobody has to wonder whether the notebook is younger than it is.
     epoch = 0.0
+    spoken = None
     if not only:
         current = coordinator.current_direction(notebook)
         if current:
             epoch = current.get("at", 0.0)
+            # BACK TO THE QUESTION THAT PRODUCED IT, when the person typed the
+            # direction here. The exchange is the head of the conversation --
+            # the box asking for a direction, and their reply to it -- and
+            # taking the epoch from the note instead cut both away, because the
+            # note is written a moment after the answer it records.
+            spoken = _spoken_direction(scanned, current)
+            if spoken:
+                epoch = (spoken.get("asked_at")
+                         or spoken.get("at", 0.0)) - 1e-3
         for note in coordinator.notes(notebook):
             kind = "direction" if note.get("kind") == "direction" else "note"
+            # THE NOTE IS A TRANSCRIPT OF THE MESSAGE, when the person typed
+            # the direction here -- `_direction` records what `wait` just
+            # collected. Keeping both put the same sentence on screen twice,
+            # once as their message and once as an authorless box under it.
+            if (kind == "direction" and spoken
+                    and note.get("at") == (current or {}).get("at")):
+                continue
             out.append((note.get("at", 0), kind, note,
                         (kind, note.get("at", 0))))
-    for r in (_runs(notebook, only) if runs is None else runs):
-        if r.get("asked") and r.get("started"):
+    for r in scanned:
+        # NOT FOR THE RESERVED ID. `_ask_panel` shows the question the
+        # coordinator put to A CHAPTER, read off `run.json`'s `question` --
+        # but `coordinator.post` writes the question's NAME into that field,
+        # so an escalation drew a box titled "asked coordinator" whose body
+        # was the slug `direction`. Both halves are degenerate, and the real
+        # question is already on the board as a question.
+        if (r.get("asked") and r.get("started")
+                and not coordinator.is_coordinator(r.get("run"))):
             out.append((r.get("started", 0), "ask", r, ("ask", r.get("run"))))
         for got in r.get("answered") or []:
             # TWO EVENTS PER EXCHANGE, each at its own time: the agent asked
@@ -519,6 +624,11 @@ def _events(notebook, only=None, runs=None):
             out.append((got.get("asked_at") or got.get("at", 0) - 1e-3,
                         "gate", (r, got),
                         ("gate", r.get("run"), got.get("at"), got.get("name"))))
+            # ONE EVENT FOR AN ACCEPTANCE, so the two halves cannot be split
+            # apart by the HISTORY trim and leave the answer with no question
+            # above it. `_gate_panel` puts it in the subtitle instead.
+            if mailbox.blank(got.get("value")):
+                continue
             out.append((got.get("at", 0), "qa", (r, got),
                         ("qa", r.get("run"), got.get("at"), got.get("name"))))
         if _ended(r):
@@ -534,9 +644,14 @@ def _events(notebook, only=None, runs=None):
     # reading the programme back wants to know. The coordinator's survives
     # only when no relay followed it, which is the case where it is the whole
     # record of what was decided.
+    # MATCHED ON THE GATE AS WELL AS THE ANSWER. An acceptance now emits only
+    # a gate event, so keying this on `qa` alone stopped recognising a relayed
+    # BLANK -- and both copies of the question survived, side by side. Every
+    # `qa` has a `gate` beside it, so widening the test loses nothing.
     relayed = {(g.get("name"), (g.get("value") or "").strip())
                for at, k, pay, _key in out
-               if k == "qa" and not coordinator.is_coordinator(pay[0].get("run"))
+               if k in ("qa", "gate")
+               and not coordinator.is_coordinator(pay[0].get("run"))
                for g in [pay[1]]}
     out = [e for e in out
            if not (e[1] in ("qa", "gate")
@@ -566,7 +681,12 @@ def _print_event(console, kind, payload, replay=False):
         # The coordinator's question, not the agent's: it chose what to ask.
         console.print(_place(console, _ask_panel(payload), COORD))
     elif kind == "gate":
-        console.print(_place(console, _gate_panel(*payload), AGENT))
+        # BY AUTHOR, like everything else. The coordinator's own escalations
+        # are recorded against the reserved id and were drawn in the agents'
+        # column, so the one question the person had answered themselves
+        # looked like a run's.
+        console.print(_place(console, _gate_panel(*payload),
+                             _side_of(payload[0])))
     elif kind == "qa":
         # Placed by WHO ANSWERED. The question came from an agent; the answer
         # is the person's when they typed it and the coordinator's when it came
@@ -610,7 +730,8 @@ def follow(notebook, only=None, answer_all=False):
     answered, seen, echoed, told = set(), set(), set(), set()
     shown_q = set()           # questions printed live -- see the loop below
 
-    past, behind = _events(notebook, only, _runs(notebook, only))
+    at_open = _runs(notebook, only)
+    past, behind = _events(notebook, only, at_open)
     if behind:
         console.print(f"  [grey50]\u2026 {behind} events under an earlier "
                       f"direction, not replayed[/grey50]")
@@ -618,7 +739,11 @@ def follow(notebook, only=None, answer_all=False):
     # it was chosen to serve it, so it reads as the head of the conversation
     # rather than a caption that has to be kept on screen.
     current = None if only else coordinator.current_direction(notebook)
-    if current:
+    # PINNED ONLY WHEN NOBODY SAID IT HERE. A direction the person typed into
+    # this board is their message, and `_events` now keeps it -- so pinning as
+    # well drew the same words twice, once with an author and a clock and once
+    # without either.
+    if current and not _spoken_direction(at_open, current):
         console.print(_direction_panel(current))
     # WHAT IS PINNED IS NOT WHAT IS PRINTED. The epoch filter keeps events
     # STRICTLY after the direction, which silently excluded the direction
@@ -663,7 +788,11 @@ def follow(notebook, only=None, answer_all=False):
             now = None if only else coordinator.current_direction(notebook)
             if now and now.get("at") != pinned_at:
                 pinned_at = now.get("at")
-                show(_direction_panel(now))
+                # The user's own message has already gone past as an event when
+                # they typed it here; announce the pivot only when it arrived
+                # some other way.
+                if not _spoken_direction(runs, now):
+                    show(_direction_panel(now))
 
             # ONE SCAN PER LOOP. `_events` used to do its own, so every
             # refresh read all 32 run directories twice -- 24 ms of json and
@@ -725,7 +854,8 @@ def follow(notebook, only=None, answer_all=False):
                 run = asking[0]
                 if live:
                     live.stop()
-                console.print(_place(console, _question_panel(run), AGENT))
+                console.print(_place(console, _question_panel(run),
+                                     _side_of(run)))
                 shown_q.add((run["run"], run["question"].get("name")))
                 try:
                     reply = console.input(f"  [{len(asking)} waiting] > ")

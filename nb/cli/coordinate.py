@@ -60,16 +60,33 @@ def _opt(argv, flag, number=False):
         return None
 
 
-def _on_turn(n, resp, turn):
-    """One line per turn, then the reasoning behind it -- as `nb watch` does."""
-    calls = [p.function_call for p in (turn.parts or []) if p.function_call]
-    named = ", ".join(_what(c) for c in calls) or "(no tool call)"
-    # Thinking is shown because it is the cost: THINKING_LEVEL is HIGH and
-    # the coordinator runs on pro, so a turn that looks cheap in output
-    # tokens usually is not.
-    p_tok, c_tok, o_tok, t_tok = usage(resp)
-    tell(f"  turn {n + 1}  {named}"
-         f"   [{p_tok} in, {c_tok} cached, {o_tok} out, {t_tok} thinking]")
+def _turns(session):
+    """
+    An `on_turn` bound to this session: one log line, and a heartbeat.
+
+    THE HEARTBEAT IS WHY THIS IS A CLOSURE. `run.json`'s `updated` was stamped
+    only by `note`, `post` and `reply`, so a coordinator ten turns into
+    research looked exactly as stale as a dead one and the board had nothing
+    to show but `nothing running`. Touched here, `updated` means "start of the
+    current turn" -- which is what it means for a run, so the board's status
+    line needs no special case for the elapsed time it prints.
+
+    `session.notebook`, not a notebook captured at launch: a setup session
+    starts with none and `new` adopts one mid-flight, and those are precisely
+    the sessions where a person is watching the board for signs of life.
+    """
+    def on_turn(n, resp, turn):
+        calls = [p.function_call for p in (turn.parts or []) if p.function_call]
+        named = ", ".join(_what(c) for c in calls) or "(no tool call)"
+        # Thinking is shown because it is the cost: THINKING_LEVEL is HIGH and
+        # the coordinator runs on pro, so a turn that looks cheap in output
+        # tokens usually is not.
+        p_tok, c_tok, o_tok, t_tok = usage(resp)
+        tell(f"  turn {n + 1}  {named}"
+             f"   [{p_tok} in, {c_tok} cached, {o_tok} out, {t_tok} thinking]")
+        if session.notebook is not None:
+            coordinator.touch(session.notebook, turn=n + 1)
+    return on_turn
 
 
 #: Which argument says WHAT a call is acting on. Mirrors `agent/setup.py`:
@@ -87,6 +104,30 @@ def _what(call):
         return call.name
     arg = " ".join(str(arg).split())
     return f"{call.name} {arg[:60]}"
+
+
+def _seed(notebook):
+    """
+    The opening user turn, when no direction was carried on the command line.
+
+    THE SEED IS NOT THE DIRECTION, and saying so is the whole job of this
+    function. Under `nb designer` the direction is a question on the board and
+    the answer has not arrived yet -- and the placeholder that used to stand
+    here, "Pick up this programme where it stands and carry it forward", read
+    as an instruction the model could act on. Measured on ft-warthog: turn 1
+    pinned those exact words as the programme's direction, six seconds before
+    the person finished typing theirs, so the direction on the board was a
+    sentence no human wrote and the real one was never recorded.
+    """
+    from ..process import mailbox
+    if notebook is not None and mailbox.pending(
+            coordinator.mailbox_for(notebook).run):
+        return ("A question is outstanding with the user on the board and no "
+                "reply has arrived yet. Call `wait` FIRST, before anything "
+                "else. These words are not the direction -- theirs are, and "
+                "`wait` is how you get them.")
+    return ("Pick up this programme where it stands and carry it forward. "
+            "Read the manifest first.")
 
 
 def _transcript(session):
@@ -177,8 +218,7 @@ def _session(name, direction, max_turns, banner):
         say(f"coordinating {where} on {COORD_MODEL}")
 
     contents = [{"role": "user", "parts": [{"text":
-        (direction or "Pick up this programme where it stands and carry it "
-                      "forward. Read the manifest first.")}]}]
+        direction or _seed(notebook)}]}]
     # REQUIRED because `tools` carries a built-in tool (google_search) beside
     # the function declarations; without it the API refuses the pair outright.
     # See `agent/client.py::config`.
@@ -195,7 +235,8 @@ def _session(name, direction, max_turns, banner):
     tpath = _transcript(session)
     try:
         drive(contents, cfg, handlers, transcript=tpath,
-              max_turns=max_turns, on_turn=_on_turn, model=COORD_MODEL)
+              max_turns=max_turns, on_turn=_turns(session),
+              model=COORD_MODEL)
     except Stopped as stop:
         _file_transcript(session, tpath)
         tell(f"  stopped: {stop}")

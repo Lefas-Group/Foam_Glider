@@ -102,9 +102,10 @@ _STAMP_W = 10                   # len("HH:MM:SS") + two spaces
 # Reasoning is indented one step PAST the run's own lines, so a turn reads as a
 # heading with its thinking beneath it rather than as another status line.
 _THOUGHT_INDENT = _STAMP_W + 2
-# Total line width for wrapped reasoning: 80 columns less the indent and gutter,
-# so a standard terminal never has to re-wrap and break the gutter.
-THOUGHT_WIDTH = 80 - _THOUGHT_INDENT - len(GUTTER)
+# How much of a line the indent and gutter take, so a reader wrapping reasoning
+# to its own terminal knows what it has left. There is no fixed width here any
+# more -- see `thought`.
+THOUGHT_MARGIN = _THOUGHT_INDENT + len(GUTTER)
 
 
 def _stamped(args):
@@ -167,18 +168,30 @@ def thought(text):
     conversation -- which is also why they can confabulate freely here without
     misleading the model later.
 
-    WRAPPED HERE, at a fixed width, rather than left to the terminal. The
-    summaries arrive as long single-line paragraphs; letting the terminal wrap
-    them sent every continuation line back to column 0, so the gutter marked
-    only the first line of each and the rest ran under the timestamps. Fixed
-    width because this is a FILE -- `nb watch` and `tail` both read it, and
-    neither can re-flow what is already written.
+    ONE PARAGRAPH, ONE LINE, UNWRAPPED. This used to hard-wrap to 66 columns
+    on the way in -- 80 less the indent and the gutter -- and the reason was
+    sound as far as it went: the summaries arrive as long single-line
+    paragraphs, and letting the terminal wrap them sent every continuation
+    line back to column 0, so the gutter marked only the first line of each
+    and the rest ran under the timestamps. But THE WRITER DOES NOT KNOW THE
+    READER'S WIDTH. On the 190-column terminal a board is usually opened in,
+    66 columns is a third of the screen, and a file cannot be re-flowed once
+    it is written.
+
+    So the wrapping moved to the one place that knows: `nb watch`'s `_emit`
+    already singles out gutter lines to dim them, and now wraps them to the
+    console it is printing to. A paragraph is a single line in the file, so
+    that stays correct while streaming -- there is no state to accumulate.
+
+    THE COST, stated: `tail -f` and `cat` on `status.log` show long lines the
+    terminal soft-wraps back to column 0, which is the complaint the fixed
+    width was introduced to fix. `nb watch` is the reader this is written for
+    and it is right at any width; the raw file is now worse in exchange.
 
     Markdown bold is stripped: the summaries head their sections with
     `**Like This**`, and the asterisks are noise in a terminal.
     """
     import re
-    import textwrap
     blank = False
     for para in (text or "").strip().splitlines():
         if not para.strip():
@@ -188,5 +201,4 @@ def thought(text):
             say(GUTTER.rstrip())
             blank = False
         para = re.sub(r"\*\*(.+?)\*\*", r"\1", para.rstrip())
-        for line in textwrap.wrap(para, width=THOUGHT_WIDTH) or [""]:
-            say(f"{GUTTER}{line}")
+        say(f"{GUTTER}{para}")

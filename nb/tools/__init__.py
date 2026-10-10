@@ -107,10 +107,15 @@ def native_declarations():
               "what an earlier probe assigned is still bound, and the result "
               "says what is held. Reuse those names; re-deriving one pays for "
               "its solves twice.",
-              {"question": dict(S, description="Python. The chapter's names are "
-                                               "in scope; do not import it. So "
-                                               "are names your earlier probes "
-                                               "defined."),
+              {"question": dict(S, description=(
+                  "Python. The chapter's names are in scope; do not import "
+                  "it. So are names your earlier probes defined, and plt, np "
+                  "and Image. A probe's CWD IS ITS OWN RUN DIRECTORY, not the "
+                  "notebook: a bare savefig lands beside the run's other "
+                  "pictures, which is where read_probe_figure looks, and a "
+                  "RELATIVE path to a chapter file will not resolve. Reach "
+                  "notebook files through the file tools, or read them under "
+                  "$NB_ROOT.")),
                "chapter": dict(S, description="Chapter directory name"),
                "budget_s": dict(N, description=(
                    "Seconds of wall clock this probe may take, drawn from the "

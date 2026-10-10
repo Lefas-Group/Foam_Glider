@@ -118,6 +118,8 @@ KIND_DEFAULT = "grey50"
 
 LINE = re.compile(r"^(\d{2}:\d{2}:\d{2})  (\S+)(\s+)(.*)$")
 BANNER = re.compile(r"^[═─]{8,}$")
+#: A gutter line: its indent, then the reasoning to re-flow.
+THINKING = re.compile(r"^(\s*)" + re.escape(GUTTER) + r" ?(.*)$")
 
 
 def _emit(console, text):
@@ -130,21 +132,39 @@ def _emit(console, text):
     that asks the terminal what it supports is the fix; `dim` degrades to a grey
     where faint is unsupported, and to nothing at all when piped.
 
-    STYLING ONLY, NEVER REWRITING. The same file is read by `tail`, by `grep`
-    and by a coordinator, so the writer keeps it plain and the reader decides
-    how it looks -- the split the telemetry rests on. Nothing here changes a
-    character; it colours the three parts of a line that already exist.
+    STYLING ONLY, NEVER REWRITING -- with one exception, below. The same file
+    is read by `tail`, by `grep` and by a coordinator, so the writer keeps it
+    plain and the reader decides how it looks: the split the telemetry rests
+    on. Nothing here changes a character of a status line; it colours the
+    three parts of one that already exist.
+
+    THE EXCEPTION IS REASONING, which arrives as one long line per paragraph
+    and is WRAPPED HERE, to this console. It used to be wrapped by the writer
+    at a fixed 66 columns, which is a third of the terminal a board is usually
+    opened in -- and a writer cannot know the width of a reader it has never
+    met. `log.py::thought` records the trade.
     """
     if console is None:
         sys.stdout.write(text)
         sys.stdout.flush()
         return
+    import textwrap
+
     from rich.text import Text
     for line in text.splitlines():
         # The model's reasoning, which the run gutters. Dim, so the run's own
         # report stands out of it.
         if line.lstrip().startswith(GUTTER):
-            console.print(line, style="grey50", highlight=False)
+            # Re-flowed to this terminal, with the file's own indent kept so
+            # every physical line carries the gutter -- which is the whole
+            # point of the gutter. Taken from the line rather than from a
+            # constant, so a log written by an older run still lines up.
+            m = THINKING.match(line)
+            indent, body = (m.group(1), m.group(2)) if m else ("", line)
+            room = max(24, console.width - len(indent) - len(GUTTER) - 2)
+            for part in textwrap.wrap(body, width=room) or [""]:
+                console.print(f"{indent}{GUTTER} {part}",
+                              style="grey50", highlight=False, markup=False)
             continue
         if BANNER.match(line.strip()):
             console.print(line, style="cyan", highlight=False, markup=False)

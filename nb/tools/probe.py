@@ -159,7 +159,9 @@ def run_probe(notebook, chapter, question, session=None, budget_s=None,
     # AFTER the numbers is a restart it has already drawn conclusions past.
     if restarted:
         out = (f"[kernel restarted -- {restarted}. Nothing is held from earlier "
-               f"probes; anything this probe needed from one is gone.]\n" + out)
+               f"probes; anything this probe needed from one is gone. "
+               f"`plt`, `np`, `Image` and the chapter are always there.]\n"
+               + out)
     # A traceback is an ordinary result here -- the kernel survives it and the
     # names it had are still there -- so there is no exit status to report. The
     # scope hint still fires on the one it exists for.

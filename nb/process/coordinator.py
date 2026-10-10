@@ -92,8 +92,21 @@ def note(notebook, text, kind="note"):
     ("direction: …" as the first words of a note), which nothing could find
     reliably and which the board could not pin. Absent on every line written
     so far, and defaulted here, so those still read as notes.
+
+    LINE BREAKS SURVIVE; nothing else does. This collapsed all whitespace,
+    which made a note of several lines impossible -- so the one thing the
+    coordinator can say in its own voice could not be a summary of where the
+    programme stands, only a sentence. The board's panel takes newlines
+    happily and `log.jsonl` escapes them, so the restriction bought nothing.
+    A one-line note comes out of this byte-identical, which is every note
+    written so far.
     """
-    text = " ".join(str(text).split())
+    lines = [" ".join(l.split()) for l in str(text).splitlines()]
+    # Blank runs collapse to one: a model writing a heading and a list leaves
+    # double spacing behind it, and the board has no room to spare.
+    kept = [l for n, l in enumerate(lines)
+            if l or (n and lines[n - 1])]
+    text = "\n".join(kept).strip()
     if not text:
         return None
     touch(notebook)
@@ -199,8 +212,14 @@ def reply(notebook, q=None):
     # history could not show.
     state = touch(notebook, waiting_on=None, question=None)
     answered = list(state.get("answered") or [])
+    # THE SAME SHAPE A RUN RECORDS, field for field -- see
+    # `mailbox.Mailbox._record`. The prompt used to be written into `why`,
+    # which left `prompt` empty, and the board fell back to "What is the
+    # direction?" over the real question with the real question printed
+    # underneath it as though it were the justification.
     answered.append({"kind": "specified", "name": q.get("name", ""),
-                     "why": q.get("prompt") or q.get("why", ""),
+                     "prompt": q.get("prompt", ""),
+                     "why": " ".join((q.get("why") or "").split())[:300],
                      "value": value, "source": got.get("by") or "user",
                      "asked_at": q.get("asked_at"), "at": time.time()})
     touch(notebook, answered=answered)
