@@ -34,6 +34,7 @@ from . import research
 from ..cli import listen
 from ..config import Notebook
 from ..process import coordinator, mailbox, runstate
+from ..tools import figures
 
 #: How long one `wait` blocks before returning empty-handed. Long, because a
 #: blocking tool call costs no turn and no tokens -- the handler is just a
@@ -111,7 +112,10 @@ def declarations():
                    "dimension the manufacturer prints goes HERE, because it "
                    "SETS the model's scale -- with span free, size trades "
                    "against camera distance and the silhouette fit goes "
-                   "degenerate.")},
+                   "degenerate. A figure the USER measured is already held in "
+                   "`_reference/INTAKE.yml` and is merged in for you: do not "
+                   "retype one, because a row typed twice can disagree with "
+                   "itself.")},
                "assume": {"type": "array", "items": S, "description": (
                    "What is assumed ABOUT THE AIRCRAFT, never an instruction "
                    "to the run. These render verbatim on the front page and "
@@ -772,10 +776,23 @@ def _new(session, chapter_title, defines, spec=(), assume=(), target=()):
                          "retrying — a second identical failure is a fault "
                          "in `nb`.")}
     session.adopt(Notebook(directory))
-    return {"created": True, "notebook": session.notebook.root.name,
-            "output": text[-1500:],
-            "note": ("Scaffolded and rendered. Photographs next: search, "
-                     "fetch, look, add_photo, mask, overlay, reference.")}
+    # WHAT COMES NEXT DEPENDS ON WHO SUPPLIED THE PHOTOGRAPHS. Told to go and
+    # search for frames when `_reference/` is already full, a session looks for
+    # an aircraft that has no product page -- so the note reads the directory
+    # rather than assuming.
+    nb = session.notebook
+    have = [p.stem for p in figures.reference_paths(nb)
+            if figures.reference_kind(p) == "photo"]
+    if have:
+        nxt = (f"Scaffolded and rendered, and the user's own photographs are "
+               f"already in `_reference/` ({', '.join(have)}). Do NOT search "
+               f"for more. `mask` next, then `overlay` every one and LOOK, "
+               f"then `reference`.")
+    else:
+        nxt = ("Scaffolded and rendered. Photographs next: search, fetch, "
+               "look, add_photo, mask, overlay, reference.")
+    return {"created": True, "notebook": nb.root.name,
+            "output": text[-1500:], "note": nxt}
 
 
 def _nb_cmd(session, args, timeout=1800):

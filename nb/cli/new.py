@@ -84,6 +84,24 @@ def _slug(text, taken):
     return slug
 
 
+def _intake(root):
+    """
+    `{block: [text]}` from `_reference/INTAKE.yml`, or `{}`.
+
+    `shared.parse_inputs` rather than a parser of its own: `nb intake` writes
+    the file in `_inputs.yml`'s shape precisely so that there is one reader for
+    both, and a second one could disagree with it about what a row is.
+    """
+    from ..contract import shared
+    from ..tools import figures
+
+    data = shared.parse_inputs(
+        pathlib.Path(root) / figures.REFERENCE_DIR / "INTAKE.yml")
+    held = {k: [t for _, t in (data.get(k) or [])]
+            for k in ("specified", "targets", "assumed")}
+    return held if any(held.values()) else {}
+
+
 def _brief(specs, assumes, targets=()):
     """The root `_inputs.yml` body, or "" to leave the template placeholders."""
     if not specs and not assumes and not targets:
@@ -138,6 +156,30 @@ def main(path, title=None, subject=None, chapter=None,
     if root.exists() and _occupied(root, top=True):
         tell(f"  {root} exists and is not empty")
         return 1
+
+    # WHAT THE USER ALREADY SUPPLIED, if they ran `nb intake` first. An
+    # aircraft they designed and built has no product page, so its span comes
+    # off a tape measure -- and the brief is written here, once, and never
+    # superseded. Holding those rows in `_reference/INTAKE.yml` is what lets
+    # the measuring happen before the directory the brief lives in exists,
+    # which is the same ordering problem `source` solves by buffering.
+    #
+    # MERGED HERE RATHER THAN IN THE COORDINATOR'S `new` TOOL, because
+    # `coord/tools.py::_new` calls this function -- so both doors pick the rows
+    # up and there is one merge to be wrong. THEIRS FIRST: a measurement
+    # outranks anything a model composed about the same aeroplane.
+    held = _intake(root)
+    if held:
+        specs = held["specified"] + [r for r in specs
+                                     if r not in held["specified"]]
+        targets = held["targets"] + [r for r in targets
+                                     if r not in held["targets"]]
+        assumes = held["assumed"] + [r for r in assumes
+                                     if r not in held["assumed"]]
+        if verbose:
+            n = sum(len(v) for v in held.values())
+            tell(f"  intake    {n} row(s) the user measured — "
+                 f"_reference/SOURCES.txt says how")
     # THE FIRST CHAPTER IS NAMED AT BIRTH, which is what removed the stub.
     # Quarto's `auto: "chapters"` dies on an empty `chapters/`, so this command
     # must create a chapter before anyone has asked a question -- and it used

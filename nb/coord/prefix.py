@@ -20,6 +20,8 @@ programme need different halves, and `doctrine.py` owns that grouping so the
 `nb doctrine` command hands Claude Code exactly what the prefix embeds.
 """
 
+import pathlib
+
 from ..process import coordinator
 from ..domain import manifest
 
@@ -72,6 +74,78 @@ You cannot `new` twice. Research first; the brief is not editable afterwards.
 """
 
 
+OWN_AIRCRAFT = """\
+# There is no notebook at `{name}` yet, and the user has already supplied it
+
+So this session STARTS AN AIRCRAFT -- one THEY designed and built. They ran
+`nb intake` first, so two things are already on disk and are not yours to
+compose:
+
+- **the photographs**, in `_reference/`, each with the description THEY wrote
+  of where the camera was:{photos}
+- **the figures they measured**, in full, below. `new` merges these into the
+  brief itself, so you do not retype them as `spec` -- and must not: a row
+  typed twice is a row that can disagree with itself. There is nothing to go
+  and read; this is all of it.
+{measured}
+The order is therefore SHORT, and three of the usual steps are already done:
+
+1. `source` and `fetch` what the MATERIALS are -- foam areal density, and the
+   mass of every motor, ESC, servo, propeller and battery named. This is the
+   research that is still yours, and the page says why it is the half that
+   fails silently.
+2. `new`. Add only what the user did not: an `assume` row for the airfoil, a
+   `target` ONLY if a figure they gave you implies one. Do not invent a target
+   to fill the block.
+3. `mask`, then `overlay` EVERY photograph and look, then `reference` until it
+   is clean.
+4. `reconstruct` the first chapter.
+
+Do NOT `search` for a product page or for photographs. There is no
+manufacturer; the aeroplane is on the user's bench. If the spread has a gap,
+`escalate` a reshoot -- naming the camera position you want -- and `wait`.
+
+You cannot `new` twice.
+"""
+
+
+def _intake(name):
+    """
+    `_reference/INTAKE.yml` at `name`, parsed, or None.
+
+    READ OFF DISK RATHER THAN PASSED IN, because the session that reaches here
+    may be days after the intake: `nb coordinate` is told a directory name and
+    nothing else, and the file is the handover. `shared.parse_inputs` is the
+    same reader `cli/new.py` uses on it, so the prefix cannot describe rows the
+    brief will not receive.
+    """
+    from ..contract import shared
+    from ..tools import figures
+
+    return shared.parse_inputs(
+        pathlib.Path(name) / figures.REFERENCE_DIR / "INTAKE.yml") or None
+
+
+def _setup_page(name, held):
+    """Which setup order this session is on, and what it already holds."""
+    where = name or "the given directory"
+    if not held:
+        return NEW_AIRCRAFT.format(name=where)
+    photos = [t for _, t in (held.get("photos") or [])]
+    rows = [t for k in ("specified", "targets", "assumed")
+            for _, t in (held.get(k) or [])]
+    # NAMED, NOT COUNTED. The whole risk of this branch is a model that
+    # researches an aircraft it was handed -- so the handed thing is put in
+    # front of it in full, rather than as a number it has to go and look up.
+    return OWN_AIRCRAFT.format(
+        name=where,
+        photos=("\n  " + "\n  ".join(f"`{s}` -- {t}"
+                                     for s, t in (held.get("photos") or []))
+                if photos else " none yet, so this half is still yours."),
+        measured=("\n" + "\n".join(f"      {r}" for r in rows) + "\n"
+                  if rows else "\n"))
+
+
 def build(notebook, direction="", name=""):
     """The system instruction: doctrine, then this notebook as it stands."""
     # A SKELETON IS NOT AN AIRCRAFT. `nb designer` creates `chapters/` so the
@@ -90,7 +164,14 @@ def build(notebook, direction="", name=""):
     who = "setup" if notebook is None else "coordinate"
     parts = [HEAD, doctrine.text(who)]
     if notebook is None:
-        parts.append(NEW_AIRCRAFT.format(name=name or "the given directory"))
+        # SUPPLIED OR RESEARCHED, and they are different jobs. A session told
+        # to "search and fetch the manufacturer's pages" for an aircraft the
+        # user designed themselves has no first step it can take -- there is no
+        # manufacturer -- and the measured ordering failure is what happens
+        # next: it searches anyway, finds a different aeroplane, and either
+        # escalates from a dead end or builds that one.
+        held = _intake(name) if name else None
+        parts.append(_setup_page(name, held))
         if direction:
             parts.append(f"## What the user has asked for\n\n{direction}\n")
         parts.append(TAIL)

@@ -89,7 +89,7 @@ class Coordination:
         # where the buffer lands.
         if self.pending_sources:
             from . import research
-            research.write_sources(notebook, self.pending_sources)
+            research.write_sources(notebook.root, self.pending_sources)
             self.pending_sources = []
         # How many times `new` has failed. A tool that fails the same
         # way twice is a tool the model cannot fix by trying again.

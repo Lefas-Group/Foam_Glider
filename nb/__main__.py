@@ -1,4 +1,10 @@
 """
+    nb intake <notebook>                     an aircraft YOU built: the
+             --photo <slug> <path> "<desc>"    …photographs you shot, each with
+             [--spec "…"] [--target "…"]       …where the camera was, and the
+             [--assume "…"] --how "<measured>" …figures you measured and HOW.
+             [--force]                        …Run this BEFORE `coordinate`;
+                                              …`new` merges it into the brief.
     nb new   <notebook>                      scaffold a notebook, then prove it
              --chapter-title "…" --defines "…" …the first chapter, named now
              [--spec "…"] [--assume "…"]      …the brief, repeatable
@@ -352,6 +358,13 @@ def main(argv):
             return 2
         from .cli.view import main as view
         return view(rest)
+
+    if cmd == "intake":
+        # THE WHOLE ARGV, because `--photo` takes three values and the helpers
+        # here are built for `--flag value`. `cli/intake.py` owns its parsing
+        # for the reason `mask` and `board` do: argv belongs to the command.
+        from .cli.intake import main as intake
+        return intake(rest)
 
     if cmd == "reference":
         if not rest:

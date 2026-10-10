@@ -53,4 +53,11 @@ nb = [
     # that "model weights carry their own licenses". BiRefNet is MIT, both code
     # and weights.
     "rembg[cpu]>=2.0.60",
+    # HEIC, which is what a phone writes. `nb intake` takes photographs the
+    # user shot themselves, and every one of them arrives in a format Pillow
+    # cannot open unaided -- so without this the common case fails at the
+    # door. One wheel, libheif bundled, and it works on any platform: the
+    # alternative was shelling out to macOS `sips`, which is a second decode
+    # path that silently does not exist anywhere else.
+    "pillow-heif>=0.18",
 ]

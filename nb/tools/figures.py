@@ -19,7 +19,14 @@ would grant write access to the one directory whose integrity freezediff depends
 on. Content the agent may read but not write is a tool, not a file.
 """
 
+# STDLIB ONLY at module level, deliberately. This module is imported into a
+# notebook render and into a probe kernel, so the heavy readers -- numpy, PIL
+# -- are imported inside the functions that need them, and nothing here costs
+# anything to have around.
 import base64
+import pathlib
+import re
+import shutil
 
 
 def figure_paths(notebook, chapter, stem=""):
@@ -63,14 +70,15 @@ def list_figures(notebook, chapter, stem=""):
 # had no sheet guessed 250 mm for an aircraft 1.21x larger -- about 10% out,
 # on a number that sets tail volume and therefore the static margin.
 #
-# SO `read_reference_image` IS FOR THE FIRST LOOK ONLY. `read_figure` above
-# reads the freeze, so a run cannot see an arbitrary image mid-probe; one call
-# there orients it -- which part is where -- and everything quantitative after
-# that is numpy. The brief says so.
+# SO A PHOTOGRAPH IS FOR THE FIRST LOOK ONLY. `read_image`, at the foot of
+# this file, is the one way a run sees one: a call orients it -- which part is
+# where -- and everything quantitative after that is numpy. The brief says so.
 #
-# That tool is at the bottom of this file. This comment outlived its deletion
-# by five days and pointed at nothing; the deletion was the accident, not the
-# reasoning.
+# This paragraph has already outlived one deletion. The tool it described was
+# removed in a forty-file sweep and the reasoning was left here pointing at
+# nothing for five days, which is how the blind spot it warns about came back.
+# It is written against the ROLE now rather than against a tool name, so the
+# next rename cannot orphan it again.
 REFERENCE_DIR = "_reference"
 _SUFFIXES = (".png", ".jpg", ".jpeg", ".webp")
 _MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
@@ -133,7 +141,16 @@ def reference_paths(notebook, images_only=True):
     Masks are excluded: they are an input to the pose fit, not an asset to
     be looked at, and listing them would offer the run a picture of a blob.
     """
-    root = notebook.root / REFERENCE_DIR
+    return _paths_in(notebook.root / REFERENCE_DIR, images_only)
+
+
+def _paths_in(root, images_only=True):
+    """The same, for a `_reference/` directory with no notebook around it yet.
+
+    `install_photo` and `nb intake` both run BEFORE `nb new` has made the
+    directory a notebook, so they have a path and nothing to call `.root` on.
+    """
+    root = pathlib.Path(root)
     if not root.is_dir():
         return []
     ok = _SUFFIXES if images_only else _SUFFIXES + _SOURCE_SUFFIXES
@@ -149,6 +166,201 @@ def reference_kind(path):
     except OSError:
         return "source" if path.suffix.lower() in _SOURCE_SUFFIXES else ""
     return raw.split()[0].lower() if raw else ""
+
+
+# =============================================================================
+# WRITING into `_reference/`, which is the other half of reading it.
+#
+# TWO DOORS, ONE DOOR FRAME. `coord/research.py::add_photo` installs a frame the
+# coordinator fetched off the web; `cli/intake.py` installs one the user shot
+# themselves and named in their own shell. Everything that is true of
+# `_reference/` is true of both -- the slug, the readable format, the
+# eight-word description, and above all the `.txt` written in the same breath
+# as the image -- so it is written ONCE, here, beside the `reference_kind` that
+# reads it back.
+
+#: A photograph's name. No dots, because `reference_kind` finds the `.txt`
+#: beside an image with `with_suffix`, which would eat the tail of `nose-on.v2`.
+SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,48}$")
+
+#: What may ARRIVE. Wider than `_SUFFIXES`, which is what the notebook picks
+#: up: a HEIC off a phone is a perfectly good frame in a format nothing
+#: downstream reads, so it is accepted here and converted below.
+_READABLE = _SUFFIXES + (".heic", ".heif", ".tif", ".tiff", ".bmp")
+
+#: Long edge, in pixels, above which an incoming frame is downscaled.
+#:
+#: MEASURED RATHER THAN CHOSEN: every reference image committed to this repo is
+#: between 480 and 1280 px on its long edge, the pinned segmentation model runs
+#: at 1024 square, and `_reference/` is committed -- so the 4032 px a phone
+#: produces costs megabytes of permanent history and buys no resolution that
+#: anything downstream reads.
+MAX_EDGE = 2048
+
+#: EXIF orientation. `0x0112` rather than a name, because the name lives in
+#: `PIL.ExifTags` and this module imports PIL lazily on purpose.
+_ORIENTATION = 0x0112
+
+
+def install_photo(ref_dir, slug, src, description, force=False):
+    """
+    Write `<slug>.<ext>` and `<slug>.txt` into `_reference/`. -> dict.
+
+    ONE CALL, NOT TWO, and that is why this is a function rather than four
+    lines at each of its two call sites. A photograph whose sibling `.txt` is
+    missing is not `kind: photo` to `reference_kind`, so it is not silently
+    broken -- it is silently ABSENT: `reference_paths` skips it, a run launches
+    with one fewer viewpoint and says so honestly, and nothing points at the
+    file that was supposed to be there. Writing both together makes an
+    undescribed photograph unrepresentable rather than merely discouraged.
+
+    Reports faults in the return value rather than raising. Both callers answer
+    to somebody -- a model reading a tool result, a person reading a terminal
+    -- and neither is served by a traceback.
+    """
+    slug = str(slug).strip().lower()
+    if not SLUG.match(slug):
+        return {"error": f"{slug!r} is not a usable name: lowercase letters, "
+                         f"digits and hyphens, no dots and no path."}
+    src = pathlib.Path(str(src)).expanduser()
+    if not src.is_file():
+        return {"error": f"no such file: {src}"}
+    if src.suffix.lower() not in _READABLE:
+        return {"error": f"{src.suffix or src.name} is not a photograph. "
+                         f"Readable here: {', '.join(_READABLE)}."}
+    body = " ".join(str(description).split())
+    if len(body.split()) < 8:
+        return {"error": "the description is what the run reads as FACT about "
+                         "the viewpoint, and nothing checks it. Say where the "
+                         "camera is -- above or below, which quarter -- and "
+                         "what the frame shows."}
+
+    ref_dir = pathlib.Path(ref_dir)
+    ref_dir.mkdir(parents=True, exist_ok=True)
+    # FOUND BY STEM, NOT BY NAME. The suffix is not known until the image has
+    # been normalised -- a HEIC lands as a `.jpg` -- so `nose-on.png` already
+    # being there is what makes this slug taken, whatever this frame will
+    # become.
+    already = [p for p in _paths_in(ref_dir) if p.stem == slug]
+    if already and not force:
+        # NOT OVERWRITABLE BY DEFAULT, for `cli/mask.py`'s reason one step
+        # earlier: a mask is an input to a fit whose output may already be
+        # committed and frozen, and nothing downstream notices when the image
+        # under it changes. The caller says how to override, because one has a
+        # flag and the other does not.
+        return {"error": f"{slug} is already {already[0].name}, and replacing "
+                         f"a reference photograph is not automatic: a mask cut "
+                         f"from the old frame is an input to fits that may "
+                         f"already be committed.",
+                "taken": already[0].name}
+
+    try:
+        dest, how = _normalise_image(src, ref_dir, slug)
+    except Exception as exc:                        # noqa: BLE001 -- reported
+        extra = ""
+        if src.suffix.lower() in (".heic", ".heif"):
+            extra = (" HEIC needs `pillow-heif`, which is in the `nb` "
+                     "dependency group -- `uv sync --group nb`.")
+        return {"error": f"{src.name} could not be read: "
+                         f"{type(exc).__name__}: {exc}.{extra}"}
+
+    # ONLY NOW is the old frame removed, and only if it is a different file:
+    # `nose-on.heic` arriving over `nose-on.png` must not leave two images
+    # sharing one `.txt`, which `reference_paths` would list as two viewpoints.
+    replaced = None
+    for p in already:
+        if p != dest:
+            p.unlink()
+            replaced = p.name
+
+    # FIRST WORD `photo`, which is what `reference_kind` reads to tell a
+    # photograph from a plan or a scan.
+    (ref_dir / f"{slug}.txt").write_text(f"photo {body}\n")
+
+    # A MASK CUT FROM THE FRAME THIS REPLACED is now a mask of a different
+    # photograph. Not deleted here: `cli/mask.py` is the only place that knows
+    # whether a committed entry's numbers came out of it, and it refuses to
+    # overwrite one for that reason. Named, so the caller can say so.
+    #
+    # THE TEST IS `already`, NOT `replaced`. A frame arriving under the same
+    # suffix as the one it replaces leaves `replaced` empty -- nothing was
+    # unlinked, the bytes were simply overwritten -- and that is the case most
+    # likely to go unnoticed, because nothing about the directory listing
+    # changed. What makes a mask stale is that the image under it moved, which
+    # is what `already` says.
+    stale = mask_for(dest)
+    return {"installed": slug, "image": dest.name, "how": how,
+            "replaced": replaced,
+            "stale_mask": stale.name if stale is not None and already else None}
+
+
+def _normalise_image(src, ref_dir, slug):
+    """
+    Copy or convert one frame into `_reference/`. -> (path, what happened).
+
+    DOES THE LEAST IT CAN. A frame already in a format the notebook reads,
+    already upright and already within `MAX_EDGE` is copied BYTE FOR BYTE.
+    Re-encoding it would be a lossy pass over the one thing in `_reference/`
+    that every reconstruction is judged against, and
+    `references/coordinator/reference-photographs.md` is explicit that a
+    vendor's own cut-out beats anything a model infers -- so what arrived is
+    what is kept, wherever that is possible.
+
+    Three things make it impossible, and the middle one is why this function
+    exists at all:
+
+    - A FORMAT NOTHING READS. A phone writes HEIC. `_SUFFIXES` does not list
+      it and PIL cannot open it without `pillow-heif`.
+    - AN EXIF ROTATION. A frame shot in portrait is stored landscape with a
+      tag saying so. PIL's own array view, numpy and the segmentation model
+      all ignore that tag -- so the mask is cut from a sideways aeroplane with
+      a perfectly clean boundary, and every pose fitted against it is ninety
+      degrees out with no number to catch it. This is the hand-in-the-frame
+      failure in another costume.
+    - A 12 MP FRAME, which is `MAX_EDGE`'s business.
+    """
+    from PIL import Image, ImageOps
+    try:
+        import pillow_heif
+    except ImportError:
+        pass
+    else:
+        pillow_heif.register_heif_opener()
+
+    suffix = src.suffix.lower()
+    with Image.open(src) as img:
+        turned = img.getexif().get(_ORIENTATION, 1) not in (0, 1)
+        wide = max(img.size) > MAX_EDGE
+        # ALPHA IS GROUND TRUTH where it exists -- a vendor's cut-out scored
+        # IoU 0.82 against the model's own attempt at the same frame, taking
+        # in 21.6% extra area -- so a frame carrying one is never flattened.
+        alpha = img.mode in ("RGBA", "LA", "PA") or "transparency" in img.info
+
+        if suffix in _SUFFIXES and not turned and not wide:
+            dest = ref_dir / f"{slug}{suffix}"
+            if dest.resolve() != src.resolve():
+                shutil.copy(src, dest)
+            return dest, f"copied unchanged, {img.size[0]}x{img.size[1]}"
+
+        was = img.size
+        out = ImageOps.exif_transpose(img)
+        if max(out.size) > MAX_EDGE:
+            out.thumbnail((MAX_EDGE, MAX_EDGE), Image.LANCZOS)
+        if alpha:
+            dest = ref_dir / f"{slug}.png"
+            out.convert("RGBA").save(dest, "PNG", optimize=True)
+        else:
+            # 95 and no chroma subsampling: this is the input to a silhouette
+            # fit, and the boundary is the whole signal.
+            dest = ref_dir / f"{slug}.jpg"
+            out.convert("RGB").save(dest, "JPEG", quality=95, subsampling=0,
+                                    optimize=True)
+        said = [f"{suffix} -> {dest.suffix}"]
+        if turned:
+            said.append("rotated per EXIF")
+        if out.size != was:
+            said.append(f"{was[0]}x{was[1]} -> {out.size[0]}x{out.size[1]}")
+        return dest, ", ".join(said)
 
 
 def reference_photos(notebook):

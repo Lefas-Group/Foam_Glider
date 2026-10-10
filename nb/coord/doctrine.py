@@ -56,6 +56,20 @@ PAGES = {
         "answering an assumptions prompt that lists overlays. Angular "
         "spread, and why the overlay is the only real check.",
         ("setup", "coordinate")),
+    # BOTH AUDIENCES, and the `coordinate` half is the one that earns it. The
+    # setup case is obvious -- it says what to do instead of searching. What
+    # outlives setup is the consequence: with nothing published, every
+    # external check the reconstruction has is a silhouette, so the overlays
+    # in an assumptions prompt are not corroboration, they are the whole
+    # verification. That is a judgement made long after the aircraft was set
+    # up, by a session that may never have seen the intake.
+    "an-unpublished-aircraft.md": (
+        "An aircraft nobody published",
+        "When `_reference/INTAKE.yml` exists -- the user built this aircraft "
+        "and supplied its photographs and figures themselves. What to "
+        "research instead, why an empty `targets:` block is honest, and why a "
+        "reshoot is worth asking for.",
+        ("setup", "coordinate")),
     "judging-a-run.md": (
         "Judging what a run asks you",
         "Every question a run puts to you: the kinds, the reply syntax, "

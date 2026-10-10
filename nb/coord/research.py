@@ -52,8 +52,6 @@ TIMEOUT = 60
 AGENT = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
          "(KHTML, like Gecko) Chrome/125.0 Safari/537.36")
 
-SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,48}$")
-
 #: What a reference photograph may be. `figures._SUFFIXES` is the authority on
 #: what the notebook will later pick up, and a mask is written as PNG beside
 #: whatever this saved, so the source format only has to be readable by PIL.
@@ -174,15 +172,27 @@ def read_plan_page(session, file, page=1, dpi=150):
             "name": made[0].name}
 
 
-def write_sources(nb, rows):
-    """Append `(url, text)` rows to `_reference/SOURCES.txt`."""
-    path = nb.root / figures.REFERENCE_DIR / "SOURCES.txt"
+def write_sources(root, rows):
+    """
+    Append `(origin, text)` rows to `_reference/SOURCES.txt`.
+
+    A ROOT PATH RATHER THAN A NOTEBOOK, because both things that write this
+    file can run before there is one. `source` buffers rows until `new` creates
+    the directory, and `nb intake` writes a measurement into a directory that
+    is not a notebook yet and may never become one.
+
+    And an ORIGIN rather than a URL. Everything the coordinator records here
+    came off a page, and the ledger in `source` holds it to that -- but a
+    figure read off a tape measure has no URL and is the better number. This
+    file says where each line came from; it does not insist that be a link.
+    """
+    path = pathlib.Path(root) / figures.REFERENCE_DIR / "SOURCES.txt"
     path.parent.mkdir(parents=True, exist_ok=True)
     prior = path.read_text() if path.exists() else ""
-    for url, body in rows:
+    for origin, body in rows:
         sep = "" if (not prior or prior.endswith("\n\n")) else (
             "\n" if prior.endswith("\n") else "\n\n")
-        prior = f"{prior}{sep}{url}\n  {body}\n"
+        prior = f"{prior}{sep}{origin}\n  {body}\n"
     path.write_text(prior)
     return path
 
@@ -217,45 +227,43 @@ def source(session, url, text):
                 "note": "held until `new` creates the notebook, then written."}
     path = nb.root / figures.REFERENCE_DIR / "SOURCES.txt"
     path.parent.mkdir(parents=True, exist_ok=True)
-    write_sources(nb, [(str(url), body)])
+    write_sources(nb.root, [(str(url), body)])
     return {"recorded": str(url), "file": str(path.relative_to(nb.repo))}
 
 
 def add_photo(session, name, file, description):
     """
-    Put a fetched image into `_reference/` with the `.txt` that makes it count.
+    Put a fetched image into `_reference/` as a described reference photograph.
 
-    ONE CALL, NOT TWO. A photograph whose sibling `.txt` is missing is not
-    `kind: photo` to `figures.reference_kind`, so it is not silently broken --
-    it is silently ABSENT: `reference_paths` skips it, the run launches with
-    one fewer viewpoint and says so honestly, and nothing points at the file
-    that was supposed to be there. Writing both together makes an undescribed
-    photograph unrepresentable rather than merely discouraged.
+    THE FETCH LEDGER IS THIS FUNCTION'S HALF, and the only half it keeps.
+    Resolving the name inside the session scratch is what makes the filesystem
+    boundary hold -- `tools/mcp_fs.py` put that boundary in another process
+    because "a glob allowlist ran against the model's raw string and `../../`
+    walked straight through it", and the answer here is that there is no path
+    to traverse. What a reference photograph IS, once the bytes are trusted,
+    belongs to `figures.install_photo`: the same rules have to govern a frame
+    the user shot and named in their own shell through `nb intake`.
     """
     nb = session.notebook
     if nb is None:
         return {"error": "no notebook yet -- call `new` first."}
-    slug = str(name).strip().lower()
-    if not SLUG.match(slug):
-        return {"error": f"{name!r} is not a usable name: lowercase letters, "
-                         f"digits and hyphens, no path."}
     src = _scratch(session) / pathlib.Path(str(file)).name
     if not src.exists():
-        return {"error": f"no fetched file {file!r}. `fetch` it first."}
-    if src.suffix.lower() not in (".jpg", ".jpeg", ".png", ".webp"):
-        return {"error": f"{src.suffix} is not a photograph."}
-    body = " ".join(str(description).split())
-    if len(body.split()) < 8:
-        return {"error": "the description is what the run reads as FACT about "
-                         "the viewpoint, and nothing checks it. Say where the "
-                         "camera is -- above or below, which quarter -- and "
-                         "what the frame shows."}
-    ref = nb.root / figures.REFERENCE_DIR
-    ref.mkdir(parents=True, exist_ok=True)
-    dest = ref / f"{slug}{src.suffix.lower()}"
-    shutil.copy(src, dest)
-    # FIRST WORD `photo`, which is what `figures.reference_kind` reads to tell
-    # a photograph from a plan or a scan.
-    (ref / f"{slug}.txt").write_text(f"photo {body}\n")
-    return {"added": slug, "image": dest.name, "note": (
-        "Described, not yet masked. `mask` cuts it, then LOOK at the overlay.")}
+        have = sorted(p.name for p in _scratch(session).iterdir())
+        return {"error": f"no fetched file {file!r}. `fetch` it first.",
+                "fetched": have}
+    got = figures.install_photo(nb.root / figures.REFERENCE_DIR,
+                                name, src, description)
+    if "error" in got:
+        # NO `force` IN THIS DOOR, deliberately. Replacing a frame invalidates
+        # a mask that committed numbers may rest on, and `cli/mask.py` is
+        # explicit that only a person can know whether they do. A coordinator
+        # that wants a different photograph adds it under a different name.
+        if got.get("taken"):
+            got["error"] += (" Add this frame under a different name, or "
+                             "`escalate` if the one on disk is wrong.")
+        return got
+    return {"added": got["installed"], "image": got["image"],
+            "normalised": got["how"], "note": (
+                "Described, not yet masked. `mask` cuts it, then LOOK at the "
+                "overlay.")}
