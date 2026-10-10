@@ -43,7 +43,7 @@ from ..process import desktop, metrics, runstate, serve
 from .view import site
 from ..agent.setup import setup, report, spoken_calls
 from ..build.publish import (_ceiling_problem, _commit, _refresh_active,
-                    targets_unreported,
+                    targets_gate,
                     _refresh_index_freeze,
                     _refresh_root_index, _render_cost, _resolve, _why_and_diff,
                     answer_line, rendered_prose)
@@ -514,7 +514,23 @@ def _targets_brief(notebook):
                 "nothing is published for this aircraft, or nobody chose to "
                 "pin it. Build what the brief describes and show it. The "
                 "three-view at the prompt is then the only check there is, so "
-                "it matters more, not less.")
+                "it matters more, not less.\n\n"
+                "SO DO NOT STATE A TOLERANCE, and do not report an error "
+                "against one. With nothing pinned you have no published "
+                "standard, and a tolerance you choose yourself is not a "
+                "standard -- an error measured against it tests only that you "
+                "picked a number you could meet. A run did exactly that: it "
+                "wrote its own table of four targets with tolerances from "
+                "nowhere, titled the entry \"can we reconstruct it within "
+                "tolerance?\", then missed its own dry-mass tolerance by seven "
+                "times and said so as though the bar had been real. The commit "
+                "is gated on this, so the entry will be handed back.\n\n"
+                "Say instead, in words, that the SHAPE IS UNVERIFIED: no "
+                "published figure was available to check it against, and the "
+                "silhouette fit is the only evidence there is. That is an "
+                "honest reconstruction, not a failed one. If you believe real "
+                "published figures exist, `escalate` and ask for them to be "
+                "pinned as `targets:` rows -- the brief is not yours to edit.")
     out = ["The targets, from the brief:"]
     out += [f"  - {t}" + ("   [GIVEN -- calibrate to it]" if g
                           else "   [DERIVED -- it must fall out]")
@@ -1005,7 +1021,7 @@ def _execute(notebook, session, contents, run_metrics, fs, handlers,
             return False, list(problems) + [(46, mismatch)]
         if getattr(session, "kind", "run") == "reconstruct":
             from ..contract import shared
-            note = targets_unreported(notebook, session.entry_path,
+            note, _why = targets_gate(notebook, session.entry_path,
                                       shared.notebook_targets(notebook.root))
             if note:
                 return False, list(problems) + [(None, note)]
@@ -1253,11 +1269,11 @@ def _finish(notebook, session, run_metrics, first_pass, moved, accepted):
     # than the teaching: the brief already says to report every target.
     if getattr(session, "kind", "run") == "reconstruct":
         from ..contract import shared
-        note = targets_unreported(notebook, session.entry_path,
-                                  shared.notebook_targets(notebook.root))
+        note, why = targets_gate(notebook, session.entry_path,
+                                 shared.notebook_targets(notebook.root))
         if note:
             tell(f"  Not committed: {note}")
-            run_metrics.close("targets_unreported")
+            run_metrics.close(why)
             return 1
 
     extra = ()

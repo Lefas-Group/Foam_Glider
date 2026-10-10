@@ -664,6 +664,85 @@ def targets_unreported(notebook, entry_path, targets):
               "names is a hole.")
 
 
+#: A DECLARED ALLOWANCE, in any of the spellings an entry writes it in. Rule 1
+#: makes every number in prose a `{python}` expression, so this deliberately
+#: matches the WORD and the bare symbol rather than any value.
+TOLERANCE_CLAIM = re.compile(r"toleranc\w*|\+/-\s*\d|\u00b1\s*\d", re.I)
+
+
+def targets_invented(entry_path, targets):
+    """
+    One line when an entry claims a tolerance the brief never declared, or "".
+
+    THE MIRROR OF `targets_unreported`, and it covers the hole that function
+    opens with `if not targets: return ""`. An empty `targets:` block is
+    allowed -- shape-first work has nothing published to converge on -- but it
+    means the run has no declared standard, and a run with no standard
+    invented one.
+
+    Measured on `f16-viper`, whose brief carries published numbers as
+    `specified:` rows and no `targets:` block at all. The run wrote its own
+    table into `_analysis.py` -- wingspan +/-0.5%, length +/-0.8%, dry mass
+    +/-3.7%, none of them from anywhere -- titled the entry "Can we
+    reconstruct the FT F-16 Viper within tolerance?", and headlined it
+    "25.0% -- worst target error". It then blew its own dry-mass tolerance by
+    seven times and committed. Nothing could object: rule 44 early-returns
+    with no targets, rule 50 reads declared reasons, and this gate returned ""
+    on the first line.
+
+    A TOLERANCE IS A DECLARED ALLOWANCE, which is why that is the signal
+    rather than a phrase list. The only place one can legitimately come from
+    is the brief, written by a person; an entry that states one when the brief
+    states none is quoting a standard it set for itself. Measured across the
+    notebooks on disk: the four `f16-viper` entries all fire, and
+    `glider-notebook` -- a design, no targets, no published spec -- never uses
+    the word, so shape-first work is untouched.
+
+    The run CANNOT fix this itself: `_inputs.yml` is the brief and
+    `verifiers.NOT_THE_RUNS_TO_FIX` refuses it. So the remedy is to stop
+    claiming a tolerance, or to escalate for a real one.
+    """
+    if targets:
+        return ""
+    try:
+        body = entry_path.read_text()
+    except OSError:
+        return ""
+    said = TOLERANCE_CLAIM.findall(body)
+    if not said:
+        return ""
+    return (f"the brief declares no targets, and this entry states a "
+            f"tolerance {len(said)} time(s) ({', '.join(sorted({w.lower() for w in said}))}). "
+            f"A tolerance is an allowance somebody published; with none in the "
+            f"brief, any figure here is one this run chose for itself, and an "
+            f"error reported against it tests nothing. Either drop the "
+            f"tolerance language and say plainly that the shape is UNVERIFIED "
+            f"-- the silhouette fit is then the only evidence, which is an "
+            f"honest reconstruction -- or `escalate` for the published figures "
+            f"and tolerances to be pinned in the brief as `targets:` rows. The "
+            f"brief is not yours to edit.")
+
+
+def targets_gate(notebook, entry_path, targets):
+    """
+    Both directions of the targets check, and the outcome name for the metric.
+
+    ONE ENTRY POINT because there are two call sites -- the lint-correction
+    loop and the commit -- and they ran the same two lines. A second check
+    added to one of them and not the other is a gate that holds in the
+    correction loop and not at the commit, or the reverse.
+
+    Returns ("", "") when there is nothing to say.
+    """
+    note = targets_unreported(notebook, entry_path, targets)
+    if note:
+        return note, "targets_unreported"
+    note = targets_invented(entry_path, targets)
+    if note:
+        return note, "targets_invented"
+    return "", ""
+
+
 # A MISS MEANS TWO OPPOSITE THINGS, and the gate above deliberately does not
 # try to tell them apart. On a first reconstruction a missed target is a
 # FINDING -- "dry weight is 25% under, and uncounted glue and plywood are
