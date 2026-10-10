@@ -922,7 +922,7 @@ def _index_renders_its_model(root, chapters, entries):
 
 
 
-@register()
+@register(51)
 def _transcribed(root, chapters, entries):
     """
     A number hand-typed into an entry that another chapter also publishes.

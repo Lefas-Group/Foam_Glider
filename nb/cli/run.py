@@ -670,7 +670,7 @@ def _reference_brief(notebook):
         usable = ", ".join('"%s"' % n for n, _, _ in photos)
         how = """
 These are the only pictures of the aircraft you are reconstructing, and
-`read_reference_image` is the only way to see one. Usable with a mask, so
+`read_image` is the only way to see one. Usable with a mask, so
 the model can be drawn over them: %s.
 
 **HOW TO USE THEM IS ONE READ: `read_reference("photographs")`.** The pose

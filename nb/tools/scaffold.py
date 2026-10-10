@@ -293,6 +293,34 @@ def create_chapter(notebook, name, title, defines="", number=None,
                       f"index is drawn from it: your `summary:` labels the "
                       f"arrow into this chapter, so write what the design "
                       f"BECAME rather than `from → to`.")
+    if fork_from and not forked:
+        # A FORK THAT COULD NOT READ ITS PARENT IS NOT A FORK, and it used to
+        # fall through to the stub below without a word. What the caller got
+        # was a brand-new chapter wearing a fork's name: a seven-line
+        # `_model.py` instead of the parent's, no `_fork.yml`, the inherited
+        # items the user had just reviewed discarded, and the `overwrites:`
+        # resolved a moment earlier thrown away. Rule 31 does not catch it
+        # either -- it asks whether a COPIED model declares its parent, and
+        # nothing was copied.
+        #
+        # `_fork_sources` reads `git show`, so this is every reason that can
+        # fail: a notebook outside a repo, and -- the one that will actually
+        # happen -- a parent whose `_model.py` has never been committed,
+        # because a run commits at the end and a fork taken from a chapter
+        # still being written has nothing to read.
+        #
+        # Refused rather than degraded. The chapter directory is already on
+        # disk at this point; leaving it with a stub and saying nothing is
+        # how a notebook comes to hold a chapter whose lineage is unrecorded
+        # and unrecoverable.
+        import shutil as _shutil
+        _shutil.rmtree(target, ignore_errors=True)
+        raise ValueError(
+            f"cannot fork chapters/{fork_from}: its `_model.py` is not in "
+            f"the last commit, so there is nothing to copy. A fork takes the "
+            f"parent's COMMITTED model, never its working tree -- otherwise "
+            f"it copies somebody's half-finished edit. Commit the parent "
+            f"first, then fork. (Nothing was created.)")
     if not forked:
         (target / "_model.py").write_text((SCAFFOLD / "_model.py.tmpl").read_text())
         (target / "_analysis.py").write_text("")

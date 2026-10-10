@@ -112,7 +112,7 @@ def native_declarations():
                   "it. So are names your earlier probes defined, and plt, np "
                   "and Image. A probe's CWD IS ITS OWN RUN DIRECTORY, not the "
                   "notebook: a bare savefig lands beside the run's other "
-                  "pictures, which is where read_probe_figure looks, and a "
+                  "pictures, which is where read_image looks, and a "
                   "RELATIVE path to a chapter file will not resolve. Reach "
                   "notebook files through the file tools, or read them under "
                   "$NB_ROOT.")),
@@ -184,32 +184,24 @@ def native_declarations():
               "Read one reference document.\n" + refs.describe(),
               {"name": dict(S, enum=refs.names())}, ["name"]),
 
-        _decl("read_figure",
-              "A rendered figure as an image, so prose can be checked against "
-              "what actually rendered rather than against the conversation.",
-              {"chapter": S, "stem": dict(S, description="Entry stem, no .qmd"),
-               "name": dict(S, description="PNG filename; omit for the first")},
-              ["chapter", "stem"]),
-
-        _decl("read_reference_image",
-              "A photograph of the REAL aircraft, as an image. THE ONLY WAY "
-              "TO SEE WHAT YOU ARE RECONSTRUCTING -- every other picture "
-              "tool shows you something you made. Call it FIRST, before "
-              "_model.py exists, and read the COMPONENT LIST off it: what "
-              "parts does this aircraft have, and roughly where. Proportions "
-              "and layout only -- never a dimension; the overlay and "
-              "fit_geometry supply those later. One look is enough.",
-              {"name": dict(S, description="Filename or stem; omit for the "
-                                           "first")},
-              []),
-
-        _decl("read_probe_figure",
-              "An image YOU just produced, from a probe -- a stitched sheet, "
-              "a crop, a three-view. Save it with `fig.savefig(\"x.png\")` "
-              "or `im.save(...)` in a probe, then read it back here to check "
-              "you built what you meant to. Measuring an image you have not "
-              "looked at is how a wrong crop becomes a confident number.",
-              {"name": dict(S, description="Filename; omit for the first")},
+        _decl("read_image",
+              "LOOK AT A PICTURE -- any picture this run may see: a "
+              "photograph of the REAL aircraft from `_reference/`, something "
+              "a probe just saved, or a figure an entry rendered. Searched "
+              "in that order of recency: probe output, then references, then "
+              "your chapter's freeze. With no `name` you get the most recent "
+              "thing you drew. A name matches exactly, by stem, or by PREFIX "
+              "-- so `fig-belly` finds the `fig-belly-output-1.png` Quarto "
+              "actually wrote. A miss lists every candidate with its source. "
+              "Measuring an image you have not looked at is how a wrong crop "
+              "becomes a confident number.",
+              {"name": dict(S, description="Filename, stem or prefix; omit "
+                                           "for the most recent picture"),
+               "chapter": dict(S, description="Only to read ANOTHER "
+                                              "chapter's rendered figure; "
+                                              "yours is the default"),
+               "stem": dict(S, description="Entry stem, to narrow a rendered "
+                                           "figure to one entry")},
               []),
 
         _decl("ask_specified",
@@ -338,12 +330,14 @@ def build(session, fs):
         "api_list": lambda kind, area="": api.api_list(kind, area),
         "api_signature": lambda path, methods=False: api.api_signature(path, methods),
         "read_reference": lambda name: refs.read_reference(name),
-        "read_figure": lambda chapter, stem, name="": figures.read_figure(
-            nb, chapter, stem, name),
-        "read_reference_image": lambda name="": figures.read_reference_image(
-            nb, name),
-        "read_probe_figure": lambda name="": figures.read_probe_figure(
-            nb, name),
+        # THE CHAPTER COMES FROM THE SESSION, not from the model. It was a
+        # required argument on the old `read_figure` and every recorded call
+        # passed the run's own; the session has held it since before the
+        # first token, so asking for it again only creates a way to get it
+        # wrong. Still overridable, for the rare read of a sibling chapter's
+        # figure.
+        "read_image": lambda name="", chapter="", stem="": figures.read_image(
+            nb, name, chapter or session.chapter, stem),
         "ask_specified": lambda name, why, kind="specified", options="",
                                 replaces="": (
             interact.ask_specified(session, name, why, kind, options, replaces)),

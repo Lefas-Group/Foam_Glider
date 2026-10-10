@@ -31,62 +31,132 @@ so in your final message and write it anyway.
 You are in **chapters/{chapter}**. It is settled, it is claimed for this run,
 and its model is quoted above in full. Probe it and write into it.
 
-**Everything about this notebook is already in front of you.** Your chapter's
+# ============================================================
+# HOW A QUESTION GOES
+# ============================================================
+
+Five steps. The order is the instruction; each exists because a recorded run
+got it wrong. You have {max_turns} turns for the whole run.
+
+## 0. DECIDE, BEFORE THE FIRST CALL                           no calls
+
+Say in one sentence: which chapter, and what you are going to compute. Then
+do that.
+
+**EVERYTHING ABOUT THIS NOTEBOOK IS ALREADY IN FRONT OF YOU.** Your chapter's
 `_model.py` is quoted in full; every chapter's specifications, assumptions and
 lineage are listed as data; every `_analysis.py` signature is given; and every
-entry that exists is there with the answer it reached. Do not go looking for
-what you have already been given -- reading `_model.py`, listing directories,
-or grepping for a term costs turns and tells you nothing new.
+entry that exists is here with the answer it reached. Reading `_model.py`,
+listing a directory or grepping for a term costs a turn and tells you nothing
+new -- measured, 86 of 702 recorded calls before `open_entry` were exactly
+that.
 
-Probe for the answer. `probe` takes Python with the chapter already loaded
-and the solve budget already armed: do not import the chapter, and do not use it
-to explore the filesystem. `chapter` is required -- the wrong one silently
-answers about a different aircraft. End your probes with `aero_report()`.
+Reading an existing entry tells you what was already answered, not how to
+answer this. Open one only to link it (rule 10), or to check a number you
+think you are contradicting.
 
-# The calls that move the run forward
+**IS THIS A DIFFERENT VEHICLE?** If answering honestly needs a `_model.py`
+that differs from the one quoted above, that is a FORK and it is step 0's
+decision, not something to discover at turn 30 -- `fork_chapter` is refused
+once the entry is open. See the section below it.
 
-    declare_input  one input, the moment you assume or decide it. Not a list
-                   you fill in at the end: four of eight recorded runs reached
-                   the end having declared nothing at all.
-    open_entry     probing is over, this is the question. It allocates the
-                   filename, puts your assumptions to the user, and hands back
-                   the instructions for writing.
-    fork_chapter   ONLY if answering this would need a different `_model.py`
-                   from the one quoted above. It stops the run for the user's
-                   approval. A new objective, different bounds, a multistart,
-                   a finer sweep or any new measurement of the SAME aircraft
-                   is not a fork -- it belongs where you already are.
+## 1. THE PROBE LOOP                                   10-30 probes
 
-`ask_specified` is the fourth, and it is not on that list because it has no
-place in the sequence: call it the moment you hit an input where a different
-answer would change WHAT IS BEING BUILT. Do not save it.
+    probe   compute the answer
+    probe   compute something INDEPENDENT that must agree with it
 
-Write nothing into the notebook before `open_entry`. Until then you are
-deciding what to write, and a write to anything but this chapter's own files is
-refused -- scratch code is `probe`, which runs in the run directory and leaves
-nothing behind.
+A single number you have not checked is a number you do not have. The second
+probe is not a repeat: it is a limit case, a different method, a bound the
+answer cannot cross, a dimensional check, the same quantity from a different
+direction.
 
-ONE question, one entry. If the ask really contains several distinct questions,
-answer the first and say at the end what the others are, for the human to ask
-separately.
+    they AGREE     -> you are done. Stop probing.
+    they DISAGREE  -> that is the finding. Chase it; it is worth more
+                      than the number you set out for.
 
-# How to spend your turns
+**THE RANGE IS MEASURED, NOT A TARGET.** Fifteen recorded runs took between 9
+and 49 probes to reach `open_entry`, median 26, and 88% of those probes
+returned something useful -- so a question genuinely costs tens of probes and
+a brief claiming otherwise was lying to you. But past about 30 with nothing
+converged, you are no longer closing in: say so, and open the entry with what
+you have and what it cost. A reported non-result is an entry; a silent
+fortieth probe is not.
 
-You have {max_turns} for the whole run -- probing AND writing. A well-run
-question uses four or five to reach `open_entry`: probe for the answer, probe
-once more to check it, declare what you assumed, open the entry. Spending twenty on orientation is the failure mode this brief exists to
-prevent.
-
-Before your first call, decide two things and say them in one sentence: which
-chapter, and what you are going to compute. Then do that.
-
-Reading existing entries tells you what was already answered, not how to answer
-this. You have every entry's title and result above; that is enough to know
-whether you are repeating one. Open an entry only to link it (rule 10) or to
-check a number you think you are contradicting.
+`probe` takes Python with the chapter already loaded and the solve budget
+already armed. Do not import the chapter. Do not explore the filesystem with
+it. `chapter` is required -- the wrong one silently answers about a different
+aircraft. End your probes with `aero_report()`.
 
 If a probe errors, read the traceback and fix the probe. Do not go looking
-through the notebook for why -- the traceback already says.
+through the notebook for why; the traceback already says.
+
+## 2. DECLARE AS YOU GO                            declare_input x n
+
+Every value you assumed or chose, the moment you assume or choose it -- not a
+list you fill in at the end. FOUR OF EIGHT recorded runs reached the end
+having declared nothing at all, which is what a list filled in last looks
+like.
+
+`ask_specified` is not in this sequence because it has no place in one: call
+it the INSTANT you hit an input where a different answer would change WHAT IS
+BEING BUILT rather than how accurately. Do not save it for later.
+
+Write nothing into the notebook before step 3. Until then you are deciding
+what to write, and a write to anything but this chapter's own files is
+refused. Scratch code is `probe`, which runs in the run directory and leaves
+nothing behind.
+
+## 3. open_entry                                             1 call
+
+Probing is over; this is the question. It allocates the filename, puts your
+assumptions to the person who can check them, and hands back the instructions
+for writing.
+
+ONE question, one entry. If the ask really contains several distinct
+questions, answer the first and say at the end what the others are, for the
+human to ask separately.
+
+## 4. WRITE, CHECK, STOP                                   ~15 calls
+
+Write the entry, `lint`, `render` the ONE entry you are iterating on,
+`read_image` what it drew, and look at it.
+
+**Then stop.** The chapter index, the front page and the commit all happen
+after you finish. A whole-notebook render of your own re-serves them from
+cache and tells you nothing, and linting a chapter you have not edited since
+the last call returns the same answer at the cost of a turn.
+
+A lint finding names its rule number and its own fix. One in a NOTEBOOK-level
+file -- `_inputs.yml`, `_quarto.yml`, `index.qmd`, `_notebook.py` -- arrives
+as a warning and is NOT yours to fix; name it in your final message for the
+coordinator.
+
+Anything interesting you were not asked about goes in your final message,
+never into the entry.
+
+# When the question needs a different aircraft
+
+    fork_chapter   ONLY if answering this would need a different `_model.py`
+                   from the one quoted above.
+
+A new objective, different bounds, a multistart, a finer sweep or any new
+measurement of the SAME aircraft is NOT a fork -- it belongs where you
+already are. A fork is a different VEHICLE.
+
+It stops the run for the user's approval, and it is the one stop with no
+default: nobody answering means the run ends resumable rather than guessing.
+If they refuse, do not ask again -- write the entry against the chapter as it
+stands, or stop and say why it cannot be written.
+
+Forking also asks which of this chapter's commitments the new one BREAKS.
+That is the one thing no computation can know: forking the 3 mm chapter back
+to 5 mm inherits "foam thickness: 3 mm", which is exactly wrong and exactly
+the thing to strike. What you strike is written into `_fork.yml` as
+`overwrites:`, and it is what lets a later reader see which chapter is in
+force.
+
+Decide this at step 0. It is refused once the entry is open, because a fork
+chosen after the filename is allocated is a different question.
 """
 
 # Returned by `open_entry`, as its result.
@@ -192,7 +262,7 @@ each message names its own fix.
 
 STOP WHEN LINT IS CLEAN AND YOU HAVE LOOKED AT YOUR FIGURES. That is the whole
 gate, and both halves are reached by rendering the ONE entry and calling
-`read_figure` on what it drew. After that there is nothing left for you to do:
+`read_image` on what it drew. After that there is nothing left for you to do:
 the chapter index, the front page and the commit are all done for you once you
 finish, and a whole-notebook `render` of your own re-serves them from cache and
 tells you nothing. Nor does linting a chapter you have not edited since the
@@ -301,7 +371,7 @@ this order was written from took eighty-six.
 
 ## 0. LOOK AT THE AIRCRAFT                                     (1 turn)
 
-    read_reference_image()
+    read_image()
 
 Before `_model.py`. Before anything. Look at ONE photograph and write down
 the COMPONENT LIST: what parts does this aircraft have -- wings, fuselage,
@@ -450,7 +520,7 @@ old -> new.
     fig, notes = show_all_views(airplane, poses=poses)
     fig.savefig("overlay.png")
 
-then `read_probe_figure("overlay.png")` AND LOOK AT IT. Pinned, so the whole
+then `read_image("overlay.png")` AND LOOK AT IT. Pinned, so the whole
 panel costs a few seconds.
 
 Targets are numbers and numbers do not see shape: a model can hit area, mass
@@ -483,7 +553,7 @@ not an error.
 ## 8. WRITE IT, CHECK IT, STOP                                (~5 turns)
 
 Write the entry, naming each view's pose in the source so the figure redraws
-identically. `lint`. `render` the ONE entry. `read_figure` what it drew.
+identically. `lint`. `render` the ONE entry. `read_image` what it drew.
 
 **Then stop.** The chapter index, the front page and the commit all happen
 after you finish; a whole-notebook render of your own re-serves them from

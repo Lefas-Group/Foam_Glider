@@ -54,11 +54,30 @@ class Input(BaseModel):
             "it. A dimension of a real aircraft that the brief did not give "
             "you is guessed, however confident the recollection: declare it, "
             "and say in `why` that it was not measured."))
-    why: str = Field(description="Ten words at most -- lint rule 8 counts them")
+    why: str = Field(description="Ten words at most -- the same budget rule 8 "
+                                 "puts on the item this becomes")
 
     @model_validator(mode="after")
     def _discipline(self):
-        if len(self.why.split()) > 10:
+        # THE CONTRACT'S OWN COUNTER, not `str.split()`. `words()` treats an
+        # inline `{python}` expression as the one thing a reader takes in,
+        # which is the whole reason it exists -- counting the source verbatim
+        # penalises the habit rule 1 enforces. This used to split on
+        # whitespace and so disagreed with every other word budget in the
+        # system about the same text.
+        #
+        # NOT `item_words`: that strips a leading `**Label**:` because an
+        # input ITEM is written `**CG**: 64 mm …` and the handle is not
+        # prose. A `why` is the reason alone and carries no handle, so the
+        # label rule has nothing to do here.
+        #
+        # This is a PROXY for rule 8, not the same check. Rule 8 counts the
+        # rendered item -- name, value and reason together -- which is longer
+        # than this. Ten here keeps the item that will be built from it
+        # inside ten there, which is why the budget is the same number.
+        from ..contract.shared import words
+        n = words(self.why)
+        if n > 10:
             raise ValueError(
-                f"'{self.name}': why is {len(self.why.split())} words, budget is 10.")
+                f"'{self.name}': why is {n} words, budget is 10.")
         return self

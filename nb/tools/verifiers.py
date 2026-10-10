@@ -231,13 +231,31 @@ def lint_chapter(notebook, chapter, session=None):
     budgets = _word_budgets(notebook, chapter)
     if not blocking and not warnings:
         return "lint clean." + budgets
+    # THE NUMBER REACHES THE MODEL. `_problems` has carried `(rule, message)`
+    # since the pre-render filter needed it, and this function threw the rule
+    # away -- so a run was handed a numbered list of every rule in its system
+    # instruction and then told it had broken one WITHOUT THE NUMBER. The one
+    # index it was given could not be used on the one occasion it was for.
+    #
+    # MEASURED, FT A-10 Warthog, 2026-10-10: nine turns on a rule 8 violation.
+    # The message said "Target item is 11 words, over 10", the instruction
+    # said "8  each Specified / Assumed item <= 10 words", and nothing
+    # connected them. The run went looking for the rule's source instead, was
+    # refused, and ended up rewriting the brief to get past it.
+    #
+    # The message still carries its own fix -- that is not changing, and it is
+    # why this was survivable -- but a reader who wants the rule itself should
+    # not have to grep prose for it.
+    def _line(rule, msg):
+        return f"  rule {rule}: {msg}" if rule is not None else f"  {msg}"
+
     out = []
     if blocking:
         out.append(f"{len(blocking)} blocking problem(s) -- fix all of these:")
-        out += [f"  {m}" for _, m in blocking]
+        out += [_line(r, m) for r, m in blocking]
     if warnings:
         out.append(f"{len(warnings)} warning(s), not blocking:")
-        out += [f"  {m}" for _, m in warnings]
+        out += [_line(r, m) for r, m in warnings]
     return tail("\n".join(out)) + budgets
 
 

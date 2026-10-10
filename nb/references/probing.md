@@ -64,7 +64,7 @@ When a probe needs to LOOK at something, save the figure and read it back:
 fig.savefig("check.png", dpi=110, bbox_inches="tight")
 ```
 
-then `read_probe_figure("check.png")` it. The kernel's cwd is the run
+then `read_image("check.png")` it. The kernel's cwd is the run
 directory, so a bare filename lands where that tool looks and there is no path
 to get right. Name it for what it shows — the assumptions prompt lists these
 files by path, newest first, and a reader picking between them has only the

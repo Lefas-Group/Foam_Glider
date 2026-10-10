@@ -29,8 +29,9 @@ from ..text import head
 # `read_media_file` was here and could never work: the server's root is
 # `chapters/`, rendered figures live under `_freeze/`, and there is no media
 # file under `chapters/` in any notebook. Its own note said "prefer the
-# read_figure tool", which is the native tool that reads the freeze -- so this
-# was a declaration billed on every request for a capability it did not have.
+# read_figure tool" -- now `read_image`, the native tool that reads the freeze
+# along with every other picture -- so this was a declaration billed on every
+# request for a capability it did not have.
 EXPOSED = ("read_text_file", "list_directory",
            "search_files", "edit_file", "write_file")
 

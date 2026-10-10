@@ -193,7 +193,7 @@ def _recent_figures(notebook, limit=4):
     """Images this run has written, newest first. Paths, for a human to open.
 
     The RUN directory and the notebook's `_scratch/` -- the two places
-    `read_probe_figure` looks, for the same reason: a probe's cwd is the run
+    `read_image` looks, for the same reason: a probe's cwd is the run
     directory, so `fig.savefig("check.png")` lands there with no path to get
     right, and `_scratch/` is where the older convention put things.
     """

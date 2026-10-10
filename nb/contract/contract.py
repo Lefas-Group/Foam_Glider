@@ -303,6 +303,14 @@ RULES = {
     48: "an inline `{python}` expression produces a value, never markup",
     49: "prose claiming the photographs agree shows the overlay that says so",
     50: "a constant calibrated to hit a target is a derived target in disguise",
+    # NUMBERED LATE, and it had been firing for some time without one.
+    # `_transcribed` was registered as a bare `@register()`, which is legal --
+    # a check may cover no numbered rule -- so it reported `rule=None`,
+    # appeared in no list the model is given, and could not be looked up by
+    # anyone it fired on. It is a warning and it fires on the live corpus.
+    # A finding without a handle is the one kind a reader cannot act on
+    # beyond the sentence in front of them.
+    51: "(warning) a number hand-typed into code that another chapter publishes",
 }
 
 

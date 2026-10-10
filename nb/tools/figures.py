@@ -1,5 +1,10 @@
 """
-read_figure -- rendered figures, as images.
+read_image -- every picture a run may look at, and the `_reference/` inputs.
+
+ONE READER, THREE SOURCES: what a probe just drew, the photographs of the real
+aircraft, and the figures an entry rendered. They were three tools with three
+declarations and one shape between them; see `read_image` at the foot of this
+file for what merging them fixed.
 
 An entry's prose can claim things about a figure that the figure does not show --
 a caption naming a crossover at 6 m/s when the curve crosses at 8 is invisible
@@ -31,67 +36,6 @@ def list_figures(notebook, chapter, stem=""):
     if not paths:
         return f"no rendered figures for {chapter}{'/' + stem if stem else ''}"
     return "\n".join(f"{p.parts[-3]}/{p.name}" for p in paths)
-
-
-def read_probe_figure(notebook, name=""):
-    """
-    An image the RUN itself just produced, as bytes for an inline part.
-
-    THE GAP THIS CLOSES. `read_figure` globs the freeze, so a run could only
-    ever see a figure after rendering an entry -- it could MEASURE an image
-    it built in a probe and never look at one. That blocked the whole
-    arrangement where the run rasterises and stitches a plan itself: it could
-    assemble a sheet and had no way to check it had assembled it correctly.
-
-    Measured, before this existed: a coordinator stitched the tiles by hand,
-    misread the tile key, dropped the LEFT WING part, and the reconstruction
-    was built from the wing's assembly jigs. Nobody could see the sheet but
-    the coordinator, and the coordinator got it wrong.
-
-    Looks in the RUN DIRECTORY first and then `_scratch/`, which is where
-    `probing.md` tells a probe to save and where the kernel's cwd already
-    points -- so `fig.savefig("x.png")` in a probe is readable here by name
-    with no path to get right.
-    """
-    # `<run>/_scratch` too: a probe's cwd is the run directory, so
-    # `savefig("_scratch/x.png")` -- which an older brief asked for -- lands
-    # in a subdirectory of it. A run spent two turns discovering that the file
-    # it had just written could not be read back by name.
-    roots = [notebook.run, notebook.run / "_scratch",
-             notebook.root / "_scratch"]
-    found = [p for r in roots if r.is_dir()
-             for p in sorted(r.iterdir())
-             if p.suffix.lower() in _SUFFIXES
-             and (not name or p.name == name)]
-    if not found:
-        where = " or ".join(str(r) for r in roots)
-        return {"error": f"no image {name or '*'} in {where}. Save one from a "
-                         f"probe first -- `fig.savefig(\"check.png\")` lands "
-                         f"in the run directory."}
-    p = found[0]
-    return {"_image": p.read_bytes(),
-            "mime_type": _MIME.get(p.suffix.lower(), "image/png"),
-            "name": p.name}
-
-
-def read_figure(notebook, chapter, stem, name=""):
-    """
-    One figure, as raw bytes for the loop to turn into an inline image part.
-
-    NOT base64 in the function response. That was the first shape this took, and
-    it was worse than having no tool at all: the model received a 91,060-character
-    string rather than an image, so vision never engaged, and ~23k tokens of noise
-    entered the context per figure. Measured against the same PNG, the inline part
-    costs 1,298 -- and the model reads the axis labels off it.
-    """
-    paths = figure_paths(notebook, chapter, stem)
-    if name:
-        paths = [p for p in paths if p.name == name]
-    if not paths:
-        return {"error": f"no figure {name or '*'} under {chapter}/{stem}. "
-                         f"Available: {list_figures(notebook, chapter, stem)}"}
-    p = paths[0]
-    return {"_image": p.read_bytes(), "mime_type": "image/png", "name": p.name}
 
 
 # =============================================================================
@@ -255,72 +199,6 @@ def reference_listing(notebook):
     return "\n".join(out)
 
 
-def read_reference_image(notebook, name=""):
-    """
-    One reference photograph, as bytes for the loop to make an inline part.
-
-    THE RUN'S ONLY WAY TO SEE THE AIRCRAFT. Everything else it can look at
-    is something it made: `read_figure` globs the freeze, so a figure has to
-    be rendered first, and `read_probe_figure` reads the run directory, so a
-    probe has to have drawn it. `compare_to_photo` reaches `_reference/` but
-    draws the MODEL over the photograph, which requires the model to exist.
-    Without this there is no point in a reconstruction at which the subject
-    can be looked at before it is built.
-
-    MEASURED, FT A-10 Warthog, 2026-10-10. Turn 2, with no way to look:
-
-        "Let's break down the geometry into its components: the wing,
-         fuselage, nacelles, horizontal stabilizer, and twin vertical
-         stabilizers. THE REAL A-10 has a constant-chord center wing
-         section... the other values will be based on estimates from the
-         REAL A-10."
-
-    It listed the components of the jet it remembered, not of the foam
-    aircraft in the photographs, and built a nacelle pylon that appears in
-    none of them -- as a lifting surface, carrying area and lift into two
-    later entries. A wrong COMPONENT LIST is the one error `fit_geometry`
-    cannot repair: it moves named constants and can neither delete a surface
-    nor invent one. So the list has to come from the photograph, and the
-    photograph has to be reachable before the model exists.
-
-    THIS FUNCTION EXISTED AND WAS DELETED by 78bef1a, a forty-file sweep
-    that landed `compare_to_photo` and cleared a dozen scratch scripts under
-    the message "READNE update". The comment that justifies it survived the
-    deletion and sat orphaned above `REFERENCE_DIR` for five days: "SO THIS
-    TOOL IS FOR THE FIRST LOOK ONLY... one call here orients it -- which
-    part is where -- and everything quantitative after that is numpy." That
-    reasoning was never withdrawn; only the code was.
-
-    ONE LOOK, FOR TOPOLOGY. `KINDS["photo"]` already states the rule the
-    brief repeats -- proportions and layout only, no dimension off a
-    photograph. What this answers is "what parts does it have, and roughly
-    where", which is exactly what vision is reliable for and exactly what
-    the model needs before its first line.
-
-    Masks are not reachable: `reference_paths` excludes them, because a run
-    looking at a white blob learns nothing and the mask is an input to the
-    fit rather than a picture of the aircraft.
-    """
-    paths = reference_paths(notebook)
-    if not paths:
-        return {"error": f"no {REFERENCE_DIR}/ images in {notebook.root.name}. "
-                         f"This notebook has no photographs, so nothing can "
-                         f"check the shape -- build from the brief, declare "
-                         f"what you supply, and say the shape is unverified."}
-    if name:
-        hit = [p for p in paths if p.name == name or p.stem == name]
-        if not hit:
-            return {"error": f"no reference image {name!r}. Available:\n"
-                             + reference_listing(notebook)}
-        paths = hit
-    p = paths[0]
-    return {"_image": p.read_bytes(),
-            "mime_type": _MIME.get(p.suffix.lower(), "image/png"),
-            "name": p.name}
-
-
-
-
 # =============================================================================
 # WHAT THE COORDINATOR GOT WRONG, said at launch rather than discovered later.
 #
@@ -428,3 +306,91 @@ def duplicate_photos(notebook, threshold=0.80):
             if iou >= threshold:
                 out.append((na, nb_, iou))
     return out
+
+
+def _candidates(notebook, chapter=None, stem=""):
+    """
+    Every picture a run may look at, newest-relevant first. -> [(tag, path)]
+
+    THE SEARCH ORDER IS THE ANSWER TO "which one did you mean". A run asks
+    for a picture far more often than it asks for a particular directory,
+    and the four places a picture can live are not equally likely at any
+    moment:
+
+      probe/      what this run just drew -- the common case by a long way
+      reference/  photographs of the real aircraft
+      figure/     what the entry rendered, from the freeze
+
+    Deterministic and documented, so a bare `read_image()` is predictable
+    rather than lucky, and every result says which source it came from.
+    """
+    out = []
+    for r in (notebook.run, notebook.run / "_scratch",
+              notebook.root / "_scratch"):
+        if r.is_dir():
+            out += [("probe", p) for p in sorted(r.iterdir())
+                    if p.suffix.lower() in _SUFFIXES]
+    out += [("reference", p) for p in reference_paths(notebook)]
+    # FREEZE LAST, and only this chapter's unless told otherwise. A run reads
+    # its OWN rendered figure; measured across every transcript on disk, the
+    # `chapter` argument of the old `read_figure` was the run's own chapter
+    # in 21 of 21 calls and another chapter's in none.
+    if chapter:
+        out += [("figure", p) for p in figure_paths(notebook, chapter, stem)]
+    return out
+
+
+def _matches(name, tag, path):
+    """Does `path` answer to `name`? Exact, then stem, then prefix."""
+    if path.name == name or path.stem == name:
+        return True
+    # PREFIX, because Quarto's filenames are not the ones anybody guesses.
+    # A cell labelled `fig-belly` renders to `fig-belly-output-1.png`, and
+    # MEASURED across every transcript, 4 of 21 `read_figure` calls asked
+    # for `fig-belly-1.png` and got an error -- the same wrong guess every
+    # time, by three different runs on three aircraft. The label is what the
+    # entry's source says; the suffix is Quarto's business.
+    return path.name.startswith(name) or path.stem.startswith(name)
+
+
+def read_image(notebook, name="", chapter=None, stem=""):
+    """
+    Any picture this run may look at, as bytes for an inline part.
+
+    ONE TOOL, THREE PLACES. This replaces `read_probe_figure`,
+    `read_reference_image` and `read_figure`, which were three declarations
+    of the same function -- resolve a name to bytes, list the candidates on a
+    miss -- differing only in which directory they searched. Measured across
+    25 runs: zero calls picked the wrong one of the three, so they were not
+    confusing, merely three. What they cost was a declaration each in every
+    turn of every run, and two defects that live in the seams:
+
+      * `read_figure` REQUIRED a chapter, and every one of its 21 recorded
+        calls passed the run's own. A required argument whose only correct
+        value the session already holds is an invitation to pass a wrong one
+        -- and a wrong chapter here answers about a different aircraft.
+      * it matched filenames exactly, and 4 of those 21 calls guessed
+        `fig-belly-1.png` for what Quarto writes as `fig-belly-output-1.png`.
+
+    Both are gone: the chapter defaults to this run's, and a name matches by
+    prefix, so the label from the entry's own source is enough.
+
+    NO ARGUMENT AT ALL returns the first picture in search order, which is
+    whatever this run most recently drew. That is almost always what is
+    wanted straight after a probe that saved one.
+    """
+    cands = _candidates(notebook, chapter, stem)
+    if not cands:
+        return {"error":
+                f"no pictures anywhere for {notebook.root.name}: nothing "
+                f"saved from a probe, no _reference/ images, nothing "
+                f"rendered. Save one from a probe -- "
+                f"`fig.savefig(\"check.png\")` lands in the run directory."}
+    hits = [(t, p) for t, p in cands if not name or _matches(name, t, p)]
+    if not hits:
+        listing = "\n".join(f"  {t:<10} {p.name}" for t, p in cands)
+        return {"error": f"no picture matching {name!r}. Available:\n{listing}"}
+    tag, p = hits[0]
+    return {"_image": p.read_bytes(),
+            "mime_type": _MIME.get(p.suffix.lower(), "image/png"),
+            "name": f"{tag}/{p.name}"}
