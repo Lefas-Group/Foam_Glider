@@ -703,6 +703,29 @@ def _new(session, chapter_title, defines, spec=(), assume=(), target=()):
         #
         # Only what THIS call created: a directory that was already there is
         # somebody else's, and removing it is not a scaffolding failure's to do.
+        # DID THE SCAFFOLD LAND ANYWAY? `nb new` creates the directory, the
+        # chapter and `_notebook.py` and THEN lints, preflights and renders,
+        # returning 0 only if all three pass. So a render failure leaves a
+        # real notebook on disk while reporting failure -- and the `existed`
+        # test below never fires under `nb designer`, where the skeleton is
+        # always there. The model would be told "new failed", and the next
+        # call would tell it "this session already holds X". A contradiction
+        # with no way out of it, which is the shape of dead end this
+        # coordinator has already escalated from once.
+        #
+        # So believe the disk, not the exit code. `_notebook.py` is what
+        # `new` copies in, so its presence means the aircraft exists and the
+        # fault is downstream -- adopt it, and say which half failed.
+        if _scaffolded(Notebook(directory) if pathlib.Path(
+                directory, "chapters").is_dir() else None):
+            session.adopt(Notebook(directory))
+            return {"created": True, "notebook": session.notebook.root.name,
+                    "exit": code, "output": text[-2000:],
+                    "note": ("The aircraft scaffolded, but lint, preflight or "
+                             "render did not pass -- the output above says "
+                             "which. The notebook is real and is yours; do "
+                             "NOT call `new` again. Carry on, and expect that "
+                             "fault to surface again when an entry renders.")}
         if not existed:
             shutil.rmtree(directory, ignore_errors=True)
         session.new_failures += 1
