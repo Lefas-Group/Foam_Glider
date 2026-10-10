@@ -1,8 +1,0 @@
-source  The FT Mini Mustang v1.0 tiled plan, 18 pages.
-Page 1 is the specification table (where the brief targets come from),
-page 2 the drawing key, pages 3-18 are tiles 1-16 printed 1:1 on
-7.5 x 10.5 in pages. The key shows a 4x2 grid of tiles 1-8 and a second
-4x2 grid of tiles 9-16; NONE are crossed out, so stitch all sixteen.
-Rasterise with pdftoppm at a dpi you choose -- a pixel is then 25.4/dpi mm.
-Part names are printed on the sheet: FUSELAGE SIDE, HORIZONTAL STABILIZER,
-VERTICAL STABILIZER, formers, canopy, cowl, sheeting and jigs.

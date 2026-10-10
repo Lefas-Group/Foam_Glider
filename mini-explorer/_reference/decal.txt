@@ -1,5 +1,0 @@
-photo  Flite Test store photo, same airframe with the orange decal set.
-Rear three-quarter from above, slightly more head-on than `trainer`.
-Shows the wing dihedral, the raked rounded tips, the black canopy, the
-slab-sided fuselage with its rounded belly ahead of the wing, and the
-one-piece elevator and rudder. Mask cut from the image alpha channel.

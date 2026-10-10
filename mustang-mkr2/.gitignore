@@ -1,6 +1,0 @@
-/.quarto/
-**/*.quarto_ipynb
-/_site/
-/_freeze/site_libs/
-**/*-listing.json
-/_scratch/*
