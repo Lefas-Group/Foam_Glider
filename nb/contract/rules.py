@@ -1372,10 +1372,14 @@ def _index_shape(root, chapters, entries):
         it is what the first version of the supersession marker did, measured
         at all 7 items across the two affected chapters.
 
-    A chapter with no `_inputs.yml` is held to the OLD rule instead -- order,
-    no stray `##`, no lead-in prose. Both frozen corpus notebooks are in that
-    state and are not worth migrating, which is the same judgement rules 33-35
-    already make about them.
+    A chapter with no `_inputs.yml` AT ALL is now a finding. It used to be
+    held to the old rule instead -- heading order, no stray `##`, no lead-in
+    prose -- because the two frozen corpus notebooks were in that state and
+    were not worth migrating. They are deleted and `nb new` writes the file,
+    so that branch could not fire; thirty lines of it were being carried to
+    describe a format nothing on disk uses. Reported rather than silently
+    skipped, because an index with no register is the one shape where this
+    rule has nothing to check and the chapter declares nothing at all.
     """
     out = []
     for c in chapters:
@@ -1403,39 +1407,20 @@ def _index_shape(root, chapters, entries):
                     break
             continue
 
-        heads = re.findall(r"^##\s+(.+?)\s*$", text, re.M)
-        seen = [h for h in heads if h in INDEX_SECTIONS]
-        want = [s for s in INDEX_SECTIONS if s in seen]
-        if seen != want:
-            out.append((index, (
-                f"sections run {' → '.join(seen)}; the order is "
-                f"{' → '.join(want)} — what was given before what was guessed")))
-        for h in heads:
-            if h not in INDEX_SECTIONS:
-                out.append((index, (
-                    f"has a `## {h}` heading. An index carries its input "
-                    f"callouts and nothing else: a listing and a code block "
-                    f"are legible without being announced, and a heading over "
-                    f"one div is a label for what the reader can already see")))
-        for body in re.findall(
-                r"^:{3,}\s*\{\.callout-\w+\}\s*\n\s*##\s*(?:" + INPUT_CALLOUTS
-                + r")[^\n]*\n(.*?)^:{3,}\s*$", text, re.S | re.M):
-            lead = [l for l in body.strip().splitlines()
-                    if l.strip() and not re.match(r"^\s*\d+\.", l)]
-            if lead and not lead[0].startswith(" "):
-                out.append((index, (
-                    f"says {lead[0].strip()[:40]!r} above its numbered items. "
-                    f"The callout IS the list; anything before it is a "
-                    f"sentence introducing three lines")))
+        out.append((index, (
+            f"has no `chapters/{c}/_inputs.yml`, so the chapter declares no "
+            f"specifications or assumptions at all and `chapter_inputs()` has "
+            f"nothing to print. `create_chapter` writes it from "
+            f"`scaffold/_inputs.yml.tmpl`; restore it")))
 
     # THE SAME CHECK ON ENTRIES, unconditionally. An entry writes its two
     # input callouts by hand -- that is the format -- so the index branch
     # above never reaches them, and the lead-in line went unlinted while the
     # entry template itself printed one: "Asked of the user, <date>:". Seven
-    # of them are in the frozen corpus. The date is the worst version of the
-    # fault, because the entry is dated in its own front matter and a second
-    # date inside a callout dates the ASKING, which nothing downstream reads
-    # and which a reader takes for the entry's.
+    # were measured, in notebooks since deleted. The date is the worst form of
+    # the fault, because the entry is dated in its own front matter and a
+    # second date inside a callout dates the ASKING, which nothing downstream
+    # reads and which a reader takes for the entry's.
     for e in entries:
         try:
             text = e.read_text()
@@ -2418,10 +2403,12 @@ def _shape_claimed_without_an_overlay(root, chapters, entries):
     """
     import re as _re
     from .shared import body_prose
-    # `plot_photo_comparisons` is the older spelling, still the only one in the
-    # four notebooks that have not taken a new `_notebook.py`. Omitting it made
-    # this rule fire on `mini-explorer`, which draws a perfectly good overlay.
-    COMPARES = ("compare_to_photo", "show_comparison", "plot_photo_comparisons")
+    # A THIRD SPELLING LIVED HERE: `plot_photo_comparisons`, whose omission
+    # once made this rule fire on a notebook drawing a perfectly good overlay.
+    # It was the one `_notebook.py` had not been renamed in, and rule 11 keeps
+    # that file byte-identical across every notebook -- all of which now define
+    # the two below and none of which defines it.
+    COMPARES = ("compare_to_photo", "show_comparison")
     # A LINK TO A SIBLING IS A CITATION, NOT A CLAIM. Rule 10 makes entries
     # refer to each other by stem, so "[the three-quarter photograph match](
     # 2026-10-05-02-...)" is one entry pointing at another's result -- which

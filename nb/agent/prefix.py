@@ -188,20 +188,23 @@ def chapter_context(notebook):
             out.append(f"Forked from {fork['parent']}"
                        + (f" — {fork['summary']}" if fork.get("summary") else ""))
 
-        data = shared.read_inputs(notebook.root, chapter)
-        declared = shared.declared_items(notebook.root, chapter)
-        if declared:
+        # `_inputs.yml` IS THE REGISTER, and the only source now. There was a
+        # second arm here printing `declared_items` directly, for a chapter
+        # whose items were still hand-written callouts in its `index.qmd` --
+        # the two frozen corpus notebooks. They are deleted, `declared_items`
+        # reads the file alone, and so `declared` is non-empty exactly when
+        # `data` holds rows.
+        data = shared.read_inputs(notebook.root, chapter) or {}
+        rows = [(label, data.get(key) or [])
+                for key, label in (("specified", "Specified"),
+                                   ("assumed", "Assumed"))]
+        if any(r for _, r in rows):
             out.append("\n### Committed to by this chapter. Inherited by every "
                        "entry in it, and never restated in one.\n")
-            for key, label in (("specified", "Specified"), ("assumed", "Assumed")):
-                rows = data.get(key) or []
-                if rows:
+            for label, items in rows:
+                if items:
                     out.append(f"{label}:")
-                    out += [f"    {i}: {t}" for i, t in rows]
-            if not data:
-                # A chapter still on hand-written callouts -- the frozen corpus.
-                for kind, text in declared:
-                    out.append(f"    [{kind}] {text}")
+                    out += [f"    {i}: {t}" for i, t in items]
             out.append("")
         else:
             out.append("\n    (declares nothing yet)\n")

@@ -22,11 +22,11 @@ def declared(notebook, chapter):
     """
     (specified, assumed) counts for ONE chapter.
 
-    Delegated to `shared.declared_items`, which knows both sources: a chapter
-    with `_inputs.yml` is read from it, one without from its index callouts.
-    This used to carry its own regex over the markdown, and the day the items
-    moved into a data file that copy would have returned zero -- silently, for
-    the notice that is the only reason `ask_specified` fires at all.
+    Delegated to `shared.declared_items`, which reads the chapter's
+    `_inputs.yml`. This used to carry its own regex over the index markdown,
+    and the day the items moved into a data file that copy would have returned
+    zero -- silently, for the notice that is the only reason `ask_specified`
+    fires at all. One reader, so that cannot happen twice.
     """
     from ..contract import shared
     items = shared.declared_items(notebook.root, chapter)

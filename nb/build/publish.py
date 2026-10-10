@@ -743,9 +743,10 @@ def targets_drifted(notebook, errors):
 
 
 #: What DRAWS a comparison against a photograph, as opposed to a drawing of
-#: the model. `plot_photo_comparisons` is the older spelling and is still the
-#: only one in the notebooks that have not taken a new `_notebook.py`.
-_COMPARES = ("compare_to_photo", "show_comparison", "plot_photo_comparisons")
+#: the model. There was a third spelling, `plot_photo_comparisons`, kept for
+#: notebooks that had not taken a new `_notebook.py`; rule 11 holds that file
+#: byte-identical everywhere and every notebook has, so it named nothing.
+_COMPARES = ("compare_to_photo", "show_comparison")
 
 #: The verdicts the note prints when the picture cannot be read. Keyed on the
 #: note's own wording, as rule 45's check is, so the two move together.

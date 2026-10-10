@@ -63,15 +63,16 @@ def is_entry(handle):
 # MEASURED is what varies between two renders of the same page; SOLVES is kept
 # out of it because masking the whole line once hid a real 18 -> 2, and the
 # limits are kept because a changed ceiling IS worth reporting.
-# BOTH spellings. The line used to read "Executed in N s" and every freeze
-# written before the rename still says so -- permanently, for the two frozen
-# corpus notebooks. Matching only the new wording made rule 17 find nothing and
-# skip its check on six entries, so a frozen notebook silently LOST six
-# problems: a rule that stops applying looks exactly like a notebook that got
-# better. The frozen-corpus sweep is what caught it, before that corpus and
-# its notebooks were retired -- the finding stands; nothing watches for its
-# recurrence now.
-RUNTIME_SECONDS = re.compile(r"(?:Executed|Rendered) in ([\d.]+) s")
+# ONE SPELLING, and the reason the other is gone is worth keeping. The line
+# used to read "Executed in N s"; `_notebook.py` was renamed to write
+# "Rendered in", and matching only the new wording made rule 17 find nothing
+# and skip its check on six entries of a notebook written before the rename --
+# a rule that stops applying looks exactly like a notebook that got better.
+# So both were matched, permanently, for those frozen notebooks. They are
+# deleted, the old string now appears nowhere in the repo, and `_notebook.py`
+# is held byte-identical by rule 11, so there is only one wording left to
+# match. If a freeze ever reads "Executed in" again, this is why it is missed.
+RUNTIME_SECONDS = re.compile(r"Rendered in ([\d.]+) s")
 
 RUNTIME_SOLVES = re.compile(r"· (\d+) aero solve")
 
@@ -1227,32 +1228,23 @@ INPUT_ROW = re.compile(r"^\s*-\s*([a-z0-9][a-z0-9-]*)\s*:\s*(.+?)\s*$")
 
 def declared_items(root, chapter):
     """
-    [(kind, text)] a chapter declares. `_inputs.yml` if it has one.
+    [(kind, text)] a chapter declares, from its `_inputs.yml`.
 
-    DUAL SOURCE, deliberately. `aircraft-notebook` and
-    `optimised-glider-notebook` are frozen corpus with hand-written callouts,
-    and unfreezing the front door of a notebook nobody opens is not worth a
-    migration. A chapter with `_inputs.yml` is read from it; one without is
-    read the old way and nothing complains.
+    THIS WAS A DUAL SOURCE and is not any more. A chapter without an
+    `_inputs.yml` used to fall back to parsing the numbered lists out of its
+    `index.qmd` input callouts, because `aircraft-notebook` and
+    `optimised-glider-notebook` were frozen corpus with hand-written ones and
+    unfreezing the front door of a notebook nobody opens was not worth a
+    migration. Both are deleted, `nb new` writes the file, and every chapter on
+    disk is read from it -- so the fallback could not fire and was quietly
+    carrying its own copy of the item-numbering format.
+
+    Returns [] for a chapter with no `_inputs.yml`, which rule 39 reports.
     """
     data = read_inputs(root, chapter)
-    if data:
-        return [("Specified" if k == "specified" else "Assumed", t)
-                for k in ("specified", "assumed")
-                for _, t in (data.get(k) or [])]
-    try:
-        text = (root / "chapters" / chapter / "index.qmd").read_text()
-    except OSError:
-        return []
-    out = []
-    for title, body in callouts_of(text):
-        if title not in INPUT_TITLES:
-            continue
-        kind = "Assumed" if "assum" in title.lower() else "Specified"
-        for item in re.findall(r"^\s*\d+\.\s+(.*(?:\n(?!\s*\d+\.).*)*)",
-                               body, re.M):
-            out.append((kind, " ".join(item.split())))
-    return out
+    return [("Specified" if k == "specified" else "Assumed", t)
+            for k in ("specified", "assumed")
+            for _, t in ((data or {}).get(k) or [])]
 
 
 
