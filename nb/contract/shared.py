@@ -1338,12 +1338,43 @@ def notebook_targets(root):
     targets were assigned, five of them to an exact 0.00 %, and the entry
     reported "0.54 % worst error" as though that verified something.
 
-    A target that is a PROPERTY YOU WOULD MEASURE OR ADJUST ON A BENCH --
-    total mass, CG -- may be given. That is calibration, not cheating: those
-    two are what almost every downstream answer rests on, and a derived mass
-    model landing 10 % out would make stall, loading and climb all worse. An
-    earlier draft of this banned assignment outright and would have forced
-    exactly that.
+    A target YOU WOULD ADJUST ON A BENCH may be given. CG is the one that
+    always is: you slide the battery until it balances, so the station is an
+    input and the published band is what authorises it. ALL-UP mass is the
+    other, when the real aircraft carries ballast to balance -- calibrating
+    ballast is then modelling a real lump of lead, not inventing a constant.
+
+    DRY WEIGHT IS NOT ONE OF THOSE. An earlier version of this paragraph said
+    "total mass, CG -- may be given", on the grounds that a derived mass model
+    landing 10 % out makes stall, loading and climb all worse. The worry was
+    right; the remedy was wrong, and `tubby-b-17`'s brief -- dry weight
+    DERIVED, only CG given -- is what the docstring should have said. Giving a
+    dry weight writes the published figure in and discards the inventory that
+    is the whole point: foam from cut area times areal density, propulsion and
+    radio from catalogue.
+
+    What makes it come out right WITHOUT giving it is a residual that is
+    DETERMINED rather than chosen. Model every component, subtract from the
+    published figure, and what is left is the mass the inventory omits -- glue,
+    plywood, tape, paper, paint. That is not ballast and not a free constant;
+    it is a measurement of what has not been counted. Then PLACE it by a
+    physical argument rather than by fitting, and the CG that falls out becomes
+    a prediction an independent published band can test. Measured on
+    `f16-viper`: 1021 g modelled against 1361 g published, a 340 g residual,
+    argued to sit at the foam cut centroid because that is where glue and
+    plywood concentrate, and the resulting CG checked against 25.4-38 mm.
+
+    THE TEST IS WHETHER A CHECK SURVIVES. One free constant per target means
+    none does. The Little Piggy tuned ballast to hit DRY mass and the battery
+    station to hit CG -- two constants, two targets -- and reported "0.01 %
+    maximum error", which was the model agreeing with itself. Note which mass
+    it was: ballast against all-up would have been defensible. Rule 50 is the
+    check on this, and it reads the REASON a constant is declared with.
+
+    So a shortfall against a derived dry weight is a FINDING, not an error to
+    drive out: it measures what the inventory does not yet contain. Calling it
+    error invites the next run to make it vanish by calibrating, which is the
+    one move that destroys the information.
 
     Derived is the default, because the failure is silent in that direction.
     """

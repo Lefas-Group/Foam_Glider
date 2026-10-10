@@ -552,16 +552,33 @@ comes to. Rule 44 warns when a derived target's number appears in the model;
 on a dimension row you were told to set, that warning is the record of the
 setting, not a fault -- say so in the entry.
 
-A GIVEN target is a bench measurement you may calibrate to: total mass and
-CG are what somebody weighs and balances, almost every answer rests on them,
-and a mass model derived to 10% is worse than one set to the published
-figure. Setting those is not cheating.
+A GIVEN target is a bench measurement you may calibrate to: CG is what
+somebody balances by sliding the battery, and ALL-UP weight is what they
+reach by adding ballast. Both are real adjustments to a real aircraft, so
+setting them is not cheating.
 
-Derive the airframe mass from geometry and material -- areas times areal
-density -- because then DRY WEIGHT becomes a check on the geometry rather
-than on your bookkeeping. Take bought components from catalogue figures.
-Then calibrate ballast or battery position to reach the given all-up weight
-and CG, which is what you would physically do.
+DRY WEIGHT IS NOT ONE OF THOSE, even though it is a mass. Derive the
+airframe from geometry and material -- areas times areal density -- and take
+bought components from catalogue figures, because then dry weight is a check
+on the geometry rather than on your bookkeeping.
+
+WHEN YOUR INVENTORY COMES OUT LIGHT, THAT IS THE FINDING. It usually will:
+glue, plywood doublers, tape, paper and paint are real mass that no cut area
+accounts for. Subtract and say what is left -- the residual is DETERMINED by
+the subtraction, so it is a measurement of what you have not counted, not a
+constant you chose. Then place it by a physical argument about where that
+mass actually goes, and report the CG that falls out as a PREDICTION against
+the published band. Measured on the F-16: 1021 g modelled against 1361 g
+published, a 340 g residual argued to sit at the foam cut centroid because
+that is where glue and plywood concentrate, and the CG checked against the
+published 25.4-38 mm.
+
+What you must NOT do is tune a free constant to close the gap. "Ballast:
+130.1 g, calibrated to hit dry mass" is the Little Piggy, which did that for
+dry mass AND battery station for CG -- two constants, two targets -- and
+reported "0.01% maximum error", a model agreeing with itself. Rule 50 blocks
+a constant whose stated reason argues from the answer, so declare a residual
+for what it IS: the uncounted remainder, placed on physical grounds.
 
 Report EVERY target with its error, including the ones that passed. A target
 you miss is a finding worth stating; a target nobody names is a hole.
